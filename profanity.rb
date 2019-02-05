@@ -528,10 +528,10 @@ setup_key = proc { |xml,binding|
 load_settings_file = proc { |reload|
 	SETTINGS_LOCK.synchronize {
 		begin
-			xml = Hilite.load(file: SETTINGS_FILENAME)
-			xml.elements.each { |e|
-				# These are things that we ignore if we're doing a reload of the settings file
-				unless reload
+			xml = Hilite.load(file: SETTINGS_FILENAME, flush: reload)
+			unless reload
+				xml.elements.each { |e|
+					# These are things that we ignore if we're doing a reload of the settings file
 					if e.name == 'preset'
 						PRESET[e.attributes['id']] = [ e.attributes['fg'], e.attributes['bg'] ]
 					elsif (e.name == 'layout') and (layout_id = e.attributes['id'])
@@ -539,11 +539,9 @@ load_settings_file = proc { |reload|
 					elsif e.name == 'key'
 						setup_key.call(e, key_binding)
 					end
-				end
-			}
+				}
+			end
 		rescue
-			$stdout.puts $!
-			$stdout.puts $!.backtrace[0..1]
 			Profanity.log $!
 			Profanity.log $!.backtrace[0..1]
 		end

@@ -10,9 +10,12 @@ module Hilite
 
   def self.load(file:, flush: true)
     # prevent cyclical references
-    return if @loaded.include?(file)
+    return if @loaded.include?(file) and not flush
     # reset on load
-    @map.clear() if flush
+    if flush
+      @loaded.clear()
+      @map.clear()
+    end
     # track for future references
     @loaded.push(file)
     # do the dew
