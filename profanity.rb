@@ -25,6 +25,7 @@
 =end
 
 $version = 0.4
+require 'json'
 require 'benchmark'
 require 'thread'
 require 'socket'
@@ -43,20 +44,12 @@ require_relative "./ui/progress.rb"
 require_relative "./ui/text.rb"
 
 require_relative "./plugin/autocomplete.rb"
+require_relative "./settings/settings.rb"
+require_relative "./hilite/hilite.rb"
 
 module Profanity
-	APP_DIR = Dir.home + "/." + self.name.downcase
-	##
-	## setup app dir
-	##
-	FileUtils.mkdir_p APP_DIR
-
-	def self.app_file(path)
-		APP_DIR + "/" + path
-	end
-
-	LOG_FILE       = app_file "debug.log"
-	SETTINGS_FILE  = app_file "default.xml"
+	LOG_FILE       = Settings.file("debug.log")
+	SETTINGS_FILE  = Settings.file("default.xml")
 
 	def self.log_file
 		return File.open(LOG_FILE, 'a') { |file| yield file } if block_given?
@@ -144,17 +137,18 @@ command_window_layout = nil
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
 # ever support reloading other settings in the future it will have to protect
 # those.
-SETTINGS_LOCK = Mutex.new
-HIGHLIGHT = Hash.new
-PRESET = Hash.new
-LAYOUT = Hash.new
-WINDOWS = Hash.new
-SCROLL_WINDOW = Array.new
+SETTINGS_LOCK               = Mutex.new
+# TODO: fix this dirty, dirty, scumbag hack
+HIGHLIGHT                   = Hilite.pointer()
+PRESET                      = Hash.new
+LAYOUT                      = Hash.new
+WINDOWS                     = Hash.new
+SCROLL_WINDOW               = Array.new
 PORT                        = (Opts.port                || 8000).to_i
 HOST                        = (Opts.host                || "127.0.0.1")
 DEFAULT_COLOR_ID            = (Opts.color_id            || 7).to_i            
 DEFAULT_BACKGROUND_COLOR_ID = (Opts.background_color_id || 0).to_i
-SETTINGS_FILENAME           = Profanity.app_file(Opts.char.downcase + ".xml") if Opts.char
+SETTINGS_FILENAME           = Settings.file(Opts.char.downcase + ".xml") if Opts.char
 
 def add_prompt(window, prompt_text, cmd="")
   window.add_string("#{prompt_text}#{cmd}", [ h={ :start => 0, :end => (prompt_text.length + cmd.length), :fg => '555555' } ])
@@ -534,41 +528,24 @@ setup_key = proc { |xml,binding|
 load_settings_file = proc { |reload|
 	SETTINGS_LOCK.synchronize {
 		begin
-			HIGHLIGHT.clear()
-			File.open(SETTINGS_FILENAME) { |file|
-				xml_doc = REXML::Document.new(file)
-				xml_root = xml_doc.root
-				xml_root.elements.each { |e|
-					if e.name == 'highlight'
-						begin
-							r = %r{#{e.text}}
-						rescue
-							r = nil
-							$stderr.puts e.to_s
-							$stderr.puts $!
-						end
-						if r
-							HIGHLIGHT[r] = [ e.attributes['fg'], e.attributes['bg'], e.attributes['ul'] ]
-						end
+			xml = Hilite.load(file: SETTINGS_FILENAME)
+			xml.elements.each { |e|
+				# These are things that we ignore if we're doing a reload of the settings file
+				unless reload
+					if e.name == 'preset'
+						PRESET[e.attributes['id']] = [ e.attributes['fg'], e.attributes['bg'] ]
+					elsif (e.name == 'layout') and (layout_id = e.attributes['id'])
+						LAYOUT[layout_id] = e
+					elsif e.name == 'key'
+						setup_key.call(e, key_binding)
 					end
-					# These are things that we ignore if we're doing a reload of the settings file
-					if !reload
-						if e.name == 'preset'
-							PRESET[e.attributes['id']] = [ e.attributes['fg'], e.attributes['bg'] ]
-						elsif (e.name == 'layout') and (layout_id = e.attributes['id'])
-							LAYOUT[layout_id] = e
-						elsif e.name == 'key'
-							setup_key.call(e, key_binding)
-						end
-					end
-				}
+				end
 			}
 		rescue
 			$stdout.puts $!
 			$stdout.puts $!.backtrace[0..1]
 			Profanity.log $!
 			Profanity.log $!.backtrace[0..1]
-
 		end
 	}
 }
@@ -1449,7 +1426,6 @@ Thread.new {
 							need_update = true
 						end
 					elsif xml =~ /^<roundTime value=('|")([0-9]+)\1/
-						Profanity.log(xml)
 						if window = countdown_handler['roundtime']
 							temp_roundtime_end = $2.to_i
 							window.end_time = temp_roundtime_end
