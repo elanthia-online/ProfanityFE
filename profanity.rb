@@ -405,7 +405,12 @@ load_layout = proc { |layout_id|
 
 		xml.elements.each { |e|
 			if e.name == 'window'
-				height, width, top, left = fix_layout_number.call(e.attributes['height']), fix_layout_number.call(e.attributes['width']), fix_layout_number.call(e.attributes['top']), fix_layout_number.call(e.attributes['left'])
+				height, width, top, left = fix_layout_number.call(
+					e.attributes['height']), 
+					fix_layout_number.call(e.attributes['width']), 
+					fix_layout_number.call(e.attributes['top']), 
+					fix_layout_number.call(e.attributes['left'])
+
 				if (height > 0) and (width > 0) and (top >= 0) and (left >= 0) and (top < Curses.lines) and (left < Curses.cols)
 					if e.attributes['class'] == 'indicator'
 						if e.attributes['value'] and (window = previous_indicator_handler[e.attributes['value']])
@@ -417,8 +422,10 @@ load_layout = proc { |layout_id|
 						window.layout = [ e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left'] ]
 						window.scrollok(false)
 						window.label = e.attributes['label'] if e.attributes['label']
-						window.fg = e.attributes['fg'].split(',').collect { |val| if val == 'nil'; nil; else; val; end  } if e.attributes['fg']
-						window.bg = e.attributes['bg'].split(',').collect { |val| if val == 'nil'; nil; else; val; end  } if e.attributes['bg']
+						window.fg = e.attributes['fg'].split(',')
+							.collect { |val| if val == 'nil'; nil; else; val; end  } if e.attributes['fg']
+						window.bg = e.attributes['bg'].split(',')
+							.collect { |val| if val == 'nil'; nil; else; val; end  } if e.attributes['bg']
 						if e.attributes['value']
 							indicator_handler[e.attributes['value']] = window
 						end
@@ -1659,8 +1666,10 @@ begin
 			Curses.doupdate
 		end
 	}
-rescue
-	Profanity.log { |f| f.puts $!; f.puts $!.backtrace[0...4] }
+rescue => exception
+	Profanity.log(exception.message)
+	Profanity.log(exception.backtrace)
+	raise exception
 ensure
 	server.close rescue()
 	Curses.close_screen
