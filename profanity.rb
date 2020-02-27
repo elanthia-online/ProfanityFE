@@ -70,7 +70,8 @@ module Profanity
 
 	def self.set_terminal_title(title)
 		return if @title.eql?(title) # noop
-		@title = title	
+		@title = title
+		@title.untaint
 		system("printf \"\033]0;#{title}\007\"")
 		Process.setproctitle(title)
 	end
