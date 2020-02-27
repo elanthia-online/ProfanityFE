@@ -1613,11 +1613,17 @@ Thread.new {
 							end
 						end
 					elsif xml =~ /^<LaunchURL src="([^"]+)"/
-						url = "\"https://www.play.net#{$1}\""
-						# assume linux if not mac
-						cmd = RUBY_PLATFORM =~ /darwin/ ? "open" : "google-chrome"
-						system("#{cmd} #{url} >/dev/null 2>&1 &")
-					else
+            url = "\"https://www.play.net#{$1}\""
+            @url = url
+            @url.untaint
+            if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
+              system "start #{url} >/dev/null 2>&1 &"
+            elsif RbConfig::CONFIG['host_os'] =~ /darwin/
+              system "open #{url} >/dev/null 2>&1 &"
+            elsif RbConfig::CONFIG['host_os'] =~ /linux|bsd/
+              system "xdg-open #{url} >/dev/null 2>&1 &"
+            end
+          else
 						nil
 					end
 				end
