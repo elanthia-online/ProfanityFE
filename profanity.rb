@@ -1566,7 +1566,7 @@ Thread.new {
 								open_style[:bg] = PRESET[$2][1]
 							end
 						end
-					elsif xml =~ /^<(?:pushStream|component) id=("|')(.*?)\1[^>]*\/?>$/
+					elsif xml =~ /^<(?:pushStream|component|compDef) id=("|')(.*?)\1[^>]*\/?>$/
 						new_stream = $2
 						game_text = line.slice!(0, start_pos)
 						handle_game_text.call(game_text)
