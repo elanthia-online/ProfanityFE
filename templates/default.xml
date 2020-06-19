@@ -1,0 +1,211 @@
+<!--
+These settings done on a 1920x1080 resolution
+Custom fix-width font - Overpass Mono, size 12
+Includes preset highlight colors for merchants/GMs/staff
+Limited additional highlights provided for demonstration purposes
+This layout will dynamically resize windows to an extent
+-->
+
+<settings>
+  <highlight fg='9090ff'>^(?:You gesture|You intone a phrase of elemental power|You recite a series of mystical phrases|You trace a series of glowing runes|Your hands glow with power as you invoke|You trace a simple rune while intoning|You trace a sign while petitioning the spirits|You trace an intricate sign that contorts in the air).*$</highlight>
+  <highlight fg='9090ff'>^(?:Cast Roundtime 3 Seconds\.|Your spell is ready\.)$</highlight>
+  <highlight fg="a6e22e">coraesine|urnon|glass and pink pearl jar|pearly grey glass jar|cobalt glass lapis-rimmed jar|pearly white glass jar</highlight>
+  <highlight fg='9090ff'>^.*remaining\. \]$</highlight>
+  <highlight fg='88aaff'>([A-Z][a-z]+ disk)</highlight>
+  <highlight fg='555555'>^\[.*?\](?:>|&gt;).*$</highlight>
+  <highlight fg='555555'>\([0-9][0-9]\:[0-9][0-9]\:[0-9][0-9]\)$</highlight>
+  <highlight fg='339999'>^\[Private(?:To)?\]|Also here:</highlight>
+  <highlight fg='008000'>^\[code\]</highlight>
+  <highlight fg="ff4444">Muscles bunching under its scaled flesh*</highlight>
+  <highlight fg='D46A6A'>
+    ^\[Merchant\]
+    |(churning|gas|dark)\scloud
+    |warrior\snaturalist
+    |\ssticky web|\svoid
+    |You shiver slightly as an invisible rash covers your body!
+    |A pale, flickering nimbus coalesces around (.*?), then vanishes in a brilliant flash!
+    |^SEND.*
+  </highlight>
+  
+  <!--Default Lich Channel Name-->
+  <highlight fg='00C851'>
+    ^\[(.*?)\]
+    |^The\s(.*?)\sscene\smelds\salmost\sseemlessly(.*?)$
+  </highlight>
+  <highlight fg='CD72AB'>
+     Running heedlessly through the icy terrain, you slip on a patch of ice but catch yourself before you truly lose your footing.
+    |The auctioneer calls out|Guild voucher pack
+    |urglaes|You\ssense\syou\shave\sjust\swon\sa\sraffle
+    |You.*a large brown bullhead catfish.*bank.|You.*a gnome sized catfish.*bank.
+    |You have just won a JACKPOT prize!!!
+    |The (.*?) comes to a stop pointing directly at (.*?)!
+    |You\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.take\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.a\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.deep\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.breath,\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.and\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.look\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.around\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.with\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.renewed\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.vigor.\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.It\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.is\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.good\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.to\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.be\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.alive,\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.and\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.an\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.adventurer\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.in\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.this\sYou\stake\sa\sdeep\sbreath,\sand\slook\saround\swith\srenewed\svigor.\s\sIt\sis\sgood\sto\sbe\salive,\sand\san\sadventurer\sin\sthis\sland.land.
+    |^You glance down to see (.*?)\.$
+  </highlight>
+
+  <!--Merchant Color-->
+  <highlight fg='FFFF00' bg='000000'>
+    \b(?:Cularin|Farain|Fesnav|Gizwizit|Ianthra|Imie|Ingela|Krelp|Ledirth|Lillabella|Lottianne|Phrolo|Roxe|Rumdotter|Ryelle|Sanster|Sauli|Stikla|Tartingworth|Thris|Toebeard|Tott|Twobits|Velade|Zoltak|Omare|Bobbler|Louella|Denison|Aristolo|Carax|Flem|Pennyworth|Vermin|Flynvias|Hending|Estinelle|Irelain|Ersix|Tredohal|Naelyne|Ravias|Xerria|Sycira|Nycolle|Oirisu|Joola|VeolaTwiddley|Haleen|Merrielle|Fryta|Zanthie|Leanney|Vahmyr|Valinda|Veola|Theammer|Treysen|Shurley|Bazzelwyn|Felthrop|Mortasha|Yansio|Glearnim|Archiwald|Tintrel|Daxela|Mitsoku|Deringo|Cocobolo|Glowbark|Ipantor|Bethezda|Hyrmea|Trulee|Jorshan|Jellybeard|Brumas|Tolby|Kroa|Kyrdra|Blusteri|Bliza|Surofee|Eosten|Jiddie|Xylophonia|Weverly|Zenlia|Litiken|Andagia|Vemeon|Sammee|Goldilynn|Nyck|Falshka|Pebbi|Zendrian|Evrick|Airisu|Bisha|Ulatari|Goblyn|Grobey|Lorgen|Dawdly|Furlow|Kyrinthe|Vilara|Comida|Bartoldt|Duplicity|Cranstal|Blodau|Moltin|Genose|Sonnora|Edero|Druena|Orbele|Zoece|Marutra|Almyra|Boring|Paralassa|Iacl|Pelil|Onriru|Zetya|Rikelle|Shahno|Philonar|Evric|Genetoba|Egton|Ganzer|Artapel|Jensun|Arlyle|Sunex|Hkala|Binklar|Liktiken|Fana|Favretto|Onetta|Gubskut|Olthos|Maialynn|Mercell|Ysadiana|Selandrine|Ianwel|Ezmerilla|Gelynne|Twiddley|Myasara|Murstyr|Qalinor|Cyik|Jaranzair|Intuitaur|Alasylis|Reyonolis|Kylistra|Quinshon|Madrim|Caelyna|Tysiri|Evlissa|Culd|Zieschka|Riuven|Yriwyn|Seskel|Otuio|Twigxt|Odoff|Idiya|Dubrin|Benejay|Elmherst|Clefford|Tanki|Baynier|Teuriz|Stephos|Wyrom|Rinnok|Ohshean|Vanetti|Junderthal|Marent|Calpa|Clamn|Eelsa|Shubbaz|Sakurvee|Aslyrion|Beitris|Bimbibick|Chelise|Damp|Dipideedoo|Drezda|Frazzelwyn|Gunkweeler|Hibis|Nimaya|Phey|Sylvere|Taionia|Tholok|Tufeetti|Upsy|Varilora|Yarimore|Zylder|Saryen|Elsia|Chariot|Aneela|Escott|Zylders|Zyders|Ahriel|Annanasi|Nezlyn|Sharlatta|Rone|Malluch|Schalyne|Jahosk|Mishrac|Hantine|Renpaw|Olba|Dett|Naughtbrite|Rashiva|Aepoch|Baroqe|Davro|Skryn|Lahke|Shrubley|Nynria|Brisstle|Orasia|Korvera|Charyia|Flaeshorn|Grolf|Holtum|Kyrralynn|Moirralynn|Nimudi|Perdu|Phestor|Sprague|Upai|Ymantha|Ziito|Hexxie|Toffit|Essensia|Tufeeti|Chubbins|Altissima|Sneen|Llalariel|Firio|Fright|Bastique|Hylania|Deloras|Sunliliye|Maragold|Karuseau|Dahria|Ulda|Feliathes|Weensie|Crondi|Urszula|Nymasha|Tselise|Ambie|Millicent|Hepit)\b
+    |^(.*?) glows brightly then suddenly shatters!$
+  </highlight>
+
+  <!--Empath Characters-->
+  <highlight fg='FFFFFF' bg='FF0000'>
+    \b(?:Nexushealbot)\b
+  </highlight>
+
+  <!--Wizard Characters-->
+  <highlight fg='008800' bg='000000'>
+    \b(?:Notathias|Myth|Rupert)\b
+  </highlight>
+
+  <!--Cleric Characters-->
+  <highlight fg='00FFFF' bg='0000FF'>
+    \b(?:Notaneya|Alfred)\b
+  </highlight>
+
+  <!--Ranger Characters-->
+  <highlight fg='65f9e9' bg='296b00'>
+    \b(?:Archer)\b
+  </highlight>
+
+  <!--Sorcerer Characters-->
+  <highlight fg='ffffff' bg='840084'>
+    \b(?:Notasorcerer)\b
+  </highlight>
+
+  <highlight fg='008000'>^---\sLich:.*</highlight>
+  <highlight fg='ff0000' bg='000000'>
+    \braffle\b|You sense you have just won a raffle for
+  </highlight>
+  <highlight fg='CAFF42'>
+    Your recent adventures echo powerfully in your mind
+  </highlight>
+  <highlight fg='FF5475'>
+    ^It\sis\s(.*?)\sweighted\sto\sinflict\smore\scritical\swounds
+    |^It\sis\s(.*?)\spadded\sagainst\scritical\sblows
+    |^It\sprovides\sa\sboost\sof\s(.*?)$
+  </highlight>
+  <highlight fg='407F7F'>\((?:calmed|dead|flying|hiding|kneeling|prone|sitting|sleeping|stunned)\)</highlight>
+  <highlight fg='801515'>
+     ^.* throws (?:his|her) arms skyward!$
+    |swirling black void
+    |(?:Dozens of flaming meteors light the sky nearby!
+    |Several flaming meteors light the nearby sky!
+    |Several flaming rocks burst from the sky and smite the area!
+    |A low roar of quickly parting air can be heard above!)</highlight>
+  <highlight fg='ffffff'>^.*(?:falls slack against the floor|falls slack against the ground|falls to the floor, motionless|falls to the ground dead|falls to the ground motionless|and dies|and lies still|goes still|going still)\.$</highlight>
+  <highlight fg='ffffff'>^.* is stunned!$|^You come out of hiding\.$</highlight>
+  <highlight fg='ffaaaa'>.*ruining your hiding place\.$|^You are no longer hidden\.$|^\s*You are (?:stunned|knocked to the ground).*|^You are unable to remain hidden!$|^You are visible again\.$|^You fade into sight\.$|^You fade into view.*|^You feel drained!$|^You have overextended yourself!$|^You feel yourself going into shock!$|^You feel the sting of a recent death slowly fade away, yet a lingering weakness remains.$</highlight>
+  <preset id='whisper' fg='88aaff'/>
+  <preset id='speech' fg='66ff66'/>
+  <preset id='roomName' fg='0000ff' bg='000000'/>
+  <preset id='monsterbold' fg='ffff00'/>
+  <preset id='familiar' bg='00001a'/>
+  <preset id='thoughts' fg='dd9900' />
+  <preset id='voln' fg='dd9000'/>
+  <preset id='debug' fg='badb73'/>
+  <preset id='rpa' fg='FF5475'/>
+
+  <key id='alt'>
+  <key id='p' macro='\xput \? in my cinereal pants'/>
+  <key id='s' macro="\xstance "/>
+    <key id='t' macro='\xtake \? from my cinereal pants'/>
+    <key id='l' macro='\xlook in my cinereal pants\r'/>
+    <key id='a' macro='\xambush \? right leg'/>
+    <key id='n' macro='\xput \? in my straps'/>
+    <key id='u' macro='\xtake \? from my straps'/>
+  </key>
+
+  <key id='ctrl+z' macro='\xwhisper '/>
+  
+  <key id='ctrl+n' macro='\xput \? in my straps'/>
+  <key id='ctrl+u' macro='\xtake \? from my straps'/>
+  <key id='plus' macro='\xlook\r'/>
+  <key id='7' macro='stance def\r'/>
+  
+  <key id='enter' action='send_command'/>
+  <key id='left' action='cursor_left'/>
+  <key id='right' action='cursor_right'/>
+  <key id='ctrl+left' action='cursor_word_left'/>
+  <key id='ctrl+right' action='cursor_word_right'/>
+  <key id='home' action='cursor_home'/>
+  <key id='end' action='cursor_end'/>
+  <key id='backspace' action='cursor_backspace'/>
+  <key id='win_backspace' action='cursor_backspace'/>
+  <key id='ctrl+?' action='cursor_backspace'/>
+  <key id='delete' action='cursor_delete'/>
+  <key id='tab' action='switch_current_window'/>
+  <key id='alt+page_up' action='scroll_current_window_up_one'/>
+  <key id='alt+page_down' action='scroll_current_window_down_one'/>
+  <key id='page_up' action='scroll_current_window_up_page'/>
+  <key id='page_down' action='scroll_current_window_down_page'/>
+  <key id='up' action='previous_command'/>
+  <key id='down' action='next_command'/>
+  <key id='ctrl+up' action='send_last_command'/>
+  <key id='alt+up' action='send_second_last_command'/>
+  <key id='resize' action='resize'/>
+
+  <layout id='default'>
+
+    <!-- Unused -->
+    <!--<window class='text' top='1'  left='119' height='12' width='78'  value='familiar' buffer-size='2000' />-->
+    <!--<window class='text' top='14' left='0'   height='7' width='19'  value='death' buffer-size='500' />-->
+    <!--<window class='text' top='21' left='0'   height='8' width='19'  value='logons' buffer-size='500' />-->
+    <!--<window class='text' top='1'  left='0' height='14' width='79'  value='room' buffer-size='500' />-->
+
+    <!-- Hands -->
+    <window class="indicator" top='0'  left='0' height='1' width='(cols/2)-1'  value='left' label='Empty' />
+    <window class="indicator" top='0' left='(cols/2)-1' height='1' width='(cols/2)-1' value='right' label="Empty" />
+
+    <!-- Main Windows -->
+    <window class='text' top='9' left='0'  height='lines-11' width='cols' value='main' buffer-size='50000'/>
+    <window class='text' top='2'  left='36' height='6' width='cols-36' value='lnet,thoughts,voln' buffer-size='2000' />
+    <window class='indicator' top='lines-1' left='0' height='1' width='1' label='&gt;' value='prompt' fg='f1f1f1,44444'/>
+    <window class='command'   top='lines-1' left='1' width='cols-1' height='1' bg='444444' />
+
+    <!-- Health Group -->
+    <window class='progress' top='2' left='12' width='12' height='1' label='health:' value='health' fg='f7f7f7,dddddd' bg='a00000,550000'/>
+    <window class='progress' top='3' left='12' width='12' height='1' label='mana:' value='mana' fg='f7f7f7,dddddd' bg='0000a0,000055'/>
+    <window class='progress' top='4' left='12' width='12' height='1' label='stam:' value='stamina' fg='f7f7f7,dddddd' bg='a05500,552200'/>
+    <window class='progress' top='5' left='12' width='12' height='1' label='spirit:' value='spirit' fg='f7f7f7,dddddd' bg='0055a0,002255'/>
+    <window class='progress' top='6' left='12' width='12' height='1' label='mind:' value='mind' fg='f7f7f7,dddddd' bg='5500a0,220055'/>
+    <window class='progress' top='7' left='12' width='12' height='1' label='encumbr:' value='encumbrance' bg='999999,555555' fg='nil,nil,nil,f7f7f7'/>
+
+    <!-- Compass and RT -->
+    <window class='indicator' top='2' left='26' height='1' width='1'  label='^'        value='compass:up'   fg='303030,ffff00'/>
+    <window class='indicator' top='3' left='26' height='1' width='1'  label='o'        value='compass:out'  fg='303030,ffff00'/>
+    <window class='indicator' top='4' left='26' height='1' width='1'  label='v'        value='compass:down' fg='303030,ffff00'/>
+    <window class='indicator' top='2' left='29' height='1' width='1'  label='*'        value='compass:nw'   fg='303030,ffff00'/>
+    <window class='indicator' top='3' left='29' height='1' width='1'  label='&lt;'     value='compass:w'    fg='303030,ffff00'/>
+    <window class='indicator' top='4' left='29' height='1' width='1'  label='*'        value='compass:sw'   fg='303030,ffff00'/>
+    <window class='indicator' top='2' left='31' height='1' width='1'  label='^'        value='compass:n'    fg='303030,ffff00'/>
+    <window class='indicator' top='4' left='31' height='1' width='1'  label='v'        value='compass:s'    fg='303030,ffff00'/>
+    <window class='indicator' top='2' left='33' height='1' width='1'  label='*'        value='compass:ne'   fg='303030,ffff00'/>
+    <window class='indicator' top='3' left='33' height='1' width='1'  label='&gt;'     value='compass:e'    fg='303030,ffff00'/>
+    <window class='indicator' top='4' left='33' height='1' width='1'  label='*'        value='compass:se'   fg='303030,ffff00'/>
+    <window class='progress'  top='5' left='25' height='1' width='10' label='stance:'  value='stance'       fg='f7f7f7,dddddd' bg='888888'/>
+    <window class='countdown' top='6' left='25' height='1' width='10' label='stun:'    value='stunned'      fg='f7f7f7,dddddd' bg='nil,aa0000'/>
+    <window class='countdown' top='7' left='25' height='1' width='10' label='rndtime:' value='roundtime'    fg='f7f7f7,dddddd,dddddd,dddddd' bg='nil,aa0000,0000aa'/>
+
+    <!-- Injuries -->
+    <window class='indicator' top='2' left='1' height='1' width='1' label='e' value='leftEye' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='2' left='5' height='1' width='1' label='e' value='rightEye' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='2' left='3' height='1' width='1' label='O' value='head' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='3' left='2' height='1' width='1' label='/' value='leftArm' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='3' left='3' height='1' width='1' label='|' value='chest' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='3' left='4' height='1' width='1' label='\' value='rightArm' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='4' left='1' height='1' width='1' label='o' value='leftHand' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='4' left='3' height='1' width='1' label='|' value='abdomen' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='4' left='5' height='1' width='1' label='o' value='rightHand' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='5' left='1' height='2' width='2' label=' /o' value='leftLeg' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='5' left='4' height='2' width='2' label='\  o' value='rightLeg' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='2' left='8' height='1' width='2' label='ns' value='nsys' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='4' left='8' height='1' width='2' label='nk' value='neck' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='5' left='8' height='1' width='2' label='bk' value='back' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+
+    <window class='indicator' top='7' left='0' height='1' width='3' label='psn' value='poisoned' fg='f7f7f7,ff0000'/>
+    <window class='indicator' top='7' left='4' height='1' width='3' label='dis' value='diseased' fg='f7f7f7,ff0000'/>
+    <window class='indicator' top='7' left='8' height='1' width='3' label='bld' value='bleeding' fg='f7f7f7,ff0000'/>
+  </layout>
+</settings>
