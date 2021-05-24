@@ -1197,6 +1197,7 @@ Thread.new {
 		need_update = false
 		line_colors = Array.new
 		open_monsterbold = Array.new
+		open_link = Array.new
 		open_preset = Array.new
 		open_style = nil
 		open_color = Array.new
@@ -1274,7 +1275,8 @@ Thread.new {
 								:end => match_data.end(0),
 								:fg => colors[0],
 								:bg => colors[1],
-								:ul => colors[2]
+								:ul => colors[2],
+								:priority => 1
 							}
 							line_colors.push(h)
 							pos = match_data.end(0)
@@ -1364,6 +1366,7 @@ Thread.new {
 			end
 			line_colors = Array.new
 			open_monsterbold.clear
+			open_link.clear
 			open_preset.clear
 			# open_color.clear
 		}
@@ -1514,6 +1517,7 @@ Thread.new {
 						if PRESET['monsterbold']
 							h[:fg] = PRESET['monsterbold'][0]
 							h[:bg] = PRESET['monsterbold'][1]
+							h[:priority] = 1
 						end
 						open_monsterbold.push(h)
 					elsif xml == '<popBold/>' or xml == '</b>'
@@ -1526,6 +1530,7 @@ Thread.new {
 						if PRESET[$2]
 							h[:fg] = PRESET[$2][0]
 							h[:bg] = PRESET[$2][1]
+							h[:priority] = 1
 						end
 						open_preset.push(h)
 					elsif xml == '</preset>'
@@ -1544,6 +1549,7 @@ Thread.new {
 						if xml =~ /\sul=('|")(.*?)\1[\s>]/
 							h[:ul] = $2.downcase
 						end
+						h[:priority] = 1
 						open_color.push(h)
 					elsif xml == '</color>'
 						if h = open_color.pop
@@ -1564,6 +1570,7 @@ Thread.new {
 							if PRESET[$2]
 								open_style[:fg] = PRESET[$2][0]
 								open_style[:bg] = PRESET[$2][1]
+								open_style[:priority] = 1
 							end
 						end
 					elsif xml =~ /^<(?:pushStream|component|compDef) id=("|')(.*?)\1[^>]*\/?>$/
@@ -1577,7 +1584,7 @@ Thread.new {
 						current_stream = nil
 					elsif xml =~ /^<progressBar/
 						nil
-					elsif xml =~ /^<(?:dialogdata|a|\/a|d|\/d|\/?component|label|skin|output)/
+					elsif xml =~ /^<(?:dialogdata|d|\/d|\/?component|label|skin|output)/
 						nil
 					elsif xml =~ /^<indicator id=('|")Icon([A-Z]+)\1 visible=('|")([yn])\3/
 						if window = countdown_handler[$2.downcase]
@@ -1623,6 +1630,17 @@ Thread.new {
             elsif RbConfig::CONFIG['host_os'] =~ /linux|bsd/
               system "xdg-open #{url} >/dev/null 2>&1 &"
             end
+          elsif xml =~ /^<a/
+					  h = { :start => start_pos }
+						h[:fg] = '5555ff'
+						h[:bg] = nil
+						h[:priority] = 2
+						open_link.push(h)
+					elsif xml == '</a>'
+					  if h = open_link.pop
+							h[:end] = start_pos
+							line_colors.push(h) if h[:fg] or h[:bg]
+						end
           else
 						nil
 					end
