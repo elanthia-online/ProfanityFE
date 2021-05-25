@@ -1,14 +1,14 @@
 module Settings
   @lock = Mutex.new
 
-  APP_DIR = Dir.home + "/.profanity"
+  APP_DIR = File.expand_path(File.dirname($0))
 	##
 	## setup app dir
 	##
-	FileUtils.mkdir_p APP_DIR
+	FileUtils.mkdir_p APP_DIR + "/debug"
 
 	def self.file(path)
-		APP_DIR + "/" + path
+		APP_DIR + "/debug/" + path
 	end
 
   def self.read(file)
@@ -21,4 +21,21 @@ module Settings
     bin = Settings.read(file)
     REXML::Document.new(bin).root
   end
+  
+  def self.copy_file(char)
+    path = APP_DIR + "/templates"
+    orig = path + "/default.xml"
+    dest = path + "/" + char
+  
+    File.write(dest, File.read(orig)) if !path.include?(dest)
+       
+    dest
+      
+  end
+  
+  
+  
+  
+ 
+  
 end
