@@ -149,7 +149,7 @@ PORT                        = (Opts.port                || 8000).to_i
 HOST                        = (Opts.host                || "127.0.0.1")
 DEFAULT_COLOR_ID            = (Opts.color_id            || 7).to_i            
 DEFAULT_BACKGROUND_COLOR_ID = (Opts.background_color_id || 0).to_i
-SETTINGS_FILENAME           = Settings.file(Opts.char.downcase + ".xml") if Opts.char
+SETTINGS_FILENAME           = Settings.profile(Opts.char.downcase + ".xml") if Opts.char
 
 def add_prompt(window, prompt_text, cmd="")
   window.add_string("#{prompt_text}#{cmd}", [ h={ :start => 0, :end => (prompt_text.length + cmd.length), :fg => '555555' } ])
