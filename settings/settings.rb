@@ -6,7 +6,8 @@ module Settings
 	## setup app dir
 	##
 	FileUtils.mkdir_p APP_DIR + "/debug"
-
+	FileUtils.mkdir_p APP_DIR + "/profiles"
+	
 	def self.file(path)
 		APP_DIR + "/debug/" + path
 	end
@@ -23,9 +24,8 @@ module Settings
   end
   
   def self.profile(char)
-    path = APP_DIR + "/templates"
-    orig = path + "/default.xml"
-    dest = path + "/" + char
+    orig = APP_DIR + "/templates/default.xml"
+    dest = APP_DIR + "/profiles/" + char
 
     File.write(dest, File.read(orig)) if !File.file?(dest)
        
