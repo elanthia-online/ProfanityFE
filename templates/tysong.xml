@@ -92,7 +92,7 @@ Includes preset highlight colors for merchants/GMs/staff, wizards, sorcerers, em
 	<preset id='roomName' fg='ffffff' bg='0000ff'/>
 	<preset id='monsterbold' fg='ffff00'/>
 	<preset id='familiar' bg='00001a'/>
-	<preset id='thoughts' bg='001a00'/>
+	<preset id='thought' bg='001a00'/>
 	<preset id='voln' bg='001a00'/>
 	<preset id='debug' fg='badb73'/>
 	<preset id='rpa' fg='FF5475'/>
