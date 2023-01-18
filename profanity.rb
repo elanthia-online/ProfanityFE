@@ -1509,6 +1509,26 @@ Thread.new {
 								need_update = true
 							end
 						end
+					# accepts (mostly) arbitrary progress bars with dynamic color codes, etc.
+					# useful for user defined progress bars (i.e. spell active timer, item cooldowns, etc.)
+					# example XML to trigger:
+					#  <arbProgress id='spellactivel' max='250' current='160' label='WaterWalking' colors='1589FF,000000'</arbProgress>
+					elsif xml =~ /^<arbProgress id='([a-zA-Z0-9]+)' max='(\d+)' current='(\d+)'(?: label='(.+?)')?(?: colors='(\S+?)')?/
+						bar = $1
+						max = $2.to_i
+						current = $3.to_i
+						current = max if current > max
+						label = $4
+						colors = $5
+						bg, fg = colors.split(',') if colors
+						if window = progress_handler[bar]
+							window.label = label if label
+							window.bg = [bg] if bg
+							window.fg = [fg] if fg
+							if window.update(current, max, force = true)
+								need_update = true
+							end
+						end
 					elsif xml == '<pushBold/>' or xml == '<b>'
 						h = { :start => start_pos }
 						if PRESET['monsterbold']
