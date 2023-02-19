@@ -71,7 +71,6 @@ module Profanity
 	def self.set_terminal_title(title)
 		return if @title.eql?(title) # noop
 		@title = title
-		@title.untaint
 		system("printf \"\033]0;#{title}\007\"")
 		Process.setproctitle(title)
 	end
@@ -378,7 +377,6 @@ kill_after = proc {
 
 fix_layout_number = proc { |str|
 	str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
-	str.untaint
 	begin
 		proc { eval(str) }.call.to_i
 	rescue
@@ -1615,7 +1613,6 @@ Thread.new {
 					elsif xml =~ /^<LaunchURL src="([^"]+)"/
             url = "\"https://www.play.net#{$1}\""
             @url = url
-            @url.untaint
             if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
               system "start #{url} >/dev/null 2>&1 &"
             elsif RbConfig::CONFIG['host_os'] =~ /darwin/
