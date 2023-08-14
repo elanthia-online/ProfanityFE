@@ -24,10 +24,6 @@
   matt@lichproject.org
 
 =end
-=begin
-  This program now maintained via Elanthia-Online team located at
-  https://github.com/elanthia-online/ProfanityFE
-=end
 
 require 'json'
 require 'benchmark'
@@ -1237,9 +1233,7 @@ Thread.new {
         # nsys wound will be correctly set by xml, dont set the scar using health verb output
         true
       else
-        if skip_nsys
-          false
-        elsif (window = indicator_handler['nsys'])
+        if (window = indicator_handler['nsys'])
           if text =~ /^You have.*? very difficult time with muscle control/
             if window.update(3)
               need_update = true
@@ -1720,7 +1714,7 @@ Thread.new {
             if blue_links
               h = { :start => start_pos }
               h[:fg] = PRESET['links'][0]
-              h[:bg] = PRESET['links'][1] unless PRESET['links'][1] == 'nil'
+              h[:bg] = PRESET['links'][1]
               h[:priority] = 2
               open_link.push(h)
             end
