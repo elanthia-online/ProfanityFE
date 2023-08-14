@@ -24,6 +24,10 @@
   matt@lichproject.org
 
 =end
+=begin
+  This program now maintained via Elanthia-Online team located at
+  https://github.com/elanthia-online/ProfanityFE
+=end
 
 require 'json'
 require 'benchmark'
