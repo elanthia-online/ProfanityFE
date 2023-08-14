@@ -101,10 +101,11 @@ module Profanity
         --custom-colors=<on|off>
         --settings-file=<filename>
         --char=<character>
-        --no-status                   do not redraw the process title with status updates
-        --links                       enable links to be shown by default, otherwise can enable via .links command
-        --speech-ts                   display timestamps on speech, familiar and thought window
-        --remote-url                  display LaunchURLs on screen, used for remote environments
+        --no-status                           do not redraw the process title with status updates
+        --links                               enable links to be shown by default, otherwise can enable via .links command
+        --speech-ts                           display timestamps on speech, familiar and thought window
+        --remote-url                          display LaunchURLs on screen, used for remote environments
+        --shorten                             display shortened deaths and arrival/departures
     HELP
     exit
   end
@@ -1369,7 +1370,8 @@ Thread.new {
             elsif current_stream == 'speech'
               text = "#{text} (#{Time.now.strftime('%H:%M:%S').sub(/^0/, '')})" if Opts["speech-ts"]
             elsif current_stream == 'logons'
-              foo = { 'joins the adventure.' => '007700', 'returns home from a hard day of adventuring.' => '777700', 'has disconnected.' => 'aa7733' }
+              foo = { 'joins the adventure.' => PRESET['logons'][0], 'returns home from a hard day of adventuring.' => PRESET['logoffs'][0], 'has disconnected.' => PRESET['disconnects'][0] }
+              joo = { 'joins the adventure.' => PRESET['logons'][1], 'returns home from a hard day of adventuring.' => PRESET['logoffs'][1], 'has disconnected.' => PRESET['disconnects'][1] }
               if text =~ /^\s\*\s([A-Z][a-z]+) (#{foo.keys.join('|')})/
                 name = $1
                 logon_type = $2
@@ -1383,6 +1385,7 @@ Thread.new {
                   :start => (name.length + 1),
                   :end   => text.length,
                   :fg    => foo[logon_type],
+                  :bg    => joo[logon_type],
                 }
                 line_colors.push(h)
               end
