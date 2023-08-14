@@ -1,6 +1,6 @@
 module Opts
-  FLAG_PREFIX    = "--"
-  
+  FLAG_PREFIX = "--"
+
   def self.parse_command(h, c)
     h[c.to_sym] = true
   end
@@ -16,22 +16,22 @@ module Opts
     end
   end
 
-  def self.parse(args = ARGV)    
-    config = OpenStruct.new  
-		if args.size > 0
-			config = OpenStruct.new(**args.reduce(Hash.new) do |h, v|
-				if v.start_with?(FLAG_PREFIX)
-					parse_flag(h, v)
-				else
-					parse_command(h, v)
-				end
-				h
-			end)
-		end
+  def self.parse(args = ARGV)
+    config = OpenStruct.new
+    if args.size > 0
+      config = OpenStruct.new(**args.reduce(Hash.new) do |h, v|
+        if v.start_with?(FLAG_PREFIX)
+          parse_flag(h, v)
+        else
+          parse_command(h, v)
+        end
+        h
+      end)
+    end
     config
-	end
-	
-	PARSED = parse()
+  end
+
+  PARSED = parse()
 
   def self.method_missing(method, *args)
     PARSED.send(method, *args)

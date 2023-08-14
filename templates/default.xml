@@ -108,6 +108,9 @@ This layout will dynamically resize windows to an extent
   <preset id='voln' fg='dd9000'/>
   <preset id='debug' fg='badb73'/>
   <preset id='rpa' fg='FF5475'/>
+  <preset id='logoffs' fg='777700'/>
+  <preset id='disconnects' fg='aa7733'/>
+  <preset id='logons' fg='007700'/>
 
   <key id='alt'>
   <key id='p' macro='\xput \? in my cinereal pants'/>
