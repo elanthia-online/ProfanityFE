@@ -105,7 +105,6 @@ module Profanity
         --links                               enable links to be shown by default, otherwise can enable via .links command
         --speech-ts                           display timestamps on speech, familiar and thought window
         --remote-url                          display LaunchURLs on screen, used for remote environments
-        --shorten                             display shortened deaths and arrival/departures
     HELP
     exit
   end
