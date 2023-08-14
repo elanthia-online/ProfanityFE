@@ -3,7 +3,7 @@
 # vim: set sts=2 noet ts=2:
 =begin
 
-	ProfanityFE v0.4
+        ProfanityFE v0.4
 	Copyright (C) 2013  Matthew Lowe
 
 	This program is free software; you can redistribute it and/or modify
