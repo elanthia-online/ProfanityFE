@@ -133,6 +133,7 @@ progress_handler = Hash.new
 countdown_handler = Hash.new
 command_window = nil
 command_window_layout = nil
+blue_links = false
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
 # ever support reloading other settings in the future it will have to protect
@@ -1101,6 +1102,8 @@ key_action['send_command'] = proc {
 		key_action['switch_arrow_mode'].call
 	elsif cmd =~ /^\.e (.*)/
 		eval(cmd.sub(/^\.e /, ''))
+	elsif cmd =~ /^\.links/i
+		blue_links = !blue_links
 	else
 		server.puts cmd.sub(/^\./, ';')
 	end
@@ -1645,11 +1648,13 @@ Thread.new {
               system "xdg-open #{url} >/dev/null 2>&1 &"
             end
 					elsif xml =~ /^<a/
-						h = { :start => start_pos }
-						h[:fg] = '6060ff'
-						h[:bg] = nil
-						h[:priority] = 2
-						open_link.push(h)
+						if blue_links						
+							h = { :start => start_pos }
+							h[:fg] = '6060ff'
+							h[:bg] = nil
+							h[:priority] = 2
+							open_link.push(h)
+						end
 					elsif xml == '</a>'
 						if h = open_link.pop
 							h[:end] = start_pos
