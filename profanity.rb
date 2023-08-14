@@ -1650,8 +1650,8 @@ Thread.new {
 					elsif xml =~ /^<a/
 						if blue_links						
 							h = { :start => start_pos }
-							h[:fg] = '6060ff'
-							h[:bg] = nil
+							h[:fg] = PRESET['links'][0]
+							h[:bg] = PRESET['links'][1]
 							h[:priority] = 2
 							open_link.push(h)
 						end
