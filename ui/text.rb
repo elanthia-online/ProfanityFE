@@ -3,6 +3,7 @@ require "curses"
 class TextWindow < Curses::Window
   attr_reader :color_stack, :buffer
   attr_accessor :scrollbar, :indent_word_wrap, :layout
+
   @@list = Array.new
 
   def TextWindow.list
@@ -17,51 +18,55 @@ class TextWindow < Curses::Window
     @@list.push(self)
     super(*args)
   end
+
   def max_buffer_size
     @max_buffer_size
   end
+
   def max_buffer_size=(val)
     # fixme: minimum size?  Curses.lines?
     @max_buffer_size = val.to_i
   end
-  def add_line(line, line_colors=Array.new)
-    part = [ 0, line.length ]
+
+  def add_line(line, line_colors = Array.new)
+    part = [0, line.length]
     line_colors.each { |h| part.push(h[:start]); part.push(h[:end]) }
     part.uniq!
     part.sort!
-    for i in 0...(part.length-1)
-      str = line[part[i]...part[i+1]]
-      color_list = line_colors.find_all { |h| (h[:start] <= part[i]) and (h[:end] >= part[i+1]) }
+    for i in 0...(part.length - 1)
+      str = line[part[i]...part[i + 1]]
+      color_list = line_colors.find_all { |h| (h[:start] <= part[i]) and (h[:end] >= part[i + 1]) }
       if color_list.empty?
         addstr str
       else
         # shortest length highlight takes precedence when multiple highlights cover the same substring
         # fixme: allow multiple highlights on a substring when one specifies fg and the other specifies bg
         color_list = color_list.sort_by { |h| h[:priority] or h[:end] - h[:start] }
-        #log("line: #{line}, list: #{color_list}")
-        fg = color_list.map { |h| h[:fg] }.find { |fg| !fg.nil? }
-        bg = color_list.map { |h| h[:bg] }.find { |bg| !bg.nil? }
-        ul = color_list.map { |h| h[:ul] == "true" }.find { |ul| ul }
-        attron(color_pair(get_color_pair_id(fg, bg))|(ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) {
+        # log("line: #{line}, list: #{color_list}")
+        fg = color_list.map { |h| h[:fg] }.find { |fgg| !fgg.nil? }
+        bg = color_list.map { |h| h[:bg] }.find { |bgg| !bgg.nil? }
+        ul = color_list.map { |h| h[:ul] == "true" }.find { |ull| ull }
+        attron(color_pair(get_color_pair_id(fg, bg)) | (ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) {
           addstr str
         }
       end
     end
   end
-  def add_string(string, string_colors=Array.new)
+
+  def add_string(string, string_colors = Array.new)
     #
     # word wrap string, split highlights if needed so each wrapped line is independent, update buffer, update window if needed
     #
-    while (line = string.slice!(/^.{2,#{maxx-1}}(?=\s|$)/)) or (line = string.slice!(0,(maxx-1)))
+    while (line = string.slice!(/^.{2,#{maxx - 1}}(?=\s|$)/)) or (line = string.slice!(0, (maxx - 1)))
       line_colors = Array.new
       for h in string_colors
         line_colors.push(h.dup) if (h[:start] < line.length)
         h[:end] -= line.length
         h[:start] = [(h[:start] - line.length), 0].max
       end
-      string_colors.delete_if { |h| h[:end] < 0 }
-      line_colors.each { |h| h[:end] = [h[:end], line.length].min }
-      @buffer.unshift([line,line_colors])
+      string_colors.delete_if { |hl| hl[:end] < 0 }
+      line_colors.each { |hl| hl[:end] = [hl[:end], line.length].min }
+      @buffer.unshift([line, line_colors])
       @buffer.pop if @buffer.length > @max_buffer_size
       if @buffer_pos == 0
         addstr "\n"
@@ -73,21 +78,21 @@ class TextWindow < Curses::Window
       end
       break if string.chomp.empty?
       if @indent_word_wrap
-        if string[0,1] == ' '
+        if string[0, 1] == ' '
           string = " #{string}"
-          string_colors.each { |h|
-            h[:end] += 1;
+          string_colors.each { |hl|
+            hl[:end] += 1;
             # Never let the highlighting hang off the edge -- it looks weird
-            h[:start] += h[:start] == 0 ? 2 : 1
+            hl[:start] += hl[:start] == 0 ? 2 : 1
           }
         else
           string = "  #{string}"
-          string_colors.each { |h| h[:end] += 2; h[:start] += 2 }
+          string_colors.each { |hl| hl[:end] += 2; hl[:start] += 2 }
         end
       else
-        if string[0,1] == ' '
-          string = string[1,string.length]
-          string_colors.each { |h| h[:end] -= 1; h[:start] -= 1 }
+        if string[0, 1] == ' '
+          string = string[1, string.length]
+          string_colors.each { |hl| hl[:end] -= 1; hl[:start] -= 1 }
         end
       end
     end
@@ -95,6 +100,7 @@ class TextWindow < Curses::Window
       noutrefresh
     end
   end
+
   def scroll(scroll_num)
     if scroll_num < 0
       if (@buffer_pos + maxy + scroll_num.abs) >= @buffer.length
@@ -103,12 +109,12 @@ class TextWindow < Curses::Window
       if scroll_num < 0
         @buffer_pos += scroll_num.abs
         scrl(scroll_num)
-        setpos(0,0)
+        setpos(0, 0)
         pos = @buffer_pos + maxy - 1
         scroll_num.abs.times {
           add_line(@buffer[pos][0], @buffer[pos][1])
           addstr "\n"
-          pos -=1
+          pos -= 1
         }
         noutrefresh
       end
@@ -135,10 +141,11 @@ class TextWindow < Curses::Window
     end
     update_scrollbar
   end
+
   def update_scrollbar
     if @scrollbar
       last_scrollbar_pos = @scrollbar_pos
-      @scrollbar_pos = maxy - ((@buffer_pos/[(@buffer.length - maxy), 1].max.to_f) * (maxy - 1)).round - 1
+      @scrollbar_pos = maxy - ((@buffer_pos / [(@buffer.length - maxy), 1].max.to_f) * (maxy - 1)).round - 1
       if last_scrollbar_pos
         unless last_scrollbar_pos == @scrollbar_pos
           @scrollbar.setpos(last_scrollbar_pos, 0)
@@ -164,11 +171,13 @@ class TextWindow < Curses::Window
       end
     end
   end
+
   def clear_scrollbar
     @scrollbar_pos = nil
     @scrollbar.clear
     @scrollbar.noutrefresh
   end
+
   def resize_buffer
     # fixme
   end
