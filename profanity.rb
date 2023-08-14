@@ -1753,7 +1753,7 @@ begin
   key_combo = nil
   loop {
     ch = command_window.getch
-    Autocomplete.consume(ch, history: command_history, buffer: command_buffer)
+    Autocomplete.consume(ch)
     if key_combo
       if key_combo[ch].class == Proc
         key_combo[ch].call
