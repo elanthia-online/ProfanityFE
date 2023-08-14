@@ -1651,7 +1651,7 @@ Thread.new {
 						if blue_links						
 							h = { :start => start_pos }
 							h[:fg] = PRESET['links'][0]
-							h[:bg] = PRESET['links'][1]
+							h[:bg] = PRESET['links'][1] unless PRESET['links'][1]=='nil'
 							h[:priority] = 2
 							open_link.push(h)
 						end
