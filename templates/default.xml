@@ -97,6 +97,8 @@ This layout will dynamically resize windows to an extent
   <highlight fg='ffffff'>^.*(?:falls slack against the floor|falls slack against the ground|falls to the floor, motionless|falls to the ground dead|falls to the ground motionless|and dies|and lies still|goes still|going still)\.$</highlight>
   <highlight fg='ffffff'>^.* is stunned!$|^You come out of hiding\.$</highlight>
   <highlight fg='ffaaaa'>.*ruining your hiding place\.$|^You are no longer hidden\.$|^\s*You are (?:stunned|knocked to the ground).*|^You are unable to remain hidden!$|^You are visible again\.$|^You fade into sight\.$|^You fade into view.*|^You feel drained!$|^You have overextended yourself!$|^You feel yourself going into shock!$|^You feel the sting of a recent death slowly fade away, yet a lingering weakness remains.$</highlight>
+
+  <preset id='links' fg='5555ff' bg='000000'/>
   <preset id='whisper' fg='88aaff'/>
   <preset id='speech' fg='66ff66'/>
   <preset id='roomName' fg='0000ff' bg='000000'/>

@@ -37,7 +37,7 @@ class TextWindow < Curses::Window
 			else
 				# shortest length highlight takes precedence when multiple highlights cover the same substring
 				# fixme: allow multiple highlights on a substring when one specifies fg and the other specifies bg
-				color_list = color_list.sort_by { |h| h[:end] - h[:start] }
+				color_list = color_list.sort_by { |h| h[:priority] or h[:end] - h[:start] }
 				#log("line: #{line}, list: #{color_list}")
 				fg = color_list.map { |h| h[:fg] }.find { |fg| !fg.nil? }
 				bg = color_list.map { |h| h[:bg] }.find { |bg| !bg.nil? }

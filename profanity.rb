@@ -103,6 +103,7 @@ module Profanity
 				--settings-file=<filename>
 				--char=<character>
 				--no-status                            do not redraw the process title with status updates
+				--links                                enable links to be shown by default, otherwise can enable via .links command
 		HELP
 		exit
 	end
@@ -133,6 +134,7 @@ progress_handler = Hash.new
 countdown_handler = Hash.new
 command_window = nil
 command_window_layout = nil
+blue_links = (Opts["links"] ? true : false)
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
 # ever support reloading other settings in the future it will have to protect
@@ -1101,6 +1103,8 @@ key_action['send_command'] = proc {
 		key_action['switch_arrow_mode'].call
 	elsif cmd =~ /^\.e (.*)/
 		eval(cmd.sub(/^\.e /, ''))
+	elsif cmd =~ /^\.links/i
+		blue_links = !blue_links
 	else
 		server.puts cmd.sub(/^\./, ';')
 	end
@@ -1198,6 +1202,7 @@ Thread.new {
 		open_preset = Array.new
 		open_style = nil
 		open_color = Array.new
+		open_link = Array.new
 		current_stream = nil
 
 		handle_game_text = proc { |text|
@@ -1272,7 +1277,8 @@ Thread.new {
 								:end => match_data.end(0),
 								:fg => colors[0],
 								:bg => colors[1],
-								:ul => colors[2]
+								:ul => colors[2],
+								:priority => 1
 							}
 							line_colors.push(h)
 							pos = match_data.end(0)
@@ -1532,6 +1538,7 @@ Thread.new {
 						if PRESET['monsterbold']
 							h[:fg] = PRESET['monsterbold'][0]
 							h[:bg] = PRESET['monsterbold'][1]
+							h[:priority] = 1
 						end
 						open_monsterbold.push(h)
 					elsif xml == '<popBold/>' or xml == '</b>'
@@ -1544,6 +1551,7 @@ Thread.new {
 						if PRESET[$2]
 							h[:fg] = PRESET[$2][0]
 							h[:bg] = PRESET[$2][1]
+							h[:priority] = 1
 						end
 						open_preset.push(h)
 					elsif xml == '</preset>'
@@ -1595,7 +1603,7 @@ Thread.new {
 						current_stream = nil
 					elsif xml =~ /^<progressBar/
 						nil
-					elsif xml =~ /^<(?:dialogdata|a|\/a|d|\/d|\/?component|label|skin|output)/
+					elsif xml =~ /^<(?:dialogdata|d|\/d|\/?component|label|skin|output)/
 						nil
 					elsif xml =~ /^<indicator id=('|")Icon([A-Z]+)\1 visible=('|")([yn])\3/
 						if window = countdown_handler[$2.downcase]
@@ -1640,6 +1648,19 @@ Thread.new {
             elsif RbConfig::CONFIG['host_os'] =~ /linux|bsd/
               system "xdg-open #{url} >/dev/null 2>&1 &"
             end
+					elsif xml =~ /^<a/
+						if blue_links						
+							h = { :start => start_pos }
+							h[:fg] = PRESET['links'][0]
+							h[:bg] = PRESET['links'][1] unless PRESET['links'][1]=='nil'
+							h[:priority] = 2
+							open_link.push(h)
+						end
+					elsif xml == '</a>'
+						if h = open_link.pop
+							h[:end] = start_pos
+							line_colors.push(h) if h[:fg] or h[:bg]
+						end
           else
 						nil
 					end
