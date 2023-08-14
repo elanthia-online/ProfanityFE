@@ -8,6 +8,9 @@ AllCops:
 Naming:
   Enabled: false
 
+Lint/ScriptPermission:
+  Enabled: false
+
 Style:
   Enabled: false
 
