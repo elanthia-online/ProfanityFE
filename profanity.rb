@@ -103,6 +103,7 @@ module Profanity
 				--settings-file=<filename>
 				--char=<character>
 				--no-status                            do not redraw the process title with status updates
+				--links                                enable links to be shown by default, otherwise can enable via .links command
 		HELP
 		exit
 	end
@@ -133,7 +134,7 @@ progress_handler = Hash.new
 countdown_handler = Hash.new
 command_window = nil
 command_window_layout = nil
-blue_links = false
+blue_links = (Opts["links"] ? true : false)
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
 # ever support reloading other settings in the future it will have to protect
