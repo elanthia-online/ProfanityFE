@@ -1267,7 +1267,7 @@ Thread.new {
 				oc[:start] = 0
 			end
 
-			if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/)
+			if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|atomospherics)$/)
 				SETTINGS_LOCK.synchronize {
 					HIGHLIGHT.each_pair { |regex,colors|
 						pos = 0
@@ -1338,7 +1338,7 @@ Thread.new {
 							window.add_string(text, line_colors)
 							need_update = true
 						end
-					elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/
+					elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|atomospherics)$/
 						if window = stream_handler['main']
 							if PRESET[current_stream]
 								line_colors.push(:start => 0, :fg => PRESET[current_stream][0], :bg => PRESET[current_stream][1], :end => text.length)
@@ -1639,15 +1639,14 @@ Thread.new {
 							end
 						end
 					elsif xml =~ /^<LaunchURL src="([^"]+)"/
-            url = "\"https://www.play.net#{$1}\""
-            @url = url
-            if RbConfig::CONFIG['host_os'] =~ /mswin|mingw|cygwin/
-              system "start #{url} >/dev/null 2>&1 &"
-            elsif RbConfig::CONFIG['host_os'] =~ /darwin/
-              system "open #{url} >/dev/null 2>&1 &"
-            elsif RbConfig::CONFIG['host_os'] =~ /linux|bsd/
-              system "xdg-open #{url} >/dev/null 2>&1 &"
-            end
+						url = "https://www.play.net#{$1}"
+						# TODO somehow determine whether we are running in a gui environment?
+						# for now, just print it instead of trying to open it
+						#cmd = RUBY_PLATFORM =~ /darwin/ ? "open" : "firefox"
+						#system("#{cmd} #{url}")
+						stream_handler['main'].add_string ' *'
+						stream_handler['main'].add_string " * LaunchURL: #{url}"
+						stream_handler['main'].add_string ' *'
 					elsif xml =~ /^<a/
 						if blue_links						
 							h = { :start => start_pos }
