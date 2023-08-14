@@ -1646,7 +1646,7 @@ Thread.new {
             end
 					elsif xml =~ /^<a/
 						h = { :start => start_pos }
-						h[:fg] = '6666ff'
+						h[:fg] = '6060ff'
 						h[:bg] = nil
 						h[:priority] = 2
 						open_link.push(h)
