@@ -3,12 +3,13 @@ class Autocomplete
 
 	@in_menu  = false
 
-	def self.consume(key_code, history:, buffer:)
+	def self.consume(key_code)
 		Autocomplete.wrap do
 			return @in_menu = true if key_code == 9 # tab
 			return unless @in_menu
 		end
 	end
+
 	##
 	## @brief      checks to see if the historical command is a possible 
 	## 						 completion of the current state of the command buffer
@@ -38,7 +39,7 @@ class Autocomplete
 	def self.wrap()
 		begin
 			yield
-		rescue Exception => e
+		rescue StandardError => e
 			Profanity.log("[autocomplete error #{Time.now}] #{$e.message}")
 			e.backtrace[0...4].each do |ln| Profanity.log(ln) end
 		end
