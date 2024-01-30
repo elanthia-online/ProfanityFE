@@ -27,7 +27,8 @@ module Hilite
     Profanity.log("[Settings] inheriting #{file} from #{parent}") if Opts.debug
     Hilite.load(
       file:  File.join(File.dirname(parent), file),
-      flush: false)
+      flush: false
+    )
   end
 
   def self.add_highlight(highlight)
@@ -36,7 +37,8 @@ module Hilite
       Hilite.put(pattern, [ 
         highlight.attributes["fg"], 
         highlight.attributes["bg"], 
-        highlight.attributes["ul"]])
+        highlight.attributes["ul"]
+      ])
     rescue => exception
       # todo: write useful error/backtrace to UI
       Profanity.log(highlight.text)
