@@ -9,11 +9,11 @@ module Hilite
   def self.load(file:, flush: true)
     Hilite.fetch(file: file, flush: flush) do |xml|
       store.clear() if flush
-     
+
       xml.elements
-        .select do |ele| ele.name.eql?("highlight") end
-        .each do |highlight| Hilite.parse(highlight: highlight, parent: file) end
-        
+         .select do |ele| ele.name.eql?("highlight") end
+         .each do |highlight| Hilite.parse(highlight: highlight, parent: file) end
+
       return xml
     end
   end
@@ -26,7 +26,7 @@ module Hilite
   def self.inherit(file:, parent:)
     Profanity.log("[Settings] inheriting #{file} from #{parent}") if Opts.debug
     Hilite.load(
-      file:  File.join(File.dirname(parent), file),
+      file: File.join(File.dirname(parent), file),
       flush: false
     )
   end
@@ -34,11 +34,11 @@ module Hilite
   def self.add_highlight(highlight)
     begin
       pattern = %r{#{highlight.text.strip}}
-      Hilite.put(pattern, [ 
-        highlight.attributes["fg"], 
-        highlight.attributes["bg"], 
-        highlight.attributes["ul"]
-      ])
+      Hilite.put(pattern, [
+                   highlight.attributes["fg"],
+                   highlight.attributes["bg"],
+                   highlight.attributes["ul"]
+                 ])
     rescue => exception
       # todo: write useful error/backtrace to UI
       Profanity.log(highlight.text)
