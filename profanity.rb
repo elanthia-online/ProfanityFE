@@ -47,7 +47,7 @@ require_relative "./settings/settings.rb"
 require_relative "./hilite/hilite.rb"
 
 module Profanity
-  LOG_FILE       = Settings.file("debug.log")
+  LOG_FILE = Settings.file("debug.log")
 
   def self.log_file
     return File.open(LOG_FILE, 'a') { |file| yield file } if block_given?
