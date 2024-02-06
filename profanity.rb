@@ -159,7 +159,6 @@ if Opts.char
         You specified --template=#{Opts.template} but it doesn't exist.
         Please try again!
       ERROR
-      exit
     end
   else
     if File.exist?(Settings.file(Opts.char.downcase + ".xml"))
