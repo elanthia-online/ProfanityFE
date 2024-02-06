@@ -154,7 +154,7 @@ if Opts.char
   if Opts.template
     SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase)
   else
-    if File.exist?(Settings.file(Opts.char.downcase + ".xml")
+    if File.exist?(Settings.file(Opts.char.downcase + ".xml"))
       SETTINGS_FILENAME = Settings.file(Opts.char.downcase + ".xml")
     else
       SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', 'default.xml')
