@@ -152,10 +152,20 @@ DEFAULT_COLOR_ID            = (Opts.color_id            || 7).to_i
 DEFAULT_BACKGROUND_COLOR_ID = (Opts.background_color_id || 0).to_i
 if Opts.char
   if Opts.template
-    SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase)
+    if File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase))
+      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase)
+    else
+      raise StandardError, <<~ERROR
+        You specified --template=#{Opts.template} but it doesn't exist.
+        Please try again!
+      ERROR
+      exit
+    end
   else
     if File.exist?(Settings.file(Opts.char.downcase + ".xml"))
       SETTINGS_FILENAME = Settings.file(Opts.char.downcase + ".xml")
+    elsif File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.char.downcase + ".xml"))
+      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.char.downcase + ".xml")
     else
       SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', 'default.xml')
     end
