@@ -48,7 +48,6 @@ require_relative "./hilite/hilite.rb"
 
 module Profanity
   LOG_FILE       = Settings.file("debug.log")
-  SETTINGS_FILE  = Settings.file("default.xml")
 
   def self.log_file
     return File.open(LOG_FILE, 'a') { |file| yield file } if block_given?
@@ -105,6 +104,7 @@ module Profanity
         --links                               enable links to be shown by default, otherwise can enable via .links command
         --speech-ts                           display timestamps on speech, familiar and thought window
         --remote-url                          display LaunchURLs on screen, used for remote environments
+        --template=<filename.xml>             filename of template to use in templates subdirectory
     HELP
     exit
   end
@@ -150,7 +150,13 @@ PORT                        = (Opts.port                || 8000).to_i
 HOST                        = (Opts.host                || "127.0.0.1")
 DEFAULT_COLOR_ID            = (Opts.color_id            || 7).to_i
 DEFAULT_BACKGROUND_COLOR_ID = (Opts.background_color_id || 0).to_i
-SETTINGS_FILENAME           = Settings.file(Opts.char.downcase + ".xml") if Opts.char
+if Opts.char
+  if Opts.template
+    SETTINGS_FILENAME       = File.join(File.expand_path(File.dirname(__FILE__)), "templates", Opts.template.downcase)
+  else
+    SETTINGS_FILENAME       = Settings.file(Opts.char.downcase + ".xml")
+  end
+end
 
 def add_prompt(window, prompt_text, cmd = "")
   window.add_string("#{prompt_text}#{cmd}", [{ :start => 0, :end => (prompt_text.length + cmd.length), :fg => '555555' }])
@@ -158,7 +164,7 @@ end
 
 unless defined?(SETTINGS_FILENAME)
   raise StandardError, <<~ERROR
-    you pust pass --char=<character>
+    you must pass --char=<character> or --template=<filename.xml>
     #{Opts.parse()}
   ERROR
 end
