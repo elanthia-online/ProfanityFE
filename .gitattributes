@@ -1,0 +1,4 @@
+.git*           export-ignore
+*.yml           export-ignore
+README.md       export-ignore
+Gemfile*        export-ignore
