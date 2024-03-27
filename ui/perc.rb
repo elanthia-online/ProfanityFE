@@ -46,3 +46,4 @@ class PercWindow < Curses::Window
       noutrefresh
     end
   end
+end
