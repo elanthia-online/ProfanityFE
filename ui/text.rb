@@ -178,7 +178,7 @@ class TextWindow < Curses::Window
     @scrollbar.noutrefresh
   end
 
-  def clear_buffer
+  def clear_window
     clear
     @buffer = Array.new
     @buffer_pos = 0
