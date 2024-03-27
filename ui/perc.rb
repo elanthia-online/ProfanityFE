@@ -46,4 +46,63 @@ class PercWindow < Curses::Window
       noutrefresh
     end
   end
+
+  def add_string(string, string_colors = [])
+    while (line = string.slice!(/^.{2,#{maxx - 1}}(?=\s|$)/)) or (line = string.slice!(0, (maxx - 1)))
+      line_colors = []
+      for h in string_colors
+        line_colors.push(h.dup) if h[:start] < line.length
+        h[:end] -= line.length
+        h[:start] = [(h[:start] - line.length), 0].max
+      end
+      string_colors.delete_if { |h| h[:end] < 0 }
+      line_colors.each { |h| h[:end] = [h[:end], line.length].min }
+      @buffer.unshift([line, line_colors])
+      @buffer.pop if @buffer.length > @max_buffer_size
+      if @buffer_pos == 0
+        add_line(line, line_colors)
+        # addstr "\n"
+      else
+        @buffer_pos += 1
+        scroll(1) if @buffer_pos > (@max_buffer_size - maxy)
+        update_scrollbar
+      end
+      break if string.chomp.empty?
+
+      if @indent_word_wrap
+        if string[0, 1] == ' '
+          string = " #{string}"
+          string_colors.each do |h|
+            h[:end] += 1
+            # Never let the highlighting hang off the edge -- it looks weird
+            h[:start] += h[:start] == 0 ? 2 : 1
+          end
+        else
+          string = "#{string}"
+          string_colors.each do |h|
+            h[:end] += 2
+            h[:start] += 2
+          end
+        end
+      elsif string[0, 1] == ' '
+        string = string[1, string.length]
+        string_colors.each do |h|
+          h[:end] -= 1
+          h[:start] -= 1
+        end
+      end
+    end
+  end
+
+  def redraw
+    clear
+    setpos(0, 0)
+    noutrefresh
+  end
+
+  def clear_window
+    clear
+    setpos(0, 0)
+    noutrefresh
+  end
 end
