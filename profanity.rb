@@ -1775,7 +1775,7 @@ Thread.new {
 
               line_colors.push(
                 start: 0,
-                fg: PRESET[current_stream][0], 
+                fg: PRESET[current_stream][0],
                 bg: PRESET[current_stream][1],
                 end: text.length
               )
