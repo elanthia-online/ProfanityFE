@@ -2049,9 +2049,10 @@ Thread.new {
             game_text = line.slice!(0, start_pos)
             handle_game_text.call(game_text)
             current_stream = new_stream
-          elsif xml =~ /^<popStream/ or xml == '</component>'
+          elsif xml =~ %r{^<popStream(?!/><pushStream)} or xml == '</component>'
             game_text = line.slice!(0, start_pos)
             handle_game_text.call(game_text)
+            stream_handler['exp'].delete_skill if current_stream == 'exp' and stream_handler['exp']
             current_stream = nil
           elsif xml =~ /^<progressBar/
             nil
