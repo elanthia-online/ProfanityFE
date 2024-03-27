@@ -35,9 +35,9 @@ class PercWindow < Curses::Window
         # shortest length highlight takes precedence when multiple highlights cover the same substring
         # fixme: allow multiple highlights on a substring when one specifies fg and the other specifies bg
         color_list = color_list.sort_by { |h| h[:end] - h[:start] }
-        fg = color_list.map { |h| h[:fg] }.find { |fg| !fg.nil? }
-        bg = color_list.map { |h| h[:bg] }.find { |bg| !bg.nil? }
-        ul = color_list.map { |h| h[:ul] == 'true' }.find { |ul| ul }
+        fg = color_list.map { |h| h[:fg] }.find { |foreground| !foreground.nil? }
+        bg = color_list.map { |h| h[:bg] }.find { |background| !background.nil? }
+        ul = color_list.map { |h| h[:ul] == 'true' }.find { |underline| underline }
         attron(color_pair(get_color_pair_id(fg, bg)) | (ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) do
           addstr str + "\n" unless str.chomp.empty?
           noutrefresh
