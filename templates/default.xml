@@ -147,7 +147,16 @@ This layout will dynamically resize windows to an extent
   <key id='page_down' action='scroll_current_window_down_page'/>
   <key id='up' action='previous_command'/>
   <key id='down' action='next_command'/>
-  <key id='ctrl+up' action='send_last_command'/>
+  <key id='num_enter' action='send_last_command'/>
+  <key id='num_1' macro='\xsw\r'/>
+  <key id='num_2' macro='\xs\r'/>
+  <key id='num_3' macro='\xse\r'/>
+  <key id='num_4' macro='\xw\r'/>
+  <key id='num_5' macro='\xout\r'/>
+  <key id='num_6' macro='\xe\r'/>
+  <key id='num_7' macro='\xnw\r'/>
+  <key id='num_8' macro='\xn\r'/>
+  <key id='num_9' macro='\xne\r'/>
   <key id='alt+up' action='send_second_last_command'/>
   <key id='resize' action='resize'/>
 
