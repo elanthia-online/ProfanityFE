@@ -1773,8 +1773,12 @@ Thread.new {
                 end
               end
 
-              line_colors.push(start: 0, fg: PRESET[current_stream][0], bg: PRESET[current_stream][1],
-                              end: text.length)
+              line_colors.push(
+                start: 0,
+                fg: PRESET[current_stream][0], 
+                bg: PRESET[current_stream][1],
+                end: text.length
+              )
               # window.add_string(text, line_colors)
               # need_update = true
             end
