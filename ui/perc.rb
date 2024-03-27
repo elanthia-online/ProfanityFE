@@ -55,8 +55,8 @@ class PercWindow < Curses::Window
         h[:end] -= line.length
         h[:start] = [(h[:start] - line.length), 0].max
       end
-      string_colors.delete_if { |h| h[:end] < 0 }
-      line_colors.each { |h| h[:end] = [h[:end], line.length].min }
+      string_colors.delete_if { |highlight| highlight[:end] < 0 }
+      line_colors.each { |highlight| highlight[:end] = [highlight[:end], line.length].min }
       @buffer.unshift([line, line_colors])
       @buffer.pop if @buffer.length > @max_buffer_size
       if @buffer_pos == 0
@@ -72,23 +72,23 @@ class PercWindow < Curses::Window
       if @indent_word_wrap
         if string[0, 1] == ' '
           string = " #{string}"
-          string_colors.each do |h|
-            h[:end] += 1
+          string_colors.each do |highlight|
+            highlight[:end] += 1
             # Never let the highlighting hang off the edge -- it looks weird
-            h[:start] += h[:start] == 0 ? 2 : 1
+            highlight[:start] += highlight[:start] == 0 ? 2 : 1
           end
         else
           string = "#{string}"
-          string_colors.each do |h|
-            h[:end] += 2
-            h[:start] += 2
+          string_colors.each do |highlight|
+            highlight[:end] += 2
+            highlight[:start] += 2
           end
         end
       elsif string[0, 1] == ' '
         string = string[1, string.length]
-        string_colors.each do |h|
-          h[:end] -= 1
-          h[:start] -= 1
+        string_colors.each do |highlight|
+          highlight[:end] -= 1
+          highlight[:start] -= 1
         end
       end
     end
