@@ -10,6 +10,19 @@ A terminal frontend for Simutronics games based on Ruby and Ncurses.
 6. Launch Lich5 via `ruby ~/lich-5/lich.rbw --login Rinualdo --without-frontend --detachable-client=8000 &` or similar.
 7. Launch Profanity via `ruby ~/ProfanityFE/profanity.rb --port=8000 --char=Rinualdo`
 
+## Profanity CLI Options
+* --port=<port>
+* --default-color-id=<id>
+* --default-background-color-id=<id>
+* --custom-colors=<on|off>
+* --settings-file=<filename>
+* --char=<character>
+* --no-status                           do not redraw the process title with status updates
+* --links                               enable links to be shown by default, otherwise can enable via .links command
+* --speech-ts                           display timestamps on speech, familiar and thought window
+* --remote-url                          display LaunchURLs on screen, used for remote environments
+* --template=<filename.xml>             filename of template to use in templates subdirectory
+
 ## Sample Scripts
 Here's a sample login script written for Linux, usage syntax would be `.\gemstone.sh <CHARNAME>`
 ```bash
