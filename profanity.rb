@@ -463,6 +463,7 @@ load_layout = proc { |layout_id|
               window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
               window.scrollok(true)
               window.max_buffer_size = e.attributes['buffer-size'] || 1000
+              window.time_stamp = e.attributes['timestamp']
               e.attributes['value'].split(',').each { |str|
                 stream_handler[str] = window
               }
