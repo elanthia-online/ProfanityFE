@@ -41,6 +41,8 @@ require_relative "./ui/countdown.rb"
 require_relative "./ui/indicator.rb"
 require_relative "./ui/progress.rb"
 require_relative "./ui/text.rb"
+require_relative "./ui/exp.rb"
+require_relative "./ui/perc.rb"
 
 require_relative "./plugin/autocomplete.rb"
 require_relative "./settings/settings.rb"
