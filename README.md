@@ -18,7 +18,7 @@ set -e
 
 port=8000
 CHAR=$1
-LICH_BIN=~/lich-gs/lich.rbw
+LICH_BIN=~/lich-5/lich.rbw
 PROFANITY_BIN=~/ProfanityFE/profanity.rb
 
 export TERM=screen-256color
