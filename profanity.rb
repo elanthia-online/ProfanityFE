@@ -1299,7 +1299,7 @@ Thread.new {
         oc[:start] = 0
       end
 
-      if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/)
+      if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics)$/)
         SETTINGS_LOCK.synchronize {
           HIGHLIGHT.each_pair { |regex, colors|
             pos = 0
