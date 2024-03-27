@@ -1674,7 +1674,7 @@ Thread.new {
             handle_game_text.call(game_text)
             current_stream = new_stream
           elsif xml =~ /^<clearStream id=['"](\w+)['"]\/>$/
-            stream_handler[$1].clear if stream_handler[$1]
+            stream_handler[$1].clear_buffer if stream_handler[$1]
           elsif xml =~ /^<popStream/ or xml == '</component>'
             game_text = line.slice!(0, start_pos)
             handle_game_text.call(game_text)
