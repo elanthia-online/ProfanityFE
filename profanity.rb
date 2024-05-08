@@ -1299,7 +1299,7 @@ Thread.new {
         oc[:start] = 0
       end
 
-      if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics)$/)
+      if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics|charprofile)$/)
         SETTINGS_LOCK.synchronize {
           HIGHLIGHT.each_pair { |regex, colors|
             pos = 0
@@ -1797,7 +1797,7 @@ Thread.new {
               window.add_string(text, line_colors)
               need_update = true
             end
-          elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics)$/
+          elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics|charprofile)$/
             if current_stream =~ /^(?:thoughts|familiar)$/
               text = "#{text} (#{Time.now.strftime('%H:%M:%S').sub(/^0/, '')})" if Opts["speech-ts"]
             end
