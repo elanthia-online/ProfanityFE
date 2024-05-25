@@ -2,7 +2,7 @@ require "curses"
 
 class TextWindow < Curses::Window
   attr_reader :color_stack, :buffer
-  attr_accessor :scrollbar, :indent_word_wrap, :layout
+  attr_accessor :scrollbar, :indent_word_wrap, :layout, :time_stamp
 
   @@list = Array.new
 
@@ -57,6 +57,7 @@ class TextWindow < Curses::Window
     #
     # word wrap string, split highlights if needed so each wrapped line is independent, update buffer, update window if needed
     #
+    string += " [#{Time.now.hour.to_s.rjust(2, '0')}:#{Time.now.min.to_s.rjust(2, '0')}]" if @time_stamp && string && !string.chomp.empty?
     while (line = string.slice!(/^.{2,#{maxx - 1}}(?=\s|$)/)) or (line = string.slice!(0, (maxx - 1)))
       line_colors = Array.new
       for h in string_colors

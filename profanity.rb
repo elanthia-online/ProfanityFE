@@ -41,6 +41,8 @@ require_relative "./ui/countdown.rb"
 require_relative "./ui/indicator.rb"
 require_relative "./ui/progress.rb"
 require_relative "./ui/text.rb"
+require_relative "./ui/exp.rb"
+require_relative "./ui/perc.rb"
 
 require_relative "./plugin/autocomplete.rb"
 require_relative "./settings/settings.rb"
@@ -258,6 +260,16 @@ key_name = {
   'page_up'       => 339,
   'end'           => 360,
   'resize'        => 410,
+  'num_7'         => 449,
+  'num_8'         => 450,
+  'num_9'         => 451,
+  'num_4'         => 452,
+  'num_5'         => 453,
+  'num_6'         => 454,
+  'num_1'         => 455,
+  'num_2'         => 456,
+  'num_3'         => 457,
+  'num_enter'     => 459,
   'ctrl+delete'   => 513,
   'alt+down'      => 517,
   'ctrl+down'     => 519,
@@ -461,10 +473,15 @@ load_layout = proc { |layout_id|
               window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
               window.scrollok(true)
               window.max_buffer_size = e.attributes['buffer-size'] || 1000
+              window.time_stamp = e.attributes['timestamp']
               e.attributes['value'].split(',').each { |str|
                 stream_handler[str] = window
               }
             end
+          elsif e.attributes['class'] == 'exp'
+            stream_handler['exp'] = ExpWindow.new(height, width - 1, top, left)
+          elsif e.attributes['class'] == 'percWindow'
+            stream_handler['percWindow'] = PercWindow.new(height, width - 1, top, left)
           elsif e.attributes['class'] == 'countdown'
             if e.attributes['value'] and (window = previous_countdown_handler[e.attributes['value']])
               previous_countdown_handler[e.attributes['value']] = nil
@@ -1282,7 +1299,7 @@ Thread.new {
         oc[:start] = 0
       end
 
-      if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/)
+      if current_stream.nil? or stream_handler[current_stream] or (current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics|charprofile)$/)
         SETTINGS_LOCK.synchronize {
           HIGHLIGHT.each_pair { |regex, colors|
             pos = 0
@@ -1407,12 +1424,380 @@ Thread.new {
                 }
                 line_colors.push(h)
               end
+            elsif current_stream == 'exp'
+              window = stream_handler['exp']
+            elsif current_stream == 'percWindow'
+              window = stream_handler['percWindow']
+              all_spells = {
+                'Abandoned Heart'            => 'ABAN',
+                'Absolution'                 => 'Absolution',
+                'Acid Splash'                => 'ACS',
+                'Aegis of Granite'           => 'AEG',
+                'Aesandry Darlaeth'          => 'AD',
+                'Aesrela Everild'            => 'AE',
+                'Aether Cloak'               => 'AC',
+                'Aether Wolves'              => 'AEWO',
+                'Aethrolysis'                => 'Aethrolysis',
+                'Avren Aevareae'             => 'AVA',
+                'Aggressive Stance'          => 'AGS',
+                'Air Bubble'                 => 'AB',
+                'Air Lash'                   => 'ALA',
+                "Alamhif's Gift"             => 'AG',
+                "Albreda's Balm"             => 'ALB',
+                "Anther's Call"              => 'ANC',
+                'Anti-Stun'                  => 'AS',
+                "Arbiter's Stylus"           => 'ARS',
+                'Arc Light'                  => 'AL',
+                "Artificer's Eye"            => 'ART',
+                'Aspects of the All-God'     => 'ALL',
+                "Aspirant's Aegis"           => 'AA',
+                'Athleticism'                => 'Athleticism',
+                'Aura Sight'                 => 'AUS',
+                'Aura of Tongues'            => 'AOT',
+                'Auspice'                    => 'Auspice',
+                'Awaken'                     => 'Awaken',
+                'Awaken Forest'              => 'AF',
+                'Banner of Truce'            => 'BOT',
+                'Bear Strength'              => 'BES',
+                'Beckon the Naga'            => 'BTN',
+                'Benediction'                => 'Benediction',
+                'Blend'                      => 'Blend',
+                'Bless'                      => 'Bless',
+                'Blessing of the Fae'        => 'BOTF',
+                'Bloodthorns'                => 'Bloodthorns',
+                'Blood Burst'                => 'BLB',
+                'Blood Staunching'           => 'BS',
+                'Blufmor Garaen'             => 'BG',
+                'Blur'                       => 'Blur',
+                'Bond Armaments'             => 'BA',
+                "Braun's Conjecture"         => 'BC',
+                'Breath of Storms'           => 'BOS',
+                'Burden'                     => 'Burden',
+                'Burn'                       => 'Burn',
+                "Butcher's Eye"              => 'BUE',
+                'Cage of Light'              => 'CoL',
+                'Calcified Hide'             => 'CH',
+                'Call from Beyond'           => 'CFB',
+                'Calm'                       => 'Calm',
+                'Caress of the Sun'          => 'CARE',
+                'Carrion Call'               => 'CAC',
+                'Centering'                  => 'Centering',
+                'Chain Lightning'            => 'CL',
+                'Cheetah Swiftness'          => 'CS',
+                'Chill Spirit'               => 'CHS',
+                'Circle of Sympathy'         => 'COS',
+                'Clarity'                    => 'Clarity',
+                'Claws of the Cougar'        => 'COTC',
+                'Clear Vision'               => 'CV',
+                'Compel'                     => 'Compel',
+                'Compost'                    => 'Compost',
+                'Consume Flesh'              => 'CF',
+                'Contingency'                => 'Contingency',
+                'Courage'                    => 'CO',
+                'Crystal Dart'               => 'CRD',
+                "Crusader's Challenge"       => 'CRC',
+                'Cure Disease'               => 'CD',
+                'Curse of the Wilds'         => 'COTW',
+                'Curse of Zachriedek'        => 'COZ',
+                "Damaris' Lullaby"           => 'DALU',
+                'Dazzle'                     => 'Dazzle',
+                'Deadfall'                   => 'DF',
+                "Demrris' Resolve"           => 'DMRS',
+                "Desert's Maelstrom"         => 'DEMA',
+                'Destiny Cipher'             => 'DC',
+                'Devitalize'                 => 'DEVI',
+                'Devolve'                    => 'DE',
+                'Devour'                     => 'Devour',
+                'Dispel'                     => 'Dispel',
+                'Distant Gaze'               => 'DG',
+                'Dinazen Olkar'              => 'DO',
+                'Divine Armor'               => 'DA',
+                'Divine Guidance'            => 'DIG',
+                'Divine Radiance'            => 'DR',
+                "Dragon's Breath"            => 'DB',
+                'Drought'                    => 'Drought',
+                'Drums of the Snake'         => 'DRUM',
+                'Ease Burden'                => 'EASE',
+                "Eagle's Cry"                => 'EC',
+                'Earth Meld'                 => 'EM',
+                'Echoes of Aether'           => 'ECHO',
+                "Eillie's Cry"               => 'ECRY',
+                'Elision'                    => 'ELI',
+                'Electrostatic Eddy'         => 'EE',
+                "Emuin's Candlelight"        => 'EMC',
+                'Enrichment'                 => 'ENRICH',
+                'Essence of Yew'             => 'EY',
+                'Ethereal Fissure'           => 'ETF',
+                'Ethereal Shield'            => 'ES',
+                'Eye of Kertigen'            => 'EYE',
+                'Eyes of the Blind'          => 'EOTB',
+                "Eylhaar's Feast"            => 'EF',
+                "Faenella's Grace"           => 'FAE',
+                'Failure of the Forge'       => 'FOTF',
+                'Fire Ball'                  => 'FB',
+                'Fire Rain'                  => 'FR',
+                'Fire Shards'                => 'FS',
+                'Fire of Ushnish'            => 'FOU',
+                'Fists of Faenella'          => 'FF',
+                'Finesse'                    => 'FIN',
+                'Fluoresce'                  => 'Fluoresce',
+                'Flush Poisons'              => 'FP',
+                'Focus Moonbeam'             => 'FM',
+                "Footman's Strike"           => 'FST',
+                "Forestwalker's Boon"        => 'FWB',
+                'Fortress of Ice'            => 'FOI',
+                'Fountain of Creation'       => 'FOC',
+                'Frostbite'                  => 'frostbite',
+                'Frost Scythe'               => 'FRS',
+                'Gam Irnan'                  => 'GI',
+                'Gauge Flow'                 => 'GAF',
+                'Gar Zeng'                   => 'GZ',
+                'Geyser'                     => 'Geyser',
+                'Ghost Shroud'               => 'GHS',
+                'Ghoulflesh'                 => 'Ghoulflesh',
+                'Gift of Life'               => 'GOL',
+                "Glythtide's Gift"           => 'GG',
+                "Glythtide's Joy"            => 'GJ',
+                'Grizzly Claws'              => 'GRIZ',
+                'Grounding Field'            => 'GF',
+                'Guardian Spirit'            => 'GS',
+                'Halo'                       => 'HALO',
+                'Halt'                       => 'Halt',
+                'Hand of Tenemlor'           => 'HOT',
+                'Hands of Justice'           => 'HOJ',
+                'Hands of Lirisa'            => 'HOL',
+                "Harawep's Bonds"            => 'HB',
+                'Harm Evil'                  => 'HE',
+                'Harm Horde'                 => 'HH',
+                'Harmony'                    => 'Harmony',
+                'Heal'                       => 'Heal',
+                'Heal Scars'                 => 'HS',
+                'Heal Wounds'                => 'HW',
+                'Heart Link'                 => 'HL',
+                'Heighten Pain'              => 'HP',
+                'Heroic Strength'            => 'HES',
+                "Hodierna's Lilt"            => 'HODI',
+                'Holy Warrior'               => 'HOW',
+                'Horn of the Black Unicorn'  => 'HORN',
+                "Huldah's Pall"              => 'HULP',
+                'Hydra Hex'                  => 'HYH',
+                'Ice Patch'                  => 'IP',
+                'Icutu Zaharenela'           => 'IZ',
+                "Idon's Theft"               => 'IT',
+                'Ignite'                     => 'Ignite',
+                'Imbue'                      => 'Imbue',
+                'Innocence'                  => 'Innocence',
+                'Instinct'                   => 'INST',
+                'Invocation of the Spheres'  => 'IOTS',
+                'Iron Constitution'          => 'IC',
+                'Iridius Rod'                => 'IR',
+                'Ivory Mask'                 => 'IVM',
+                'Kura-Silma'                 => 'KS',
+                'Last Gift of Vithwok IV'    => 'LGV',
+                'Lay Ward'                   => 'LW',
+                'Lethargy'                   => 'LETHARGY',
+                'Lightning Bolt'             => 'LB',
+                'Locate'                     => 'Locate',
+                "Machinist's Touch"          => 'MT',
+                'Magnetic Ballista'          => 'MAB',
+                'Major Physical Protection'  => 'MAPP',
+                'Malediction'                => 'Malediction',
+                'Manifest Force'             => 'MAF',
+                'Mantle of Flame'            => 'MOF',
+                'Mark of Arhat'              => 'MOA',
+                'Marshal Order'              => 'MO',
+                'Mask of the Moons'          => 'MOM',
+                'Mass Rejuvenation'          => 'MRE',
+                "Membrach's Greed"           => 'MEG',
+                'Memory of Nature'           => 'MON',
+                'Mental Blast'               => 'MB',
+                'Mental Focus'               => 'MEF',
+                "Meraud's Cry"               => 'MC',
+                'Mind Shout'                 => 'MS',
+                'Minor Physical Protection'  => 'MPP',
+                'Misdirection'               => 'MIS',
+                'Moonblade'                  => 'Moonblade',
+                'Moongate'                   => 'MG',
+                "Murrula's Flames"           => 'MF',
+                'Naming of Tears'            => 'NAME',
+                'Necrotic Reconstruction'    => 'NR',
+                'Nexus'                      => 'NEXUS',
+                "Nissa's Binding"            => 'NB',
+                'Nonchalance'                => 'NON',
+                'Noumena'                    => 'NOU',
+                'Oath of the Firstborn'      => 'OATH',
+                'Obfuscation'                => 'Obfuscation',
+                'Osrel Meraud'               => 'OM',
+                "Paeldryth's Wrath"          => 'PW',
+                'Paralysis'                  => 'PARALYSIS',
+                'Partial Displacement'       => 'PD',
+                "Perseverance of Peri'el"    => 'POP',
+                'Persistence of Mana'        => 'POM',
+                'Petrifying Visions'         => 'PV',
+                "Phelim's Sanction"          => 'PS',
+                "Philosopher's Preservation" => 'PHP',
+                'Piercing Gaze'              => 'PG',
+                "Phoenix's Pyre"             => 'PYRE',
+                'Platinum Hands of Kertigen' => 'PHK',
+                'Protection from Evil'       => 'PFE',
+                'Psychic Shield'             => 'PSY',
+                'Quicken the Earth'          => 'QE',
+                'Rage of the Clans'          => 'RAGE',
+                'Raise Power'                => 'RP',
+                'Read the Ripples'           => 'RtR',
+                'Rebuke'                     => 'REB',
+                "Redeemer's Pride"           => 'REPR',
+                'Refractive Field'           => 'RF',
+                'Refresh'                    => 'Refresh',
+                'Regalia'                    => 'REGAL',
+                'Regenerate'                 => 'Regenerate',
+                'Rejuvenation'               => 'REJUV',
+                'Rend'                       => 'rend',
+                "Researcher's Insight"       => 'REI',
+                'Resonance'                  => 'Resonance',
+                'Resurrection'               => 'REZZ',
+                'Revelation'                 => 'Revelation',
+                'Reverse Putrefaction'       => 'RPU',
+                'Riftal Summons'             => 'RS',
+                'Righteous Wrath'            => 'RW',
+                'Rimefang'                   => 'RIM',
+                'Ring of Spears'             => 'ROS',
+                'Rising Mists'               => 'RM',
+                'Rite of Contrition'         => 'ROC',
+                'Rite of Grace'              => 'ROG',
+                'Rite of Forbearance'        => 'ROF',
+                'River in the Sky'           => 'RITS',
+                "Rutilor's Edge"             => 'RUE',
+                'Saesordian Compass'         => 'SCO',
+                'Sanctify Pattern'           => 'SAP',
+                'Sanctuary'                  => 'Sanctuary',
+                'Sanyu Lyba'                 => 'SL',
+                'Seal Cambrinth'             => 'SEC',
+                "Seer's Sense"               => 'SEER',
+                'See the Wind'               => 'STW',
+                'Senses of the Tiger'        => 'SOTT',
+                "Sentinel's Resolve"         => 'SR',
+                'Sever Thread'               => 'SET',
+                'Shadewatch Mirror'          => 'SHM',
+                'Shadow Servant'             => 'SS',
+                'Shadowling'                 => 'Shadowling',
+                'Shadows'                    => 'Shadows',
+                'Shadow Web'                 => 'SHW',
+                'Shatter'                    => 'Shatter',
+                'Shear'                      => 'shear',
+                'Shield of Light'            => 'SOL',
+                'Shift Moonbeam'             => 'SM',
+                'Shockwave'                  => 'Shockwave',
+                'Siphon Vitality'            => 'SV',
+                'Skein of Shadows'           => 'SKS',
+                'Sleep'                      => 'Sleep',
+                'Smite Horde'                => 'SMH',
+                "Soldier's Prayer"           => 'SP',
+                'Soul Ablaze'                => 'SOUL',
+                'Soul Attrition'             => 'SA',
+                'Soul Bonding'               => 'SB',
+                'Soul Shield'                => 'SOS',
+                'Soul Sickness'              => 'SICK',
+                'Sovereign Destiny'          => 'SOD',
+                'Spite of Dergati'           => 'SPIT',
+                'Stampede'                   => 'Stampede',
+                'Starcrash'                  => 'Starcrash',
+                'Starlight Sphere'           => 'SLS',
+                'Stellar Collector'          => 'STC',
+                'Steps of Vuan'              => 'SOV',
+                'Stone Strike'               => 'STS',
+                'Strange Arrow'              => 'STRA',
+                'Stun Foe'                   => 'SF',
+                'Substratum'                 => 'Substratum',
+                'Sure Footing'               => 'SUF',
+                'Swarm'                      => 'Swarm',
+                'Swirling Winds'             => 'SW',
+                'Syamelyo Kuniyo'            => 'SK',
+                'Tailwind'                   => 'TW',
+                'Tangled Fate'               => 'TF',
+                "Tamsine's Kiss"             => 'TK',
+                'Telekinetic Shield'         => 'TKSH',
+                'Telekinetic Storm'          => 'TKS',
+                'Telekinetic Throw'          => 'TKT',
+                'Teleport'                   => 'Teleport',
+                'Tenebrous Sense'            => 'TS',
+                "Tezirah's Veil"             => 'TV',
+                'Thoughtcast'                => 'TH',
+                'Thunderclap'                => 'TC',
+                'Tingle'                     => 'TI',
+                'Trabe Chalice'              => 'TRC',
+                'Tranquility'                => 'Tranquility',
+                'Tremor'                     => 'Tremor',
+                "Truffenyi's Rally"          => 'TR',
+                'Turmar Illumination'        => 'TURI',
+                'Uncurse'                    => 'Uncurse',
+                'Universal Solvent'          => 'USOL',
+                'Unleash'                    => 'Unleash',
+                'Veil of Ice'                => 'VOI',
+                'Vertigo'                    => 'Vertigo',
+                'Vessel of Salvation'        => 'VOS',
+                'Vigil'                      => 'Vigil',
+                'Vigor'                      => 'Vigor',
+                'Viscous Solution'           => 'VS',
+                'Visions of Darkness'        => 'VOD',
+                'Vitality Healing'           => 'VH',
+                'Vivisection'                => 'Vivisection',
+                'Ward Break'                 => 'WB',
+                'Whispers of the Muse'       => 'WOTM',
+                'Whole Displacement'         => 'WD',
+                'Will of Winter'             => 'WILL',
+                'Wisdom of the Pack'         => 'WOTP',
+                'Wolf Scent'                 => 'WS',
+                'Words of the Wind'          => 'WORD',
+                "Worm's Mist"                => 'WORM',
+                "Y'ntrel Sechra"             => 'YS',
+                'Zephyr'                     => 'zephyr'
+              }
+
+              # Reduce lines a bit
+              text.sub!(/ (roisaen|roisan)/, '')
+              text.sub!(/Indefinite/, 'cyclic')
+              text.sub!(/Khri /, '')
+
+              if text.index('(')
+                spell_name = text[0..text.index('(') - 2]
+                # Shorten spell names
+                text.sub!(/^#{spell_name}/, all_spells[spell_name.strip]) if all_spells.include?(spell_name.strip)
+              end
+
+              text.strip!
+
+              SETTINGS_LOCK.synchronize do
+                HIGHLIGHT.each_pair do |regex, colors|
+                  pos = 0
+                  while (match_data = text.match(regex, pos))
+                    h = {
+                      start: match_data.begin(0),
+                      end: match_data.end(0),
+                      fg: colors[0],
+                      bg: colors[1],
+                      ul: colors[2]
+                    }
+                    line_colors.push(h)
+                    pos = match_data.end(0)
+                  end
+                end
+              end
+
+              line_colors.push(
+                start: 0,
+                fg: PRESET[current_stream][0],
+                bg: PRESET[current_stream][1],
+                end: text.length
+              )
+              # window.add_string(text, line_colors)
+              # need_update = true
             end
             unless text =~ /^\[server\]: "(?:kill|connect)/
               window.add_string(text, line_colors)
               need_update = true
             end
-          elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar)$/
+          elsif current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics|charprofile)$/
             if current_stream =~ /^(?:thoughts|familiar)$/
               text = "#{text} (#{Time.now.strftime('%H:%M:%S').sub(/^0/, '')})" if Opts["speech-ts"]
             end
@@ -1670,14 +2055,21 @@ Thread.new {
             end
           elsif xml =~ /^<(?:pushStream|component|compDef) id=("|')(.*?)\1[^>]*\/?>$/
             new_stream = $2
+            if new_stream =~ /^exp (\w+\s?\w+?)/
+              current_stream = 'exp'
+              stream_handler['exp'].set_current(Regexp.last_match(1)) if stream_handler['exp']
+            else
+              current_stream = new_stream
+            end
             game_text = line.slice!(0, start_pos)
             handle_game_text.call(game_text)
             current_stream = new_stream
           elsif xml =~ /^<clearStream id=['"](\w+)['"]\/>$/
             stream_handler[$1].clear_window if stream_handler[$1]
-          elsif xml =~ /^<popStream/ or xml == '</component>'
+          elsif xml =~ %r{^<popStream(?!/><pushStream)} or xml == '</component>'
             game_text = line.slice!(0, start_pos)
             handle_game_text.call(game_text)
+            stream_handler['exp'].delete_skill if current_stream == 'exp' and stream_handler['exp']
             current_stream = nil
           elsif xml =~ /^<progressBar/
             nil
