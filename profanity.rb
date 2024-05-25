@@ -1239,6 +1239,14 @@ Thread.new {
     open_color = Array.new
     open_link = Array.new
     current_stream = nil
+    is_room_desc = false
+    is_room_name = false
+    is_obvious_paths = false
+    is_also_here = false
+    consume_room_desc = false
+    consume_room_name = false
+    consume_obvious_paths = false
+    consume_also_here = false
 
     handle_game_text = proc { |text|
       for escapable in xml_escape_list.keys
@@ -1823,8 +1831,39 @@ Thread.new {
               need_prompt = false
               add_prompt(window, prompt_text)
             end
-            window.add_string(text, line_colors)
-            need_update = true
+ 
+            # don't print any of these updates if we're meant to consume them
+            if !(is_room_desc && consume_room_desc) && !(is_room_name && consume_room_name) && !(is_obvious_paths && consume_obvious_paths) && !(is_also_here && consume_also_here)
+              # note: add_string can mutate the passed references in some scenarios like indented word wrapping for rooms
+              # the side effect is if you spend the same string to mulitple windows, the subsequent call to add_string
+              # may receive a truncated string. so we duplicate it to avoid the issue. similarly the line_colors hash
+              # may be modified by add_string, so we duplicate that as well.
+              window.add_string(text.dup, line_colors.map(&:dup))
+              need_update = true
+            end
+
+            if (room_window = stream_handler['room']) && (is_room_desc || is_room_name || is_obvious_paths || is_also_here)
+              if is_room_name
+                room_window.clear_window
+                is_room_name = false
+                consume_room_name = false if consume_room_name
+              elsif is_room_desc
+                is_room_desc = false
+                consume_room_desc = false if consume_room_desc 
+              elsif is_obvious_paths
+                is_obvious_paths = false
+                consume_obvious_paths = false if consume_obvious_paths 
+              elsif is_also_here
+                is_also_here = false
+                consume_also_here = false if consume_also_here
+              end
+              # note: add_string can mutate the passed references in some scenarios like indented word wrapping for rooms
+              # the side effect is if you spend the same string to mulitple windows, the subsequent call to add_string
+              # may receive a truncated string. so we duplicate it to avoid the issue. similarly the line_colors hash
+              # may be modified by add_string, so we duplicate that as well.
+              room_window.add_string(text.dup, line_colors.map(&:dup))
+              need_update = true
+            end
           end
         end
       end
@@ -1846,9 +1885,19 @@ Thread.new {
           need_update = true
         end
       else
+        # Need to keep track of this line coming through as a result of looking automatically
+        # whenever room objs is received as part of the room window implementation
+        # if we initiate a look that results in this line we want to suppress it
+        if line =~ /^Obvious (paths|exits): /
+          is_obvious_paths = true
+        elsif line =~ /^Also here: /
+          is_also_here = true
+        end
+
         while (start_pos = (line =~ /(<(prompt|spell|right|left|inv|style|compass).*?\2>|<.*?>)/))
           xml = $1
           line.slice!(start_pos, xml.length)
+
           if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)&gt;<\/prompt>$/
             Profanity.put(prompt: "#{$3.clone}".strip)
             Profanity.update_process_title()
@@ -1876,7 +1925,7 @@ Thread.new {
             end
           elsif xml =~ /^<spell(?:>|\s.*?>)(.*?)<\/spell>$/
             if (window = indicator_handler['spell'])
-              window.clear
+              window.erase
               window.label = $1
               window.update($1 == 'None' ? 0 : 1)
               need_update = true
@@ -1885,14 +1934,14 @@ Thread.new {
             Profanity.put(room: $1)
             Profanity.update_process_title()
             if (window = indicator_handler["room"])
-              window.clear
+              window.erase
               window.label = $1
               window.update($1 ? 0 : 1)
               need_update = true
             end
           elsif xml =~ /^<(right|left)(?:>|\s.*?>)(.*?)<\/\1>/
             if (window = indicator_handler[$1])
-              window.clear
+              window.erase
               window.label = $2
               window.update($2 == 'Empty' ? 0 : 1)
               need_update = true
@@ -2047,6 +2096,11 @@ Thread.new {
                 open_style = nil
               end
             else
+              if $2 == 'roomDesc'
+                is_room_desc = true
+              elsif $2 == 'roomName'
+                is_room_name = true
+              end
               open_style = { :start => start_pos }
               if PRESET[$2]
                 open_style[:fg] = PRESET[$2][0]
@@ -2064,6 +2118,13 @@ Thread.new {
             game_text = line.slice!(0, start_pos)
             handle_game_text.call(game_text)
             current_stream = new_stream
+            # if the new stream is from room objs and we have a room window open we should update it
+            # if we're amidst an update (already consuming) don't start another
+            if stream_handler['room'] && (current_stream == "room objs" || current_stream == "room players") && (!consume_room_desc || !consume_room_name || !consume_obvious_paths || !consume_also_here)
+              # prevent the main window from updating with this look
+              consume_room_desc = consume_room_name = consume_obvious_paths = consume_also_here = true
+              server.puts 'look'
+            end
           elsif xml =~ /^<clearStream id=['"](\w+)['"]\/>$/
             stream_handler[$1].clear_window if stream_handler[$1]
           elsif xml =~ %r{^<popStream(?!/><pushStream)} or xml == '</component>'
