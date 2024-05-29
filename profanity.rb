@@ -96,10 +96,10 @@ module Profanity
 
       Profanity FrontEnd
       #{'  '}
-        --port=<port>
-        --default-color-id=<id>
-        --default-background-color-id=<id>
-        --char=<character>
+        --port=<port>                         the port to connect to Lich on
+        --default-color-id=<id>               optional override, a terminal palette color number
+        --default-background-color-id=<id>    optional override, a terminal palette color number
+        --char=<character>                    character name used in Lich
         --no-status                           do not redraw the process title with status updates
         --links                               enable links to be shown by default, otherwise can enable via .links command
         --speech-ts                           display timestamps on speech, familiar and thought window
@@ -146,10 +146,10 @@ PRESET                      = Hash.new
 LAYOUT                      = Hash.new
 WINDOWS                     = Hash.new
 SCROLL_WINDOW               = Array.new
-PORT                        = (Opts.port.to_i                           || 8000)
-HOST                        = (Opts.host                                || "127.0.0.1")
-DEFAULT_COLOR_ID            = (Opts["default-color-id"].to_i            || 7)
-DEFAULT_BACKGROUND_COLOR_ID = (Opts["default-background-color-id"].to_i || 0)
+PORT                        = (Opts.port                           || 8000).to_i
+HOST                        = (Opts.host                           || "127.0.0.1")
+DEFAULT_COLOR_ID            = (Opts["default-color-id"]            || 7).to_i
+DEFAULT_BACKGROUND_COLOR_ID = (Opts["default-background-color-id"] || 0).to_i
 if Opts.char
   if Opts.template
     if File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase))
@@ -671,9 +671,9 @@ do_macro = proc { |macro|
 
 key_action['resize'] = proc {
   # fixme: re-word-wrap
-  window = Window.new(0, 0, 0, 0)
-  window.refresh
-  window.close
+  Curses.clear
+  Curses.refresh
+
   first_text_window = true
   for window in TextWindow.list.to_a
     window.resize(fix_layout_number.call(window.layout[0]), fix_layout_number.call(window.layout[1]) - 1)
@@ -2262,6 +2262,7 @@ begin
       Curses.doupdate
     end
   }
+rescue Interrupt # Stop spamming exceptions to my terminal when I'm closing with Ctrl-C
 rescue => exception
   Profanity.log(exception.message)
   Profanity.log(exception.backtrace)
@@ -2274,4 +2275,7 @@ ensure
     Profanity.log(exception.backtrace)
   end
   Curses.close_screen
+  if /darwin/ =~ RUBY_PLATFORM
+    system("tput reset") # reset the terminal colors
+  end
 end
