@@ -99,8 +99,6 @@ module Profanity
         --port=<port>
         --default-color-id=<id>
         --default-background-color-id=<id>
-        --custom-colors=<on|off>
-        --settings-file=<filename>
         --char=<character>
         --no-status                           do not redraw the process title with status updates
         --links                               enable links to be shown by default, otherwise can enable via .links command
@@ -148,10 +146,10 @@ PRESET                      = Hash.new
 LAYOUT                      = Hash.new
 WINDOWS                     = Hash.new
 SCROLL_WINDOW               = Array.new
-PORT                        = (Opts.port                || 8000).to_i
-HOST                        = (Opts.host                || "127.0.0.1")
-DEFAULT_COLOR_ID            = (Opts.color_id            || 7).to_i
-DEFAULT_BACKGROUND_COLOR_ID = (Opts.background_color_id || 0).to_i
+PORT                        = (Opts.port.to_i                           || 8000)
+HOST                        = (Opts.host                                || "127.0.0.1")
+DEFAULT_COLOR_ID            = (Opts["default-color-id"].to_i            || 7)
+DEFAULT_BACKGROUND_COLOR_ID = (Opts["default-background-color-id"].to_i || 0)
 if Opts.char
   if Opts.template
     if File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase))
@@ -285,6 +283,7 @@ key_name = {
 
 if CUSTOM_COLORS
   COLOR_ID_LOOKUP = Hash.new
+  # e.g. code 000000 = id 0
   COLOR_ID_LOOKUP[DEFAULT_COLOR_CODE] = DEFAULT_COLOR_ID
   COLOR_ID_LOOKUP[DEFAULT_BACKGROUND_COLOR_CODE] = DEFAULT_BACKGROUND_COLOR_ID
   COLOR_ID_HISTORY = Array.new
@@ -384,6 +383,11 @@ def get_color_pair_id(fg_code, bg_code)
   end
 end
 
+# Previously we weren't setting bkgd so it's no wonder it didn't seem to work
+# Had to put this down here under the get_color_pair_id definition
+Curses.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
+Curses.refresh
+
 # Implement support for basic readline-style kill and yank (cut and paste)
 # commands.  Successive calls to delete_word, backspace_word, kill_forward, and
 # kill_line will accumulate text into the kill_buffer as long as no other
@@ -449,6 +453,7 @@ load_layout = proc { |layout_id|
               old_windows.delete(window)
             else
               window = IndicatorWindow.new(height, width, top, left)
+              window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
             end
             window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
             window.scrollok(false)
@@ -468,7 +473,9 @@ load_layout = proc { |layout_id|
                 old_windows.delete(window)
               else
                 window = TextWindow.new(height, width - 1, top, left)
+                window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
                 window.scrollbar = Curses::Window.new(window.maxy, 1, window.begy, window.begx + window.maxx)
+                window.scrollbar.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
               end
               window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
               window.scrollok(true)
@@ -480,14 +487,17 @@ load_layout = proc { |layout_id|
             end
           elsif e.attributes['class'] == 'exp'
             stream_handler['exp'] = ExpWindow.new(height, width - 1, top, left)
+            stream_handler['exp'].bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
           elsif e.attributes['class'] == 'percWindow'
             stream_handler['percWindow'] = PercWindow.new(height, width - 1, top, left)
+            stream_handler['percWindow'].bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
           elsif e.attributes['class'] == 'countdown'
             if e.attributes['value'] and (window = previous_countdown_handler[e.attributes['value']])
               previous_countdown_handler[e.attributes['value']] = nil
               old_windows.delete(window)
             else
               window = CountdownWindow.new(height, width, top, left)
+              window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
             end
             window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
             window.scrollok(false)
@@ -504,6 +514,7 @@ load_layout = proc { |layout_id|
               old_windows.delete(window)
             else
               window = ProgressWindow.new(height, width, top, left)
+              window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
             end
             window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
             window.scrollok(false)
@@ -517,6 +528,7 @@ load_layout = proc { |layout_id|
           elsif e.attributes['class'] == 'command'
             unless command_window
               command_window = Curses::Window.new(height, width, top, left)
+              command_window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
             end
             command_window_layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
             command_window.scrollok(false)
@@ -1247,6 +1259,7 @@ Thread.new {
     consume_room_name = false
     consume_obvious_paths = false
     consume_also_here = false
+
 
     handle_game_text = proc { |text|
       for escapable in xml_escape_list.keys
