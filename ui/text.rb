@@ -175,12 +175,12 @@ class TextWindow < Curses::Window
 
   def clear_scrollbar
     @scrollbar_pos = nil
-    @scrollbar.clear
+    @scrollbar.erase
     @scrollbar.noutrefresh
   end
 
   def clear_window
-    clear
+    erase
     @buffer = Array.new
     @buffer_pos = 0
   end

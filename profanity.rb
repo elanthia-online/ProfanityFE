@@ -96,12 +96,10 @@ module Profanity
 
       Profanity FrontEnd
       #{'  '}
-        --port=<port>
-        --default-color-id=<id>
-        --default-background-color-id=<id>
-        --custom-colors=<on|off>
-        --settings-file=<filename>
-        --char=<character>
+        --port=<port>                         the port to connect to Lich on
+        --default-color-id=<id>               optional override, a terminal palette color number
+        --default-background-color-id=<id>    optional override, a terminal palette color number
+        --char=<character>                    character name used in Lich
         --no-status                           do not redraw the process title with status updates
         --links                               enable links to be shown by default, otherwise can enable via .links command
         --speech-ts                           display timestamps on speech, familiar and thought window
@@ -148,10 +146,10 @@ PRESET                      = Hash.new
 LAYOUT                      = Hash.new
 WINDOWS                     = Hash.new
 SCROLL_WINDOW               = Array.new
-PORT                        = (Opts.port                || 8000).to_i
-HOST                        = (Opts.host                || "127.0.0.1")
-DEFAULT_COLOR_ID            = (Opts.color_id            || 7).to_i
-DEFAULT_BACKGROUND_COLOR_ID = (Opts.background_color_id || 0).to_i
+PORT                        = (Opts.port                           || 8000).to_i
+HOST                        = (Opts.host                           || "127.0.0.1")
+DEFAULT_COLOR_ID            = (Opts["default-color-id"]            || 7).to_i
+DEFAULT_BACKGROUND_COLOR_ID = (Opts["default-background-color-id"] || 0).to_i
 if Opts.char
   if Opts.template
     if File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase))
@@ -285,6 +283,7 @@ key_name = {
 
 if CUSTOM_COLORS
   COLOR_ID_LOOKUP = Hash.new
+  # e.g. code 000000 = id 0
   COLOR_ID_LOOKUP[DEFAULT_COLOR_CODE] = DEFAULT_COLOR_ID
   COLOR_ID_LOOKUP[DEFAULT_BACKGROUND_COLOR_CODE] = DEFAULT_BACKGROUND_COLOR_ID
   COLOR_ID_HISTORY = Array.new
@@ -384,6 +383,11 @@ def get_color_pair_id(fg_code, bg_code)
   end
 end
 
+# Previously we weren't setting bkgd so it's no wonder it didn't seem to work
+# Had to put this down here under the get_color_pair_id definition
+Curses.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
+Curses.refresh
+
 # Implement support for basic readline-style kill and yank (cut and paste)
 # commands.  Successive calls to delete_word, backspace_word, kill_forward, and
 # kill_line will accumulate text into the kill_buffer as long as no other
@@ -449,6 +453,7 @@ load_layout = proc { |layout_id|
               old_windows.delete(window)
             else
               window = IndicatorWindow.new(height, width, top, left)
+              window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
             end
             window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
             window.scrollok(false)
@@ -468,7 +473,9 @@ load_layout = proc { |layout_id|
                 old_windows.delete(window)
               else
                 window = TextWindow.new(height, width - 1, top, left)
+                window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
                 window.scrollbar = Curses::Window.new(window.maxy, 1, window.begy, window.begx + window.maxx)
+                window.scrollbar.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
               end
               window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
               window.scrollok(true)
@@ -480,14 +487,17 @@ load_layout = proc { |layout_id|
             end
           elsif e.attributes['class'] == 'exp'
             stream_handler['exp'] = ExpWindow.new(height, width - 1, top, left)
+            stream_handler['exp'].bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
           elsif e.attributes['class'] == 'percWindow'
             stream_handler['percWindow'] = PercWindow.new(height, width - 1, top, left)
+            stream_handler['percWindow'].bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
           elsif e.attributes['class'] == 'countdown'
             if e.attributes['value'] and (window = previous_countdown_handler[e.attributes['value']])
               previous_countdown_handler[e.attributes['value']] = nil
               old_windows.delete(window)
             else
               window = CountdownWindow.new(height, width, top, left)
+              window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
             end
             window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
             window.scrollok(false)
@@ -504,6 +514,7 @@ load_layout = proc { |layout_id|
               old_windows.delete(window)
             else
               window = ProgressWindow.new(height, width, top, left)
+              window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
             end
             window.layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
             window.scrollok(false)
@@ -517,6 +528,7 @@ load_layout = proc { |layout_id|
           elsif e.attributes['class'] == 'command'
             unless command_window
               command_window = Curses::Window.new(height, width, top, left)
+              command_window.bkgd(Curses.color_pair(get_color_pair_id(nil, nil)))
             end
             command_window_layout = [e.attributes['height'], e.attributes['width'], e.attributes['top'], e.attributes['left']]
             command_window.scrollok(false)
@@ -659,9 +671,9 @@ do_macro = proc { |macro|
 
 key_action['resize'] = proc {
   # fixme: re-word-wrap
-  window = Window.new(0, 0, 0, 0)
-  window.refresh
-  window.close
+  Curses.clear
+  Curses.refresh
+
   first_text_window = true
   for window in TextWindow.list.to_a
     window.resize(fix_layout_number.call(window.layout[0]), fix_layout_number.call(window.layout[1]) - 1)
@@ -1239,6 +1251,15 @@ Thread.new {
     open_color = Array.new
     open_link = Array.new
     current_stream = nil
+    is_room_desc = false
+    is_room_name = false
+    is_obvious_paths = false
+    is_also_here = false
+    consume_room_desc = false
+    consume_room_name = false
+    consume_obvious_paths = false
+    consume_also_here = false
+
 
     handle_game_text = proc { |text|
       for escapable in xml_escape_list.keys
@@ -1823,8 +1844,39 @@ Thread.new {
               need_prompt = false
               add_prompt(window, prompt_text)
             end
-            window.add_string(text, line_colors)
-            need_update = true
+ 
+            # don't print any of these updates if we're meant to consume them
+            if !(is_room_desc && consume_room_desc) && !(is_room_name && consume_room_name) && !(is_obvious_paths && consume_obvious_paths) && !(is_also_here && consume_also_here)
+              # note: add_string can mutate the passed references in some scenarios like indented word wrapping for rooms
+              # the side effect is if you spend the same string to mulitple windows, the subsequent call to add_string
+              # may receive a truncated string. so we duplicate it to avoid the issue. similarly the line_colors hash
+              # may be modified by add_string, so we duplicate that as well.
+              window.add_string(text.dup, line_colors.map(&:dup))
+              need_update = true
+            end
+
+            if (room_window = stream_handler['room']) && (is_room_desc || is_room_name || is_obvious_paths || is_also_here)
+              if is_room_name
+                room_window.clear_window
+                is_room_name = false
+                consume_room_name = false if consume_room_name
+              elsif is_room_desc
+                is_room_desc = false
+                consume_room_desc = false if consume_room_desc 
+              elsif is_obvious_paths
+                is_obvious_paths = false
+                consume_obvious_paths = false if consume_obvious_paths 
+              elsif is_also_here
+                is_also_here = false
+                consume_also_here = false if consume_also_here
+              end
+              # note: add_string can mutate the passed references in some scenarios like indented word wrapping for rooms
+              # the side effect is if you spend the same string to mulitple windows, the subsequent call to add_string
+              # may receive a truncated string. so we duplicate it to avoid the issue. similarly the line_colors hash
+              # may be modified by add_string, so we duplicate that as well.
+              room_window.add_string(text.dup, line_colors.map(&:dup))
+              need_update = true
+            end
           end
         end
       end
@@ -1846,9 +1898,19 @@ Thread.new {
           need_update = true
         end
       else
+        # Need to keep track of this line coming through as a result of looking automatically
+        # whenever room objs is received as part of the room window implementation
+        # if we initiate a look that results in this line we want to suppress it
+        if line =~ /^Obvious (paths|exits): /
+          is_obvious_paths = true
+        elsif line =~ /^Also here: /
+          is_also_here = true
+        end
+
         while (start_pos = (line =~ /(<(prompt|spell|right|left|inv|style|compass).*?\2>|<.*?>)/))
           xml = $1
           line.slice!(start_pos, xml.length)
+
           if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)&gt;<\/prompt>$/
             Profanity.put(prompt: "#{$3.clone}".strip)
             Profanity.update_process_title()
@@ -1876,7 +1938,7 @@ Thread.new {
             end
           elsif xml =~ /^<spell(?:>|\s.*?>)(.*?)<\/spell>$/
             if (window = indicator_handler['spell'])
-              window.clear
+              window.erase
               window.label = $1
               window.update($1 == 'None' ? 0 : 1)
               need_update = true
@@ -1885,14 +1947,14 @@ Thread.new {
             Profanity.put(room: $1)
             Profanity.update_process_title()
             if (window = indicator_handler["room"])
-              window.clear
+              window.erase
               window.label = $1
               window.update($1 ? 0 : 1)
               need_update = true
             end
           elsif xml =~ /^<(right|left)(?:>|\s.*?>)(.*?)<\/\1>/
             if (window = indicator_handler[$1])
-              window.clear
+              window.erase
               window.label = $2
               window.update($2 == 'Empty' ? 0 : 1)
               need_update = true
@@ -2047,6 +2109,11 @@ Thread.new {
                 open_style = nil
               end
             else
+              if $2 == 'roomDesc'
+                is_room_desc = true
+              elsif $2 == 'roomName'
+                is_room_name = true
+              end
               open_style = { :start => start_pos }
               if PRESET[$2]
                 open_style[:fg] = PRESET[$2][0]
@@ -2064,6 +2131,13 @@ Thread.new {
             game_text = line.slice!(0, start_pos)
             handle_game_text.call(game_text)
             current_stream = new_stream
+            # if the new stream is from room objs and we have a room window open we should update it
+            # if we're amidst an update (already consuming) don't start another
+            if stream_handler['room'] && (current_stream == "room objs" || current_stream == "room players") && (!consume_room_desc || !consume_room_name || !consume_obvious_paths || !consume_also_here)
+              # prevent the main window from updating with this look
+              consume_room_desc = consume_room_name = consume_obvious_paths = consume_also_here = true
+              server.puts 'look'
+            end
           elsif xml =~ /^<clearStream id=['"](\w+)['"]\/>$/
             stream_handler[$1].clear_window if stream_handler[$1]
           elsif xml =~ %r{^<popStream(?!/><pushStream)} or xml == '</component>'
@@ -2188,6 +2262,7 @@ begin
       Curses.doupdate
     end
   }
+rescue Interrupt # Stop spamming exceptions to my terminal when I'm closing with Ctrl-C
 rescue => exception
   Profanity.log(exception.message)
   Profanity.log(exception.backtrace)
@@ -2200,4 +2275,7 @@ ensure
     Profanity.log(exception.backtrace)
   end
   Curses.close_screen
+  if /darwin/ =~ RUBY_PLATFORM
+    system("tput reset") # reset the terminal colors
+  end
 end
