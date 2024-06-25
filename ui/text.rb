@@ -70,7 +70,7 @@ class TextWindow < Curses::Window
       @buffer.unshift([line, line_colors])
       @buffer.pop if @buffer.length > @max_buffer_size
       if @buffer_pos == 0
-        addstr "\n"
+        addstr "\n" unless cury == 0 && curx == 0
         add_line(line, line_colors)
       else
         @buffer_pos += 1
