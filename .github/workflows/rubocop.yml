@@ -4,6 +4,10 @@ on:
     paths:
       - "**/*.rb"
       - "profanity.rb"
+  pull_request:
+    paths:
+      - "**/*.rb"
+      - "profanity.rb"
 
 jobs:
   rubocop:
