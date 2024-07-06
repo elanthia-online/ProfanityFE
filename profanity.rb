@@ -1323,7 +1323,7 @@ Thread.new {
                 :fg       => colors[0],
                 :bg       => colors[1],
                 :ul       => colors[2],
-                :priority => 1
+                :priority => (colors[3].to_i || 1)
               }
               line_colors.push(h)
               pos = match_data.end(0)

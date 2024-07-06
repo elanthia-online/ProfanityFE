@@ -28,27 +28,38 @@ class TextWindow < Curses::Window
     @max_buffer_size = val.to_i
   end
 
-  def add_line(line, line_colors = Array.new)
-    part = [0, line.length]
-    line_colors.each { |h| part.push(h[:start]); part.push(h[:end]) }
-    part.uniq!
-    part.sort!
-    for i in 0...(part.length - 1)
-      str = line[part[i]...part[i + 1]]
-      color_list = line_colors.find_all { |h| (h[:start] <= part[i]) and (h[:end] >= part[i + 1]) }
-      if color_list.empty?
+  def add_line(line, line_colors = [])
+    parts = [0, line.length]
+    line_colors.each { |h| parts.push(h[:start], h[:end]) if h[:start] && h[:end] }
+    parts.uniq!
+    parts.sort!
+
+    parts.each_cons(2) do |start_idx, end_idx|
+      str = line[start_idx...end_idx]
+      relevant_colors = line_colors.select { |h| h[:start] && h[:end] && h[:start] <= start_idx && h[:end] >= end_idx }
+
+      if relevant_colors.empty?
         addstr str
       else
-        # shortest length highlight takes precedence when multiple highlights cover the same substring
-        # fixme: allow multiple highlights on a substring when one specifies fg and the other specifies bg
-        color_list = color_list.sort_by { |h| h[:priority] or h[:end] - h[:start] }
-        # log("line: #{line}, list: #{color_list}")
-        fg = color_list.map { |h| h[:fg] }.find { |fgg| !fgg.nil? }
-        bg = color_list.map { |h| h[:bg] }.find { |bgg| !bgg.nil? }
-        ul = color_list.map { |h| h[:ul] == "true" }.find { |ull| ull }
-        attron(color_pair(get_color_pair_id(fg, bg)) | (ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) {
+        # Sort by priority first (higher priority first), then by length (shorter first)
+        sorted_colors = relevant_colors.sort_by { |h| [-(h[:priority] || Float::INFINITY), h[:end] - h[:start]] }
+
+        # Find the highest priority segment that matches the length
+        highest_priority_segment = sorted_colors.find { |h| h[:end] - h[:start] == str.length }
+
+        if highest_priority_segment
+          fg = highest_priority_segment[:fg]
+          bg = highest_priority_segment[:bg]
+        else
+          # Use colors from the lowest priority segment
+          fg = sorted_colors.last[:fg]
+          bg = sorted_colors.last[:bg]
+        end
+
+        ul = sorted_colors.any? { |h| h[:ul] == "true" }
+        attron(color_pair(get_color_pair_id(fg, bg)) | (ul ? Curses::A_UNDERLINE : Curses::A_NORMAL)) do
           addstr str
-        }
+        end
       end
     end
   end

@@ -37,7 +37,8 @@ module Hilite
       Hilite.put(pattern, [
                    highlight.attributes["fg"],
                    highlight.attributes["bg"],
-                   highlight.attributes["ul"]
+                   highlight.attributes["ul"],
+                   highlight.attributes["priority"]
                  ])
     rescue => exception
       # todo: write useful error/backtrace to UI
