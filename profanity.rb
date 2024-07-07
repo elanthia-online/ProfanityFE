@@ -2184,6 +2184,7 @@ Thread.new {
               h = { :start => start_pos }
               h[:fg] = PRESET['links'][0]
               h[:bg] = PRESET['links'][1]
+              # todo: should this be priority 1 so a monster retains monsterbold rather than a link color?
               h[:priority] = 2
               open_link.push(h)
             end

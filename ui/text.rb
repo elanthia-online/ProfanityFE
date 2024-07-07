@@ -29,6 +29,8 @@ class TextWindow < Curses::Window
   end
 
   def add_line(line, line_colors = [])
+    fg = nil
+    bg = nil
     parts = [0, line.length]
     line_colors.each { |h| parts.push(h[:start], h[:end]) if h[:start] && h[:end] }
     parts.uniq!
@@ -36,24 +38,23 @@ class TextWindow < Curses::Window
 
     parts.each_cons(2) do |start_idx, end_idx|
       str = line[start_idx...end_idx]
+      # Any color values that span the segment
       relevant_colors = line_colors.select { |h| h[:start] && h[:end] && h[:start] <= start_idx && h[:end] >= end_idx }
 
       if relevant_colors.empty?
         addstr str
       else
-        # Sort by priority first (higher priority first), then by length (shorter first)
-        sorted_colors = relevant_colors.sort_by { |h| [-(h[:priority] || Float::INFINITY), h[:end] - h[:start]] }
+        # If there are values specific to this segment, use the highest priority ones
+        specific_colors = relevant_colors.select { |h| h[:start] && h[:end] && h[:start] == start_idx && h[:end] == end_idx }
+        sorted_colors = specific_colors.sort_by { |h| -(h[:priority] || Float::INFINITY) }
+        fg = sorted_colors.find { |h| h[:fg] }&.[](:fg)
+        bg = sorted_colors.find { |h| h[:bg] }&.[](:bg)
 
-        # Find the highest priority segment that matches the length
-        highest_priority_segment = sorted_colors.find { |h| h[:end] - h[:start] == str.length }
-
-        if highest_priority_segment
-          fg = highest_priority_segment[:fg]
-          bg = highest_priority_segment[:bg]
-        else
-          # Use colors from the lowest priority segment
-          fg = sorted_colors.last[:fg]
-          bg = sorted_colors.last[:bg]
+        # If there are no values specific to this segment, use the highest priority non-specific spanning color
+        if fg == nil || bg == nil then
+          sorted_colors = relevant_colors.sort_by { |h| -(h[:priority] || Float::INFINITY) }
+          fg = sorted_colors.find { |h| h[:fg] }&.[](:fg) if fg == nil
+          bg = sorted_colors.find { |h| h[:bg] }&.[](:bg) if bg == nil
         end
 
         ul = sorted_colors.any? { |h| h[:ul] == "true" }
