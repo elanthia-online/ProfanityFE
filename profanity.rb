@@ -1,7 +1,3 @@
-#!/usr/bin/env ruby
-# encoding: US-ASCII
-
-# vim: set sts=2 noet ts=2:
 =begin
 
   ProfanityFE
