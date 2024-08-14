@@ -32,7 +32,10 @@ class ProgressWindow < Curses::Window
   end
 
   def redraw
-    str = "#{@label}#{@value.to_s.rjust(self.maxx - @label.length)}"
+    # prioritize the label text and allow the timer to be truncated
+    max_value_length = [self.maxx - @label.length, 0].max
+    value_str = @value.to_s.slice(0, max_value_length)
+    str = "#{@label}#{value_str.rjust(max_value_length)}"
     percent = [[(@value / @max_value.to_f), 0.to_f].max, 1].min
     if (@value == 0) and (fg[3] or bg[3])
       setpos(0, 0)
