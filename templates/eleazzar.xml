@@ -1,7 +1,17 @@
 <!--
-Usefull regex to use with sgml-mode and rainbow-mode in emacs or whatever color highlighting you:
+This template assumes you are using the following:
+- A nerdfont from nerdfont.com - for nice icons
+- effectmon.lic - for populating the right side of the screen with your spell effects
+- targetlist.lic - for populating the lower left side of the screen with valid targets
+
+WARNING: If you launch ProfanityFE in a window _too small_ to fit everything you won't see
+the spell effects on the right side - you need to make sure your window is large enough
+**before** you launch ProfanityFE!
+
+
+Usefull regex to use with sgml-mode and rainbow-mode in emacs/vim:
 :%s/\<[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]\>/#&/g
-remember when you find and replace # to remove the # you may remove it from the line above!
+Note to self: remember when you find and replace # to remove the # you may remove it from the line above!
 
 TODO: Classify message foreground highlights, avoid bg highlights use that for characters
 Info / Positive effects: Cyan
