@@ -2021,7 +2021,7 @@ Thread.new {
               window.label = label if label
               window.bg = [bg] if bg
               window.fg = [fg] if fg
-              if window.update(current, max, true)
+              if window.update(current, max)
                 need_update = true
               end
             end
