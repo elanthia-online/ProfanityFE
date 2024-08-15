@@ -25,6 +25,7 @@ A terminal frontend for Simutronics games based on Ruby and Ncurses.
 
 ## Sample Scripts
 Here's a sample login script written for Linux, usage syntax would be `.\gemstone.sh <CHARNAME>`
+Do note that some of these settings will need to be adjusted based on the terminal being used (e.g. xterm-256color vs screen-256color)
 ```bash
 #!/bin/bash
 set -e
