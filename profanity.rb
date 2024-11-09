@@ -28,7 +28,7 @@ require 'rexml/document'
 require 'curses'
 require 'fileutils'
 require 'ostruct'
-include Curses
+require 'pry'
 
 require_relative "./ext/string.rb"
 
@@ -51,9 +51,10 @@ module Profanity
     return File.open(LOG_FILE, 'a') { |file| yield file } if block_given?
   end
 
+  @opts = Opts.new(ARGV)
   @title  = nil
   @status = nil
-  @char   = Opts.char.capitalize
+  @char   = @opts.char.capitalize
   @state  = {}
 
   def self.fetch(key, default = nil)
@@ -130,7 +131,9 @@ progress_handler = Hash.new
 countdown_handler = Hash.new
 command_window = nil
 command_window_layout = nil
-blue_links = (Opts["links"] ? true : false)
+
+@opts = Opts.new(ARGV)
+blue_links = (@opts.links ? true : false)
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
 # ever support reloading other settings in the future it will have to protect
@@ -142,25 +145,24 @@ PRESET                      = Hash.new
 LAYOUT                      = Hash.new
 WINDOWS                     = Hash.new
 SCROLL_WINDOW               = Array.new
-PORT                        = (Opts.port                           || 8000).to_i
-HOST                        = (Opts.host                           || "127.0.0.1")
-DEFAULT_COLOR_ID            = (Opts["default-color-id"]            || 7).to_i
-DEFAULT_BACKGROUND_COLOR_ID = (Opts["default-background-color-id"] || 0).to_i
-if Opts.char
-  if Opts.template
-    if File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase))
-      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase)
+HOST                        = @opts.host
+DEFAULT_COLOR_ID            = @opts.default_color_id
+DEFAULT_BACKGROUND_COLOR_ID = @opts.default_background_color_id
+if @opts.char
+  if @opts.template
+    if File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', @opts.template.downcase))
+      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', @opts.template.downcase)
     else
       raise StandardError, <<~ERROR
-        You specified --template=#{Opts.template} but it doesn't exist.
+        You specified --template=#{@opts.template} but it doesn't exist.
         Please try again!
       ERROR
     end
   else
-    if File.exist?(Settings.file(Opts.char.downcase + ".xml"))
-      SETTINGS_FILENAME = Settings.file(Opts.char.downcase + ".xml")
-    elsif File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.char.downcase + ".xml"))
-      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.char.downcase + ".xml")
+    if File.exist?(Settings.file(@opts.char.downcase + ".xml"))
+      SETTINGS_FILENAME = Settings.file(@opts.char.downcase + ".xml")
+    elsif File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', @opts.char.downcase + ".xml"))
+      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', @opts.char.downcase + ".xml")
     else
       SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', 'default.xml')
     end
@@ -174,11 +176,10 @@ end
 unless defined?(SETTINGS_FILENAME)
   raise StandardError, <<~ERROR
     you must pass --char=<character> or --template=<filename.xml>
-    #{Opts.parse()}
   ERROR
 end
 
-Profanity.set_terminal_title(Opts.char.capitalize)
+Profanity.set_terminal_title(@opts.char.capitalize)
 
 unless defined?(CUSTOM_COLORS)
   CUSTOM_COLORS = Curses.can_change_color?
@@ -1232,7 +1233,7 @@ load_layout.call('default')
 
 TextWindow.list.each { |w| w.maxy.times { w.add_string "\n" } }
 
-server = TCPSocket.open(HOST, PORT)
+server = TCPSocket.open(@opts.host, @opts.port)
 
 Thread.new { sleep 15; skip_server_time_offset = false }
 
