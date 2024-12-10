@@ -1,4 +1,6 @@
 #!/usr/bin/env ruby
+# encoding: US-ASCII
+
 =begin
 
   ProfanityFE
