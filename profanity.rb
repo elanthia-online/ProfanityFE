@@ -54,7 +54,7 @@ module Profanity
 
   @title  = nil
   @status = nil
-  @char   = Opts.char.capitalize
+  @char   = Opts.char.nil? ? "Unknown" : Opts.char.capitalize
   @state  = {}
 
   def self.fetch(key, default = nil)
@@ -179,7 +179,7 @@ unless defined?(SETTINGS_FILENAME)
   ERROR
 end
 
-Profanity.set_terminal_title(Opts.char.capitalize)
+Profanity.set_terminal_title((Opts.char.nil? ? "Unknown" : Opts.char.capitalize))
 
 unless defined?(CUSTOM_COLORS)
   CUSTOM_COLORS = Curses.can_change_color?
