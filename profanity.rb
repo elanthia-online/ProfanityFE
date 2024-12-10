@@ -168,6 +168,8 @@ if Opts.char
       SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', 'default.xml')
     end
   end
+else
+  SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', 'default.xml')
 end
 
 def add_prompt(window, prompt_text, cmd = "")
