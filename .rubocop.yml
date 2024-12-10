@@ -64,3 +64,6 @@ Security/Eval:
   
 Security/MarshalLoad:
   Enabled: false
+
+Lint/ScriptPermission:
+  Enabled: false
