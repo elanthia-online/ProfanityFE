@@ -1,0 +1,231 @@
+<!DOCTYPE highlight [
+  <!ENTITY black "000000">
+  <!ENTITY red "ff623e">
+  <!ENTITY green "46ac36">
+  <!ENTITY yellow "FFFF00">
+  <!ENTITY blue "7095db">
+  <!ENTITY magenta "ff2aff">
+  <!ENTITY cyan "0EE3D8">
+  <!ENTITY white "FFFFFF">
+  <!ENTITY grey "D0D4D6">
+  <!ENTITY purple "dc6ad8">
+  <!ENTITY teal "3ea4a3">
+  <!ENTITY olive "9c9a26">
+  <!ENTITY orange "ff8700">
+]>
+
+<settings>
+    <!-- Skill colors by mindstate -->
+    <highlight fg='&white;'>\w+(\s\w+)?:\s+(?!1750)\d+\s(\d{1,2}|100)(?:\.\d{2})?%\s+(\w+)?(\s+)?(\w+)?(\s+)?\(?\[?\s?(0)\/34\)?\]?</highlight>
+    <highlight fg='&cyan;'>\w+(\s\w+)?:\s+\d+\s(\d{1,2}|100)(?:\.\d{2})?%\s+(\w+)?(\s+)?(\w+)?(\s+)?\(?\[?(\s?[1-9]|10)\/34\)?\]?</highlight>
+    <highlight fg='&green;'>\w+(\s\w+)?:\s+\d+\s(\d{1,2}|100)(?:\.\d{2})?%\s+(\w+)?(\s+)?(\w+)?(\s+)?\(?\[?(1[1-9]|20)\/34\)?\]?</highlight>
+    <highlight fg='&yellow;'>\w+(\s\w+)?:\s+\d+\s(\d{1,2}|100)(?:\.\d{2})?%\s+(\w+)?(\s+)?(\w+)?(\s+)?\(?\[?(2[1-9]|30)\/34\)?\]?</highlight>
+    <highlight fg='&orange;'>\w+\s?\w*:\s+\d+\s(\d{1,2}|100)(?:\.\d{2})?%\s+(\w+)?(\s+)?(\w+)?(\s+)?\(?\[?(3[1-4])\/34\)?\]?</highlight>
+    <highlight fg='&magenta;'>\w+\s*\w*?:\s+1750\s00\.?\d*%\s+clear\s+\(0\/34\)</highlight>
+    <!-- Arcana:   1750 00.00% clear          (0/34) -->
+    <highlight fg='&cyan;'>SKILL: Rank\/Percent towards next rank\/Amount learning\/Mindstate [Ff]raction</highlight>
+    <highlight fg='&yellow;'>^\w+ is next\.$</highlight>
+    <highlight fg='&yellow;'>windowless|building</highlight>
+
+    <highlight fg='&yellow;'>corn maze|fuzzy dice pouch with black cording|wide leather war belt with an agonite-inlaid gargoyle buckle</highlight>
+    <highlight fg='&magenta;'>Gortik</highlight>
+    <highlight fg='&yellow;'>(?i)(Adderwood|Aformosia|Agonite|Albarco|Alerce|Anjisis|Audrualm|Avodire|Azurelle|Belzune|Blackened bone|Blackwater jet|Bloodwood|Bocote|Bulbous bone|Caracal bone|Charred bone|Cherry (wood)|Copperwood|Coralite|Crabwood|Crystal-bone|Darkspine|Demonbone|Desumos bone|Diamondique|Diamondwood|Dragon bone|Dragonwood|Durian|Ebony|Fae bone|Felstone|Felwood|Finivire|Fulginode|Goldwood|Greenheart|Haledroth|Hickory|Horse bone|Icesteel|Ilomba|Indurium|Ironwood|Jaguar bone|Kadepa|Kapok|Kelpzyte|Kiralan|Lelori|Loimic|Macawood|Mammoth bone|Mistwood|Moradu-bone|Morgawr bone|Niello|Orichalcum|Osage|Quelium|Ramin|Redwood|Rockwood|Rosewood|Sandalwood|Senci|Sickle bone|Silversteel|Silverwood|Smokewood|Sprite-bone|Tamarak|Telothian|Tomiek|Tyrium|Vardite|Wood drake bone|Wraith bone|Wyvern bone|Xenomite|Yew|Zeltfish-bone)</highlight>
+    <highlight fg='&yellow;'>(?i)(imperial weave|shimmering fiber|zenganne|anjisis|blackwater jet|diamond-hide|shadowleaf|tyrium|kiralan|coralite|kelpzyte|haledroth|loimic|silversteel|vardite|icesteel)</highlight>
+
+    <highlight fg='&white;'>\w+\s?\w*\s+0\.([0-1][0-9]|2[0-5])</highlight>
+    <highlight fg='&cyan;'>\w+\s?\w*\s+0\.(2[6-9]|[3-4][0-9]|50)</highlight>
+    <highlight fg='&green;'>\w+\s?\w*\s+(0\.(5[1-9]|[6-9][0-9])|1\.00)</highlight>
+    <highlight fg='&yellow;'>\w+\s?\w*\s+1\.(0[1-9]|[1-4][0-9])</highlight>
+    <highlight fg='&orange;'>\w+\s?\w*\s+(1\.(5[0-9]|[6-9][0-9])|[2-9]\.[0-9][0-9])</highlight>
+
+
+    <highlight fg='&red;'>^(--- Lich|\[go2):.*</highlight>
+    <highlight fg='&red;'>^\[(?i)(mdusk|accept-sell|addroom|afk|alchemy|alias|almanac|appraisal|arenawatch|arrows|astrology|athletics|attunement|autocontingency|automap|autostart|avtalia|bankbot|bescort|better-book|boggle_blast|bolts|bonding-rose|bootstrap|buff(other|-watcher)?|bug-grabber|burgle|carve(-bead)?|charge-holy-weapon|checkfavors|chop-wood|circlecheck|clean-(leather|lumber)|cleric-quests|clerk-tools|combat-trainer|commune|coordinator|corn-maze.*|craft|create_remedies|crossing-(repair|training)|crowns|dependency|discern|drinfomon|dusk-labyrinth|echo|edityaml|empathylink|enchant|equipmanager|esp|events|examine|exp-monitor|expreset|faskinner|faux-atmo|favor|feed-cloak|fill-dirt|find-darkbox|find|first-aid|forestry-buddy|forge|gate|gbox|generate-profile|get2|glyph-of-mana|gmoney|go2|gosafe|gpouch|grave-pile|healer|healme|heal-remedy|herb-stock|horse-trainer|hunting-buddy|infomon|inventory-manager|invoke-rune|jail-buddy|join-thieves|journal|kill-counter|lamprey|learned|levelup|lichbot|links|lnet|lockbox|locksmithing|magic-training|makesteel|mapmap|mech-lore|mine|mining-buddy|mining-manager|mm|moonwatch|multi|narost-glass|narost|newbie-gear|new-character|nexus|om|oshu_manor|outdoorsmanship|paladin-quests|pattern-hues|pay-debt|performance|performance-monitor|pick|pilgrimage|playermonitor|play|pray-chadatru|ranger-companion|register|release_cyclic|remedy|repeat|repository|restock|restock-shop|rezz|riverhaven-thieves|roomnumbers|safe-room|sanowret-crystal|schedule|scouting|scroll-search|sell-loot|sell-pouches|setupaliases|sew|shape|shit-list|shockquest|skill-recorder|slackbot|smartlisten|smarttransfer|smash-pumpkins|smash-shells|smelt-deeds|smelt|smith|smoke|sorcery|sorter|spellmonitor|spin|spinner|stabbity|stack-scrolls|status-monitor|steal|study-art|su-helmas|summoning|t2|tarantula|tdps|tendme|tendother|tessera|textsubs|theurgy|tinker|tithe|titlecheck|training-manager|train|transfer-items|truffenyi-commune-quest|ulfhara|update-shops|validate|vanity-pet|vars|wait|walkingastro|wand-watcher|weararmor|weave-cloth|whistle|workorders)(\]|:)?</highlight>
+
+	<highlight fg='&magenta;'>\((?:calmed|dead|flying|hiding|kneeling|prone|sitting|sleeping|stunned)\)</highlight>
+
+    <!-- Presets -->
+	<preset id='whisper' fg='&cyan;'/>
+	<preset id='speech' fg='&green;'/>
+	<preset id='roomName' fg='&green;'/>
+	<preset id='monsterbold' fg='&yellow;'/>
+	<preset id='thought' fg='&cyan;'/>
+	<preset id='voln' fg='&teal;'/>
+    <preset id='percWindow' fg='&cyan;'/>
+
+    <!-- Keybindings -->
+	<key id='enter' action='send_command'/>
+	<key id='left' action='cursor_left'/>
+	<key id='right' action='cursor_right'/>
+	<key id='ctrl+left' action='cursor_word_left'/>
+	<key id='ctrl+right' action='cursor_word_right'/>
+	<key id='shift+home' action='cursor_home'/>
+	<key id='shift+end' action='cursor_end'/>
+	<key id='backspace' action='cursor_backspace'/>
+	<key id='ctrl+h' action='cursor_backspace'/>
+	<key id='ctrl+w' action='cursor_backspace_word'/>
+	<key id='ctrl+u' action='cursor_kill_line'/>
+	<key id='delete' action='cursor_delete'/>
+	<key id='tab' action='switch_current_window'/>
+	<key id='page_up' action='scroll_current_window_up_page'/>
+	<key id='page_down' action='scroll_current_window_down_page'/>
+	<key id='alt+page_up' action='scroll_current_window_up_one'/>
+	<key id='alt+page_down' action='scroll_current_window_down_one'/>
+	<key id='up' action='previous_command'/>
+	<key id='down' action='next_command'/>
+
+	<!-- WEAPONS -->
+    <highlight fg='&yellow;'>\b(sipar|shield|arrows?|bolts|jambiya|katar|hhr'ata|spike|(hand|throwing|marauder|morning)?\s?(axe|club|star|dagger|blade)|scimitar|maul|greataxe|((composite|short)\s?|cross|long|latch|stone)?bow|allarh|boomerang|cutlass|hammer|bola|claymore|knife|(night|parry )?stick|sling|mace|(broad|long|bastard\s)?sword|(light\s)?spear|pasabas|foil)\b</highlight>
+
+	<!-- random highlights -->
+    <highlight fg='&yellow;'>\b(pouch|scroll|cambrinth|gwethdesuan|a corn maze ticket|bloodscrip|uthamar)\b</highlight>
+    <highlight fg='&yellow;'>(Inspired|Enlightened) Sigil Comprehension</highlight>
+    <highlight fg='&yellow;'>\w+'s? name appears on the result board!</highlight>
+
+    <!-- Names -->
+    <highlight fg='&magenta;'>^A tingling on the back of your neck draws attention to itself by disappearing, making you believe the heat is off from your last break in\.</highlight>
+    <highlight fg='&magenta;'>Utility Forging|(Exotic|Decorative) Wood (Adornments|Shaping)|(Artificer|Shaper|Weaving|Threadcraft|Fabric) (Theory|Specialization|Acumen)|(Basic|Advanced|Knitted|Proficient|Cloth) (Runestone Creation|(Outfitting|Container|Accessory|Artificing|Fabric|Decorative Wear|Alchemy) (Design|Principles))|(Artificer|Shaper|Weaving|Threadcraft|Fabric) (Theory|Specialization|Acumen)</highlight>
+    <highlight fg='&magenta;'>\b(agonite|muracite|telothian|tyrium|bloodscrip|inkpot|blade|handle|pommel|haralun|mistwood|kertig|ruby chunk|onyx chunk|sapphire chunk|unembellished ring|platinum chain|mortar|clamps|bellows|svidaw sis instructions|shovel|pliers|bowl|knitting needles|scissors|bone saw|forging mallet|flamewood riste|spike|textbook|shackle|razaksel|iron scimitar|battle axe|warrior's belt|leathers|harness|stonebow|latchbow)\b</highlight>
+    <highlight fg='&green;'>\b(Encumbrance|Name|Race|Guild|Gender|Age|Circle|Wealth|Debt|Favors|Encumbrance|Time Development Points|Deaths|Departs|Overall state of mind|Rested EXP Stored|Usable This Cycle|Cycle Refreshes|Total Ranks Displayed|Skills Included|(\w+) Average)\s?:</highlight>
+
+	<!-- BOXES -->
+    <highlight fg='&yellow;'>\b(box|caddy|crate|trunk|casket|skippet|chest|coffer|strongbox)\b</highlight>
+
+    <!-- GEMS -->
+    <highlight fg='&yellow;'>\b(alexandrite|amber|amethyst|carnelian|chalcedony|citrine|coral|diamond|emerald|garnet|jade|jasper|lazuli|moonstone|onyx|opal|sapphire|spinel|topaz|tourmaline|pearl|turqoise)\b</highlight>
+    <highlight fg='&red;'>\b(slim|alfar|warrior)\b</highlight>
+    <highlight fg='&red;'>\b(textbook)\b</highlight>
+    <highlight fg='&red;'>ruby chunk</highlight>
+    <highlight fg='&cyan;'>sapphire chunk</highlight>
+    <highlight fg='&green;'>onyx chunk</highlight>
+
+    <!-- MISC -->
+    <highlight fg='&green;'>^\[(LichNet|DRPrime)\]</highlight>
+    <highlight fg='&green;'>^\[Private(?:To)?\]</highlight>
+    <highlight fg='&white;'>\b(?i)your?\b </highlight>
+    <highlight fg='&red;'>(^\[?Roundtime.*|type: AWAKEN)</highlight>
+    <highlight fg='&red;'>^\.\.\.wait \d+ seconds.$</highlight>
+    <highlight fg='&green;'>^(Obvious (exits|paths)|Room (Number|Exits)|Showing all skills with field experience.|Also here):</highlight>
+    <highlight fg='&red;'>which appears dead</highlight>
+
+    <highlight fg='&magenta;'>You feel fully prepared to seek assistance from the Immortals once again\.</highlight>
+    <highlight fg='&magenta;'>^Your formation of a targeting pattern.*</highlight>
+    <highlight fg='&magenta;'>^You leap out of hiding.*</highlight>
+    <highlight fg='&magenta;'>.*position yourself behind.*</highlight>
+    <highlight fg='&magenta;'>.*masterfully position yourself to strike.*</highlight>
+    <highlight fg='&magenta;'>.*best shot possible.*</highlight>
+    <highlight fg='&magenta;'>^You dash forward.*</highlight>
+    <highlight fg='&magenta;'>^Utilizing flawless combat expertise.*</highlight>
+    <highlight fg='&magenta;'>^You feel fully prepared to cast your.*</highlight>
+
+    <highlight fg='&magenta;'>a volcanic crevasse</highlight>
+    <highlight fg='&magenta;'>You also see a subtle trail\.</highlight>
+
+    <!-- Health related -->
+    <highlight fg='&red;'>\b(feel a warmth radiate from [^ ]+ touch|feel fully rested|have a brief sensation that leaves your wounds tingling)\.</highlight>
+    <highlight fg='&yellow;'>\w(abdomen|back|chest|head|skin|nerves|(left|right) (arm|leg|eye|hand)|neck)\w</highlight>
+    <highlight fg='&magenta;'>^You sense a successful empathic link.*</highlight>
+    <highlight fg='&magenta;'>^You sense that.*</highlight>
+    <highlight fg='&magenta;'>^The internal (wounds|scars).*</highlight>
+    <highlight fg='&magenta;'>\'s injuries include\.\.\.</highlight>
+    <highlight fg='&yellow;'>^Wounds to the [A-Z]+\s?[A-Z]*:</highlight>
+    <highlight fg='&purple;'>^The external (wounds|scars).*</highlight>
+    <highlight fg='&cyan;'>(\.\.\. no injuries to speak of|\w+ has normal vitality)\.</highlight>
+    <highlight fg='&white;'>-- \w+ \((1|2|3)/13\)</highlight>
+    <highlight fg='&cyan;'>-- \w+\s?\w*\s?\w* \((4|5|6)/13\)</highlight>
+    <highlight fg='&yellow;'>-- \w+\s?\w* \((7|8|9)/13\)</highlight>
+    <highlight fg='&magenta;'>-- \w+\s?\w* \((10|11|12)/13\)</highlight>
+    <highlight fg='&red;'>-- \w+ \(13/13\)</highlight>
+
+    <!--- Shifting Messages -->
+    <highlight fg='&yellow;'>type ACCEPT TRANSFORM</highlight>
+    <highlight fg='&magenta;'>.*You turn toward \w+ and notice that \w+ appearance has changed\.</highlight>
+    <highlight fg='&magenta;'>^Inhaling deeply, you close your eyes, focusing intently on reshaping \w+'s? body to your will\.\.\.</highlight>
+    <highlight fg='&magenta;'>^You concentrate on the changes taking place in \w+'s body, guiding it and molding it to your will\.</highlight>
+    <highlight fg='&magenta;'>^Your empathic senses stretch out, forming a link so intense that your breathing slows almost to a stop\.</highlight>
+    <highlight fg='&magenta;'>^You feel the link growing further in strength, demanding all of your thought and concentration\.</highlight>
+    <highlight fg='&magenta;'>\[Type SHIFT \w+ to begin the transformation.\]</highlight>
+    <highlight fg='&magenta;'>^You bend all your senses to the changes in each particle of \w+\'s body, some growing, some shrinking away, and others changing form and color\.</highlight>
+    <highlight fg='&magenta;'>^Stretching your senses along the link with \w+, you slowly lose the boundary between \w+ and yourself, until you feel the changes moving and shaping as though they were in your own body\.</highlight>
+    <highlight fg='&red;'>^You don't feel as if you've sufficiently recovered from the previous shift\.</highlight>
+    <highlight fg='&cyan;'>^You feel your ability to Shift return to you\.</highlight>
+
+    <!--- Spell info -->
+    <highlight fg='&magenta;'>\[(acs|ad|adc|aewo|ags|aot|ars|art|aus|ava|avta|bc|blb|bos|botf|bs|bspk|cac|care|cd|col|cotc|crd|cs|cv|dalu|dc|devi|df|dmrs|do|dr|drum|ease|ec|echo|ecry|em|ey|fae|ff|fm|foc|fou|fp|gaf|gg|gol|gs|hes|hodi|hol|hp|hs|hw|hyh|ic|inst|iots|iz|lgv|maf|mapp|mb|mef|meg|mg|mom|mpp|mre|ms|mt|nb|oath|om|pfe|pg|phk|pom|psy|pyre|rage|rei|repr|rezz|rf|rits|rp|rs|rt|rtr|sap|sb|seer|shw|sick|sks|sl|sls|sm|sol|sott|stc|stra|stw|sv|th|tks|tksh|tkt|trc|turi|vh|wd|wotm)\]</highlight>
+    <highlight fg='&magenta;'>\s\s(Absolution|Athleticism|Awaken|Benediction|Blend|Bless|Bloodthorns|Blur|(Ease )?Burden|Burn|Calm|Centering|Compel|Compost|Contingency|Finesse|Fluoresce|Harmony|Heal|Hypnotize|Innocence|Lethargy|Locate|Malediction|Moonblade|Nexus|Nonchalance|Noumena|Obfuscation|Paralysis|Refresh|Regalia|Regenerate|Rejuvenation|Rend|Resumption|Sanctuary|Shadowling|Shadows|Sleep|Stampede|Starcrash|Swarm|Teleport|Tranquility|Uncurse|Vigil|Vigor)(,|\s(spells?|and)|\s\s)</highlight>
+    <highlight fg='&yellow;'>(Temporarily Memorized|Analogous Patterns|Blood Magic|Corruption|Synthetic Creation|Fabrication|Noematics|Illusion|Fae Arts|Emotion Control|Sound Manipulation|Elemental Invocations|Perception|Psychic Projection|Moonlight Manipulation|Enlightened Geometry|Stellar Magic|Animal Abilities|Wilderness Survival|Nature Manipulation|Healing|Body Purification|Life Force Manipulation|Protection|Mental Preparation|Holy Defense|Spirit Manipulation|Holy Evocations|Divine Intervention|Metamagic):</highlight>
+    <highlight fg='&magenta;'>(Augmentation|Debilitation|Targeted|Utility|Warding) Mastery|(Raw|Efficient) (Channeling|Harnessing)|Deep Attunement|Improved Memory|Improvised Rituals|Magic Theorist|Mental Matrices|Sorcerous Patterns|Symbiotic Research</highlight>
+    <highlight fg='&yellow;'>\b(acs|ad|adc|aewo|ags|aot|ars|art|aus|ava|avta|bc|blb|bos|botf|bs|bspk|cac|care|cd|col|cotc|crd|cs|cv|dalu|dc|devi|df|dmrs|do|dr|drum|ease|ec|echo|ecry|em|ey|fae|ff|fm|foc|fou|fp|gaf|gg|gol|gs|hes|hodi|hol|hp|hs|hw|hyh|ic|inst|iots|iz|lgv|maf|mapp|mb|mef|meg|mg|mom|mpp|mre|ms|mt|nb|oath|om|pfe|pg|phk|pom|psy|pyre|rage|rei|repr|rezz|rf|rits|rp|rs|rt|rtr|sap|sb|seer|shw|sick|sks|sl|sls|sm|sol|sott|stc|stra|stw|sv|th|tks|tksh|tkt|trc|turi|vh|wd|wotm)\b</highlight>
+    <highlight fg='&yellow;'>You have temporarily memorized</highlight>
+
+    <!--- Death Messages -->
+    <highlight fg='&red;'>^An armored warklin crumbles.*</highlight>
+    <highlight fg='&red;'>.*a grating bellow.*</highlight>
+    <highlight fg='&red;'>^The scout gurgles.*</highlight>
+    <highlight fg='&red;'>^The scout coughs up.*</highlight>
+    <highlight fg='&red;'>^The wind hound lets loose.*</highlight>
+    <highlight fg='&red;'>^A zombie stomper falls belly-up.*</highlight>
+    <highlight fg='&red;'>.*eyes glaze over.*</highlight>
+    <highlight fg='&red;'>.*closing its eyes forever.*</highlight>
+    <highlight fg='&red;'>.*eyes roll back in its head.*</highlight>
+    <highlight fg='&red;'>.*one last time and collapses.*</highlight>
+    <highlight fg='&red;'>^A storm bull expires.*</highlight>
+
+    <highlight fg='&cyan;'>^Gained:\s.*</highlight>
+    <highlight fg='&cyan;'>almanac</highlight>
+    <highlight fg='&magenta;'>(?i)moongate</highlight>
+
+    <highlight fg='&white;'>^You begin chanting a mantra.*</highlight>
+    <highlight fg='&white;'>^You trace a.*</highlight>
+
+    <highlight fg='&magenta;'>^A feeling of shock washes through your veins.*</highlight>
+    <highlight fg='&magenta;'>^A hulking Xala'shar magus glowers darkly at.*</highlight>
+
+    <highlight fg='&yellow;'>.*begins to advance on you.$</highlight>
+    <highlight fg='&yellow;'>[tT]here is nothing in there</highlight>
+    <highlight fg='&yellow;'>^You've gained a new rank in.*$</highlight>
+    <highlight fg='&yellow;'>The groaning sound culminates in a section of wall</highlight>
+
+    <highlight fg='&orange;'>\w+\s\((OM|cyclic)\)</highlight>
+
+    <highlight fg='&red;'>\[(k|x|y)\]\-\(\-?\+?\d+\)</highlight>
+    <highlight fg='&cyan;'>\[(k|x|y)\]\+\(\+?\-?\d+\)</highlight>
+
+    <layout id='default'>
+      <window class='text'       top='0'       left='((cols/3)*2)+1' height='17' width='cols/6'  value='death'      />
+      <window class='percWindow' top='0'       left='((cols/6)*5)+4' height='17' width='cols/6'  value='percWindow' />
+      <window class='text'       top='17'      left='((cols/3)*2)+1' height='6'  width='cols/3'  value='lnet,thoughts,voln' buffer-size='30'   timestamp='true'/>
+      <window class='text'       top='23'      left='((cols/3)*2)+1' height='6'  width='cols/3'  value='talk,whispers'      buffer-size='30'   timestamp='true'/>
+      <window class='text'       top='29'      left='((cols/3)*2)+1' height='27' width='cols/3'  value='familiar,ooc'           buffer-size='1000' timestamp='true'/>
+      <window class='text'       top='lines-2' left='((cols/3)*2)+1' height='2'  width='cols/3'  value='atmospherics'       buffer-size='10'   timestamp='true'/>
+
+      <window class='text'       top='0'       left='0'      height='22'           width='(cols/3)*2' value='combat,assess' buffer-size='100' />
+      <window class='text'       top='22'      left='0'      height='lines-24'     width='(cols/3)*2' value='main'          buffer-size='1000'/>
+
+      <window class='indicator' top='lines-2' left='0' width='1' height='1' label='#' fg='&white;'/>
+      <window class='command'   top='lines-2' left='1' width='(cols/3)*2' height='1'/>
+
+      <window class='countdown' top='lines-1' left='0' width='10' height='1' label='' value='roundtime' fg='&white;,&white;,&white;,&white;' bg='nil,&blue;,&yellow;'/>
+
+      <window class='indicator' top='lines-1' left='17' height='1' width='3' label='L:' fg='&blue;'/>
+      <window class='indicator' top='lines-1' left='20' height='1' width='20' label=' ' value='left'  fg='&white;,&purple;'/>
+
+      <window class='indicator' top='lines-1' left='42' height='1' width='3' label='R:' fg='&blue;'/>
+      <window class='indicator' top='lines-1' left='45' height='1' width='20' label=' ' value='right' fg='&white;,&purple;'/>
+
+      <window class='indicator' top='lines-1' left='67' height='1' width='3'  label='S:' fg='&blue;'/>
+      <window class='indicator' top='lines-1' left='70' height='1' width='25' label=' ' value='spell' fg='&white;,&purple;' />
+
+      <window class='indicator' top='lines-1' left='96' height='1' width='4' label='STUN' value='stunned'  fg='&black;,&yellow;'/>
+      <window class='indicator' top='lines-1' left='101' height='1' width='3' label='BLD'  value='bleeding' fg='&black;,&red;'/>
+
+      <window class='progress' top='lines-1' left='105'   width='3'  height='1' label='' value='health'        fg='&red;,&red;,&red;'       bg='&black;'/>
+      <window class='progress' top='lines-1' left='109'   width='3'  height='1' label='' value='mana'          fg='&blue;,&blue;,&blue;'    bg='&black;'/>
+      <window class='progress' top='lines-1' left='113'   width='3'  height='1' label='' value='stamina'       fg='&white;,&white;,&white;' bg='&black;'/>
+      <window class='progress' top='lines-1' left='117'   width='3'  height='1' label='' value='concentration' fg='&green;,&green;,&green;' bg='&black;'/>
+      <window class='progress' top='lines-1' left='121'  width='3'  height='1' label='' value='spirit'        fg='&cyan;,&cyan;,&cyan;'    bg='&black;'/>
+
+      <!-- <window class='indicator' top='lines-1' left='125' height='1' width='6' label='Moons:' fg='&white;'/> -->
+      <window class='text'     top='lines-1' left='125'  width='33' height='1' value='moonWindow' />
+    </layout>
+</settings>
