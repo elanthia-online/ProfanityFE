@@ -2010,6 +2010,13 @@ Thread.new {
                 need_update = true
               end
             end
+          # DragonRealms vitals progressbars
+          elsif xml =~ /^<progressBar id='(health|mana|spirit|stamina|concentration)' value='([0-9]+)' text='(?:health|mana|spirit|fatigue|concentration) [0-9]+\%' /
+            if (window = progress_handler[Regexp.last_match(1)])
+              if window.update(Regexp.last_match(2).to_i, 100)
+                need_update = true
+              end
+            end
           # accepts (mostly) arbitrary progress bars with dynamic color codes, etc.
           # useful for user defined progress bars (i.e. spell active timer, item cooldowns, etc.)
           # example XML to trigger:
