@@ -10,6 +10,14 @@ A terminal frontend for Simutronics games based on Ruby and Ncurses.
 6. Launch Lich5 via `ruby ~/lich-5/lich.rbw --login Rinualdo --without-frontend --detachable-client=8000 &` or similar.
 7. Launch Profanity via `ruby ~/ProfanityFE/profanity.rb --port=8000 --char=Rinualdo`
 
+## Templates Described
+Located within the templates folder are premade xml templates that you can utilize as a base for your own needs. Below is a description of each one.
+* default.xml - Game Type: ANY - a 1080p template with automatic resizing
+* original.xml - Game Type: ANY - the original xml that was released with ProfanityFE. Very little customizations. If you want to start from ground zero, this is the way to go.
+* eleazzar.xml - Game Type: GS - a automatic resizing template that utilizes game specific lich scripts to populate GS based window elements. Utilizes nerdfont or other similar fonts for custom characters displayed for the UI borders
+* mahtra.xml - Game Type: DR - displays specific UI elements for DR and should resize window elements correctly
+* tysong.xml - Game Type: GS - a hardcoded 1080p template that utilizes basic window outputs. Although customized for GS, can be used for DR without issue as well
+
 ## Profanity CLI Options
 * --port=<port>
 * --default-color-id=<id>
