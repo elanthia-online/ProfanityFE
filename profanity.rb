@@ -2239,10 +2239,34 @@ Thread.new {
   end
 }
 
+BUTTON4_PRESSED = defined?(Curses::BUTTON4_PRESSED) ? Curses::BUTTON4_PRESSED : 0x80000 # 1 << 19
+BUTTON5_PRESSED = defined?(Curses::BUTTON5_PRESSED) ? Curses::BUTTON5_PRESSED : 0x8000000 # 1 << 27
+mousemask(BUTTON4_PRESSED | BUTTON5_PRESSED)
+# Need the following line to avoid a warning
+getmouse
+
 begin
   key_combo = nil
   loop {
     ch = command_window.getch
+
+    # Handle mouse scroll events
+    if ch == Curses::KEY_MOUSE
+      begin
+        m = getmouse
+        if m
+          bstate = m.respond_to?(:bstate) ? m.bstate : m[4]
+          if (bstate & BUTTON4_PRESSED != 0)
+            key_action['scroll_current_window_up_one'].call
+          elsif (bstate & BUTTON5_PRESSED != 0)
+            key_action['scroll_current_window_down_one'].call
+          end
+        end
+      rescue => e
+        Profanity.log("Mouse event error: #{e.message}")
+      end
+      next
+    end
     Autocomplete.consume(ch)
     if key_combo
       if key_combo[ch].class == Proc
