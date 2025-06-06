@@ -21,4 +21,10 @@ module Settings
     bin = Settings.read(file)
     REXML::Document.new(bin).root
   end
+
+  def self.write(file, data)
+    @lock.synchronize do
+      File.write(file, data)
+    end
+  end
 end
