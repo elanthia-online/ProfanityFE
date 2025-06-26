@@ -1,14 +1,17 @@
 # ProfanityFE
 A terminal frontend for Simutronics games based on Ruby and Ncurses.
 
+## Requirements
+
 ## Installation
 1. Install Ruby on machine
-2. Git Clone the Lich5 repository
-3. Git Clone the ProfanityFE repository
-4. Configure the template file for your character in the ProfanityFE\templates folder, otherwise use default.xml
-5. Open Lich5 and save a character entry, alternatively do this on another machine with a GUI interface and copy Lich5\data\entry.dat
-6. Launch Lich5 via `ruby ~/lich-5/lich.rbw --login Rinualdo --without-frontend --detachable-client=8000 &` or similar.
-7. Launch Profanity via `ruby ~/ProfanityFE/profanity.rb --port=8000 --char=Rinualdo`
+2. Install required gems needed for Lich plus `curses` gem that is required for ProfanityFE to run
+3. Git Clone the Lich5 repository
+4. Git Clone the ProfanityFE repository
+5. Configure the template file for your character in the ProfanityFE\templates folder, otherwise use default.xml
+6. Open Lich5 and save a character entry, alternatively do this on another machine with a GUI interface and copy Lich5\data\entry.dat
+7. Launch Lich5 via `ruby ~/lich-5/lich.rbw --login Rinualdo --without-frontend --detachable-client=8000 &` or similar.
+8. Launch Profanity via `ruby ~/ProfanityFE/profanity.rb --port=8000 --char=Rinualdo`
 
 ## Templates Described
 Located within the templates folder are premade xml templates that you can utilize as a base for your own needs. Below is a description of each one.
