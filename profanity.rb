@@ -1238,6 +1238,8 @@ load_layout.call('default')
 TextWindow.list.each { |w| w.maxy.times { w.add_string "\n" } }
 
 server = TCPSocket.open(HOST, PORT)
+server.puts "SET_FRONTEND_PID #{Process.pid}"
+server.flush
 
 Thread.new { sleep 15; skip_server_time_offset = false }
 
