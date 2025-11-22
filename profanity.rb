@@ -88,7 +88,7 @@ module Profanity
     app_title(Profanity.fetch(:prompt, ""), Profanity.fetch(:room, ""))
   end
 
-  def self.log(str)
+  def self.log(*str)
     log_file { |f| f.puts str }
   end
 
@@ -142,7 +142,6 @@ write_to_client = proc { |str, color|
   Curses.doupdate
 }
 mouse = Mouse.new(write_to_client, key_action)
-
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
 # ever support reloading other settings in the future it will have to protect
@@ -1243,8 +1242,6 @@ load_layout.call('default')
 TextWindow.list.each { |w| w.maxy.times { w.add_string "\n" } }
 
 server = TCPSocket.open(HOST, PORT)
-server.puts "SET_FRONTEND_PID #{Process.pid}"
-server.flush
 
 Thread.new { sleep 15; skip_server_time_offset = false }
 
@@ -1889,7 +1886,7 @@ Thread.new {
         end
       else
         while (start_pos = (line =~ /(<(prompt|spell|right|left|inv|style|compass).*?\2>|<.*?>)/))
-          xml = $1
+          xml = Regexp.last_match(1)
           line.slice!(start_pos, xml.length)
 
           if xml =~ /^<prompt time=('|")([0-9]+)\1.*?>(.*?)&gt;<\/prompt>$/
