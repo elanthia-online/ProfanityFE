@@ -47,6 +47,8 @@ require_relative "./plugin/autocomplete.rb"
 require_relative "./settings/settings.rb"
 require_relative "./hilite/hilite.rb"
 
+require_relative "./util/mouse.rb"
+
 module Profanity
   LOG_FILE = Settings.file("debug.log")
 
@@ -134,6 +136,13 @@ countdown_handler = Hash.new
 command_window = nil
 command_window_layout = nil
 blue_links = (Opts["links"] ? true : false)
+write_to_client = proc { |str, color|
+  stream_handler["main"].add_string str, [{ :fg => color, :start => 0, :end => str.size }]
+  command_window.noutrefresh
+  Curses.doupdate
+}
+mouse = Mouse.new(write_to_client, key_action)
+
 # We need a mutex for the settings because highlights can be accessed during a
 # reload.  For now, it is just used to protect access to HIGHLIGHT, but if we
 # ever support reloading other settings in the future it will have to protect
@@ -991,12 +1000,6 @@ key_action['scroll_current_window_bottom'] = proc {
   Curses.doupdate
 }
 
-write_to_client = proc { |str, color|
-  stream_handler["main"].add_string str, [{ :fg => color, :start => 0, :end => str.size }]
-  command_window.noutrefresh
-  Curses.doupdate
-}
-
 key_action['autocomplete'] = proc { |idx|
   Autocomplete.wrap do
     current = command_buffer.dup
@@ -1154,6 +1157,8 @@ key_action['send_command'] = proc {
     eval(cmd.sub(/^\.e /, ''))
   elsif cmd =~ /^\.links/i
     blue_links = !blue_links
+  elsif cmd =~ /^\.scrollcfg/i
+    mouse.config
   else
     server.puts cmd.sub(/^\./, ';')
   end
@@ -2252,6 +2257,8 @@ begin
   key_combo = nil
   loop {
     ch = command_window.getch
+
+    mouse.process_mouse(ch)
     Autocomplete.consume(ch)
     if key_combo
       if key_combo[ch].class == Proc
