@@ -158,24 +158,22 @@ PORT                        = (Opts.port                           || 8000).to_i
 HOST                        = (Opts.host                           || "127.0.0.1")
 DEFAULT_COLOR_ID            = (Opts["default-color-id"]            || 7).to_i
 DEFAULT_BACKGROUND_COLOR_ID = (Opts["default-background-color-id"] || 0).to_i
-if Opts.char
-  if Opts.template
-    if File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase))
-      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase)
-    else
-      raise StandardError, <<~ERROR
-        You specified --template=#{Opts.template} but it doesn't exist.
-        Please try again!
-      ERROR
-    end
+if Opts.template
+  if File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase))
+    SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.template.downcase)
   else
-    if File.exist?(Settings.file(Opts.char.downcase + ".xml"))
-      SETTINGS_FILENAME = Settings.file(Opts.char.downcase + ".xml")
-    elsif File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.char.downcase + ".xml"))
-      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.char.downcase + ".xml")
-    else
-      SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', 'default.xml')
-    end
+    raise StandardError, <<~ERROR
+      You specified --template=#{Opts.template} but it doesn't exist.
+      Please try again!
+    ERROR
+  end
+elsif Opts.char
+  if File.exist?(Settings.file(Opts.char.downcase + ".xml"))
+    SETTINGS_FILENAME = Settings.file(Opts.char.downcase + ".xml")
+  elsif File.exist?(File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.char.downcase + ".xml"))
+    SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', Opts.char.downcase + ".xml")
+  else
+    SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', 'default.xml')
   end
 else
   SETTINGS_FILENAME = File.join(File.expand_path(File.dirname(__FILE__)), 'templates', 'default.xml')
