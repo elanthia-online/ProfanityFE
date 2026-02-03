@@ -30,6 +30,9 @@ Layout/LineLength:
 Lint/MissingSuper:
   AllowedParentClasses: [Object, BaseObject, GameBase::Game]
 
+Lint/ScriptPermission:
+  Enabled: false
+
 Metrics/AbcSize:
   Enabled: false
 
