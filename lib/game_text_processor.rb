@@ -391,7 +391,7 @@ class GameTextProcessor
           return
         elsif room_result == :continue
           # Room players: also update the indicator, then stop
-          update_room_players_indicator(text)
+          update_room_players_indicator(text, @line_colors)
           return
         end
 

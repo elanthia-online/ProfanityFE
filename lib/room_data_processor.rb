@@ -371,18 +371,22 @@ module RoomDataProcessor
 
   # Update the 'room players' indicator window with parsed player names.
   #
-  # Applies highlights to the full "Also here: ..." text for correct
-  # context-aware matching, then remaps matching color regions to each
-  # name's position in the indicator label.
+  # Merges SAX link colors (GemStone <a> tags) with highlights applied to
+  # the full "Also here: ..." text, then remaps color regions covering
+  # each name to the indicator label. Only highlights that fully cover a
+  # name are included -- partial matches create visual noise on a compact
+  # indicator display.
   #
   # @param players_text [String, nil] raw "Also here:" text or nil
+  # @param sax_colors [Array<Hash>] SAX-parsed color regions (link colors)
   # @return [void]
-  def update_room_players_indicator(players_text)
+  def update_room_players_indicator(players_text, sax_colors = [])
     names = players_text ? parse_player_names(players_text) : []
     if names.any?
       names_text = names.join(', ')
       full_text = players_text.strip
-      full_colors = HighlightProcessor.apply_highlights(full_text, [])
+      full_colors = sax_colors.dup
+      HighlightProcessor.apply_highlights(full_text, full_colors)
       label_colors = remap_name_colors(full_text, names, full_colors)
       @event_bus.emit(:indicator_update, id: 'room players', label: names_text, label_colors: label_colors, value: true)
     else
@@ -410,14 +414,13 @@ module RoomDataProcessor
       search_pos = name_end
 
       full_colors.each do |c|
-        # Clip color region to the name's range in the full text
-        region_start = [c[:start], name_start].max
-        region_end = [c[:end], name_end].min
-        next unless region_start < region_end
+        # Only include highlights that fully cover the name -- partial
+        # matches create visual noise on a compact indicator display.
+        next unless c[:start] <= name_start && c[:end] >= name_end
 
         label_colors << {
-          start: label_pos + (region_start - name_start),
-          end: label_pos + (region_end - name_start),
+          start: label_pos,
+          end: label_pos + name.length,
           fg: c[:fg],
           bg: c[:bg],
           ul: c[:ul]

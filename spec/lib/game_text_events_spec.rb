@@ -450,6 +450,20 @@ RSpec.describe 'GameTextProcessor event emissions' do
     ensure
       HIGHLIGHT.delete(/Navesi/)
     end
+
+    it 'excludes partial highlight matches from indicator colors' do
+      HIGHLIGHT[/ith/] = ['ff0000', nil, nil]
+
+      indicator_events = []
+      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
+
+      process_line("<component id='room players'>Also here: Cithrin</component>")
+
+      colors = indicator_events.last[:label_colors]
+      expect(colors).to be_empty
+    ensure
+      HIGHLIGHT.delete(/ith/)
+    end
   end
 
   # ---- Stream fallback with preset colors ----
