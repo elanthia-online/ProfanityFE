@@ -55,7 +55,7 @@ module SettingsLoader
           case e.name
           when 'highlight'
             begin
-              r = Regexp.new(e.text)
+              r = Regexp.new(e.text.strip)
             rescue StandardError => e_err
               r = nil
               warn e
