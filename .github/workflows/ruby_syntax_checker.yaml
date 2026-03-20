@@ -1,0 +1,41 @@
+name: Valid Ruby Syntax
+on: 
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.rb"
+      - "*.rb"
+  pull_request:
+    paths:
+      - "**/*.rb"
+      - "*.rb"
+
+jobs:
+  check_syntax:
+    runs-on: ubuntu-latest
+    env:
+      BUNDLE_WITHOUT: 'gtk:vscode:profanity'
+    name: Run tests on Ruby
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.2
+        with:
+          fetch-depth: 0
+          
+      - name: Get changed files
+        id: changed-files
+        uses: step-security/changed-files@60967b822d3001fa82242f8d6b4ed46bc3600a68 # v47.0.1
+        with:
+          files: |
+            **/*.rb
+            *.rb
+
+      - uses: ruby/setup-ruby@319994f95fa847cf3fb3cd3dbe89f6dcde9f178f # v1.295.0
+        with:
+          bundler-cache: true
+          
+      - name: Run Ruby syntax check on changed scripts
+        run: |
+          for file in ${{ steps.changed-files.outputs.all_changed_files }}; do
+            ruby -c $file
+          done
