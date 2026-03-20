@@ -392,6 +392,66 @@ RSpec.describe 'GameTextProcessor event emissions' do
     end
   end
 
+  # ---- Room players indicator without RoomWindow ----
+
+  describe 'room players indicator without a RoomWindow' do
+    # No wm.room['room'] set -- the default wm has an empty room hash
+
+    def process_line(line)
+      processor.send(:instance_variable_set, :@current_raw_line, line)
+      processor.send(:process_line_tags, line)
+    end
+
+    it 'updates indicator from room players component stream' do
+      indicator_events = []
+      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
+
+      process_line("<component id='room players'>Also here: Cithrin</component>")
+
+      expect(indicator_events.last).to include(id: 'room players', label: 'Cithrin', value: true)
+    end
+
+    it 'clears indicator from empty room players component' do
+      indicator_events = []
+      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
+
+      process_line("<component id='room players'></component>")
+
+      expect(indicator_events.last).to include(id: 'room players', value: false)
+    end
+
+    it 'maps highlight colors from full text to name positions' do
+      HIGHLIGHT[/Cithrin/] = ['ff0000', nil, nil]
+
+      indicator_events = []
+      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
+
+      process_line("<component id='room players'>Also here: Cithrin</component>")
+
+      colors = indicator_events.last[:label_colors]
+      expect(colors).to include(a_hash_including(start: 0, end: 7, fg: 'ff0000'))
+    ensure
+      HIGHLIGHT.delete(/Cithrin/)
+    end
+
+    it 'maps highlight colors correctly for multiple names' do
+      HIGHLIGHT[/Navesi/] = ['00ff00', nil, nil]
+
+      indicator_events = []
+      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
+
+      process_line("<component id='room players'>Also here: Cithrin and Navesi</component>")
+
+      label = indicator_events.last[:label]
+      colors = indicator_events.last[:label_colors]
+      expect(label).to eq('Cithrin, Navesi')
+      # "Navesi" starts at position 9 in "Cithrin, Navesi"
+      expect(colors).to include(a_hash_including(start: 9, end: 15, fg: '00ff00'))
+    ensure
+      HIGHLIGHT.delete(/Navesi/)
+    end
+  end
+
   # ---- Stream fallback with preset colors ----
 
   describe 'stream fallback applies preset colors' do

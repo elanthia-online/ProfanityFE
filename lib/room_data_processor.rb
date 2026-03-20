@@ -78,9 +78,14 @@ module RoomDataProcessor
       @room_capture_mode = nil
     end
 
-    # Without a RoomWindow, remaining room-data patterns (objects, players,
-    # exits) are not applicable — return early with whatever was captured.
-    return room_data_captured unless @wm.room['room']
+    # Without a RoomWindow, only update the room players indicator from
+    # inline text patterns (objects, exits, etc. are not applicable).
+    unless @wm.room['room']
+      if text =~ /^Also here:\s*(.+)$/
+        update_room_players_indicator(text.strip)
+      end
+      return room_data_captured
+    end
 
     # Skip inline pattern matching when inside a component stream.
     # Component stream data (room objs, room players, room exits) is
@@ -156,7 +161,12 @@ module RoomDataProcessor
   #   also needs indicator handling), or nil if not a room stream
   # @api private
   def process_room_stream(text)
-    return nil unless @current_stream&.start_with?('room') && @wm.room['room']
+    return nil unless @current_stream&.start_with?('room')
+
+    # Without a RoomWindow, only handle room players for the indicator
+    unless @wm.room['room']
+      return @current_stream == 'room players' ? :continue : nil
+    end
 
     # Extract pre-computed link regions from SAX-parsed @line_colors.
     # These have correct positions relative to `text` (the clean text
@@ -252,6 +262,7 @@ module RoomDataProcessor
   # @api private
   def parse_player_names(text)
     text.sub(/^Also here:\s*/, '')
+        .sub(/\.\s*$/, '')
         .sub(/ and (?<rest>.*)$/) { ", #{Regexp.last_match[:rest]}" }
         .split(', ')
         .map { |obj| obj.sub(/ (who|whose body)? ?(has|is|appears|glows) .+/, '').sub(/ \(.+\)/, '') }
@@ -360,16 +371,63 @@ module RoomDataProcessor
 
   # Update the 'room players' indicator window with parsed player names.
   #
+  # Applies highlights to the full "Also here: ..." text for correct
+  # context-aware matching, then remaps matching color regions to each
+  # name's position in the indicator label.
+  #
   # @param players_text [String, nil] raw "Also here:" text or nil
   # @return [void]
   def update_room_players_indicator(players_text)
     names = players_text ? parse_player_names(players_text) : []
     if names.any?
       names_text = names.join(', ')
-      label_colors = HighlightProcessor.apply_highlights(names_text, [])
+      full_text = players_text.strip
+      full_colors = HighlightProcessor.apply_highlights(full_text, [])
+      label_colors = remap_name_colors(full_text, names, full_colors)
       @event_bus.emit(:indicator_update, id: 'room players', label: names_text, label_colors: label_colors, value: true)
     else
       @event_bus.emit(:indicator_update, id: 'room players', label: ' ', label_colors: nil, value: false)
     end
+  end
+
+  # Map highlight color regions from full players text to indicator label positions.
+  #
+  # @param full_text [String] the full "Also here: ..." text
+  # @param names [Array<String>] parsed player names
+  # @param full_colors [Array<Hash>] highlight regions for the full text
+  # @return [Array<Hash>] color regions remapped to the names-only label
+  def remap_name_colors(full_text, names, full_colors)
+    return [] if full_colors.empty?
+
+    label_colors = []
+    label_pos = 0
+    search_pos = 0
+
+    names.each_with_index do |name, i|
+      name_start = full_text.index(name, search_pos)
+      next unless name_start
+      name_end = name_start + name.length
+      search_pos = name_end
+
+      full_colors.each do |c|
+        # Clip color region to the name's range in the full text
+        region_start = [c[:start], name_start].max
+        region_end = [c[:end], name_end].min
+        next unless region_start < region_end
+
+        label_colors << {
+          start: label_pos + (region_start - name_start),
+          end: label_pos + (region_end - name_start),
+          fg: c[:fg],
+          bg: c[:bg],
+          ul: c[:ul]
+        }
+      end
+
+      label_pos += name.length
+      label_pos += 2 if i < names.length - 1 # ", " separator
+    end
+
+    label_colors
   end
 end
