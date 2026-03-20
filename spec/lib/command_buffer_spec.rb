@@ -180,7 +180,7 @@ RSpec.describe CommandBuffer do
     it 'handles multiple spaces between words' do
       type('hello   world')
       buf.cursor_word_left
-      expect(buf.pos).to be <= 8  # Should land at or before 'w'
+      expect(buf.pos).to be <= 8 # Should land at or before 'w'
     end
 
     it 'handles punctuation as word boundary' do
@@ -508,7 +508,7 @@ RSpec.describe CommandBuffer do
     end
 
     it 'handles command at exactly min_history_length' do
-      buf.add_to_history('abcd')  # default min is 4
+      buf.add_to_history('abcd') # default min is 4
       expect(buf.history).to include('abcd')
     end
 

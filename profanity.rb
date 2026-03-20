@@ -1,6 +1,6 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
-# encoding: US-ASCII
+# encoding: US-ASCII # rubocop:disable Lint/OrderedMagicComments
 
 # vim: set sts=2 noet ts=2:
 #

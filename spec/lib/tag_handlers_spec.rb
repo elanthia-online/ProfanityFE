@@ -72,7 +72,7 @@ class SpyWindow
     @calls = []
   end
 
-  def route_string(text, colors, stream, **opts)
+  def route_string(text, colors, stream, **_opts)
     @calls << { method: :route_string, text: text, colors: colors, stream: stream }
   end
 
@@ -109,8 +109,8 @@ RSpec.describe TagHandlers do
   let(:wm) do
     Struct.new(:stream, :indicator, :progress, :countdown, :room,
                :command_window, :command_window_layout).new(
-      { 'main' => main_window }, {}, {}, {}, {}, nil, nil
-    )
+                 { 'main' => main_window }, {}, {}, {}, {}, nil, nil
+               )
   end
   let(:state) do
     Struct.new(:need_prompt, :prompt_text, :skip_server_time_offset,
@@ -706,7 +706,7 @@ RSpec.describe TagHandlers do
 
       region = host.line_colors.find { |c| c[:fg] == 'ff0000' }
       expect(region[:start]).to eq 0
-      expect(region[:end]).to eq 3  # "a<b" is 3 chars after unescape
+      expect(region[:end]).to eq 3 # "a<b" is 3 chars after unescape
     end
 
     it 'multiple color regions do not overlap incorrectly' do

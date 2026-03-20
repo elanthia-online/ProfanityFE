@@ -29,30 +29,30 @@ module Games
     #
     # @return [Hash<Regexp, String>]
     DEATH_AREA_CODES = {
-      /just bit the dust!/                                                   => 'WL',
-      /echoes in your mind!/                                                 => 'RIFT',
-      /just got squashed!/                                                   => 'CY',
-      /has gone to feed the fishes!/                                         => 'RR',
-      /life on land appears to be as rough as (?:his|her) life at sea\./     => 'KF',
-      /just turned (?:his|her) last page!/                                   => 'TI',
-      /(?:is off to a rough start!\s+(?:He|She) )?was just put on ice!/      => 'IMT',
+      /just bit the dust!/                                                       => 'WL',
+      /echoes in your mind!/                                                     => 'RIFT',
+      /just got squashed!/                                                       => 'CY',
+      /has gone to feed the fishes!/                                             => 'RR',
+      /life on land appears to be as rough as (?:his|her) life at sea\./         => 'KF',
+      /just turned (?:his|her) last page!/                                       => 'TI',
+      /(?:is off to a rough start!\s+(?:He|She) )?was just put on ice!/          => 'IMT',
       /just sank to the bottom of the (?:Great Western Sea|Tenebrous Cauldron)!/ => 'OSA',
-      /just gave up the ghost!/                                              => 'TRAIL',
-      /just got iced in the Hinterwilds!/                                    => 'HW',
-      /just punched a one-way ticket!/                                       => 'KD',
-      /is going home on (?:his|her) shield!/                                 => 'TV',
-      /just took a long walk off of a short pier!/                           => 'SOL',
-      /is dust in the wind!/                                                 => 'FWI',
-      /is six hundred feet under!/                                           => 'ZUL',
-      /just lost (?:his|her) way somewhere in the Settlement of Reim!/       => 'REIM',
-      /may just be going home on (?:his|her) shield!/                        => 'RED',
-      /flame just burnt out in the Sea of Fire!/                             => 'SOS',
-      /failed within the Bank at Bloodriven/                                 => 'DR-B',
-      /was just defeated in Duskruin Arena!/                                 => 'DR-A',
-      /was just defeated during round \d+ in (?:Endless )?Duskruin Arena!/   => 'DR-A',
-      /was just defeated in the Arena of the Abyss!/                         => 'EG-A',
-      /failed to bring a shrubbery to the Night at the Academy!/             => 'NATA',
-      /has just returned to Gosaena!/                                        => '??',
+      /just gave up the ghost!/                                                  => 'TRAIL',
+      /just got iced in the Hinterwilds!/                                        => 'HW',
+      /just punched a one-way ticket!/                                           => 'KD',
+      /is going home on (?:his|her) shield!/                                     => 'TV',
+      /just took a long walk off of a short pier!/                               => 'SOL',
+      /is dust in the wind!/                                                     => 'FWI',
+      /is six hundred feet under!/                                               => 'ZUL',
+      /just lost (?:his|her) way somewhere in the Settlement of Reim!/           => 'REIM',
+      /may just be going home on (?:his|her) shield!/                            => 'RED',
+      /flame just burnt out in the Sea of Fire!/                                 => 'SOS',
+      /failed within the Bank at Bloodriven/                                     => 'DR-B',
+      /was just defeated in Duskruin Arena!/                                     => 'DR-A',
+      /was just defeated during round \d+ in (?:Endless )?Duskruin Arena!/       => 'DR-A',
+      /was just defeated in the Arena of the Abyss!/                             => 'EG-A',
+      /failed to bring a shrubbery to the Night at the Academy!/                 => 'NATA',
+      /has just returned to Gosaena!/                                            => '??',
     }.freeze
 
     # Resolve a death area message to its short area code.
@@ -71,9 +71,9 @@ module Games
     #
     # @return [Hash<String, String>] message suffix => hex color code
     LOGON_PATTERNS = {
-      'joins the adventure.' => '007700',
+      'joins the adventure.'                         => '007700',
       'returns home from a hard day of adventuring.' => '777700',
-      'has disconnected.' => 'aa7733',
+      'has disconnected.'                            => 'aa7733',
     }.freeze
 
     # Abbreviate a GS spell name (stub — returns original name).

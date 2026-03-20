@@ -8,22 +8,22 @@ RSpec.describe Games::GemStone do
 
     # Every area death message should match and resolve
     {
-      'just bit the dust!' => 'WL',
-      'echoes in your mind!' => 'RIFT',
-      'just got squashed!' => 'CY',
-      'has gone to feed the fishes!' => 'RR',
-      'just got iced in the Hinterwilds!' => 'HW',
-      'just punched a one-way ticket!' => 'KD',
-      'is going home on his shield!' => 'TV',
-      'just took a long walk off of a short pier!' => 'SOL',
-      'is dust in the wind!' => 'FWI',
-      'is six hundred feet under!' => 'ZUL',
-      'just gave up the ghost!' => 'TRAIL',
-      'was just defeated in Duskruin Arena!' => 'DR-A',
-      'failed within the Bank at Bloodriven' => 'DR-B',
-      'was just defeated in the Arena of the Abyss!' => 'EG-A',
+      'just bit the dust!'                                       => 'WL',
+      'echoes in your mind!'                                     => 'RIFT',
+      'just got squashed!'                                       => 'CY',
+      'has gone to feed the fishes!'                             => 'RR',
+      'just got iced in the Hinterwilds!'                        => 'HW',
+      'just punched a one-way ticket!'                           => 'KD',
+      'is going home on his shield!'                             => 'TV',
+      'just took a long walk off of a short pier!'               => 'SOL',
+      'is dust in the wind!'                                     => 'FWI',
+      'is six hundred feet under!'                               => 'ZUL',
+      'just gave up the ghost!'                                  => 'TRAIL',
+      'was just defeated in Duskruin Arena!'                     => 'DR-A',
+      'failed within the Bank at Bloodriven'                     => 'DR-B',
+      'was just defeated in the Arena of the Abyss!'             => 'EG-A',
       'failed to bring a shrubbery to the Night at the Academy!' => 'NATA',
-      'has just returned to Gosaena!' => '??',
+      'has just returned to Gosaena!'                            => '??',
     }.each do |death_msg, expected_area|
       it "matches '#{death_msg[0..40]}...' and resolves to #{expected_area}" do
         text = " * Mahtra #{death_msg}"

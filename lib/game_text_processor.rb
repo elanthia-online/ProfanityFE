@@ -140,62 +140,59 @@ class GameTextProcessor
 
       # Synchronize all curses operations (noutrefresh calls from indicator,
       # text, countdown, and room window updates) with the final doupdate so
-      # that timer and input threads cannot flush a half-updated virtual screen.
-      # rubocop:disable Layout/BlockAlignment -- flat indent avoids re-indent
+      # that timer and input threads cannot flush a half-updated virtual screen. # -- flat indent avoids re-indent
       CursesRenderer.synchronize do
-      if line.empty?
-        if @current_stream.nil?
-          # Check if last line in ANY tab was movement (backup check)
-          main_window = @wm.stream[MAIN_STREAM]
-          last_line_was_movement = false
-          if main_window.is_a?(TabbedTextWindow)
-            # Check all tabs for recent movement (movement could be in main, combat, etc.)
-            main_window.tabs.each_value do |tab_buffer|
-              last_entry = tab_buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-              if last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-                last_line_was_movement = true
-                break
+        if line.empty?
+          if @current_stream.nil?
+            # Check if last line in ANY tab was movement (backup check)
+            main_window = @wm.stream[MAIN_STREAM]
+            last_line_was_movement = false
+            if main_window.is_a?(TabbedTextWindow)
+              # Check all tabs for recent movement (movement could be in main, combat, etc.)
+              main_window.tabs.each_value do |tab_buffer|
+                last_entry = tab_buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
+                if last_entry && last_entry[0] =~ MOVEMENT_PATTERN
+                  last_line_was_movement = true
+                  break
+                end
               end
+            elsif main_window.respond_to?(:buffer) && !main_window.buffer.empty?
+              last_entry = main_window.buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
+              last_line_was_movement = last_entry && last_entry[0] =~ MOVEMENT_PATTERN
             end
-          elsif main_window.respond_to?(:buffer) && !main_window.buffer.empty?
-            last_entry = main_window.buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-            last_line_was_movement = last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-          end
 
-          # Skip prompt and empty line after movement (use flag OR buffer check)
-          if @last_was_movement || last_line_was_movement
-            @state.need_prompt = false
-            @last_was_movement = false
-            # Skip the empty line entirely
-          else
-            if @state.need_prompt
+            # Skip prompt and empty line after movement (use flag OR buffer check)
+            if @last_was_movement || last_line_was_movement
               @state.need_prompt = false
-              @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
+              @last_was_movement = false
+              # Skip the empty line entirely
+            else
+              if @state.need_prompt
+                @state.need_prompt = false
+                @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
+              end
+              @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: String.new, colors: [])
+              @need_update = true
             end
-            @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: String.new, colors: [])
-            @need_update = true
           end
+        else
+          @current_raw_line = line.dup
+          process_line_tags(line)
         end
-      else
-        @current_raw_line = line.dup
-        process_line_tags(line)
-      end
-      #
-      # Flush screen update unless more game lines are waiting (batch rendering).
-      # IO.select returns nil (no data waiting) when we should flush now.
-      #
-      if @need_update && !IO.select([server], nil, nil, 0.001)
-        @need_update = false
-        if @need_room_render
-          @event_bus.emit(:room_render)
-          @need_room_render = false
+        #
+        # Flush screen update unless more game lines are waiting (batch rendering).
+        # IO.select returns nil (no data waiting) when we should flush now.
+        #
+        if @need_update && !IO.select([server], nil, nil, 0.001)
+          @need_update = false
+          if @need_room_render
+            @event_bus.emit(:room_render)
+            @need_room_render = false
+          end
+          @cmd_buffer.window&.noutrefresh
+          Curses.doupdate
         end
-        @cmd_buffer.window&.noutrefresh
-        Curses.doupdate
-      end
       end # CursesRenderer.synchronize
-      # rubocop:enable Layout/BlockAlignment
-
       # Flush terminal title AFTER curses operations complete.
       # Writing escape sequences to $stdout inside the synchronize block
       # interleaves with curses output, causing visible artifacts.
@@ -398,7 +395,7 @@ class GameTextProcessor
           return
         end
 
-        if (window = @wm.stream[@current_stream])
+        if (@wm.stream[@current_stream])
           if @current_stream == 'death'
             if (death_match = text.match(Games::DragonRealms::DEATH_PATTERN))
               # DR death: "Name" or "Name MF" (moonfire phoenix)
@@ -441,9 +438,9 @@ class GameTextProcessor
           end
 
           if @current_stream == 'exp'
-            window = @wm.stream['exp']
+            @wm.stream['exp']
           elsif @current_stream == 'percWindow'
-            window = @wm.stream['percWindow']
+            @wm.stream['percWindow']
 
             # Apply configurable text transformations from XML
             # Example: <perc-transform pattern=" (roisaen|roisan)" replace=""/>

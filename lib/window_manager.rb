@@ -411,74 +411,74 @@ class WindowManager
   # @return [void]
   def resize(_cmd_buffer)
     CursesRenderer.synchronize do
-    window = Curses::Window.new(0, 0, 0, 0)
-    window.refresh
-    window.close
+      window = Curses::Window.new(0, 0, 0, 0)
+      window.refresh
+      window.close
 
-    # Skip resize when terminal is too small — ncurses segfaults on
-    # invalid dimensions (negative/zero height or width, out-of-bounds
-    # positions). The windows will be repositioned on the next resize
-    # when the terminal is large enough.
-    return if Curses.lines < 3 || Curses.cols < 10
+      # Skip resize when terminal is too small — ncurses segfaults on
+      # invalid dimensions (negative/zero height or width, out-of-bounds
+      # positions). The windows will be repositioned on the next resize
+      # when the terminal is large enough.
+      return if Curses.lines < 3 || Curses.cols < 10
 
-    first_text_window = true
-    TextWindow.list.to_a.each do |win|
-      next unless safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - 1,
-                                   fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
-      win.scrollbar.resize([win.maxy, 1].max, 1)
-      win.scrollbar.move(win.begy, win.begx + win.maxx)
-      win.scroll(-win.maxy)
-      win.scroll(win.maxy)
-      win.clear_scrollbar
-      if first_text_window
-        win.update_scrollbar
-        first_text_window = false
-      end
-      win.noutrefresh
-    end
-
-    TabbedTextWindow.list.to_a.each do |win|
-      next unless safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - 1,
-                                   fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
-      if win.scrollbar
+      first_text_window = true
+      TextWindow.list.to_a.each do |win|
+        next unless safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - 1,
+                                     fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
         win.scrollbar.resize([win.maxy, 1].max, 1)
         win.scrollbar.move(win.begy, win.begx + win.maxx)
+        win.scroll(-win.maxy)
+        win.scroll(win.maxy)
+        win.clear_scrollbar
+        if first_text_window
+          win.update_scrollbar
+          first_text_window = false
+        end
+        win.noutrefresh
       end
-      win.scroll(-win.maxy)
-      win.scroll(win.maxy)
-      win.clear_scrollbar
-      win.redraw
-      win.noutrefresh
-    end
 
-    [ExpWindow, PercWindow, RoomWindow].each do |klass|
-      klass.list.to_a.each do |win|
-        next unless safe_reposition(win)
+      TabbedTextWindow.list.to_a.each do |win|
+        next unless safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - 1,
+                                     fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
+        if win.scrollbar
+          win.scrollbar.resize([win.maxy, 1].max, 1)
+          win.scrollbar.move(win.begy, win.begx + win.maxx)
+        end
+        win.scroll(-win.maxy)
+        win.scroll(win.maxy)
+        win.clear_scrollbar
         win.redraw
         win.noutrefresh
       end
-    end
 
-    [IndicatorWindow, ProgressWindow, CountdownWindow].each do |klass|
-      klass.list.to_a.each do |win|
-        next unless safe_reposition(win)
-        win.noutrefresh
+      [ExpWindow, PercWindow, RoomWindow].each do |klass|
+        klass.list.to_a.each do |win|
+          next unless safe_reposition(win)
+          win.redraw
+          win.noutrefresh
+        end
       end
-    end
 
-    if @command_window && @command_window_layout
-      h = [fix_layout_number(@command_window_layout[0]), 1].max
-      w = [fix_layout_number(@command_window_layout[1]), 1].max
-      t = [fix_layout_number(@command_window_layout[2]), 0].max
-      l = [fix_layout_number(@command_window_layout[3]), 0].max
-      if t < Curses.lines && l < Curses.cols
-        @command_window.resize(h, w)
-        @command_window.move(t, l)
-        @command_window.noutrefresh
+      [IndicatorWindow, ProgressWindow, CountdownWindow].each do |klass|
+        klass.list.to_a.each do |win|
+          next unless safe_reposition(win)
+          win.noutrefresh
+        end
       end
-    end
 
-    Curses.doupdate
+      if @command_window && @command_window_layout
+        h = [fix_layout_number(@command_window_layout[0]), 1].max
+        w = [fix_layout_number(@command_window_layout[1]), 1].max
+        t = [fix_layout_number(@command_window_layout[2]), 0].max
+        l = [fix_layout_number(@command_window_layout[3]), 0].max
+        if t < Curses.lines && l < Curses.cols
+          @command_window.resize(h, w)
+          @command_window.move(t, l)
+          @command_window.noutrefresh
+        end
+      end
+
+      Curses.doupdate
     end # CursesRenderer.synchronize
   end
 
@@ -529,9 +529,9 @@ end
 BaseWindow.register_type('command') do |height, width, top, left, element, wm|
   wm.instance_variable_set(:@command_window, Curses::Window.new(height, width, top, left)) unless wm.command_window
   wm.instance_variable_set(:@command_window_layout, [
-    element.attributes['height'], element.attributes['width'],
-    element.attributes['top'], element.attributes['left']
-  ])
+                             element.attributes['height'], element.attributes['width'],
+                             element.attributes['top'], element.attributes['left']
+                           ])
   wm.command_window.scrollok(false)
   wm.command_window.keypad(true)
   wm.command_window

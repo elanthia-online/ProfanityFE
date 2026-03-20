@@ -50,7 +50,7 @@ RSpec.describe KillRing do
     it 'does not update original when buffer is preserved' do
       ring.before('first', 0)
       ring.after('first', 0)
-      ring.before('first', 0)  # same state — no reset
+      ring.before('first', 0) # same state — no reset
       expect(ring.original).to eq 'first'
     end
 
@@ -67,7 +67,7 @@ RSpec.describe KillRing do
     it 'handles position 0 consistently' do
       ring.after('text', 0)
       ring.before('text', 0)
-      expect(ring.buffer).to eq ''  # first call always resets since last_text starts empty
+      expect(ring.buffer).to eq '' # first call always resets since last_text starts empty
     end
 
     it 'handles nil-length strings' do
@@ -98,7 +98,7 @@ RSpec.describe KillRing do
       text.replace('changed')
       # The snapshot should still be 'mutable'
       ring.before('mutable', 3)
-      expect(ring.buffer).to eq ''  # still empty from init, but no reset
+      expect(ring.buffer).to eq '' # still empty from init, but no reset
     end
   end
 
@@ -111,7 +111,7 @@ RSpec.describe KillRing do
 
       # Cursor hasn't moved, text changed — but after() snapshot matches
       ring.before('hello', 5)
-      ring.buffer += '!'  # hypothetical next kill
+      ring.buffer += '!' # hypothetical next kill
       expect(ring.buffer).to eq ' world!'
     end
 

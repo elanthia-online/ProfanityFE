@@ -226,7 +226,7 @@ RSpec.describe LinkExtractor do
 
       it 'does not match <div> or other tags starting with d' do
         text = '<div>content</div>'
-        clean, colors = described_class.extract_links(text, links_enabled: true)
+        _, colors = described_class.extract_links(text, links_enabled: true)
         # <div> should NOT match <d> link pattern — the regex requires </d> or </a>
         # But <div> matches <([ad])...> where \1 = 'd' and closing is </d>iv> — no match
         # Actually <div> matches <([ad])\s?... with 'd', then looks for </d> — 'iv>' != closing

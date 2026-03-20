@@ -24,8 +24,8 @@ RSpec.describe 'GameTextProcessor event emissions' do
   let(:wm) do
     Struct.new(:stream, :indicator, :progress, :countdown, :room,
                :command_window, :command_window_layout).new(
-      { 'main' => main_window }, {}, {}, {}, {}, nil, nil
-    )
+                 { 'main' => main_window }, {}, {}, {}, {}, nil, nil
+               )
   end
   let(:state) do
     Struct.new(:need_prompt, :prompt_text, :skip_server_time_offset,
@@ -323,11 +323,11 @@ RSpec.describe 'GameTextProcessor event emissions' do
       room_spy = Object.new
       def room_spy.calls = @calls ||= []
       def room_spy.update_title(t)  = calls << [:update_title, t]
-      def room_spy.update_desc(t, links: [])   = calls << [:update_desc, t]
-      def room_spy.update_objects(t, links: [], creatures: []) = calls << [:update_objects, t]
-      def room_spy.update_players(t, links: []) = calls << [:update_players, t]
-      def room_spy.update_exits(t, links: [])  = calls << [:update_exits, t]
-      def room_spy.render           = calls << [:render]
+      def room_spy.update_desc(t, **) = calls << [:update_desc, t]
+      def room_spy.update_objects(t, **) = calls << [:update_objects, t]
+      def room_spy.update_players(t, **) = calls << [:update_players, t]
+      def room_spy.update_exits(t, **) = calls << [:update_exits, t]
+      def room_spy.render = calls << [:render]
       def room_spy.clear_supplemental = calls << [:clear_supplemental]
       def room_spy.update_room_number(t) = calls << [:update_room_number, t]
       def room_spy.update_stringprocs(t) = calls << [:update_stringprocs, t]
@@ -345,9 +345,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
       )
 
       test_processor.send(:instance_variable_set, :@current_raw_line,
-        "<component id='room players'>Also here: Mahtra.</component>")
+                          "<component id='room players'>Also here: Mahtra.</component>")
       test_processor.send(:process_line_tags,
-        "<component id='room players'>Also here: Mahtra.</component>")
+                          "<component id='room players'>Also here: Mahtra.</component>")
 
       expect(room_spy.calls).to include([:update_players, a_string_matching(/Mahtra/)])
     end

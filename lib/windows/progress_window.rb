@@ -93,8 +93,8 @@ BaseWindow.register_type('progress') do |height, width, top, left, element, wm|
   window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   window.scrollok(false)
   window.label = element.attributes['label'] if element.attributes['label']
-  window.fg = BaseWindow.parse_color_attrs(element,'fg') if element.attributes['fg']
-  window.bg = BaseWindow.parse_color_attrs(element,'bg') if element.attributes['bg']
+  window.fg = BaseWindow.parse_color_attrs(element, 'fg') if element.attributes['fg']
+  window.bg = BaseWindow.parse_color_attrs(element, 'bg') if element.attributes['bg']
   wm.progress[element.attributes['value']] = window if element.attributes['value']
   window.redraw
   window

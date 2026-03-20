@@ -46,7 +46,7 @@ class RoomWindow < BaseWindow
     @lich_exits = ''
     @room_number = ''
     @stringprocs = ''
-    @rendered_lines = []      # [{text:, colors:}, ...] for link_cmd_at
+    @rendered_lines = [] # [{text:, colors:}, ...] for link_cmd_at
     @links_enabled = false
     super
   end

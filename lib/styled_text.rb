@@ -83,7 +83,7 @@ class StyledText
   def slice(range)
     start_pos = range.begin || 0
     end_pos = range.end || @text.length
-    end_pos = @text.length if end_pos > @text.length
+    @text.length if end_pos > @text.length
     sliced_text = @text[range] || ''
     sliced_len = sliced_text.length
 

@@ -214,7 +214,7 @@ class CommandBuffer
       @window.insch(@text[@offset - num])
     rescue StandardError => e
       ProfanityLog.write('command_buffer', "#{e} text=#{@text.inspect} offset=#{@offset.inspect} num=#{num.inspect}", backtrace: e.backtrace)
-      return
+      return # rubocop:disable Lint/NonLocalExitFromIterator
     end
     @offset = 0
     @window.noutrefresh

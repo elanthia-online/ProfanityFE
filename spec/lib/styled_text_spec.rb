@@ -87,9 +87,9 @@ RSpec.describe StyledText do
   describe '#slice' do
     let(:st) do
       described_class.new('Hello world', [
-        { start: 0, end: 5, fg: 'ff0000' },   # "Hello"
-        { start: 6, end: 11, fg: '00ff00' },   # "world"
-      ])
+                            { start: 0, end: 5, fg: 'ff0000' }, # "Hello"
+                            { start: 6, end: 11, fg: '00ff00' }, # "world"
+                          ])
     end
 
     it 'slices text correctly' do
@@ -171,9 +171,9 @@ RSpec.describe StyledText do
 
     it 'drops runs that end up entirely before position 0' do
       st = described_class.new('   hello', [
-        { start: 0, end: 2, fg: 'ff0000' },   # entirely in whitespace
-        { start: 3, end: 8, fg: '00ff00' },    # "hello"
-      ])
+                                 { start: 0, end: 2, fg: 'ff0000' }, # entirely in whitespace
+                                 { start: 3, end: 8, fg: '00ff00' }, # "hello"
+                               ])
       result = st.lstrip
       expect(result.runs.length).to eq 1
       expect(result.runs.first[:fg]).to eq '00ff00'
@@ -241,9 +241,9 @@ RSpec.describe StyledText do
 
     it 'preserves run colors through wrapping' do
       st = described_class.new('AAAAABBBBB', [
-        { start: 0, end: 5, fg: 'ff0000' },
-        { start: 5, end: 10, fg: '00ff00' },
-      ])
+                                 { start: 0, end: 5, fg: 'ff0000' },
+                                 { start: 5, end: 10, fg: '00ff00' },
+                               ])
       lines = st.wrap(5, indent: false)
       expect(lines[0].runs.first[:fg]).to eq 'ff0000'
       expect(lines[1].runs.first[:fg]).to eq '00ff00'
@@ -251,9 +251,9 @@ RSpec.describe StyledText do
 
     it 'run positions are valid indices into the line text' do
       st = described_class.new('The quick brown fox jumps over the lazy dog', [
-        { start: 4, end: 9, fg: 'ff0000' },    # "quick"
-        { start: 20, end: 25, fg: '00ff00' },   # "jumps"
-      ])
+                                 { start: 4, end: 9, fg: 'ff0000' }, # "quick"
+                                 { start: 20, end: 25, fg: '00ff00' }, # "jumps"
+                               ])
       lines = st.wrap(15, indent: false)
       lines.each do |line|
         line.runs.each do |run|
@@ -278,8 +278,8 @@ RSpec.describe StyledText do
 
     it 'preserves cmd attributes through wrapping' do
       st = described_class.new('Click here to go', [
-        { start: 0, end: 16, fg: '0000ff', cmd: 'go north' }
-      ])
+                                 { start: 0, end: 16, fg: '0000ff', cmd: 'go north' }
+                               ])
       lines = st.wrap(10, indent: false)
       all_cmds = lines.flat_map { |l| l.runs.select { |r| r[:cmd] }.map { |r| r[:cmd] } }
       expect(all_cmds).to all(eq 'go north')
@@ -351,9 +351,9 @@ RSpec.describe StyledText do
     it 'splits a run exactly at a word boundary' do
       # Run ends at "Hello" (5), wrap at width 6 breaks after "Hello "
       st = described_class.new('Hello world', [
-        { start: 0, end: 5, fg: 'ff0000' },
-        { start: 6, end: 11, fg: '00ff00' }
-      ])
+                                 { start: 0, end: 5, fg: 'ff0000' },
+                                 { start: 6, end: 11, fg: '00ff00' }
+                               ])
       lines = st.wrap(6, indent: false)
       expect(lines[0].text.strip).to eq 'Hello'
       expect(lines[0].runs.first[:fg]).to eq 'ff0000'
@@ -362,8 +362,8 @@ RSpec.describe StyledText do
 
     it 'handles a run that spans exactly the wrap width' do
       st = described_class.new('AAAA BBBB', [
-        { start: 0, end: 9, fg: 'ff0000' }
-      ])
+                                 { start: 0, end: 9, fg: 'ff0000' }
+                               ])
       lines = st.wrap(4, indent: false)
       lines.each do |line|
         line.runs.each do |run|
@@ -375,9 +375,9 @@ RSpec.describe StyledText do
 
     it 'handles UTF-8 multi-byte characters in text' do
       st = described_class.new('café résumé', [
-        { start: 0, end: 4, fg: 'ff0000' },
-        { start: 5, end: 11, fg: '00ff00' }
-      ])
+                                 { start: 0, end: 4, fg: 'ff0000' },
+                                 { start: 5, end: 11, fg: '00ff00' }
+                               ])
       lines = st.wrap(6, indent: false)
       all_text = lines.map(&:text).join
       expect(all_text.gsub(/\s+/, ' ').strip).to include('café')
@@ -386,8 +386,8 @@ RSpec.describe StyledText do
 
     it 'handles CJK characters without crashing' do
       st = described_class.new('日本語テスト', [
-        { start: 0, end: 6, fg: 'ff0000' }
-      ])
+                                 { start: 0, end: 6, fg: 'ff0000' }
+                               ])
       lines = st.wrap(3, indent: false)
       expect(lines.flat_map { |l| l.runs }).to all(
         satisfy { |r| r[:start] >= 0 && r[:end] <= lines.find { |l| l.runs.include?(r) }.text.length }
@@ -431,8 +431,8 @@ RSpec.describe StyledText do
 
     it 'lstrip room text preserves color regions' do
       st = described_class.new('  You also see a goblin.', [
-        { start: 17, end: 23, fg: 'ff0000' }  # "goblin"
-      ])
+                                 { start: 17, end: 23, fg: 'ff0000' }  # "goblin"
+                               ])
       result = st.lstrip
       expect(result.text).to eq 'You also see a goblin.'
       segment = result.text[result.runs.first[:start]...result.runs.first[:end]]
@@ -441,9 +441,9 @@ RSpec.describe StyledText do
 
     it 'slice extracts a window of text with correct colors' do
       st = described_class.new('The quick brown fox jumps', [
-        { start: 4, end: 9, fg: 'ff0000' },   # "quick"
-        { start: 10, end: 15, fg: '00ff00' },  # "brown"
-      ])
+                                 { start: 4, end: 9, fg: 'ff0000' },   # "quick"
+                                 { start: 10, end: 15, fg: '00ff00' }, # "brown"
+                               ])
       # Extract "quick brown"
       result = st.slice(4...15)
       expect(result.text).to eq 'quick brown'

@@ -117,10 +117,10 @@ module RoomDataProcessor
     if text =~ /^Obvious (?:paths|exits):/
       # Use raw line to preserve <d>/<a> tags for link processing in room window
       @room_pending_exits = if @current_raw_line && (match = @current_raw_line.match(/Obvious (?:paths|exits):.*/))
-                               match[0].strip
-                             else
-                               text.strip
-                             end
+                              match[0].strip
+                            else
+                              text.strip
+                            end
       room_data_captured = true
       # Trigger room render since exits are typically last
       commit_room_data_batch

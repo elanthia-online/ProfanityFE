@@ -226,7 +226,6 @@ class TextWindow < BaseWindow
     end
     nil
   end
-
 end
 
 BaseWindow.register_type('text') do |height, width, top, left, element, wm|

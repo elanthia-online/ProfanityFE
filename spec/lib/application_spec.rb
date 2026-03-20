@@ -53,7 +53,7 @@ RSpec.describe Application do
     obj = Object.new
     def obj.calls = @calls ||= []
     def obj.add_string(text, colors = []) = calls << { text: text, colors: colors }
-    def obj.route_string(text, colors, stream, **opts) = calls << { text: text, stream: stream }
+    def obj.route_string(text, _colors, stream, **_opts) = calls << { text: text, stream: stream }
     def obj.respond_to?(m, *) = m == :buffer ? false : super
     obj
   end
@@ -356,6 +356,7 @@ RSpec.describe Application do
     let(:countdown_window) do
       obj = Object.new
       def obj.updates = @updates ||= []
+
       def obj.update
         updates << Time.now
         updates.length <= 3 # return true for first 3 calls
@@ -398,7 +399,7 @@ RSpec.describe Application do
       def stun_window.update = true
       app.window_mgr.instance_variable_set(:@countdown, {
         'roundtime' => countdown_window,
-        'stunned' => stun_window,
+        'stunned'   => stun_window,
       })
       expect(app.send(:tick_countdowns)).to be true
       expect(countdown_window.updates.length).to eq 1

@@ -38,7 +38,7 @@ module Curses
   BUTTON1_RELEASED = 0x4
   BUTTON1_CLICKED = 0x8
 
-  def self.color_pair(id) = 0
+  def self.color_pair(_id) = 0
   def self.lines = 24
   def self.cols = 80
   def self.can_change_color? = false
@@ -150,12 +150,13 @@ def safe_eval_arithmetic(expr)
   return 0 unless normalized.match?(%r{\A[\d+\-*/()]+\z})
   return 0 if normalized.include?('**')
 
-  eval(expr).to_i # rubocop:disable Security/Eval
+  eval(expr).to_i
 rescue SyntaxError, ZeroDivisionError
   0
 end
 
 def get_color_pair_id(_fg, _bg) = 0
+
 def add_prompt(window, prompt_text, cmd = '')
   return if cmd.empty? && window.respond_to?(:duplicate_prompt?) && window.duplicate_prompt?(prompt_text)
 
@@ -223,7 +224,7 @@ end
 class TextWindow < BaseWindow
   def self.list = @list ||= []
 
-  def add_string(text, colors = []) = nil
+  def add_string(_text, _colors = []) = nil
 end
 
 class TabbedTextWindow < BaseWindow

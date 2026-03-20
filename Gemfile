@@ -7,4 +7,5 @@ gem 'rexml', '~> 3.4'
 
 group :test do
   gem 'rspec', '~> 3.13'
+  gem 'rubocop', '~> 1.75'
 end
