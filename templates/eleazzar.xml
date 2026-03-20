@@ -410,7 +410,7 @@
 
     <!-- Main scrollable text windows -->
     <window class='text'      top='12'       left='45'  height='lines-14' width='114'                  value='main,familiar' buffer-size='4000'/>
-    <window class='text'      top='1'        left='45'  height='10'       width='114'                  value='room'          buffer-size='500' />
+    <window class='room'      top='1'        left='45'  height='10'       width='114'                  title-preset='roomName' creatures-preset='monsterbold'/>
     <window class='text'      top='1'        left='0'   height='lines-15' width='44'                   value='speech,announcements,lnet,thoughts,voln' buffer-size='2000' />
     <window class='text'      top='lines-13' left='0'   height='3'        width='44'                   value='combat'       buffer-size='500'/>
 
