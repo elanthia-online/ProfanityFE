@@ -236,13 +236,12 @@ RSpec.describe XmlTokenizer do
       expect(described_class.tag_name('<h1>')).to eq 'h1'
     end
 
-    it 'raises on completely empty tag <>' do
-      # <> has no \w+ match — should raise NoMethodError on nil[1]
-      expect { described_class.tag_name('<>') }.to raise_error(NoMethodError)
+    it 'returns nil for empty tag <>' do
+      expect(described_class.tag_name('<>')).to be_nil
     end
 
-    it 'raises on closing tag with no name </>' do
-      expect { described_class.tag_name('</>') }.to raise_error(NoMethodError)
+    it 'returns nil for closing tag with no name </>' do
+      expect(described_class.tag_name('</>')).to be_nil
     end
   end
 end

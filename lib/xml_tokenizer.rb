@@ -48,9 +48,9 @@ module XmlTokenizer
   # @return [String] tag name (e.g. "pushBold", "preset")
   def self.tag_name(xml)
     if xml.start_with?('</')
-      xml.match(/^<\/(\w+)/)[1]
+      xml.match(/^<\/(\w+)/)&.send(:[], 1)
     else
-      xml.match(/^<(\w+)/)[1]
+      xml.match(/^<(\w+)/)&.send(:[], 1)
     end
   end
 end
