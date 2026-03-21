@@ -27,9 +27,24 @@
 require 'socket'
 require 'rexml/document'
 
+BOOT_PROFILE = ARGV.include?('--profile')
+
+if BOOT_PROFILE
+  BOOT_T0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  BOOT_TIMINGS = []
+
+  def boot_mark(label)
+    elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
+    BOOT_TIMINGS << [label, elapsed]
+  end
+
+  boot_mark('stdlib loaded')
+end
+
 # Load version and initialize curses
 require_relative 'lib/version'
 require_relative 'lib/curses_setup'
+boot_mark('curses init') if BOOT_PROFILE
 
 # Load global constants (HIGHLIGHT, PRESET, LAYOUT, etc.)
 require_relative 'lib/constants'
@@ -77,6 +92,7 @@ require_relative 'lib/application'
 
 # Initialize gag patterns with defaults (can be extended via XML config)
 GagPatterns.load_defaults
+boot_mark('requires + gag defaults') if BOOT_PROFILE
 
 # Ensure terminal is restored on any exit path (graceful shutdown)
 at_exit do
@@ -232,6 +248,7 @@ OptionParser.new do |opts|
   opts.on('--log-file=PATH', 'Log file path (default: profanity.log)') { |v| cli_options[:log_file] = v }
   opts.on('--log-dir=DIR', 'Log directory (default: current directory)') { |v| cli_options[:log_dir] = v }
   opts.on('--settings-file=FILE', 'Settings XML file path (overrides --char/--config lookup)') { |v| cli_options[:settings_file] = v }
+  opts.on('--profile', 'Log boot timing to log file') { } # handled early via BOOT_PROFILE
 end.parse!
 
 # ========== GLOBAL CONSTANTS ==========
@@ -267,5 +284,6 @@ ColorManager.configure(
 )
 
 # ========== RUN ==========
+boot_mark('constants + color config') if BOOT_PROFILE
 
 Application.new(cli_options).run

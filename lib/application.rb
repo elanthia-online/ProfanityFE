@@ -72,17 +72,22 @@ class Application
 
     @mouse_scroll = MouseScroll.new(@key_action, method(:write_to_client))
     @mouse_scroll.enable_click_events if cli_options[:links]
+    boot_mark('Application.new') if BOOT_PROFILE
   end
 
   # Load settings, connect to the game server, and run the input loop.
-  # This is the main entry point — blocks until the connection closes
+  # This is the main entry point -- blocks until the connection closes
   # or the user quits.
   #
   # @return [void] never returns normally; calls +exit+ on disconnect
   def run
     load_settings_and_layout
+    boot_mark('settings + layout') if BOOT_PROFILE
     connect_server
+    boot_mark('connect_server') if BOOT_PROFILE
     start_server_thread
+    boot_mark('server thread started') if BOOT_PROFILE
+    flush_boot_profile if BOOT_PROFILE
     input_loop
   end
 
@@ -182,6 +187,16 @@ class Application
   private
 
   # ---- Feedback helpers ----
+
+  def flush_boot_profile
+    prev = 0.0
+    lines = BOOT_TIMINGS.map do |label, ms|
+      delta = (ms - prev).round(1)
+      prev = ms
+      format('  %7.1fms (+%6.1fms)  %s', ms, delta, label)
+    end
+    ProfanityLog.write('boot-profile', "Startup timing:\n#{lines.join("\n")}")
+  end
 
   def feedback_colors(text)
     [{ start: 0, end: text.length, fg: FEEDBACK_COLOR, bg: nil, ul: nil }]
