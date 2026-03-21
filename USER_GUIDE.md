@@ -1413,6 +1413,32 @@ Launch the interactive mouse scroll wheel calibration wizard. See
 .scrollcfg
 ```
 
+### .highlight
+
+Add a temporary cyan highlight for a text string (session only -- not saved to
+the settings XML). The match is case-insensitive and literal (no regex). Quotes
+around the string are optional but recommended for clarity.
+
+```
+.highlight "some string"
+.highlight goblin
+```
+
+With no argument, lists all active inline highlights:
+
+```
+.highlight
+```
+
+### .unhighlight
+
+Remove a previously added inline highlight.
+
+```
+.unhighlight "some string"
+.unhighlight goblin
+```
+
 ### .help
 
 Display a list of all available dot-commands with brief descriptions.

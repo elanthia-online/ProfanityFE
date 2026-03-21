@@ -32,12 +32,17 @@ class Application
     '.arrow             Cycle arrow keys: history/page/line',
     '.links             Toggle in-game link highlighting',
     '.scrollcfg         Configure mouse scroll wheel',
+    '.highlight <text>   Add cyan highlight for text (session only)',
+    '.unhighlight <text> Remove an inline highlight',
+    '.highlight          List active inline highlights',
     '.help              Show this help'
   ].freeze
 
   # Create a new application instance with the given CLI options.
   #
   # @param cli_options [Hash] parsed CLI options from OptionParser
+  INLINE_HIGHLIGHT_COLOR = '00ffff'
+
   def initialize(cli_options)
     @cli_options = cli_options
     @server = nil
@@ -113,6 +118,10 @@ class Application
       handle_dot_links
     elsif cmd =~ /^\.scrollcfg/i
       @mouse_scroll.start_configuration
+    elsif (match = cmd.match(/^\.unhighlight\s+(?<pattern>.+)/i))
+      handle_dot_unhighlight(match[:pattern])
+    elsif (match = cmd.match(/^\.highlight(?:\s+(?<pattern>.+))?/i))
+      handle_dot_highlight(match[:pattern]&.strip)
     elsif cmd =~ /^\.help/i
       handle_dot_help
     else
@@ -259,6 +268,72 @@ class Application
       window.add_string(msg, feedback_colors(msg))
       CursesRenderer.doupdate
     end
+  end
+
+  def handle_dot_highlight(pattern)
+    window = @window_mgr.stream[MAIN_STREAM]
+    return unless window
+
+    if pattern.nil? || pattern.empty?
+      @inline_highlights ||= {}
+      if @inline_highlights.empty?
+        msg = '* No inline highlights active'
+        window.add_string(msg, feedback_colors(msg))
+      else
+        window.add_string('* ', feedback_colors('* '))
+        @inline_highlights.each do |regex, _|
+          msg = "*   #{regex.source}"
+          window.add_string(msg, [{ start: 0, end: msg.length, fg: INLINE_HIGHLIGHT_COLOR, bg: nil, ul: nil }])
+        end
+        window.add_string('* ', feedback_colors('* '))
+      end
+      CursesRenderer.doupdate
+      return
+    end
+
+    @inline_highlights ||= {}
+    pattern = pattern.sub(/^"(.*)"$/, '\1')
+    begin
+      regex = Regexp.new(Regexp.escape(pattern), Regexp::IGNORECASE)
+    rescue RegexpError => e
+      msg = "* Invalid pattern: #{e.message}"
+      window.add_string(msg, feedback_colors(msg))
+      CursesRenderer.doupdate
+      return
+    end
+
+    SETTINGS_LOCK.synchronize do
+      HIGHLIGHT[regex] = [INLINE_HIGHLIGHT_COLOR, nil, nil]
+    end
+    @inline_highlights[regex] = true
+
+    msg = "* Highlight added: #{pattern}"
+    window.add_string(msg, [{ start: 0, end: msg.length, fg: INLINE_HIGHLIGHT_COLOR, bg: nil, ul: nil }])
+    CursesRenderer.doupdate
+  end
+
+  def handle_dot_unhighlight(pattern)
+    window = @window_mgr.stream[MAIN_STREAM]
+    return unless window
+
+    @inline_highlights ||= {}
+    pattern = pattern.sub(/^"(.*)"$/, '\1')
+    target = @inline_highlights.keys.find { |r| r.source == Regexp.escape(pattern) }
+    unless target
+      msg = "* No inline highlight found for: #{pattern}"
+      window.add_string(msg, feedback_colors(msg))
+      CursesRenderer.doupdate
+      return
+    end
+
+    SETTINGS_LOCK.synchronize do
+      HIGHLIGHT.delete(target)
+    end
+    @inline_highlights.delete(target)
+
+    msg = "* Highlight removed: #{pattern}"
+    window.add_string(msg, feedback_colors(msg))
+    CursesRenderer.doupdate
   end
 
   def handle_dot_help
