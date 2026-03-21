@@ -84,6 +84,7 @@ class GameTextProcessor
     @combat_next_line = nil
     @need_update = false
     @need_room_render = false
+    @first_render = true
 
     # Track content sent to dedicated stream windows to prevent duplicates to main
     @last_stream_text = nil
@@ -113,8 +114,13 @@ class GameTextProcessor
   # @return [void] never returns normally; calls +exit+ on disconnect or error
   def run(server)
     line = nil
+    first_line = true
 
     while (line = server.gets)
+      if first_line && BOOT_PROFILE
+        boot_mark('first server data received')
+        first_line = false
+      end
 
       if line =~ %r{^<popBold/>}
         @bold_next_line = false
@@ -191,6 +197,10 @@ class GameTextProcessor
           end
           @cmd_buffer.window&.noutrefresh
           Curses.doupdate
+          if @first_render && BOOT_PROFILE
+            boot_mark('first screen render')
+            @first_render = false
+          end
         end
       end # CursesRenderer.synchronize
       # Flush terminal title AFTER curses operations complete.
