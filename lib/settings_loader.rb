@@ -3,6 +3,24 @@
 # Parses .profanity.xml settings and populates global constants
 # (HIGHLIGHT, PRESET, LAYOUT, PERC_TRANSFORMS) and gag patterns.
 
+# Lightweight stand-in for REXML::Element that can be Marshal'd.
+# Supports the same interface used by SettingsLoader and WindowManager:
+# .name, .attributes[], .text, and .elements.each.
+class CachedElement
+  attr_reader :name, :attributes, :text, :children
+
+  def initialize(name, attributes, text, children)
+    @name = name
+    @attributes = attributes
+    @text = text
+    @children = children
+  end
+
+  def elements
+    @children
+  end
+end
+
 # Parses a .profanity.xml configuration file and populates global constants.
 #
 # On initial load, populates PRESET (color presets), LAYOUT (window layouts),
@@ -48,9 +66,7 @@ module SettingsLoader
       PERC_TRANSFORMS.clear
       GagPatterns.clear_custom if reload
 
-      File.open(filename) do |file|
-        xml_doc = REXML::Document.new(sanitize_xml_comments(file.read))
-        xml_root = xml_doc.root
+      xml_root = load_cached_xml(filename)
         xml_root.elements.each do |e|
           case e.name
           when 'highlight'
@@ -95,10 +111,66 @@ module SettingsLoader
             LAYOUT[e.attributes['id']] = e if e.attributes['id']
           end
         end
-      end
     end
   rescue StandardError => e
     ProfanityLog.write('settings', e.message, backtrace: e.backtrace)
+  end
+
+  # Load the XML settings, using a Marshal cache when possible.
+  # If the cache file exists and is newer than the XML source, the cached
+  # CachedElement tree is returned directly (~1ms). Otherwise the XML is
+  # parsed with REXML, converted to CachedElements, and cached for next time.
+  #
+  # @param filename [String] path to the .profanity.xml file
+  # @return [CachedElement] root element of the parsed settings
+  def load_cached_xml(filename)
+    cache_file = cache_path_for(filename)
+
+    if cache_file && File.exist?(cache_file) && File.mtime(cache_file) >= File.mtime(filename)
+      begin
+        return Marshal.load(File.binread(cache_file))
+      rescue StandardError
+        # Cache corrupt or incompatible -- fall through to full parse
+      end
+    end
+
+    xml_string = sanitize_xml_comments(File.read(filename))
+    xml_doc = REXML::Document.new(xml_string)
+    cached_root = rexml_to_cached(xml_doc.root)
+
+    if cache_file
+      begin
+        File.binwrite(cache_file, Marshal.dump(cached_root))
+      rescue StandardError => e
+        ProfanityLog.write('settings', "Failed to write settings cache: #{e.message}")
+      end
+    end
+
+    cached_root
+  end
+
+  # Convert an REXML::Element tree to a CachedElement tree.
+  #
+  # @param element [REXML::Element] source element
+  # @return [CachedElement] lightweight equivalent
+  def rexml_to_cached(element)
+    attrs = {}
+    element.attributes.each { |k, v| attrs[k] = v }
+    children = element.elements.map { |child| rexml_to_cached(child) }
+    CachedElement.new(element.name, attrs, element.text, children)
+  end
+
+  # Compute the cache file path for a given XML settings file.
+  # Cache lives in ~/.profanity/ alongside log files.
+  #
+  # @param filename [String] path to the XML file
+  # @return [String, nil] cache path, or nil if APP_DIR is unavailable
+  def cache_path_for(filename)
+    dir = defined?(ProfanitySettings::APP_DIR) ? ProfanitySettings::APP_DIR : nil
+    return nil unless dir
+
+    basename = File.basename(filename, File.extname(filename))
+    File.join(dir, "#{basename}.settings.cache")
   end
 
   # Replace '--' inside XML comments with '~~' to avoid REXML parse errors.
