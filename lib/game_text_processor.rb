@@ -118,7 +118,8 @@ class GameTextProcessor
 
     while (line = server.gets)
       if first_line && BOOT_PROFILE
-        boot_mark('first server data received')
+        elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
+        ProfanityLog.write('boot-profile', "first server data received: #{elapsed}ms")
         first_line = false
       end
 
@@ -198,7 +199,8 @@ class GameTextProcessor
           @cmd_buffer.window&.noutrefresh
           Curses.doupdate
           if @first_render && BOOT_PROFILE
-            boot_mark('first screen render')
+            elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
+            ProfanityLog.write('boot-profile', "first screen render: #{elapsed}ms")
             @first_render = false
           end
         end
