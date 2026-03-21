@@ -139,6 +139,16 @@ module TagHandlers
       @state.skip_server_time_offset = true
     end
 
+    if @first_prompt
+      @first_prompt = false
+      @server.puts 'look'
+      @server.flush
+      if BOOT_PROFILE
+        elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
+        ProfanityLog.write('boot-profile', "first prompt (sent look): #{elapsed}ms")
+      end
+    end
+
     new_prompt_text = "#{m[:text]}>"
     if @state.prompt_text != new_prompt_text
       @state.need_prompt = false

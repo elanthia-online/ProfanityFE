@@ -87,6 +87,7 @@ class GameTextProcessor
     @need_update = false
     @need_room_render = false
     @first_render = true
+    @first_prompt = true
 
     # Track content sent to dedicated stream windows to prevent duplicates to main
     @last_stream_text = nil
@@ -115,6 +116,7 @@ class GameTextProcessor
   # @param server [IO] TCP socket (or socket-like) connected to the game server
   # @return [void] never returns normally; calls +exit+ on disconnect or error
   def run(server)
+    @server = server
     line = nil
     first_line = true
 
