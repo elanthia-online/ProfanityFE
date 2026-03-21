@@ -79,6 +79,7 @@ ProfanityFE connects to `127.0.0.1` on the specified port.
 | `--use-default-colors` | off | Call `Curses.use_default_colors` for transparent background support |
 | `--log-file=<path>` | see below | Full path for the log file (overrides --log-dir and --char) |
 | `--log-dir=<dir>` | see below | Directory for the log file |
+| `--profile` | off | Log boot timing breakdown to the log file (for startup performance debugging) |
 | `--help` / `-h` / `-?` | -- | Print usage and exit |
 
 > **Note:** `--settings-file=<path>` is still supported as a hidden override
@@ -1867,6 +1868,10 @@ ProfanityFE connects to the port that Lich opens for frontend connections.
 When starting Lich, note the port number it reports and pass it to ProfanityFE
 with `--port=<port>`.
 
+On connect, ProfanityFE automatically sends a `look` command as soon as the
+first game prompt is received. This ensures the room window is populated
+immediately without requiring manual input.
+
 Commands starting with `.` that are not recognized as dot-commands are
 forwarded to the game server with the leading `.` replaced by `;`, which is the
 standard Lich script command prefix. For example, typing `.e echo hello` sends
@@ -1874,6 +1879,13 @@ standard Lich script command prefix. For example, typing `.e echo hello` sends
 
 ### Performance
 
+- **Settings cache:** Parsed XML settings are cached as a Marshal file in
+  `~/.profanity/` (e.g. `mahtra.settings.cache`). The first load parses the
+  XML normally; subsequent launches load the cache in ~1ms instead of ~230ms.
+  The cache auto-invalidates when the XML file is modified, and `.reload`
+  works normally (editing the XML makes it newer than the cache).
+- **Boot profiling:** Use `--profile` to log a timing breakdown of each
+  startup phase to the log file. Useful for diagnosing slow launches.
 - The `buffer-size` attribute controls how many lines each text window retains.
   Very large values (10000+) may increase memory usage.
 - ProfanityFE batches screen updates and delays rendering when more server data
