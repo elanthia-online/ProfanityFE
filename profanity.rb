@@ -248,7 +248,7 @@ OptionParser.new do |opts|
   opts.on('--log-file=PATH', 'Log file path (default: profanity.log)') { |v| cli_options[:log_file] = v }
   opts.on('--log-dir=DIR', 'Log directory (default: current directory)') { |v| cli_options[:log_dir] = v }
   opts.on('--settings-file=FILE', 'Settings XML file path (overrides --char/--config lookup)') { |v| cli_options[:settings_file] = v }
-  opts.on('--profile', 'Log boot timing to log file') { } # handled early via BOOT_PROFILE
+  opts.on('--profile', 'Log boot timing to log file') {} # handled early via BOOT_PROFILE
 end.parse!
 
 # ========== GLOBAL CONSTANTS ==========

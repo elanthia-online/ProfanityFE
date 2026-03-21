@@ -67,50 +67,50 @@ module SettingsLoader
       GagPatterns.clear_custom if reload
 
       xml_root = load_cached_xml(filename)
-        xml_root.elements.each do |e|
-          case e.name
-          when 'highlight'
-            begin
-              pattern = e.text&.strip
-              r = pattern && !pattern.empty? ? Regexp.new(pattern) : nil
-            rescue StandardError => e_err
-              r = nil
-              warn e
-              warn e_err
-            end
-            HIGHLIGHT[r] = [e.attributes['fg'], e.attributes['bg'], e.attributes['ul']] if r
-
-          when 'key'
-            setup_key.call(e, key_binding)
-
-          when 'gag'
-            GagPatterns.add_general_pattern(e.text) if e.text && !e.text.strip.empty?
-
-          when 'combat_gag'
-            GagPatterns.add_combat_pattern(e.text) if e.text && !e.text.strip.empty?
-
-          when 'perc-transform'
-            if e.attributes['pattern']
-              begin
-                pattern = Regexp.new(e.attributes['pattern'])
-                replacement = e.attributes['replace'] || ''
-                PERC_TRANSFORMS.push([pattern, replacement])
-              rescue RegexpError => e_err
-                warn "Invalid perc-transform pattern: #{e.attributes['pattern']} - #{e_err}"
-              end
-            end
+      xml_root.elements.each do |e|
+        case e.name
+        when 'highlight'
+          begin
+            pattern = e.text&.strip
+            r = pattern && !pattern.empty? ? Regexp.new(pattern) : nil
+          rescue StandardError => e_err
+            r = nil
+            warn e
+            warn e_err
           end
+          HIGHLIGHT[r] = [e.attributes['fg'], e.attributes['bg'], e.attributes['ul']] if r
 
-          # Presets and layouts are only loaded on initial load, not reload
-          next if reload
+        when 'key'
+          setup_key.call(e, key_binding)
 
-          case e.name
-          when 'preset'
-            PRESET[e.attributes['id']] = [e.attributes['fg'], e.attributes['bg']]
-          when 'layout'
-            LAYOUT[e.attributes['id']] = e if e.attributes['id']
+        when 'gag'
+          GagPatterns.add_general_pattern(e.text) if e.text && !e.text.strip.empty?
+
+        when 'combat_gag'
+          GagPatterns.add_combat_pattern(e.text) if e.text && !e.text.strip.empty?
+
+        when 'perc-transform'
+          if e.attributes['pattern']
+            begin
+              pattern = Regexp.new(e.attributes['pattern'])
+              replacement = e.attributes['replace'] || ''
+              PERC_TRANSFORMS.push([pattern, replacement])
+            rescue RegexpError => e_err
+              warn "Invalid perc-transform pattern: #{e.attributes['pattern']} - #{e_err}"
+            end
           end
         end
+
+        # Presets and layouts are only loaded on initial load, not reload
+        next if reload
+
+        case e.name
+        when 'preset'
+          PRESET[e.attributes['id']] = [e.attributes['fg'], e.attributes['bg']]
+        when 'layout'
+          LAYOUT[e.attributes['id']] = e if e.attributes['id']
+        end
+      end
     end
   rescue StandardError => e
     ProfanityLog.write('settings', e.message, backtrace: e.backtrace)
