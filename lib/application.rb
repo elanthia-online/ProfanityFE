@@ -1,5 +1,8 @@
 # frozen_string_literal: true
 
+# Default BOOT_PROFILE to false when loaded outside profanity.rb (e.g. specs)
+BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
+
 # Core application class for ProfanityFE.
 #
 # Owns all runtime state that was previously captured by closures in

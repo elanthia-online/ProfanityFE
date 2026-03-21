@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
+
 require_relative 'spell_abbreviations'
 require_relative 'games/dragonrealms'
 require_relative 'games/gemstone'
