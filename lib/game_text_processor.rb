@@ -419,6 +419,8 @@ class GameTextProcessor
               timestamp = Time.now.strftime('%H:%M')
               text = if text.match?(/A fiery phoenix soars into the heavens as/)
                        "#{timestamp} #{name} MF"
+                     elsif text.match?(/was just sacrificed to/)
+                       "#{timestamp} #{name} Sacrifice"
                      else
                        "#{timestamp} #{name}"
                      end

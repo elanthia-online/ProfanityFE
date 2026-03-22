@@ -57,7 +57,7 @@ module Games
     # DR death message pattern (phoenix, struck down, disintegrated, etc.)
     #
     # @return [Regexp]
-    DEATH_PATTERN = /^\s\*\s(?:A fiery phoenix soars into the heavens as\s)?(?<name>[A-Z][a-z]+)(?: was just struck down.*| just disintegrated!| was lost to the Plane of Exile!|'s spirit arises from the ashes of death.| was smote by \w+!)/.freeze
+    DEATH_PATTERN = /^\s\*\s(?:A fiery phoenix soars into the heavens as\s)?(?<name>[A-Z][a-z]+)(?: was just struck down.*| just disintegrated!| was lost to the Plane of Exile!|'s spirit arises from the ashes of death.| was smote by \w+!| failed within .*!| was just sacrificed to \w+!)/.freeze
 
     # DR Raise Dead stun pattern (cleric deity-specific messaging variants)
     #

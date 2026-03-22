@@ -58,6 +58,14 @@ RSpec.describe Games::DragonRealms do
       expect(' * Grocha was smote by Aldauth!'.match(pattern)[:name]).to eq 'Grocha'
     end
 
+    it 'captures name from failed within (Duskruin Bank)' do
+      expect(' * Chanepheous failed within the Bank of Duskruin!'.match(pattern)[:name]).to eq 'Chanepheous'
+    end
+
+    it 'captures name from sacrifice' do
+      expect(' * Serapheim was just sacrificed to Dergati!'.match(pattern)[:name]).to eq 'Serapheim'
+    end
+
     # Adversarial
     it 'does not match without leading " * "' do
       expect('Mahtra was just struck down!').not_to match(pattern)
