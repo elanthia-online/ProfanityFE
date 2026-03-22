@@ -141,6 +141,13 @@ class RoomWindow < BaseWindow
     @stringprocs = ''
   end
 
+  # Re-render room content after a resize or layout change.
+  #
+  # @return [void]
+  def redraw
+    render
+  end
+
   # Render the complete room display.
   # Clears the window and draws each section (title, description, objects,
   # players, exits, room number, stringprocs) with appropriate presets and
