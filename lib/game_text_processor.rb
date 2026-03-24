@@ -529,6 +529,7 @@ class GameTextProcessor
         end
       end
     end
+  ensure
     @line_colors = []
     @open_monsterbold.clear
     @open_preset.clear
