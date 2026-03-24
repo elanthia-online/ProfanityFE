@@ -73,10 +73,11 @@ class IndicatorWindow < BaseWindow
       base_fg = @value ? @fg[1] : @fg[0]
       base_bg = @value ? @bg[1] : @bg[0]
 
-      # Create base color region spanning entire label, then overlay highlights
-      # Highlights with smaller ranges take priority in render_colored_text
+      # Create base color region spanning entire label, then overlay highlights.
+      # Highlights before base so they win ties (sort_by is stable; equal-range
+      # entries keep input order, and first non-nil fg wins).
       base_color = { start: 0, end: @label.length, fg: base_fg, bg: base_bg }
-      colors = [base_color] + @label_colors
+      colors = @label_colors + [base_color]
       add_line(@label, colors)
     elsif @value
       # Original single-color behavior
