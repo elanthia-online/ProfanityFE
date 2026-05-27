@@ -47,8 +47,6 @@ module Curses
   def self.init_pair(*) = nil
   def self.init_color(*) = nil
   def self.color_content(*) = [0, 0, 0]
-  def self.clear = nil
-  def self.refresh = nil
   def self.doupdate = nil
   def self.use_default_colors = nil
   def self.mousemask(*) = nil
