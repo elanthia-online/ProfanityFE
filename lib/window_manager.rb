@@ -417,6 +417,13 @@ class WindowManager
       window.refresh
       window.close
 
+      # Clear the entire screen so that windows moving to new positions
+      # don't leave stale content at their old locations. Without this,
+      # RoomWindow (and other non-scrollable windows) appear offset after
+      # a terminal resize because their old screen region is never erased.
+      Curses.clear
+      Curses.refresh
+
       # Skip resize when terminal is too small — ncurses segfaults on
       # invalid dimensions (negative/zero height or width, out-of-bounds
       # positions). The windows will be repositioned on the next resize
