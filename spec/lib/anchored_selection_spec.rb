@@ -164,4 +164,99 @@ RSpec.describe AnchoredSelection do
       expect(described_class.extract(with_nil, 6, 5, 0, 6, 3)).to eq("line 4\n")
     end
   end
+
+  describe '.extract with wrap continuations' do
+    # A logical line wrapped to three display lines (indent adds 2 spaces,
+    # StyledText#wrap keeps the break space on the previous line), then a
+    # separate unwrapped line. Newest first, IDs 1..4.
+    let(:wrapped) do
+      [
+        ['Next line', [], false],           # ID 4
+        ['  the lazy dog', [], true],       # ID 3
+        ['  fox jumps over ', [], true],    # ID 2
+        ['The quick brown ', [], false]     # ID 1
+      ]
+    end
+
+    it 'rejoins wrapped display lines into one logical line' do
+      text = described_class.extract(wrapped, 4, 1, 0, 4, 9)
+      expect(text).to eq("The quick brown fox jumps over the lazy dog\nNext line")
+    end
+
+    it 'joins partial pieces across a wrap boundary' do
+      text = described_class.extract(wrapped, 4, 2, 2, 3, 8)
+      expect(text).to eq('fox jumps over the la')
+    end
+
+    it 'does not join when the selection starts on a continuation line' do
+      text = described_class.extract(wrapped, 4, 3, 0, 4, 4)
+      expect(text).to eq("  the lazy dog\nNext")
+    end
+
+    it 'rejoins a hard mid-word break seamlessly' do
+      hard = [['  efgh', [], true], ['abcd', [], false]]
+      expect(described_class.extract(hard, 2, 1, 0, 2, 6)).to eq('abcdefgh')
+    end
+
+    it 'keeps a continuation intact when its wrap start was evicted' do
+      trimmed = wrapped.first(3) # ID 1 ("The quick brown ") evicted
+      text = described_class.extract(trimmed, 4, 1, 0, 4, 9)
+      expect(text).to eq("  fox jumps over the lazy dog\nNext line")
+    end
+  end
+
+  describe '.word_span' do
+    let(:line) { 'get #40872332 from pack' }
+
+    it 'spans the whitespace-delimited word under the column' do
+      expect(described_class.word_span(line, 7)).to eq([4, 13])
+      expect(line[4...13]).to eq('#40872332')
+    end
+
+    it 'spans a word from its first and last characters' do
+      expect(described_class.word_span(line, 0)).to eq([0, 3])
+      expect(described_class.word_span(line, 2)).to eq([0, 3])
+    end
+
+    it 'returns nil on whitespace' do
+      expect(described_class.word_span(line, 3)).to be_nil
+    end
+
+    it 'returns nil for an empty or nil line' do
+      expect(described_class.word_span('', 0)).to be_nil
+      expect(described_class.word_span(nil, 0)).to be_nil
+    end
+
+    it 'clamps a column past the end of the line to the last word' do
+      expect(described_class.word_span(line, 500)).to eq([19, 23])
+    end
+  end
+
+  describe '.logical_line_span' do
+    let(:wrapped) do
+      [
+        ['Next line', [], false],           # ID 4
+        ['  the lazy dog', [], true],       # ID 3
+        ['  fox jumps over ', [], true],    # ID 2
+        ['The quick brown ', [], false]     # ID 1
+      ]
+    end
+
+    it 'expands from a middle continuation to the full logical line' do
+      expect(described_class.logical_line_span(wrapped, 4, 2)).to eq([1, 3])
+    end
+
+    it 'expands from the first display line forward' do
+      expect(described_class.logical_line_span(wrapped, 4, 1)).to eq([1, 3])
+    end
+
+    it 'returns the line itself for an unwrapped line' do
+      expect(described_class.logical_line_span(wrapped, 4, 4)).to eq([4, 4])
+    end
+
+    it 'stops the backward walk at an evicted line' do
+      trimmed = wrapped.first(3) # ID 1 evicted
+      expect(described_class.logical_line_span(trimmed, 4, 3)).to eq([2, 3])
+    end
+  end
 end

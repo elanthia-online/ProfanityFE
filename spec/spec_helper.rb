@@ -37,6 +37,7 @@ module Curses
   BUTTON1_PRESSED = 0x2
   BUTTON1_RELEASED = 0x4
   BUTTON1_CLICKED = 0x8
+  REPORT_MOUSE_POSITION = 0x8000000
 
   def self.color_pair(_id) = 0
   def self.lines = 24
@@ -50,6 +51,7 @@ module Curses
   def self.doupdate = nil
   def self.use_default_colors = nil
   def self.mousemask(*) = nil
+  def self.mouseinterval(*) = 166
   def self.getmouse = nil
   def self.close_screen = nil
   def self.init_screen = nil

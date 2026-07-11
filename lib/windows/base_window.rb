@@ -82,14 +82,16 @@ class BaseWindow < Curses::Window
   # @param width [Integer] maximum line width in characters
   # @param string_colors [Array<Hash>] color region descriptors for the full string
   # @param indent [Boolean] whether continuation lines should be indented
-  # @yield [line, line_colors] each wrapped line and its adjusted color regions
+  # @yield [line, line_colors, continuation] each wrapped line, its adjusted
+  #   color regions, and whether it continues the previous wrapped line
   # @yieldparam line [String] one wrapped line of text
   # @yieldparam line_colors [Array<Hash>] color regions scoped to this line
+  # @yieldparam continuation [Boolean] true for the 2nd+ line of a wrapped string
   # @return [void]
   def wrap_text(string, width, string_colors, indent: true)
     styled = StyledText.new(string, string_colors)
-    styled.wrap(width, indent: indent).each do |wrapped_line|
-      yield wrapped_line.text, wrapped_line.runs
+    styled.wrap(width, indent: indent).each_with_index do |wrapped_line, idx|
+      yield wrapped_line.text, wrapped_line.runs, idx.positive?
     end
   end
 
@@ -244,6 +246,24 @@ class BaseWindow < Curses::Window
   # @return [Array<Integer>, nil] [line_id, x] anchor, or nil
   def selection_anchor_at(_rel_y, _rel_x)
     nil
+  end
+
+  # Monotonic count of lines ever appended, for selection anchoring.
+  # Overridden by windows with line buffers.
+  #
+  # @return [Integer]
+  def lines_appended
+    0
+  end
+
+  # Scroll one line when a drag pointer sits at this window's top or
+  # bottom edge. Subclasses with scrollable buffers override this.
+  # The default is a no-op for window types that don't scroll.
+  #
+  # @param _rel_y [Integer] drag row relative to window top
+  # @return [Boolean] true if the view actually scrolled
+  def drag_auto_scroll(_rel_y)
+    false
   end
 
   # Whether text is currently selected in this window.

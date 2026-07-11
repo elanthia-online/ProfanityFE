@@ -227,8 +227,8 @@ class TabbedTextWindow < BaseWindow
     tab_buffer_pos = @buffer_positions[tab_name]
 
     effective_indent = indent.nil? ? @indent_word_wrap : indent
-    wrap_text(string, content_width, string_colors, indent: effective_indent) do |line, line_colors|
-      tab_buffer.unshift([line, line_colors])
+    wrap_text(string, content_width, string_colors, indent: effective_indent) do |line, line_colors, continuation|
+      tab_buffer.unshift([line, line_colors, continuation])
       @lines_appended[tab_name] += 1
       if tab_buffer.length > @max_buffer_size
         tab_buffer.pop
@@ -417,6 +417,22 @@ class TabbedTextWindow < BaseWindow
   def extract_selection(start_id, start_x, end_id, end_x)
     tab_buffer = @tabs[@active_tab] || []
     AnchoredSelection.extract(tab_buffer, lines_appended, start_id, start_x, end_id, end_x)
+  end
+
+  # Scroll one line when a drag pointer sits at the content area's top or
+  # bottom edge, extending a selection past the visible area. The top
+  # threshold is the tab bar row.
+  #
+  # @param rel_y [Integer] drag row relative to window top (includes tab bar)
+  # @return [Boolean] true if the view actually scrolled
+  def drag_auto_scroll(rel_y)
+    before = buffer_pos
+    if rel_y <= TAB_BAR_HEIGHT
+      scroll(-1)
+    elsif rel_y >= maxy - 1
+      scroll(1)
+    end
+    buffer_pos != before
   end
 
   # Redraw the active tab's content with reverse-video selection highlighting.

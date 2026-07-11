@@ -62,8 +62,8 @@ class TextWindow < BaseWindow
   def add_string(string, string_colors = [], indent: nil)
     string += format_timestamp if @time_stamp && string && !string.chomp.empty?
     effective_indent = indent.nil? ? @indent_word_wrap : indent
-    wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors|
-      @buffer.unshift([line, line_colors])
+    wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors, continuation|
+      @buffer.unshift([line, line_colors, continuation])
       @lines_appended += 1
       @buffer.pop if @buffer.length > @max_buffer_size
       if @buffer_pos == 0
@@ -179,6 +179,21 @@ class TextWindow < BaseWindow
   # @return [String] the selected text, lines joined by newlines
   def extract_selection(start_id, start_x, end_id, end_x)
     AnchoredSelection.extract(@buffer, @lines_appended, start_id, start_x, end_id, end_x)
+  end
+
+  # Scroll one line when a drag pointer sits at the window's top or
+  # bottom edge, extending a selection past the visible area.
+  #
+  # @param rel_y [Integer] drag row relative to window top
+  # @return [Boolean] true if the view actually scrolled
+  def drag_auto_scroll(rel_y)
+    before = @buffer_pos
+    if rel_y <= 0
+      scroll(-1)
+    elsif rel_y >= maxy - 1
+      scroll(1)
+    end
+    @buffer_pos != before
   end
 
   # Redraw all visible lines, applying reverse-video to the selected region.

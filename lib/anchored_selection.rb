@@ -96,28 +96,103 @@ module AnchoredSelection
   # Lines that have been evicted (past max buffer size) or not yet
   # appended are skipped; column bounds are clamped to line length.
   #
-  # @param buffer [Array<Array(String, Array<Hash>)>] line buffer, newest first
+  # Buffer entries may carry a wrap-continuation flag at index 2 (set by
+  # BaseWindow#wrap_text). Consecutive selected display lines that belong
+  # to one logical line are rejoined without the hard wrap: the previous
+  # piece keeps its break whitespace (StyledText#wrap leaves it there) and
+  # the continuation's artificial indent is stripped, so copied text has
+  # no mid-sentence line breaks.
+  #
+  # @param buffer [Array<Array(String, Array<Hash>, Boolean)>] line buffer, newest first
   # @param lines_appended [Integer] monotonic append counter
   # @param start_id [Integer] anchor line ID
   # @param start_x [Integer] anchor column
   # @param end_id [Integer] endpoint line ID
   # @param end_x [Integer] endpoint column
-  # @return [String] selected text, lines joined by newlines
+  # @return [String] selected text, logical lines joined by newlines
   def extract(buffer, lines_appended, start_id, start_x, end_id, end_x)
     start_id, start_x, end_id, end_x = normalize(start_id, start_x, end_id, end_x)
 
     lines = []
+    prev_id = nil
     (start_id..end_id).each do |id|
       index = lines_appended - id
       next if index.negative? || index >= buffer.length
 
-      text = buffer[index][0] || ''
+      entry = buffer[index]
+      text = entry[0] || ''
       from = id == start_id ? start_x : 0
       to = id == end_id ? end_x : text.length
       from = from.clamp(0, text.length)
       to = to.clamp(from, text.length)
-      lines << text[from...to]
+      piece = text[from...to]
+
+      if entry[2] && prev_id == id - 1 && !lines.empty?
+        lines[-1] += piece.lstrip
+      else
+        lines << piece
+      end
+      prev_id = id
     end
     lines.join("\n")
+  end
+
+  # Text of the buffer line with the given stable ID.
+  #
+  # @param buffer [Array<Array(String, Array<Hash>)>] line buffer, newest first
+  # @param lines_appended [Integer] monotonic append counter
+  # @param id [Integer] stable line ID
+  # @return [String, nil] line text, or nil if evicted / never appended
+  def line_at(buffer, lines_appended, id)
+    index = lines_appended - id
+    return nil if index.negative? || index >= buffer.length
+
+    buffer[index][0]
+  end
+
+  # Span of the whitespace-delimited word at column x, for double-click
+  # word selection.
+  #
+  # @param text [String] the line text
+  # @param x [Integer] column within the line
+  # @return [Array<Integer>, nil] [from, to) span, or nil if the line is
+  #   empty or the column is on whitespace
+  def word_span(text, x)
+    return nil if text.nil? || text.empty?
+
+    x = x.clamp(0, text.length - 1)
+    return nil if text[x].match?(/\s/)
+
+    from = x
+    from -= 1 while from.positive? && !text[from - 1].match?(/\s/)
+    to = x + 1
+    to += 1 while to < text.length && !text[to].match?(/\s/)
+    [from, to]
+  end
+
+  # IDs of the first and last display lines of the logical (unwrapped)
+  # line containing the given ID, for triple-click line selection.
+  # Walks continuation flags backward to the wrap start and forward to
+  # the last continuation, stopping at evicted/missing lines.
+  #
+  # @param buffer [Array<Array(String, Array<Hash>, Boolean)>] line buffer, newest first
+  # @param lines_appended [Integer] monotonic append counter
+  # @param id [Integer] stable line ID anywhere within the logical line
+  # @return [Array<Integer>] [first_id, last_id]
+  def logical_line_span(buffer, lines_appended, id)
+    continuation = lambda do |line_id|
+      index = lines_appended - line_id
+      index >= 0 && index < buffer.length && buffer[index][2]
+    end
+    present = lambda do |line_id|
+      index = lines_appended - line_id
+      index >= 0 && index < buffer.length
+    end
+
+    first = id
+    first -= 1 while continuation.call(first) && present.call(first - 1)
+    last = id
+    last += 1 while continuation.call(last + 1)
+    [first, last]
   end
 end
