@@ -287,7 +287,7 @@ class Application
     end
     if (window = @window_mgr.stream[MAIN_STREAM])
       msg = if @shared_state.blue_links
-              '* Links: ON (clickable links + drag-to-select)'
+              '* Links: ON (clickable links + drag-to-select; Shift+drag for native selection)'
             elsif @selection_enabled
               '* Links: OFF (drag-to-select still on via .select)'
             else
@@ -306,7 +306,7 @@ class Application
       @mouse_scroll.disable_click_events
     end
     msg = if @selection_enabled
-            '* Select: ON (drag-to-select without clickable links)'
+            '* Select: ON (drag-to-select; Shift+drag for native selection)'
           elsif @shared_state.blue_links
             '* Select: OFF (drag-to-select still on via .links)'
           else

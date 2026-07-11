@@ -1423,7 +1423,9 @@ Toggle the live selection highlight that follows the pointer while
 dragging. Defaults to on; the choice is saved to
 `~/.profanity/settings.json`. Turn it off if your terminal misbehaves
 with mouse motion reporting — the selection still works, with the
-highlight appearing when you release the button.
+highlight appearing when you release the button. (GNU Screen and tmux
+generally don't forward motion events at all; there the highlight
+appears on release regardless of this setting.)
 
 ```
 .draghl
@@ -1751,8 +1753,17 @@ as one logical line, without the mid-sentence breaks. A brief
 `[copied N chars]` note appears in the main window after each copy.
 Selected text is copied via
 OSC 52 (if your terminal supports it) and saved to `/tmp/profanity_selection.txt`.
-Native terminal selection is unavailable while `.links` or `.select` is on;
-toggle both off if you prefer your terminal's built-in selection.
+Native terminal selection is unavailable while `.links` or `.select` is on
+because the terminal hands the mouse to Profanity — but nearly all terminal
+emulators bypass mouse capture when you hold a modifier: **Shift+drag**
+(Option+drag on macOS) still gives you native selection at any time.
+Toggle `.links` and `.select` off if you prefer native selection without
+the modifier.
+
+Inside GNU Screen or tmux, pointer *motion* events may not be forwarded to
+Profanity even though clicks are. Selection still works there — the live
+highlight just appears when you release the button instead of following
+the drag, and edge auto-scroll is unavailable.
 
 To customize the link color, override the `links` preset in your settings XML:
 
