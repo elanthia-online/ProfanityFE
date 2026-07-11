@@ -7,30 +7,42 @@
 # Selection is per-window: drag coordinates are clamped to the
 # active window's bounds so selections never bleed across windows.
 #
+# Endpoints are anchored to stable buffer line IDs (see
+# {AnchoredSelection}) at press time, so the selection stays glued to
+# the same text even when new lines arrive or the user scrolls between
+# press and release. The raw press coordinates are kept separately for
+# the click-vs-drag heuristic in the input loop.
+#
 # The highlight persists after release so the user can see what was
 # selected. It is cleared on the next mouse press or link click.
 # Selected text is copied to the system clipboard (pbcopy/xclip/wl-copy),
 # OSC 52 (for remote/SSH sessions), and /tmp/profanity_selection.txt.
 module SelectionManager
   @active_window = nil
-  @start_y = nil
+  @press_y = nil
+  @press_x = nil
+  @start_id = nil
   @start_x = nil
-  @end_y = nil
+  @end_id = nil
   @end_x = nil
   @selecting = false
 
   class << self
-    attr_reader :active_window, :start_y, :start_x, :end_y, :end_x, :selecting
+    attr_reader :active_window, :start_id, :start_x, :end_id, :end_x, :selecting
 
-    # Return the starting [y, x] coordinates as a pair, or nil if no selection.
+    # Return the window-relative [y, x] press coordinates, or nil if no
+    # selection. Used by the input loop's click-vs-drag heuristic, which
+    # compares screen positions — not buffer anchors.
     #
     # @return [Array<Integer>, nil] [y, x] pair or nil
     def start_pos
-      @start_y && @start_x ? [@start_y, @start_x] : nil
+      @press_y && @press_x ? [@press_y, @press_x] : nil
     end
 
     # Begin a new text selection at the given window coordinates.
-    # Clears any previous selection highlight first.
+    # Clears any previous selection highlight first, then resolves the
+    # press position to a stable [line_id, x] anchor immediately — before
+    # any incoming text can shift the buffer under it.
     #
     # @param window [BaseWindow] the window where selection starts
     # @param y [Integer] starting row (window-relative)
@@ -39,24 +51,30 @@ module SelectionManager
     def start_selection(window, y, x)
       clear_selection
       @active_window = window
-      @start_y = y
-      @start_x = x
-      @end_y = y
-      @end_x = x
+      @press_y = y
+      @press_x = x
+      if (anchor = window.selection_anchor_at(y, x))
+        @start_id, @start_x = anchor
+        @end_id, @end_x = anchor
+      end
       @selecting = true
     end
 
     # Extend the current selection to a new endpoint and redraw highlights.
+    # The endpoint is resolved against the window's current scroll/buffer
+    # state, so dragging works even after the content has moved.
     #
     # @param y [Integer] new end row (window-relative)
     # @param x [Integer] new end column (window-relative)
     # @return [void]
     def update_selection(y, x)
-      return unless @selecting && @active_window
+      return unless @selecting && @active_window && @start_id
 
-      @end_y = y
-      @end_x = x
-      @active_window.highlight_selection(@start_y, @start_x, @end_y, @end_x)
+      anchor = @active_window.selection_anchor_at(y, x)
+      return unless anchor
+
+      @end_id, @end_x = anchor
+      @active_window.highlight_selection(@start_id, @start_x, @end_id, @end_x)
     end
 
     # Finalize the selection and copy text to the clipboard.
@@ -67,11 +85,13 @@ module SelectionManager
       return unless @selecting && @active_window
 
       @selecting = false
-      text = @active_window.extract_selection(@start_y, @start_x, @end_y, @end_x)
+      return unless @start_id && @end_id
+
+      text = @active_window.extract_selection(@start_id, @start_x, @end_id, @end_x)
       if text && !text.empty?
         copy_to_clipboard(text)
       else
-        ProfanityLog.write('SelectionManager', "No text extracted: start=(#{@start_y},#{@start_x}) end=(#{@end_y},#{@end_x})")
+        ProfanityLog.write('SelectionManager', "No text extracted: start=(#{@start_id},#{@start_x}) end=(#{@end_id},#{@end_x})")
       end
       # Keep highlight visible — cleared on next start_selection or clear_selection
     end
@@ -82,7 +102,8 @@ module SelectionManager
     def clear_selection
       @active_window&.clear_highlight
       @active_window = nil
-      @start_y = @start_x = @end_y = @end_x = nil
+      @press_y = @press_x = nil
+      @start_id = @start_x = @end_id = @end_x = nil
       @selecting = false
     end
 

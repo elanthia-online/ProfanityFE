@@ -35,6 +35,7 @@ class TabbedTextWindow < BaseWindow
     @tabs = {}              # { "main" => [[line, colors], ...], ... }
     @buffer_positions = {}  # Per-tab scroll positions
     @tab_activity = {}      # Track unread content in background tabs
+    @lines_appended = {}    # Per-tab monotonic append counters (stable line IDs)
     @active_tab = nil
     @max_buffer_size = DEFAULT_BUFFER_SIZE
     @indent_word_wrap = true
@@ -60,8 +61,18 @@ class TabbedTextWindow < BaseWindow
     @tabs[name] = []
     @buffer_positions[name] = 0
     @tab_activity[name] = false
+    @lines_appended[name] = 0
     @active_tab ||= name
     draw_tab_bar
+  end
+
+  # Monotonic count of lines ever appended to the active tab's buffer.
+  # Gives each buffer line a stable ID for selection anchoring
+  # (see {AnchoredSelection}).
+  #
+  # @return [Integer]
+  def lines_appended
+    @lines_appended[@active_tab] || 0
   end
 
   # Return the active tab's line buffer for TextWindow-compatible access.
@@ -87,6 +98,10 @@ class TabbedTextWindow < BaseWindow
     return unless @tabs.key?(name)
     return if name == @active_tab
 
+    # Selection line IDs are per-tab; a stale selection would map onto
+    # unrelated text in the new tab
+    @selection_start = nil
+    @selection_end = nil
     @active_tab = name
     @tab_activity[name] = false
     redraw
@@ -214,6 +229,7 @@ class TabbedTextWindow < BaseWindow
     effective_indent = indent.nil? ? @indent_word_wrap : indent
     wrap_text(string, content_width, string_colors, indent: effective_indent) do |line, line_colors|
       tab_buffer.unshift([line, line_colors])
+      @lines_appended[tab_name] += 1
       if tab_buffer.length > @max_buffer_size
         tab_buffer.pop
         max_pos = tab_buffer.length - content_height
@@ -311,6 +327,9 @@ class TabbedTextWindow < BaseWindow
         noutrefresh
       end
     end
+    # Selection is anchored to line IDs; re-render so the highlight
+    # follows its text to the new scroll position
+    redraw_with_highlight if has_highlight?
     update_scrollbar
   end
 
@@ -371,61 +390,44 @@ class TabbedTextWindow < BaseWindow
     @tabs[@active_tab] || []
   end
 
-  # Extract selected text from the active tab's buffer.
-  # Adjusts coordinates for the tab bar offset before indexing.
+  # Resolve window-relative coordinates to a stable [line_id, x] anchor
+  # in the active tab's buffer. Adjusts for the tab bar offset first.
   #
-  # @param start_y [Integer] starting row (window-relative)
+  # @param rel_y [Integer] row relative to window top (includes tab bar)
+  # @param rel_x [Integer] column relative to window left
+  # @return [Array<Integer>, nil] [line_id, x] anchor, or nil if the tab is empty
+  def selection_anchor_at(rel_y, rel_x)
+    tab_buffer = @tabs[@active_tab] || []
+    id = AnchoredSelection.id_at_row(rel_y - TAB_BAR_HEIGHT,
+                                     lines_appended: lines_appended,
+                                     buffer_pos: buffer_pos,
+                                     buffer_length: tab_buffer.length,
+                                     height: content_height)
+    id ? [id, [rel_x, 0].max] : nil
+  end
+
+  # Extract text from the active tab's buffer for a selection anchored
+  # to stable line IDs. Lines evicted past max_buffer_size are skipped.
+  #
+  # @param start_id [Integer] starting line ID
   # @param start_x [Integer] starting column
-  # @param end_y [Integer] ending row (window-relative)
+  # @param end_id [Integer] ending line ID
   # @param end_x [Integer] ending column
   # @return [String] the selected text, lines joined by newlines
-  def extract_selection(start_y, start_x, end_y, end_x)
-    start_y -= TAB_BAR_HEIGHT
-    end_y -= TAB_BAR_HEIGHT
-
-    return '' if start_y < 0 && end_y < 0
-
-    start_y = [start_y, 0].max
-    end_y = [end_y, 0].max
-
+  def extract_selection(start_id, start_x, end_id, end_x)
     tab_buffer = @tabs[@active_tab] || []
-    tab_buffer_pos = @buffer_positions[@active_tab] || 0
-    visible_lines = [tab_buffer.length - tab_buffer_pos, content_height].min
-    start_y, start_x, end_y, end_x = normalize_selection(start_y, start_x, end_y, end_x)
-
-    lines = []
-    (start_y..end_y).each do |y|
-      buffer_idx = tab_buffer_pos + (visible_lines - 1 - y)
-      next if buffer_idx >= tab_buffer.length || buffer_idx < 0
-
-      line_text = tab_buffer[buffer_idx][0] || ''
-      lines << if y == start_y && y == end_y
-                 line_text[start_x...end_x]
-               elsif y == start_y
-                 line_text[start_x..-1]
-               elsif y == end_y
-                 line_text[0...end_x]
-               else
-                 line_text
-               end
-    end
-    lines.join("\n")
+    AnchoredSelection.extract(tab_buffer, lines_appended, start_id, start_x, end_id, end_x)
   end
 
   # Redraw the active tab's content with reverse-video selection highlighting.
-  # Coordinates are window-relative (includes tab bar row).
+  # The selection is anchored to stable line IDs, so the highlight follows
+  # its text as new lines arrive or the user scrolls.
   #
   # @return [void]
   def redraw_with_highlight
     return unless @selection_start && @selection_end && @active_tab
 
-    start_y, start_x = @selection_start
-    end_y, end_x = @selection_end
-
-    # Adjust for tab bar and normalize
-    start_y -= TAB_BAR_HEIGHT
-    end_y -= TAB_BAR_HEIGHT
-    start_y, start_x, end_y, end_x = normalize_selection(start_y, start_x, end_y, end_x)
+    start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end)
 
     tab_buffer = @tabs[@active_tab] || []
     tab_buffer_pos = @buffer_positions[@active_tab] || 0
@@ -440,9 +442,10 @@ class TabbedTextWindow < BaseWindow
       next if buffer_idx >= tab_buffer.length || buffer_idx < 0
 
       line_text, line_colors = tab_buffer[buffer_idx]
+      id = lines_appended - buffer_idx
 
-      if i >= start_y && i <= end_y
-        draw_line_with_selection(i, line_text, line_colors || [], start_y, start_x, end_y, end_x)
+      if id >= start_id && id <= end_id
+        draw_line_with_selection(id, line_text, line_colors || [], start_id, start_x, end_id, end_x)
       else
         add_line(line_text, line_colors || [])
       end

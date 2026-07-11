@@ -1715,7 +1715,10 @@ to the main window as if you had typed it.
 
 **Text selection:** When `.links` is on, you can drag to select text within
 any window. The selection is clamped to the window boundary — dragging in the
-main window won't bleed into adjacent windows. Selected text is copied via
+main window won't bleed into adjacent windows. Selections are anchored to the
+text itself, not the screen position: if new lines arrive between press and
+release, you still copy the text you pressed on, even after it scrolls.
+Selected text is copied via
 OSC 52 (if your terminal supports it) and saved to `/tmp/profanity_selection.txt`.
 Native terminal selection is unavailable while `.links` is on; toggle it off
 if you prefer your terminal's built-in selection.

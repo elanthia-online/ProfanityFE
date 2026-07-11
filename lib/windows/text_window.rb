@@ -20,12 +20,18 @@ class TextWindow < BaseWindow
   # @return [Boolean] whether a timestamp is appended to each non-empty line
   attr_accessor :time_stamp
 
+  # @return [Integer] monotonic count of lines ever appended to the buffer.
+  #   Gives each buffer line a stable ID for selection anchoring
+  #   (see {AnchoredSelection}).
+  attr_reader :lines_appended
+
   # Create a new scrollable text window.
   #
   # @param args [Array] arguments forwarded to {BaseWindow#initialize}
   def initialize(*args)
     @buffer = []
     @buffer_pos = 0
+    @lines_appended = 0
     @max_buffer_size = DEFAULT_BUFFER_SIZE
     @indent_word_wrap = true
     super
@@ -58,6 +64,7 @@ class TextWindow < BaseWindow
     effective_indent = indent.nil? ? @indent_word_wrap : indent
     wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors|
       @buffer.unshift([line, line_colors])
+      @lines_appended += 1
       @buffer.pop if @buffer.length > @max_buffer_size
       if @buffer_pos == 0
         addstr "\n" unless line.chomp.empty?
@@ -116,6 +123,9 @@ class TextWindow < BaseWindow
         noutrefresh
       end
     end
+    # Selection is anchored to line IDs; re-render so the highlight
+    # follows its text to the new scroll position
+    redraw_with_highlight if has_highlight?
     update_scrollbar
   end
 
@@ -145,46 +155,41 @@ class TextWindow < BaseWindow
     recent_line && recent_line[0] == prompt_text
   end
 
-  # Extract text from buffer for a selection region.
-  # Buffer is stored in reverse order: @buffer[0] = newest line.
-  # Text fills from the top of the window; visible_lines accounts for
-  # partially-filled buffers.
+  # Resolve window-relative coordinates to a stable [line_id, x] anchor.
+  # The anchor stays glued to the same text as the buffer grows or scrolls.
   #
-  # @param start_y [Integer] starting row (window-relative)
+  # @param rel_y [Integer] row relative to window top
+  # @param rel_x [Integer] column relative to window left
+  # @return [Array<Integer>, nil] [line_id, x] anchor, or nil if the buffer is empty
+  def selection_anchor_at(rel_y, rel_x)
+    id = AnchoredSelection.id_at_row(rel_y, lines_appended: @lines_appended,
+                                            buffer_pos: @buffer_pos,
+                                            buffer_length: @buffer.length,
+                                            height: maxy)
+    id ? [id, [rel_x, 0].max] : nil
+  end
+
+  # Extract text from the buffer for a selection anchored to stable line IDs.
+  # Lines evicted past max_buffer_size are skipped.
+  #
+  # @param start_id [Integer] starting line ID
   # @param start_x [Integer] starting column
-  # @param end_y [Integer] ending row (window-relative)
+  # @param end_id [Integer] ending line ID
   # @param end_x [Integer] ending column
   # @return [String] the selected text, lines joined by newlines
-  def extract_selection(start_y, start_x, end_y, end_x)
-    start_y, start_x, end_y, end_x = normalize_selection(start_y, start_x, end_y, end_x)
-    visible_lines = [@buffer.length - @buffer_pos, maxy].min
-
-    lines = []
-    (start_y..end_y).each do |y|
-      buffer_idx = @buffer_pos + (visible_lines - 1 - y)
-      next if buffer_idx >= @buffer.length || buffer_idx < 0
-
-      line_text = @buffer[buffer_idx][0] || ''
-      lines << if y == start_y && y == end_y
-                 line_text[start_x...end_x]
-               elsif y == start_y
-                 line_text[start_x..-1]
-               elsif y == end_y
-                 line_text[0...end_x]
-               else
-                 line_text
-               end
-    end
-    lines.join("\n")
+  def extract_selection(start_id, start_x, end_id, end_x)
+    AnchoredSelection.extract(@buffer, @lines_appended, start_id, start_x, end_id, end_x)
   end
 
   # Redraw all visible lines, applying reverse-video to the selected region.
+  # The selection is anchored to stable line IDs, so the highlight follows
+  # its text as new lines arrive or the user scrolls.
   #
   # @return [void]
   def redraw_with_highlight
     return unless @selection_start && @selection_end
 
-    start_y, start_x, end_y, end_x = normalize_selection(*@selection_start, *@selection_end)
+    start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end)
     visible_lines = [@buffer.length - @buffer_pos, maxy].min
 
     (0...maxy).each do |y|
@@ -194,9 +199,10 @@ class TextWindow < BaseWindow
       next if buffer_idx >= @buffer.length || buffer_idx < 0
 
       line_text, line_colors = @buffer[buffer_idx]
+      id = @lines_appended - buffer_idx
 
-      if y >= start_y && y <= end_y
-        draw_line_with_selection(y, line_text, line_colors, start_y, start_x, end_y, end_x)
+      if id >= start_id && id <= end_id
+        draw_line_with_selection(id, line_text, line_colors, start_id, start_x, end_id, end_x)
       else
         add_line(line_text, line_colors)
       end
