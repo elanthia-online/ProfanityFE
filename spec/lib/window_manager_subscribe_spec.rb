@@ -45,12 +45,13 @@ end
 
 class SpyIndicatorWindow
   attr_accessor :label, :label_colors
-  attr_reader :calls
+  attr_reader :calls, :value
 
   def initialize
     @calls = []
     @label = nil
     @label_colors = nil
+    @value = nil
   end
 
   def update(value)
@@ -169,7 +170,8 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
     it 'sets label and updates value' do
       event_bus.emit(:indicator_update, id: 'spell', label: 'Fire Ball', value: 1)
       expect(indicator.label).to eq 'Fire Ball'
-      expect(indicator.calls).to include(a_hash_including(method: :update, value: 1))
+      expect(indicator.value).to eq 1
+      expect(indicator.calls).to include(a_hash_including(method: :redraw))
     end
 
     it 'redraws when only label changes (no value provided)' do
@@ -182,7 +184,8 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
     it 'sets only value when no label provided' do
       event_bus.emit(:indicator_update, id: 'spell', value: 0)
       expect(indicator.label).to be_nil
-      expect(indicator.calls).to include(a_hash_including(method: :update, value: 0))
+      expect(indicator.value).to eq 0
+      expect(indicator.calls).to include(a_hash_including(method: :redraw))
     end
 
     it 'sets label_colors and redraws' do
