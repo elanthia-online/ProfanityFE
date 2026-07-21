@@ -51,7 +51,15 @@ module Curses
   def self.doupdate = nil
   def self.use_default_colors = nil
   def self.mousemask(*) = nil
-  def self.mouseinterval(*) = 166
+
+  # Models the real curses 1.6.0 binding: NUM2INT raises on non-Integer
+  # args, and the return is a boolean — never the previous interval.
+  def self.mouseinterval(interval)
+    raise TypeError, "no implicit conversion of #{interval.class} into Integer" unless interval.is_a?(Integer)
+
+    true
+  end
+
   def self.getmouse = nil
   def self.close_screen = nil
   def self.init_screen = nil

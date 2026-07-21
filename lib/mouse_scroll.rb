@@ -33,6 +33,12 @@ class MouseScroll
   # highlight-on-release).
   MOTION_EVENTS = defined?(Curses::REPORT_MOUSE_POSITION) ? Curses::REPORT_MOUSE_POSITION : 0
 
+  # ncurses default click-resolution interval, in milliseconds. The curses
+  # gem's mouseinterval returns a boolean (whether the interval was set),
+  # not the previous interval, so the prior value cannot be read back;
+  # restore this documented default when re-enabling click resolution.
+  DEFAULT_MOUSEINTERVAL = 166
+
   # @return [Boolean] whether the live drag highlight is enabled.
   #   When false, selection falls back to highlight-on-release and no
   #   motion events are ever requested from the terminal.
@@ -51,7 +57,7 @@ class MouseScroll
 
     @click_events_enabled = false
     @drag_highlight = ProfanitySettings.load_setting('DRAG_HIGHLIGHT', true)
-    @saved_mouseinterval = nil
+    @click_resolution_suppressed = false
     load_settings
   end
 
@@ -190,25 +196,26 @@ class MouseScroll
   end
 
   # Stop ncurses from buffering press/release pairs to synthesize
-  # click events; remembers the previous interval for restoration.
+  # click events (mouseinterval 0) and record that we did so.
   #
   # @return [void]
   def suppress_click_resolution
     return unless Curses.respond_to?(:mouseinterval)
 
-    previous = Curses.mouseinterval(0)
-    @saved_mouseinterval ||= previous
+    Curses.mouseinterval(0)
+    @click_resolution_suppressed = true
   end
 
-  # Restore the click-resolution interval saved by
-  # {#suppress_click_resolution}, if any.
+  # Re-enable click-resolution buffering after {#suppress_click_resolution}
+  # by restoring the ncurses default interval. No-op unless suppression is
+  # currently active.
   #
   # @return [void]
   def restore_click_resolution
-    return unless @saved_mouseinterval && Curses.respond_to?(:mouseinterval)
+    return unless @click_resolution_suppressed && Curses.respond_to?(:mouseinterval)
 
-    Curses.mouseinterval(@saved_mouseinterval)
-    @saved_mouseinterval = nil
+    Curses.mouseinterval(DEFAULT_MOUSEINTERVAL)
+    @click_resolution_suppressed = false
   end
 
   # Load saved scroll button masks from settings and enable the mouse listener.
