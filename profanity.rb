@@ -210,6 +210,7 @@ require 'optparse'
 
 cli_options = {
   port: 8000,
+  host: '127.0.0.1',
   default_color_id: 7,
   default_background_color_id: 0,
   use_default_colors: false,
@@ -234,6 +235,7 @@ OptionParser.new do |opts|
   opts.on('--config=NAME', 'Config name to load (default: same as --char)') { |v| cli_options[:config] = v }
   opts.on('--template=FILE', 'Template file name (from templates/)') { |v| cli_options[:template] = v }
   opts.on('--port=PORT', Integer, 'Game server port (default: 8000)') { |v| cli_options[:port] = v }
+  opts.on('--host=HOST', 'Game server host (default: 127.0.0.1)') { |v| cli_options[:host] = v }
   opts.on('--default-color-id=ID', Integer, 'Default foreground color (default: 7)') { |v| cli_options[:default_color_id] = v }
   opts.on('--default-background-color-id=ID', Integer, 'Default background color (default: 0)') { |v| cli_options[:default_background_color_id] = v }
   opts.on('--custom-colors=MODE', %w[on off yes no], 'Force custom color mode (on/off/yes/no)') do |v|
@@ -254,6 +256,7 @@ end.parse!
 # ========== GLOBAL CONSTANTS ==========
 
 PORT = cli_options[:port]
+HOST = cli_options[:host]
 CHAR_NAME = cli_options[:char]
 
 SETTINGS_FILENAME = ProfanitySettings.resolve_template(
