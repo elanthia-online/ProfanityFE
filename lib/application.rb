@@ -557,7 +557,7 @@ class Application
   end
 
   def connect_server
-    @server = TCPSocket.open('127.0.0.1', PORT)
+    @server = TCPSocket.open(HOST, PORT)
     @server.puts "SET_FRONTEND_PID #{Process.pid}"
     @server.flush
 
