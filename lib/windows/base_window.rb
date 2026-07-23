@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../styled_text'
+require_relative '../anchored_selection'
 
 # Base class for all ProfanityFE window types.
 # Provides shared rendering, word-wrap, scrollbar, selection, and window registry.
@@ -81,14 +82,16 @@ class BaseWindow < Curses::Window
   # @param width [Integer] maximum line width in characters
   # @param string_colors [Array<Hash>] color region descriptors for the full string
   # @param indent [Boolean] whether continuation lines should be indented
-  # @yield [line, line_colors] each wrapped line and its adjusted color regions
+  # @yield [line, line_colors, continuation] each wrapped line, its adjusted
+  #   color regions, and whether it continues the previous wrapped line
   # @yieldparam line [String] one wrapped line of text
   # @yieldparam line_colors [Array<Hash>] color regions scoped to this line
+  # @yieldparam continuation [Boolean] true for the 2nd+ line of a wrapped string
   # @return [void]
   def wrap_text(string, width, string_colors, indent: true)
     styled = StyledText.new(string, string_colors)
-    styled.wrap(width, indent: indent).each do |wrapped_line|
-      yield wrapped_line.text, wrapped_line.runs
+    styled.wrap(width, indent: indent).each_with_index do |wrapped_line, idx|
+      yield wrapped_line.text, wrapped_line.runs, idx.positive?
     end
   end
 
@@ -225,11 +228,43 @@ class BaseWindow < Curses::Window
     buffer_content.length
   end
 
-  # @return [Array<Integer>, nil] [y, x] coordinates where the selection begins
+  # @return [Array<Integer>, nil] [line_id, x] where the selection begins
+  #   (line_id is a stable buffer line ID — see {AnchoredSelection})
   attr_accessor :selection_start
 
-  # @return [Array<Integer>, nil] [y, x] coordinates where the selection ends
+  # @return [Array<Integer>, nil] [line_id, x] where the selection ends
   attr_accessor :selection_end
+
+  # Resolve window-relative coordinates to a stable selection anchor.
+  # Subclasses with line buffers (TextWindow, TabbedTextWindow) override
+  # this to return a [line_id, x] pair that stays glued to the same text
+  # as the buffer grows or scrolls. The default returns nil for window
+  # types that don't support selection.
+  #
+  # @param _rel_y [Integer] row relative to window top
+  # @param _rel_x [Integer] column relative to window left
+  # @return [Array<Integer>, nil] [line_id, x] anchor, or nil
+  def selection_anchor_at(_rel_y, _rel_x)
+    nil
+  end
+
+  # Monotonic count of lines ever appended, for selection anchoring.
+  # Overridden by windows with line buffers.
+  #
+  # @return [Integer]
+  def lines_appended
+    0
+  end
+
+  # Scroll one line when a drag pointer sits at this window's top or
+  # bottom edge. Subclasses with scrollable buffers override this.
+  # The default is a no-op for window types that don't scroll.
+  #
+  # @param _rel_y [Integer] drag row relative to window top
+  # @return [Boolean] true if the view actually scrolled
+  def drag_auto_scroll(_rel_y)
+    false
+  end
 
   # Whether text is currently selected in this window.
   #
@@ -248,14 +283,14 @@ class BaseWindow < Curses::Window
 
   # Set the selection range and trigger a highlight redraw if supported.
   #
-  # @param start_y [Integer] starting row
+  # @param start_id [Integer] starting line ID
   # @param start_x [Integer] starting column
-  # @param end_y [Integer] ending row
+  # @param end_id [Integer] ending line ID
   # @param end_x [Integer] ending column
   # @return [void]
-  def highlight_selection(start_y, start_x, end_y, end_x)
-    @selection_start = [start_y, start_x]
-    @selection_end = [end_y, end_x]
+  def highlight_selection(start_id, start_x, end_id, end_x)
+    @selection_start = [start_id, start_x]
+    @selection_end = [end_id, end_x]
     redraw_with_highlight
   end
 
@@ -286,12 +321,12 @@ class BaseWindow < Curses::Window
   # Extract selected text from the buffer.
   # Subclasses override this with buffer-aware implementations.
   #
-  # @param _start_y [Integer] starting row
+  # @param _start_id [Integer] starting line ID
   # @param _start_x [Integer] starting column
-  # @param _end_y [Integer] ending row
+  # @param _end_id [Integer] ending line ID
   # @param _end_x [Integer] ending column
   # @return [String] the selected text (empty string by default)
-  def extract_selection(_start_y, _start_x, _end_y, _end_x)
+  def extract_selection(_start_id, _start_x, _end_id, _end_x)
     ''
   end
 
@@ -305,38 +340,34 @@ class BaseWindow < Curses::Window
     nil
   end
 
-  # Normalize selection coordinates so start is before end (top-left to bottom-right).
+  # Normalize selection coordinates so start is the older (topmost) endpoint.
   # Shared by TextWindow and TabbedTextWindow for selection extraction and rendering.
   #
-  # @param start_y [Integer] starting row
+  # @param start_id [Integer] starting line ID
   # @param start_x [Integer] starting column
-  # @param end_y [Integer] ending row
+  # @param end_id [Integer] ending line ID
   # @param end_x [Integer] ending column
-  # @return [Array<Integer>] normalized [start_y, start_x, end_y, end_x]
-  protected def normalize_selection(start_y, start_x, end_y, end_x)
-    if start_y > end_y || (start_y == end_y && start_x > end_x)
-      [end_y, end_x, start_y, start_x]
-    else
-      [start_y, start_x, end_y, end_x]
-    end
+  # @return [Array<Integer>] normalized [start_id, start_x, end_id, end_x]
+  protected def normalize_selection(start_id, start_x, end_id, end_x)
+    AnchoredSelection.normalize(start_id, start_x, end_id, end_x)
   end
 
   # Draw a single line with reverse-video highlighting for the selected region.
   # Shared by TextWindow and TabbedTextWindow for selection rendering.
   #
-  # @param y [Integer] the window row being drawn
+  # @param id [Integer] stable line ID of the line being drawn
   # @param line_text [String] full text of the line
   # @param line_colors [Array<Hash>] color regions for the line
-  # @param start_y [Integer] selection start row
+  # @param start_id [Integer] selection start line ID
   # @param start_x [Integer] selection start column
-  # @param end_y [Integer] selection end row
+  # @param end_id [Integer] selection end line ID
   # @param end_x [Integer] selection end column
   # @return [void]
-  protected def draw_line_with_selection(y, line_text, line_colors, start_y, start_x, end_y, end_x)
+  protected def draw_line_with_selection(id, line_text, line_colors, start_id, start_x, end_id, end_x)
     return if line_text.nil?
 
-    sel_start = y == start_y ? start_x : 0
-    sel_end = y == end_y ? end_x : line_text.length
+    sel_start = id == start_id ? start_x : 0
+    sel_end = id == end_id ? end_x : line_text.length
 
     if sel_start > 0
       pre_text = line_text[0...sel_start]

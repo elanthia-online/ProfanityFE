@@ -150,15 +150,39 @@ module ProfanitySettings
     nil
   end
 
-  # Save mouse scroll settings to settings.json.
+  # Save mouse scroll settings to settings.json, preserving any other
+  # keys already stored there.
   #
   # @param button4_mask [Integer] scroll-up button mask
   # @param button5_mask [Integer] scroll-down button mask
   # @return [void]
   def self.save_mouse_settings(button4_mask, button5_mask)
-    write(file('settings.json'), JSON.pretty_generate({
-      'BUTTON4_PRESSED_MASK' => button4_mask,
-      'BUTTON5_PRESSED_MASK' => button5_mask
-    }))
+    settings = load_mouse_settings || {}
+    settings['BUTTON4_PRESSED_MASK'] = button4_mask
+    settings['BUTTON5_PRESSED_MASK'] = button5_mask
+    write(file('settings.json'), JSON.pretty_generate(settings))
+  end
+
+  # Read a single value from settings.json.
+  #
+  # @param key [String] setting name
+  # @param default [Object] value returned when the file or key is absent
+  # @return [Object] the stored value or the default
+  def self.load_setting(key, default)
+    settings = load_mouse_settings
+    return default unless settings&.key?(key)
+
+    settings[key]
+  end
+
+  # Write a single value to settings.json, preserving other keys.
+  #
+  # @param key [String] setting name
+  # @param value [Object] JSON-serializable value
+  # @return [void]
+  def self.save_setting(key, value)
+    settings = load_mouse_settings || {}
+    settings[key] = value
+    write(file('settings.json'), JSON.pretty_generate(settings))
   end
 end

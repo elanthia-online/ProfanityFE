@@ -1405,6 +1405,32 @@ restore text selection. See [Link Display](#13-link-display) for details.
 .links
 ```
 
+### .select
+
+Toggle drag-to-select independently of `.links`. Use this to get
+Profanity's text selection (drag, double-click word, triple-click line)
+without clickable links. Like `.links`, it captures the mouse, so native
+terminal selection is unavailable while it is on. Selection is active
+when either `.links` or `.select` is on.
+
+```
+.select
+```
+
+### .draghl
+
+Toggle the live selection highlight that follows the pointer while
+dragging. Defaults to on; the choice is saved to
+`~/.profanity/settings.json`. Turn it off if your terminal misbehaves
+with mouse motion reporting — the selection still works, with the
+highlight appearing when you release the button. (GNU Screen and tmux
+generally don't forward motion events at all; there the highlight
+appears on release regardless of this setting.)
+
+```
+.draghl
+```
+
 ### .scrollcfg
 
 Launch the interactive mouse scroll wheel calibration wizard. See
@@ -1713,12 +1739,31 @@ text sends the associated command to the game server. In DragonRealms, this
 executes the `cmd` attribute (e.g., `get #40872332`). The command is echoed
 to the main window as if you had typed it.
 
-**Text selection:** When `.links` is on, you can drag to select text within
-any window. The selection is clamped to the window boundary — dragging in the
-main window won't bleed into adjacent windows. Selected text is copied via
+**Text selection:** When `.links` (or `.select`) is on, you can drag to
+select text within any window. The selection is clamped to the window
+boundary — dragging in the main window won't bleed into adjacent windows.
+Selections are anchored to the text itself, not the screen position: if new
+lines arrive between press and release, you still copy the text you pressed
+on, even after it scrolls. The highlight follows the pointer live while you
+drag (toggle with `.draghl` if your terminal misbehaves), holding the
+pointer at a window's top or bottom edge auto-scrolls to extend the
+selection, double-click selects the word under the cursor, and triple-click
+selects the whole line. Lines that were word-wrapped for display are copied
+as one logical line, without the mid-sentence breaks. A brief
+`[copied N chars]` note appears in the main window after each copy.
+Selected text is copied via
 OSC 52 (if your terminal supports it) and saved to `/tmp/profanity_selection.txt`.
-Native terminal selection is unavailable while `.links` is on; toggle it off
-if you prefer your terminal's built-in selection.
+Native terminal selection is unavailable while `.links` or `.select` is on
+because the terminal hands the mouse to Profanity — but nearly all terminal
+emulators bypass mouse capture when you hold a modifier: **Shift+drag**
+(Option+drag on macOS) still gives you native selection at any time.
+Toggle `.links` and `.select` off if you prefer native selection without
+the modifier.
+
+Inside GNU Screen or tmux, pointer *motion* events may not be forwarded to
+Profanity even though clicks are. Selection still works there — the live
+highlight just appears when you release the button instead of following
+the drag, and edge auto-scroll is unavailable.
 
 To customize the link color, override the `links` preset in your settings XML:
 
