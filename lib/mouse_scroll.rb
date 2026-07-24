@@ -22,10 +22,27 @@ class MouseScroll
 
   # Bitmask for mouse events when .links is active.
   # BUTTON1 press/release/click for link detection and drag-to-select.
-  # Does NOT include REPORT_MOUSE_POSITION (causes display corruption).
-  # Drag highlight appears on release instead of during drag.
+  # Does NOT include REPORT_MOUSE_POSITION in the steady state — a
+  # constant motion-event stream corrupts the display. Motion reporting
+  # is added only while button 1 is held (see {#begin_drag_capture}).
   CLICK_EVENTS = Curses::BUTTON1_PRESSED | Curses::BUTTON1_RELEASED |
                  (defined?(Curses::BUTTON1_CLICKED) ? Curses::BUTTON1_CLICKED : 0)
+
+  # Bitmask for pointer motion reports, used for live drag highlight.
+  # Zero when the curses build doesn't expose it (feature degrades to
+  # highlight-on-release).
+  MOTION_EVENTS = defined?(Curses::REPORT_MOUSE_POSITION) ? Curses::REPORT_MOUSE_POSITION : 0
+
+  # ncurses default click-resolution interval, in milliseconds. The curses
+  # gem's mouseinterval returns a boolean (whether the interval was set),
+  # not the previous interval, so the prior value cannot be read back;
+  # restore this documented default when re-enabling click resolution.
+  DEFAULT_MOUSEINTERVAL = 166
+
+  # @return [Boolean] whether the live drag highlight is enabled.
+  #   When false, selection falls back to highlight-on-release and no
+  #   motion events are ever requested from the terminal.
+  attr_reader :drag_highlight
 
   # @param key_action [Hash<String, Proc>] the key action registry
   # @param display_fn [Proc] callback to display messages: display_fn.call(text)
@@ -39,6 +56,8 @@ class MouseScroll
     @bstate_counts = {}
 
     @click_events_enabled = false
+    @drag_highlight = ProfanitySettings.load_setting('DRAG_HIGHLIGHT', true)
+    @click_resolution_suppressed = false
     load_settings
   end
 
@@ -93,33 +112,80 @@ class MouseScroll
     @config_state != :idle
   end
 
-  # Enable mouse click events for clickable links.
-  # Called when .links is toggled on.
+  # Enable mouse click events for clickable links and drag-to-select.
+  # Called when .links or .select is toggled on.
+  #
+  # With drag highlight on, click resolution is also disabled
+  # (mouseinterval 0) so presses and releases arrive raw — the
+  # application's own click-vs-drag heuristic takes over, and no events
+  # are buffered waiting to synthesize BUTTON1_CLICKED.
   #
   # @return [void]
   def enable_click_events
     @click_events_enabled = true
+    suppress_click_resolution if @drag_highlight
     apply_mouse_mask
   end
 
   # Disable mouse click events, restoring native terminal selection.
-  # Called when .links is toggled off.
+  # Called when .links / .select are toggled off.
   #
   # @return [void]
   def disable_click_events
     @click_events_enabled = false
+    restore_click_resolution
     apply_mouse_mask
   end
 
+  # Toggle the live drag highlight. Adjusts click resolution to match
+  # if mouse capture is currently active, and persists the choice.
+  #
+  # @param value [Boolean] true to highlight while dragging
+  # @return [void]
+  def drag_highlight=(value)
+    @drag_highlight = value
+    if @click_events_enabled
+      value ? suppress_click_resolution : restore_click_resolution
+    end
+    ProfanitySettings.save_setting('DRAG_HIGHLIGHT', value)
+  end
+
+  # Add pointer-motion reporting to the mouse mask for the duration of
+  # a button-1 drag. Called on press; {#end_drag_capture} restores the
+  # steady-state mask on release. Keeping motion reporting scoped to
+  # the drag avoids the constant event stream that corrupts the display.
+  #
+  # @return [void]
+  def begin_drag_capture
+    return unless @click_events_enabled && @drag_highlight && MOTION_EVENTS.nonzero?
+
+    Curses.mousemask(base_mask | MOTION_EVENTS)
+  end
+
+  # Restore the steady-state mouse mask after a drag ends.
+  #
+  # @return [void]
+  def end_drag_capture
+    apply_mouse_mask if @click_events_enabled
+  end
+
   private
+
+  # Compute the steady-state mouse mask from scroll and click event bits.
+  #
+  # @return [Integer]
+  def base_mask
+    mask = 0
+    mask |= @button4_mask | @button5_mask if @button4_mask && @button5_mask
+    mask |= CLICK_EVENTS if @click_events_enabled
+    mask
+  end
 
   # Apply the current mouse mask combining scroll and click event bits.
   #
   # @return [void]
   def apply_mouse_mask
-    mask = 0
-    mask |= @button4_mask | @button5_mask if @button4_mask && @button5_mask
-    mask |= CLICK_EVENTS if @click_events_enabled
+    mask = base_mask
     if mask.nonzero?
       Curses.mousemask(mask)
       @listener_enabled = true
@@ -127,6 +193,29 @@ class MouseScroll
       Curses.mousemask(0)
       @listener_enabled = false
     end
+  end
+
+  # Stop ncurses from buffering press/release pairs to synthesize
+  # click events (mouseinterval 0) and record that we did so.
+  #
+  # @return [void]
+  def suppress_click_resolution
+    return unless Curses.respond_to?(:mouseinterval)
+
+    Curses.mouseinterval(0)
+    @click_resolution_suppressed = true
+  end
+
+  # Re-enable click-resolution buffering after {#suppress_click_resolution}
+  # by restoring the ncurses default interval. No-op unless suppression is
+  # currently active.
+  #
+  # @return [void]
+  def restore_click_resolution
+    return unless @click_resolution_suppressed && Curses.respond_to?(:mouseinterval)
+
+    Curses.mouseinterval(DEFAULT_MOUSEINTERVAL)
+    @click_resolution_suppressed = false
   end
 
   # Load saved scroll button masks from settings and enable the mouse listener.

@@ -34,6 +34,8 @@ class Application
     '.tab <N|name>      Switch tab by number or name',
     '.arrow             Cycle arrow keys: history/page/line',
     '.links             Toggle in-game link highlighting',
+    '.select            Toggle drag-to-select without links',
+    '.draghl            Toggle live highlight while dragging',
     '.scrollcfg         Configure mouse scroll wheel',
     '.highlight <text>   Add cyan highlight for text (session only)',
     '.unhighlight <text> Remove an inline highlight',
@@ -70,6 +72,7 @@ class Application
     @window_mgr = WindowManager.new
     @key_binding = {}
     @key_action = {}
+    @selection_enabled = false
 
     setup_key_actions
 
@@ -124,6 +127,10 @@ class Application
       handle_dot_arrow
     elsif cmd =~ /^\.links/i
       handle_dot_links
+    elsif cmd =~ /^\.select/i
+      handle_dot_select
+    elsif cmd =~ /^\.draghl/i
+      handle_dot_draghl
     elsif cmd =~ /^\.scrollcfg/i
       @mouse_scroll.start_configuration
     elsif (match = cmd.match(/^\.unhighlight\s+(?<pattern>.+)/i))
@@ -270,7 +277,8 @@ class Application
     @shared_state.blue_links = !@shared_state.blue_links
     if @shared_state.blue_links
       @mouse_scroll.enable_click_events
-    else
+    elsif !@selection_enabled
+      # Keep mouse capture when .select is still on
       @mouse_scroll.disable_click_events
     end
     if (room_win = @window_mgr.room['room'])
@@ -279,13 +287,42 @@ class Application
     end
     if (window = @window_mgr.stream[MAIN_STREAM])
       msg = if @shared_state.blue_links
-              '* Links: ON (clickable links + drag-to-select)'
+              '* Links: ON (clickable links + drag-to-select; Shift+drag for native selection)'
+            elsif @selection_enabled
+              '* Links: OFF (drag-to-select still on via .select)'
             else
               '* Links: OFF (native terminal selection)'
             end
       window.add_string(msg, feedback_colors(msg))
       CursesRenderer.doupdate
     end
+  end
+
+  def handle_dot_select
+    @selection_enabled = !@selection_enabled
+    if @selection_enabled || @shared_state.blue_links
+      @mouse_scroll.enable_click_events
+    else
+      @mouse_scroll.disable_click_events
+    end
+    msg = if @selection_enabled
+            '* Select: ON (drag-to-select; Shift+drag for native selection)'
+          elsif @shared_state.blue_links
+            '* Select: OFF (drag-to-select still on via .links)'
+          else
+            '* Select: OFF (native terminal selection)'
+          end
+    write_to_client(msg)
+  end
+
+  def handle_dot_draghl
+    @mouse_scroll.drag_highlight = !@mouse_scroll.drag_highlight
+    msg = if @mouse_scroll.drag_highlight
+            '* Drag highlight: ON (highlight follows the pointer while dragging)'
+          else
+            '* Drag highlight: OFF (highlight appears when you release)'
+          end
+    write_to_client(msg)
   end
 
   def handle_dot_highlight(pattern)
@@ -577,10 +614,12 @@ class Application
       CursesRenderer.synchronize do
         # Tick countdowns on every iteration (~100ms), regardless of input
         countdown_updated = tick_countdowns
+        # Drag held at a window edge keeps scrolling once per tick
+        drag_scrolled = tick_drag_auto_scroll
 
         ch = @cmd_buffer.window.getch
         if ch.nil?
-          Curses.doupdate if countdown_updated
+          Curses.doupdate if countdown_updated || drag_scrolled
           next
         end
 
@@ -637,13 +676,7 @@ class Application
     bstate = mouse.bstate
 
     if (bstate & Curses::BUTTON1_PRESSED) != 0
-      SelectionManager.clear_selection
-      window = BaseWindow.find_window_at(screen_y, screen_x)
-      if window
-        rel_y = screen_y - window.begy
-        rel_x = screen_x - window.begx
-        SelectionManager.start_selection(window, rel_y, rel_x)
-      end
+      handle_mouse_press(screen_y, screen_x)
     elsif (bstate & Curses::BUTTON1_RELEASED) != 0
       handle_mouse_release(screen_y, screen_x)
     elsif defined?(Curses::BUTTON1_CLICKED) && (bstate & Curses::BUTTON1_CLICKED) != 0
@@ -654,10 +687,40 @@ class Application
         rel_x = screen_x - window.begx
         dispatch_link(window, rel_y, rel_x)
       end
+    elsif MouseScroll::MOTION_EVENTS.nonzero? && (bstate & MouseScroll::MOTION_EVENTS) != 0
+      handle_mouse_drag(screen_y, screen_x)
     end
   end
 
+  def handle_mouse_press(screen_y, screen_x)
+    window = BaseWindow.find_window_at(screen_y, screen_x)
+    unless window
+      SelectionManager.clear_selection
+      return
+    end
+
+    rel_y = screen_y - window.begy
+    rel_x = screen_x - window.begx
+    multi_click = SelectionManager.start_selection(window, rel_y, rel_x)
+    # Motion reporting only while the button is held — a permanent
+    # motion stream corrupts the display
+    @mouse_scroll.begin_drag_capture
+    CursesRenderer.doupdate if multi_click
+  end
+
+  # Live highlight update from a motion report while button 1 is held.
+  # SelectionManager throttles redraws so a motion flood coalesces.
+  def handle_mouse_drag(screen_y, screen_x)
+    window = SelectionManager.active_window
+    return unless window && SelectionManager.selecting
+
+    rel_y = screen_y - window.begy
+    rel_x = screen_x - window.begx
+    CursesRenderer.doupdate if SelectionManager.drag_update(rel_y, rel_x)
+  end
+
   def handle_mouse_release(screen_y, screen_x)
+    @mouse_scroll.end_drag_capture
     return unless SelectionManager.selecting
 
     window = SelectionManager.active_window
@@ -671,18 +734,49 @@ class Application
     start_pos = SelectionManager.start_pos
 
     if start_pos && start_pos[0] == rel_y && (start_pos[1] - rel_x).abs <= 3
-      # Single click (no drag): check for link, skip selection
-      dispatch_link(window, rel_y, rel_x)
-      SelectionManager.clear_selection
+      if SelectionManager.multi_click_selected?
+        # Double/triple click: copy the expanded word/line selection
+        finalize_selection
+      else
+        # Single click (no drag): check for link, skip selection
+        dispatch_link(window, rel_y, rel_x)
+        SelectionManager.clear_selection
+      end
     else
       # Actual drag: finalize selection and copy to clipboard
       SelectionManager.update_selection(rel_y, rel_x)
-      SelectionManager.end_selection
-      CursesRenderer.doupdate
+      finalize_selection
     end
   end
 
+  # Copy the finished selection and show brief feedback in the main window.
+  def finalize_selection
+    chars = SelectionManager.end_selection
+    write_to_client("* [copied #{chars} chars]") if chars&.positive?
+    CursesRenderer.doupdate
+  end
+
+  # While a drag is held at a window's top or bottom edge, keep scrolling
+  # one line per input-loop tick (~100ms) and extend the selection.
+  # Motion events stop when the pointer stops moving, so the tick drives
+  # the repeat. Returns true if the screen needs a refresh.
+  def tick_drag_auto_scroll
+    return false unless SelectionManager.selecting
+
+    window = SelectionManager.active_window
+    pos = SelectionManager.last_drag_pos
+    return false unless window && pos
+
+    scrolled = window.drag_auto_scroll(pos[0])
+    SelectionManager.update_selection(pos[0], pos[1]) if scrolled
+    scrolled
+  end
+
   def dispatch_link(window, rel_y, rel_x)
+    # Links may be toggled off while selection capture (.select) stays on;
+    # lines rendered earlier can still carry cmd runs that must not fire
+    return unless @shared_state.blue_links
+
     if (link_cmd = window.link_cmd_at(rel_y, rel_x))
       if (main = @window_mgr.stream[MAIN_STREAM])
         @window_mgr.add_prompt(main, @shared_state.prompt_text, link_cmd)
