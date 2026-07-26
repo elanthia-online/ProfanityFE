@@ -1230,7 +1230,7 @@ Combine with the DOCTYPE entity definitions for readable color names:
 ## 6. Gag Patterns
 
 Gag patterns suppress (hide) lines that match a regular expression. There are
-two types:
+three types:
 
 ### General Gag Patterns
 
@@ -1249,6 +1249,26 @@ combat messages.
 ```xml
 <combat_gag>REGEX_PATTERN</combat_gag>
 ```
+
+### Multi-line Gag Patterns
+
+Suppress a whole block of lines, not just one. When a line matches the `start`
+pattern, that line and every following line are dropped until the block ends.
+
+```xml
+<multiline_gag start="REGEX_PATTERN" end="REGEX_PATTERN"/>
+```
+
+- `start` (required) is the regex that begins the block. The matching line is
+  suppressed.
+- `end` (optional) is the regex that ends the block. The line matching `end`
+  is also suppressed, and normal display resumes on the next line.
+- If `end` is omitted, the block is **prompt-terminated**: it ends at the next
+  game prompt (the prompt itself is unaffected). This suits messages that are
+  always followed by a prompt, such as sanowret crystal knowledge.
+
+A safety cap releases any block that runs longer than 100 suppressed lines, so
+a mistyped `end` pattern can never swallow the stream indefinitely.
 
 ### Examples
 
@@ -1270,6 +1290,12 @@ combat messages.
 
 <!-- Hide specific creature ambient text -->
 <combat_gag>^An? \w+ (hisses|growls|snarls) menacingly\.</combat_gag>
+
+<!-- Hide sanowret crystal knowledge (header + body), ending at the prompt -->
+<multiline_gag start="^Knowledge from your sanowret crystal about .* rings clear in your mind:"/>
+
+<!-- Hide a block bounded by explicit start and end lines -->
+<multiline_gag start="^You begin to read the tattered scroll\." end="^The scroll crumbles to dust\."/>
 ```
 
 ### Notes
@@ -1277,6 +1303,7 @@ combat messages.
 - Gag patterns use Ruby regular expression syntax.
 - General gags are checked before any text processing or routing.
 - Combat gags are checked only for lines in the combat stream.
+- Multi-line gags are checked before general gags, at the raw-line level.
 - On `.reload`, custom gag patterns from XML are reloaded (defaults are
   preserved).
 - Invalid regex patterns are logged as warnings and skipped.

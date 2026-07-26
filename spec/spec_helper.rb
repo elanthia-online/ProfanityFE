@@ -278,6 +278,8 @@ module GagPatterns
   def self.clear_custom = nil
   def self.add_general_pattern(*) = nil
   def self.add_combat_pattern(*) = nil
+  def self.add_multiline_gag(*) = nil
+  def self.match_multiline_start(*) = nil
 end
 
 # ---------------------------------------------------------------------------

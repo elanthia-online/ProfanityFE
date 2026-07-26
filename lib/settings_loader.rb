@@ -89,6 +89,12 @@ module SettingsLoader
         when 'combat_gag'
           GagPatterns.add_combat_pattern(e.text) if e.text && !e.text.strip.empty?
 
+        when 'multiline_gag'
+          start_pattern = e.attributes['start']
+          if start_pattern && !start_pattern.strip.empty?
+            GagPatterns.add_multiline_gag(start_pattern, e.attributes['end'])
+          end
+
         when 'perc-transform'
           if e.attributes['pattern']
             begin
