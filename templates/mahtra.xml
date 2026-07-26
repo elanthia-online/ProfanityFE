@@ -426,7 +426,14 @@
   <gag>^You're already playing a song</gag>
   <gag>Assuming you mean (?:a|an) \w+ eddy</gag>
 
-  <!-- Multi-line gags: suppress the header + body block; ends at the prompt -->
+  <!-- ==================== MULTI-LINE GAG PATTERNS ====================
+       Suppress a whole block of lines, not just one. When a line matches
+       "start", that line and every following line are hidden until "end"
+       matches (also hidden), or - if "end" is omitted - until the next
+       game prompt (prompt-terminated). -->
+
+  <!-- sanowret crystal knowledge: header + body paragraph, ends at prompt.
+       Replaces the need to enumerate each lore body line individually. -->
   <multiline_gag start="^Knowledge from your sanowret crystal about .* rings clear in your mind:"/>
 
   <!-- ================================================================
