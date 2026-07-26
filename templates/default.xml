@@ -310,6 +310,17 @@
        ambient actions, lore book text, equipment visual effects, etc.
 
        Format: <gag>REGEX</gag>
+
+       To suppress a whole multi-line block (header + body), use a
+       multi-line gag instead. When a line matches "start", that line and
+       every following line are hidden until "end" matches (also hidden).
+       When "end" is omitted, the block ends at the next game prompt.
+
+       Format: <multiline_gag start="REGEX" end="REGEX"/>
+
+       Example (hides the sanowret crystal header AND its body paragraph,
+       which the single-line gag below cannot do):
+       <multiline_gag start="^Knowledge from your sanowret crystal about .* rings clear in your mind:"/>
   -->
 
   <!-- ==================== YOUR COMBAT ACTIONS ====================

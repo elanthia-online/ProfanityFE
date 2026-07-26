@@ -426,6 +426,9 @@
   <gag>^You're already playing a song</gag>
   <gag>Assuming you mean (?:a|an) \w+ eddy</gag>
 
+  <!-- Multi-line gags: suppress the header + body block; ends at the prompt -->
+  <multiline_gag start="^Knowledge from your sanowret crystal about .* rings clear in your mind:"/>
+
   <!-- ================================================================
        PERC-TRANSFORM — Text substitutions for the active spells display
        ================================================================

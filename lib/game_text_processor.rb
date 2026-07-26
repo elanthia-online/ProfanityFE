@@ -52,6 +52,11 @@ class GameTextProcessor
   # Movement verbs that suppress the following prompt and empty line.
   MOVEMENT_PATTERN = /^You (?:run|walk|go|swim|climb|crawl|drag|stride|sneak|stalk)\b/
 
+  # Safety cap: a multi-line gag whose end pattern (or prompt) never arrives
+  # is released after this many suppressed lines so it cannot swallow the
+  # stream. Real blocks (e.g. sanowret crystal knowledge) are 2-3 lines.
+  MULTILINE_GAG_MAX_LINES = 100
+
   # Precomputed merged logon patterns (DR + GS) and matching regex.
   # Built once at load time instead of on every logon line.
   ALL_LOGON_PATTERNS = Games::DragonRealms::LOGON_PATTERNS.merge(Games::GemStone::LOGON_PATTERNS).freeze
@@ -95,6 +100,11 @@ class GameTextProcessor
     # Track movement messages to suppress prompts/empty lines after them
     @last_was_movement = false
 
+    # Multi-line gag state: the active { start:, end: } gag being suppressed
+    # (nil when not inside a block) and how many lines it has swallowed so far.
+    @active_multiline_gag = nil
+    @multiline_gag_lines = 0
+
     # Room data tracking for RoomWindow
     @room_capture_mode = nil # :title, :desc, or nil
     @room_pending_title = nil
@@ -136,6 +146,8 @@ class GameTextProcessor
       end
 
       line.chomp!
+
+      next if multiline_gag?(line)
 
       if line.match(GagPatterns.general_regexp)
         next
@@ -273,6 +285,49 @@ class GameTextProcessor
   # @api private
   def append_speech_timestamp(text)
     "#{text} (#{Time.now.strftime('%H:%M:%S').sub(/^0/, '')})"
+  end
+
+  # Decide whether a raw server line should be suppressed as part of a
+  # multi-line gag block, advancing the gag state machine as a side effect.
+  #
+  # When no block is active, the line is tested against the configured
+  # multi-line gag start patterns; a match begins a block and suppresses
+  # the start line. While a block is active every line is suppressed until:
+  #   - the gag's end pattern matches (that end line is also suppressed), or
+  #   - for prompt-terminated gags (no end pattern), a prompt line is seen
+  #     (the prompt is NOT suppressed and passes through normally), or
+  #   - the safety cap is exceeded (the block is released, line passes through).
+  #
+  # @param line [String] raw server line (post-chomp, XML tags intact)
+  # @return [Boolean] true if the line should be dropped
+  # @api private
+  def multiline_gag?(line)
+    if @active_multiline_gag
+      gag = @active_multiline_gag
+      @multiline_gag_lines += 1
+
+      if @multiline_gag_lines > MULTILINE_GAG_MAX_LINES
+        ProfanityLog.write('gag', "multiline gag exceeded #{MULTILINE_GAG_MAX_LINES} lines; releasing")
+        @active_multiline_gag = nil
+        false
+      elsif gag[:end]
+        # Explicit end pattern: the end line is part of the block (suppressed).
+        @active_multiline_gag = nil if line.match?(gag[:end])
+        true
+      elsif line =~ /<prompt\b/
+        # Prompt-terminated: stop gagging and let the prompt line through.
+        @active_multiline_gag = nil
+        false
+      else
+        true
+      end
+    elsif (gag = GagPatterns.match_multiline_start(line))
+      @active_multiline_gag = gag
+      @multiline_gag_lines = 0
+      true
+    else
+      false
+    end
   end
 
   # Emit a prompt to the main stream if one is pending and the last
