@@ -648,6 +648,11 @@ class Application
         end
       end # CursesRenderer.synchronize
     end
+  rescue Interrupt
+    # Ctrl+C: exit cleanly without dumping a backtrace. Interrupt is not a
+    # StandardError, so it bypasses the rescue below; catch it explicitly and
+    # let the ensure block below restore the terminal.
+    nil
   rescue StandardError => e
     ProfanityLog.write('main', e.to_s, backtrace: e.backtrace)
   ensure
