@@ -7,6 +7,7 @@
 
 require_relative '../../lib/event_bus'
 require_relative '../../lib/xml_tokenizer'
+require_relative '../../lib/stream_stack'
 require_relative '../../lib/tag_handlers'
 
 # Minimal host class that includes TagHandlers, providing the instance
@@ -18,7 +19,7 @@ class TagHandlerHost
                 :open_color, :open_link, :current_stream, :combat_next_line,
                 :need_update, :need_room_render, :room_capture_mode
 
-  attr_reader :flushed_texts, :wm, :state, :cmd_buffer, :event_bus
+  attr_reader :flushed_texts, :wm, :state, :cmd_buffer, :event_bus, :stream_stack
 
   def initialize(wm:, state:, event_bus:)
     @wm = wm
@@ -33,6 +34,7 @@ class TagHandlerHost
     @open_color = []
     @open_link = []
     @current_stream = nil
+    @stream_stack = StreamStack.new
     @combat_next_line = nil
     @need_update = false
     @need_room_render = false
@@ -741,15 +743,66 @@ RSpec.describe TagHandlers do
       expect(host.current_stream).to eq 'thoughts'
     end
 
-    it 'stream close after multiple opens resets to nil' do
+    it 'stream close after nested opens restores the enclosing stream' do
+      # A popStream closes only the innermost stream; the parent must resume
+      # so its remaining text keeps routing to the right window instead of
+      # spilling into the main window.
       host.dispatch_tag('<pushStream id="combat" />', String.new)
       host.dispatch_tag('<pushStream id="thoughts" />', String.new)
       host.dispatch_tag('<popStream/>', String.new)
-      expect(host.current_stream).to be_nil
+      expect(host.current_stream).to eq 'combat'
     end
 
     it 'clearStream for non-percWindow id does not crash' do
       expect { host.dispatch_tag('<clearStream id="other"/>', String.new) }.not_to raise_error
+    end
+  end
+
+  # Regression coverage for the "text leaks into another window" class of bug:
+  # a nested or asynchronously-injected stream (e.g. moonwatch repainting the
+  # moon window) must not close the game stream that was already active.
+  describe 'nested stream restoration' do
+    it 'restores the main window (nil) after a single balanced open/close' do
+      host.dispatch_tag('<pushStream id="moonWindow" />', String.new)
+      expect(host.current_stream).to eq 'moonWindow'
+      host.dispatch_tag('<popStream/>', String.new)
+      expect(host.current_stream).to be_nil
+    end
+
+    it 'restores the enclosing game stream when an injected stream closes' do
+      host.dispatch_tag('<pushStream id="familiar" />', String.new)
+      # An asynchronous script pushes its own self-contained stream inside the
+      # still-open familiar stream, then pops it.
+      host.dispatch_tag('<pushStream id="moonWindow" />', String.new)
+      host.dispatch_tag('<popStream/>', String.new)
+      expect(host.current_stream).to eq 'familiar'
+    end
+
+    it 'unwinds several nesting levels back to the main window in order' do
+      %w[thoughts room moonWindow].each { |id| host.dispatch_tag(%(<pushStream id="#{id}" />), String.new) }
+      expect(host.current_stream).to eq 'moonWindow'
+      host.dispatch_tag('<popStream/>', String.new)
+      expect(host.current_stream).to eq 'room'
+      host.dispatch_tag('<popStream/>', String.new)
+      expect(host.current_stream).to eq 'thoughts'
+      host.dispatch_tag('<popStream/>', String.new)
+      expect(host.current_stream).to be_nil
+    end
+
+    it 'treats </component> and </compDef> as stream closes that restore the parent' do
+      host.dispatch_tag('<pushStream id="speech" />', String.new)
+      host.dispatch_tag('<component id="room objs">', String.new)
+      expect(host.current_stream).to eq 'room objs'
+      host.dispatch_tag('</component>', String.new)
+      expect(host.current_stream).to eq 'speech'
+    end
+
+    it 'never underflows: extra popStreams stay at the main window' do
+      host.dispatch_tag('<pushStream id="thoughts" />', String.new)
+      3.times { host.dispatch_tag('<popStream/>', String.new) }
+      expect(host.current_stream).to be_nil
+      expect { host.dispatch_tag('<popStream/>', String.new) }.not_to raise_error
+      expect(host.current_stream).to be_nil
     end
   end
 
