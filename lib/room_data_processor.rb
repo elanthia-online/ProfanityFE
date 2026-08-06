@@ -60,7 +60,12 @@ module RoomDataProcessor
       room_title = parse_room_subtitle(text)
       @state.room_title = room_title unless room_title.empty?
       if @wm.room['room']
-        @room_pending_title = text.sub(/^\[/, '').sub(/\]\s*\(/, ' (').strip
+        # Strip the title's brackets so RoomWindow#render can re-add them exactly once.
+        # The closing bracket takes two forms: "[Room] (230008)" (RealID appended, the
+        # bracket precedes the "(") and "[Room - 2071]" or plain "[Room]" (no RealID, the
+        # bracket is trailing). Handle the trailing case too - dropping only the "] (" form
+        # left the trailing "]" behind, which render then doubled into "[Room - 2071]]".
+        @room_pending_title = text.sub(/^\[/, '').sub(/\]\s*\(/, ' (').sub(/\]\s*\z/, '').strip
         @room_pending_title_colors = line_colors.dup
         room_data_captured = true
       end
