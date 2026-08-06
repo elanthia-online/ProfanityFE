@@ -14,8 +14,7 @@ require_relative 'link_extractor'
 # - @wm, @state, @cmd_buffer, @xml_escapes, @event_bus
 # - @line_colors, @open_monsterbold, @open_preset, @open_style,
 #   @open_color, @open_link
-# - @current_stream, @stream_stack, @combat_next_line, @need_update,
-#   @need_room_render
+# - @current_stream, @combat_next_line, @need_update, @need_room_render
 # - @room_capture_mode
 # - handle_game_text, new_stun, fix_layout_number, parse_room_subtitle,
 #   add_prompt
@@ -348,17 +347,11 @@ module TagHandlers
   end
 
   # Handle <pushStream>, <component>, or <compDef> stream-opening tag.
-  #
-  # Flushes accumulated text, suspends the stream that was active by pushing
-  # it onto {StreamStack}, and switches to the newly opened stream. Suspending
-  # the previous stream (rather than discarding it) lets {#handle_stream_close}
-  # restore it when this nested stream closes, so nested/asynchronously-injected
-  # streams do not strand the enclosing stream's text in the wrong window.
+  # Flushes accumulated text and switches the current stream.
   def handle_stream_open(xml, text_buffer)
     return unless (m = xml.match(%r{id=(?<q>"|')(?<id>.*?)\k<q>}))
 
     flush_text_buffer(text_buffer)
-    @stream_stack.push(@current_stream)
     new_stream = m[:id]
     if (exp_match = new_stream.match(/^exp (?<skill>\w+\s?\w+?)/))
       @current_stream = 'exp'
@@ -378,12 +371,7 @@ module TagHandlers
   end
 
   # Handle <popStream.../>, </component>, or </compDef> stream-closing tag.
-  #
-  # Flushes accumulated text and resumes the enclosing stream that was
-  # suspended by the matching {#handle_stream_open} (via {StreamStack#pop}),
-  # falling back to the main window (+nil+) when nothing is suspended. This
-  # replaces the previous unconditional reset to the main window, which caused
-  # a nested or asynchronously-injected pop to close the wrong stream.
+  # Flushes accumulated text and clears the current stream.
   def handle_stream_close(_xml, text_buffer)
     if text_buffer.empty? && @current_stream&.start_with?('room')
       # Empty room components (e.g., <component id='room players'></component>)
@@ -400,7 +388,7 @@ module TagHandlers
       flush_text_buffer(text_buffer)
     end
     @event_bus.emit(:exp_delete_skill) if @current_stream == 'exp'
-    @current_stream = @stream_stack.pop
+    @current_stream = nil
   end
 
   # Handle <clearStream id="percWindow"/> tag.
