@@ -11,6 +11,7 @@ require_relative 'xml_tokenizer'
 require_relative 'tag_handlers'
 require_relative 'styled_text'
 require_relative 'event_bus'
+require_relative 'stream_stack'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -84,8 +85,12 @@ class GameTextProcessor
     @open_color = []
     @open_link = []
 
-    # Stream and display state
+    # Stream and display state.
+    # @current_stream is the active stream (nil routes to the main window);
+    # @stream_stack holds the enclosing streams suspended while nested streams
+    # are open so a popStream restores the parent instead of clearing to main.
     @current_stream = nil
+    @stream_stack = StreamStack.new
     @bold_next_line = false
     @emptycount = 0
     @combat_next_line = nil
