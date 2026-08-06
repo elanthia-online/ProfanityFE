@@ -427,6 +427,20 @@ class Application
 
   # ---- Key action setup ----
 
+  # Register every named key action as a {Proc} in {#key_action}.
+  #
+  # Each cursor/edit action delegates to {CommandBuffer}, which only stages
+  # its changes to the curses virtual screen via +noutrefresh+. The physical
+  # terminal is not repainted until +doupdate+ is called, so *every* action
+  # that mutates the visible command line must end with
+  # {CursesRenderer.doupdate}. Omitting it leaves the edit invisible until
+  # the next keystroke happens to trigger a flush -- the class of bug that
+  # previously affected +cursor_backspace_word+, +cursor_delete_word+, and
+  # +cursor_yank+.
+  #
+  # @return [void]
+  # @see CommandBuffer#backspace_word
+  # @see CursesRenderer.doupdate
   def setup_key_actions
     @key_action['resize'] = proc {
       @window_mgr.resize(@cmd_buffer)
@@ -441,11 +455,11 @@ class Application
     @key_action['cursor_end']            = proc { @cmd_buffer.cursor_end; CursesRenderer.doupdate }
     @key_action['cursor_backspace']      = proc { @cmd_buffer.backspace; CursesRenderer.doupdate }
     @key_action['cursor_delete']         = proc { @cmd_buffer.delete_char; CursesRenderer.doupdate }
-    @key_action['cursor_backspace_word'] = proc { @cmd_buffer.backspace_word }
-    @key_action['cursor_delete_word']    = proc { @cmd_buffer.delete_word }
+    @key_action['cursor_backspace_word'] = proc { @cmd_buffer.backspace_word; CursesRenderer.doupdate }
+    @key_action['cursor_delete_word']    = proc { @cmd_buffer.delete_word; CursesRenderer.doupdate }
     @key_action['cursor_kill_forward']   = proc { @cmd_buffer.kill_forward; CursesRenderer.doupdate }
     @key_action['cursor_kill_line']      = proc { @cmd_buffer.kill_line; CursesRenderer.doupdate }
-    @key_action['cursor_yank']           = proc { @cmd_buffer.yank }
+    @key_action['cursor_yank']           = proc { @cmd_buffer.yank; CursesRenderer.doupdate }
 
     @key_action['switch_current_window'] = proc {
       SCROLL_WINDOW[0]&.set_active(false)

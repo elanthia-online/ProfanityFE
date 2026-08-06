@@ -318,6 +318,83 @@ RSpec.describe Application do
     end
   end
 
+  # ---- Regression: editing key actions must flush the physical screen ----
+  #
+  # CommandBuffer edits only stage changes to the curses virtual screen
+  # (via noutrefresh). Nothing appears on the terminal until doupdate is
+  # called. Every key action that mutates the visible command line must
+  # therefore end with CursesRenderer.doupdate, otherwise the edit stays
+  # invisible until the next keystroke happens to trigger a flush.
+  #
+  # BUG FOUND (fixed here): cursor_backspace_word, cursor_delete_word, and
+  # cursor_yank omitted the doupdate call, so word-delete and yank appeared
+  # to "do nothing" until the user typed the next character.
+  describe 'editing key actions flush with doupdate' do
+    before do
+      app.cmd_buffer.window = Curses::Window.new(1, 80, 0, 0)
+    end
+
+    # Every action listed here mutates the visible line and MUST repaint.
+    editing_actions = %w[
+      cursor_left cursor_right cursor_word_left cursor_word_right
+      cursor_home cursor_end cursor_backspace cursor_delete
+      cursor_backspace_word cursor_delete_word cursor_kill_forward
+      cursor_kill_line cursor_yank
+    ]
+
+    editing_actions.each do |action|
+      it "#{action} calls CursesRenderer.doupdate" do
+        expect(CursesRenderer).to receive(:doupdate)
+        app.key_action[action].call
+      end
+    end
+
+    # ---- The three previously-broken actions, tested behaviorally ----
+
+    it 'cursor_backspace_word deletes the previous word and repaints' do
+      app.do_macro('hello world')
+      expect(CursesRenderer).to receive(:doupdate)
+      app.key_action['cursor_backspace_word'].call
+      expect(app.cmd_buffer.text).to eq 'hello '
+    end
+
+    it 'cursor_delete_word deletes the next word and repaints' do
+      app.do_macro('hello world')
+      app.cmd_buffer.cursor_home
+      expect(CursesRenderer).to receive(:doupdate)
+      app.key_action['cursor_delete_word'].call
+      expect(app.cmd_buffer.text).to eq ' world'
+    end
+
+    it 'cursor_yank restores killed text and repaints' do
+      app.do_macro('hello')
+      app.key_action['cursor_kill_line'].call # fills the kill ring, clears line
+      expect(app.cmd_buffer.text).to eq ''
+      expect(CursesRenderer).to receive(:doupdate)
+      app.key_action['cursor_yank'].call
+      expect(app.cmd_buffer.text).to eq 'hello'
+    end
+
+    # ---- Adversarial: no-op edits must still flush ----
+    #
+    # A word-delete on an empty buffer changes nothing, but the action must
+    # not silently skip doupdate -- the invariant is "always repaint after an
+    # edit action", regardless of whether the buffer actually changed.
+
+    it 'cursor_backspace_word on an empty buffer still calls doupdate' do
+      expect(app.cmd_buffer.text).to eq ''
+      expect(CursesRenderer).to receive(:doupdate)
+      app.key_action['cursor_backspace_word'].call
+    end
+
+    it 'cursor_yank with an empty kill ring still calls doupdate' do
+      expect(app.cmd_buffer.text).to eq ''
+      expect(CursesRenderer).to receive(:doupdate)
+      app.key_action['cursor_yank'].call
+      expect(app.cmd_buffer.text).to eq ''
+    end
+  end
+
   # ---- Feedback colors ----
 
   describe 'feedback_colors' do
