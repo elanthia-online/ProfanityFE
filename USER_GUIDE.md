@@ -1749,7 +1749,8 @@ a different window, name its stream:
 The stream must have a window in your layout (for example a text window with
 `value='ooc'`), otherwise the notes are dropped. Script names in STATUS lines
 may contain letters, digits, `_`, `-`, and `/`, and status text starting with a
-digit is ignored. The setting is refreshed on settings reload.
+digit is ignored. The setting is refreshed on settings reload; removing the
+element and reloading restores the default (`familiar`).
 
 ### Perc-Transforms
 
