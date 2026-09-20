@@ -17,6 +17,10 @@
 # @example Reset only dynamic settings (e.g., during hot-reload)
 #   CONFIG.reset_dynamic!
 class Config
+  # Stream that notifier notes (script STATUS, almanac, empath, etc.) go to
+  # unless <notification-stream> overrides it.
+  DEFAULT_NOTIFICATION_STREAM = 'familiar'
+
   # @return [Hash<Regexp, Array>] highlight patterns mapping regex => [fg, bg, ul]
   attr_reader :highlight
 
@@ -35,6 +39,10 @@ class Config
   # @return [Array<Array(Regexp, String)>] percWindow text transformations [pattern, replacement]
   attr_reader :perc_transforms
 
+  # @return [String] stream that notifier notes are routed to
+  #   (set with <notification-stream> in the settings XML)
+  attr_accessor :notification_stream
+
   # @return [Mutex] synchronization lock for HIGHLIGHT reads during settings reload
   attr_reader :lock
 
@@ -45,6 +53,7 @@ class Config
     @scroll_window = []
     @room_objects = []
     @perc_transforms = []
+    @notification_stream = DEFAULT_NOTIFICATION_STREAM
     @lock = Mutex.new
   end
 
@@ -59,17 +68,19 @@ class Config
       @scroll_window.clear
       @room_objects.clear
       @perc_transforms.clear
+      @notification_stream = DEFAULT_NOTIFICATION_STREAM
     end
   end
 
   # Clear only settings that are refreshed during hot-reload
-  # (highlights, perc-transforms). Presets and layouts are preserved.
+  # (highlights, perc-transforms, notification-stream). Presets and layouts are preserved.
   #
   # @return [void]
   def reset_dynamic!
     @lock.synchronize do
       @highlight.clear
       @perc_transforms.clear
+      @notification_stream = DEFAULT_NOTIFICATION_STREAM
     end
   end
 end

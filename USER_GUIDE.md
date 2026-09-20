@@ -1735,6 +1735,22 @@ on text and tabbed windows.
   lookup table. Perc-transforms from the settings file are also applied.
 - **combat**: Combat gag patterns are checked before routing.
 
+### Notification Stream
+
+Short notes extracted from game text (script `***STATUS***` lines, almanac
+discoveries, empath assessments, scroll spells, tarantula and focus messages,
+auctions, and similar) go to the `familiar` stream by default. To send them to
+a different window, name its stream:
+
+```xml
+<notification-stream>ooc</notification-stream>
+```
+
+The stream must have a window in your layout (for example a text window with
+`value='ooc'`), otherwise the notes are dropped. Script names in STATUS lines
+may contain letters, digits, `_`, `-`, and `/`, and status text starting with a
+digit is ignored. The setting is refreshed on settings reload.
+
 ### Perc-Transforms
 
 You can define text transformations for the percWindow stream to further

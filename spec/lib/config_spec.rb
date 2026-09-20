@@ -85,6 +85,21 @@ RSpec.describe Config do
     end
   end
 
+  describe '#notification_stream' do
+    it 'defaults to familiar' do
+      expect(config.notification_stream).to eq 'familiar'
+    end
+
+    it 'is restored by reset! and reset_dynamic!' do
+      config.notification_stream = 'ooc'
+      config.reset_dynamic!
+      expect(config.notification_stream).to eq 'familiar'
+      config.notification_stream = 'ooc'
+      config.reset!
+      expect(config.notification_stream).to eq 'familiar'
+    end
+  end
+
   describe '#reset_dynamic!' do
     before do
       config.highlight[/test/] = ['ff0000', nil, nil]

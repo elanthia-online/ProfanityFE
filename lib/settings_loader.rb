@@ -95,6 +95,9 @@ module SettingsLoader
             GagPatterns.add_multiline_gag(start_pattern, e.attributes['end'])
           end
 
+        when 'notification-stream'
+          CONFIG.notification_stream = e.text.strip if e.text && !e.text.strip.empty?
+
         when 'perc-transform'
           if e.attributes['pattern']
             begin

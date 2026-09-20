@@ -2,7 +2,7 @@
 
 =begin
 Familiar window notification extraction.
-Detects notable game events and sends summary notifications to the familiar stream window.
+Detects notable game events and sends summary notifications to the configured notification stream (familiar by default).
 =end
 
 # Extracts notable events from game text for display in the familiar window.
@@ -18,6 +18,11 @@ Detects notable game events and sends summary notifications to the familiar stre
 #
 # @api private
 module FamiliarNotifier
+  # Script status line, e.g. "[combat-trainer: ***STATUS*** Killing a rat]".
+  # Script names may contain hyphens and a "custom/" style path prefix.
+  # Lines whose status starts with a digit are ignored (countdown chatter).
+  STATUS_PATTERN = %r{^\[[\w\-/]+: \*\*\*STATUS\*\*\*\s(?!\d+).*}
+
   # Check text for notable events and push to the familiar window if found.
   #
   # @param text [String] game text to check
@@ -37,7 +42,7 @@ module FamiliarNotifier
              else
                []
              end
-    @event_bus.emit(:stream_text, stream: 'familiar', text: note, colors: colors)
+    @event_bus.emit(:stream_text, stream: CONFIG.notification_stream, text: note, colors: colors)
     # Preserve existing behavior: clear line colors so the main text
     # display doesn't inherit the notification styling
     @line_colors = []
@@ -51,7 +56,7 @@ module FamiliarNotifier
   # @param text [String] game text
   # @return [String, nil] notification text or nil
   def extract_notification(text)
-    if text =~ %r{^\[(?:custom/)?\w+: \*\*\*STATUS\*\*\*\s(?!\d+).*}
+    if text =~ STATUS_PATTERN
       text.gsub(%r{(\[|\]|\*\*\*STATUS\*\*\* |EXECUTE |custom/)}, '')
     elsif text =~ /Auctioneer Endlar bangs his gavel and yells, "Bidding is now open/
       text

@@ -142,6 +142,16 @@ RSpec.describe FamiliarNotifier do
       it { is_expected.not_to be_nil }
     end
 
+    context 'with hyphenated script name' do
+      let(:text) { '[combat-trainer: ***STATUS*** Killing a rat]' }
+      it { is_expected.to eq 'combat-trainer: Killing a rat' }
+    end
+
+    context 'with hyphenated custom/ script name' do
+      let(:text) { '[custom/my-script: ***STATUS*** waiting]' }
+      it { is_expected.to eq 'my-script: waiting' }
+    end
+
     context 'with very long text' do
       let(:text) { 'You sense nothing wrong with ' + 'A' * 1000 }
       it { is_expected.to include('is all healthy.') }
@@ -154,6 +164,20 @@ RSpec.describe FamiliarNotifier do
       host.check_familiar_notification('You sense nothing wrong with Mahtra')
       expect(events.last[:stream]).to eq 'familiar'
       expect(events.last[:text]).to eq 'Mahtra is all healthy.'
+    end
+
+    it 'routes notifications to the configured notification stream' do
+      CONFIG.notification_stream = 'ooc'
+      events = collect_stream_events
+      host.check_familiar_notification('[combat-trainer: ***STATUS*** Killing a rat]')
+      host.check_familiar_notification("You believe you've learned something significant about Foraging!")
+      expect(events.map { |e| e[:stream] }).to eq %w[ooc ooc]
+    end
+
+    it 'routes notifications to familiar by default' do
+      events = collect_stream_events
+      host.check_familiar_notification('[hunter: ***STATUS*** waiting]')
+      expect(events.last[:stream]).to eq 'familiar'
     end
 
     it 'sets need_update when notification sent' do
