@@ -64,6 +64,9 @@ module SettingsLoader
     SETTINGS_LOCK.synchronize do
       HIGHLIGHT.clear
       PERC_TRANSFORMS.clear
+      # Restore the default so a <notification-stream> removed from the XML
+      # doesn't linger across a reload; the element below re-applies it.
+      CONFIG.notification_stream = Config::DEFAULT_NOTIFICATION_STREAM
       GagPatterns.clear_custom if reload
 
       xml_root = load_cached_xml(filename)
@@ -94,6 +97,9 @@ module SettingsLoader
           if start_pattern && !start_pattern.strip.empty?
             GagPatterns.add_multiline_gag(start_pattern, e.attributes['end'])
           end
+
+        when 'notification-stream'
+          CONFIG.notification_stream = e.text.strip if e.text && !e.text.strip.empty?
 
         when 'perc-transform'
           if e.attributes['pattern']
