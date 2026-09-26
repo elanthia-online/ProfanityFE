@@ -108,6 +108,19 @@ module GagPatterns
       @multiline_gags.find { |gag| line.match?(gag[:start]) }
     end
 
+    # Find the general gag pattern that matches the given line.
+    #
+    # The union regexp is checked first as a fast reject so the common
+    # no-match case costs a single match instead of one per pattern.
+    #
+    # @param line [String] raw server line to test
+    # @return [Regexp, nil] the first matching pattern, or nil
+    def match_general(line)
+      return nil unless line.match?(@general_regexp)
+
+      @general_patterns.find { |pattern| line.match?(pattern) }
+    end
+
     # Reset to default patterns, discarding any custom patterns.
     # Called during settings reload to re-apply patterns from XML.
     #
