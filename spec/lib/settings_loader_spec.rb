@@ -60,6 +60,28 @@ RSpec.describe SettingsLoader do
     end
   end
 
+  describe 'file encoding' do
+    # Under LANG=C / POSIX, Ruby's default external encoding is US-ASCII.
+    def with_default_external(encoding)
+      original = Encoding.default_external
+      verbose = $VERBOSE
+      $VERBOSE = nil
+      Encoding.default_external = encoding
+      yield
+    ensure
+      Encoding.default_external = original
+      $VERBOSE = verbose
+    end
+
+    it 'loads a settings file containing non-ASCII text under a C locale' do
+      path = write_settings(@dir, '<!-- highlights — for goblins --><notification-stream>ooc</notification-stream>')
+
+      with_default_external(Encoding::US_ASCII) { load_settings(path) }
+
+      expect(CONFIG.notification_stream).to eq 'ooc'
+    end
+  end
+
   describe 'settings cache' do
     it 'picks up an edit saved within the same filesystem clock tick as the cache' do
       path = write_settings(@dir, '<notification-stream>ooc</notification-stream>')
