@@ -24,6 +24,9 @@ class SharedState
   # @return [Boolean] whether room data is shown only in the room window (not echoed to story)
   attr_accessor :room_window_only
 
+  # @return [Boolean] whether every gagged line is written to the log in full (--log-gags)
+  attr_accessor :log_gags
+
   def initialize
     @mutex = Mutex.new
     @need_prompt = false
@@ -35,6 +38,7 @@ class SharedState
     @char_name = nil
     @no_status = false
     @room_window_only = false
+    @log_gags = false
     @server_time_offset = 0.0
     @last_title = nil
     @title_dirty = false
