@@ -4,6 +4,7 @@
 # #slice, #lstrip, #wrap (word-wrap with run splitting), #<<, #add_run,
 # and #dup_with_runs. Includes adversarial edge cases for wrapping.
 
+require 'timeout'
 require_relative '../../lib/styled_text'
 
 RSpec.describe StyledText do
@@ -213,6 +214,20 @@ RSpec.describe StyledText do
   end
 
   describe '#wrap' do
+    # A one- or two-column window asks for width 0 (maxx - 1); a regression
+    # would loop forever, so fail fast instead.
+    def wrap_within_a_second(styled, width)
+      Timeout.timeout(1) { styled.wrap(width, indent: false).map(&:text) }
+    end
+
+    it 'wraps one character per line when asked for width 0' do
+      expect(wrap_within_a_second(described_class.new('abc'), 0)).to eq %w[a b c]
+    end
+
+    it 'treats a negative width like width 1' do
+      expect(wrap_within_a_second(described_class.new('abc'), -1)).to eq %w[a b c]
+    end
+
     it 'returns single line when text fits within width' do
       st = described_class.new('Hello', [{ start: 0, end: 5, fg: 'ff0000' }])
       lines = st.wrap(80)
