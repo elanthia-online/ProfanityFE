@@ -298,12 +298,7 @@ class WindowManager
         window.add_string(' *'.dup)
       else
         # Default: open URL in system browser
-        quoted = "\"#{data[:url]}\""
-        case RbConfig::CONFIG['host_os']
-        when /darwin/       then system("open #{quoted} >/dev/null 2>&1 &")
-        when /linux|bsd/    then system("xdg-open #{quoted} >/dev/null 2>&1 &")
-        when /mswin|mingw|cygwin/ then system("start #{quoted} >/dev/null 2>&1 &")
-        end
+        open_in_browser(data[:url])
       end
     end
 
@@ -485,6 +480,27 @@ class WindowManager
   end
 
   private
+
+  # Open a URL in the system browser without blocking the caller.
+  #
+  # The command is spawned as an argument list, so the URL is never parsed
+  # by a shell: characters such as +$(...)+ or backticks in a server-supplied
+  # URL stay literal.
+  #
+  # @param url [String] the URL to open
+  # @return [void]
+  def open_in_browser(url)
+    command = case RbConfig::CONFIG['host_os']
+              when /darwin/ then ['open', url]
+              when /linux|bsd/ then ['xdg-open', url]
+              when /mswin|mingw|cygwin/ then ['rundll32', 'url.dll,FileProtocolHandler', url]
+              end
+    return unless command
+
+    Process.detach(Process.spawn(*command, out: File::NULL, err: File::NULL))
+  rescue SystemCallError => e
+    ProfanityLog.write('launch_url', "could not open #{url}: #{e.message}")
+  end
 
   # Safely resize and move a window, clamping dimensions to valid ranges.
   # ncurses segfaults on negative/zero dimensions or out-of-bounds positions.

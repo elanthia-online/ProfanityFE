@@ -414,11 +414,36 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
       expect(texts).to include(' * LaunchURL: https://www.play.net/path')
     end
 
-    it 'does not display URL in main window when remote is false' do
-      allow_any_instance_of(Object).to receive(:system)
-      event_bus.emit(:launch_url, url: 'https://www.play.net/path', remote: false)
-      texts = main_window.calls.map { |c| c[:text] }
-      expect(texts).not_to include(' * LaunchURL: https://www.play.net/path')
+    context 'when remote is false' do
+      before do
+        stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin'))
+        allow(Process).to receive(:spawn).and_return(4242)
+        allow(Process).to receive(:detach)
+      end
+
+      it 'opens the URL in the browser instead of displaying it' do
+        event_bus.emit(:launch_url, url: 'https://www.play.net/path', remote: false)
+
+        expect(Process).to have_received(:spawn).with('open', 'https://www.play.net/path', out: File::NULL, err: File::NULL)
+        expect(main_window.calls.map { |c| c[:text] }).not_to include(' * LaunchURL: https://www.play.net/path')
+      end
+
+      it 'passes shell metacharacters in the URL through as one literal argument' do
+        url = 'https://www.play.net/x$(touch /tmp/pwned)`id`'
+
+        event_bus.emit(:launch_url, url: url, remote: false)
+
+        expect(Process).to have_received(:spawn).with('open', url, out: File::NULL, err: File::NULL)
+      end
+
+      it 'logs instead of raising when the browser command is missing' do
+        allow(Process).to receive(:spawn).and_raise(Errno::ENOENT, 'open')
+        allow(ProfanityLog).to receive(:write)
+
+        event_bus.emit(:launch_url, url: 'https://www.play.net/path', remote: false)
+
+        expect(ProfanityLog).to have_received(:write).with('launch_url', a_string_including('could not open'))
+      end
     end
 
     it 'is a no-op when no main window exists' do
