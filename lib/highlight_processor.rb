@@ -26,7 +26,16 @@ module HighlightProcessor
     SETTINGS_LOCK.synchronize do
       HIGHLIGHT.each_pair do |regex, colors|
         pos = 0
-        while (match_data = text.match(regex, pos))
+        # Bound pos explicitly: String#match with a start past the end still
+        # returns a zero-width match at the end of the string.
+        while pos <= text.length && (match_data = text.match(regex, pos))
+          if match_data.end(0) == match_data.begin(0)
+            # A zero-width match (e.g. /\b/, /x*/ or an empty pattern) colors
+            # nothing; step past it so the scan always advances.
+            pos = match_data.end(0) + 1
+            next
+          end
+
           h = {
             start: match_data.begin(0),
             end: match_data.end(0),

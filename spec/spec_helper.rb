@@ -199,31 +199,9 @@ module ProfanityLog
   def self.write(*_args, **_kwargs) = nil
 end
 
-module HighlightProcessor
-  module_function
-
-  def apply_highlights(text, line_colors = [])
-    SETTINGS_LOCK.synchronize do
-      HIGHLIGHT.each_pair do |regex, colors|
-        pos = 0
-        while (match_data = text.match(regex, pos))
-          h = {
-            start: match_data.begin(0),
-            end: match_data.end(0),
-            fg: colors[0],
-            bg: colors[1],
-            ul: colors[2]
-          }
-          line_colors.push(h)
-          pos = match_data.end(0)
-        end
-      end
-    end
-    line_colors
-  end
-
-  def render_colored_text(*) = nil
-end
+# The real HighlightProcessor (needs only SETTINGS_LOCK, HIGHLIGHT and
+# get_color_pair_id, defined above) so specs exercise production matching.
+require_relative '../lib/highlight_processor'
 
 # Stub window class hierarchies
 class BaseWindow < Curses::Window
