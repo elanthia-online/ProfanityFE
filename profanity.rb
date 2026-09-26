@@ -226,6 +226,7 @@ cli_options = {
   speech_ts: false,
   room_window_only: false,
   remote_url: false,
+  log_gags: false,
 }
 
 OptionParser.new do |opts|
@@ -247,6 +248,7 @@ OptionParser.new do |opts|
   opts.on('--speech-ts', 'Add timestamps to speech, familiar, and thought windows') { cli_options[:speech_ts] = true }
   opts.on('--room-window-only', 'Do not echo room data to the story window') { cli_options[:room_window_only] = true }
   opts.on('--remote-url', 'Display LaunchURLs on screen instead of opening browser') { cli_options[:remote_url] = true }
+  opts.on('--log-gags', 'Log every gagged line in full (diagnostics)') { cli_options[:log_gags] = true }
   opts.on('--log-file=PATH', 'Log file path (default: profanity.log)') { |v| cli_options[:log_file] = v }
   opts.on('--log-dir=DIR', 'Log directory (default: current directory)') { |v| cli_options[:log_dir] = v }
   opts.on('--settings-file=FILE', 'Settings XML file path (overrides --char/--config lookup)') { |v| cli_options[:settings_file] = v }

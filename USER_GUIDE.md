@@ -73,6 +73,7 @@ ProfanityFE connects to `127.0.0.1` on the specified port.
 | `--speech-ts` | off | Add timestamps to speech, familiar, and thought windows |
 | `--room-window-only` | off | Do not echo room data to the story window (show only in room window) |
 | `--remote-url` | off | Display LaunchURLs as text instead of opening browser (for SSH/remote sessions) |
+| `--log-gags` | off | Write every gagged line to the log in full (see [Gag Patterns](#6-gag-patterns)) |
 | `--default-color-id=<id>` | `7` | Curses color ID for the default foreground color |
 | `--default-background-color-id=<id>` | `0` | Curses color ID for the default background color |
 | `--custom-colors=<on\|off\|yes\|no>` | auto-detected | Force custom color mode on or off |
@@ -1297,6 +1298,22 @@ a mistyped `end` pattern can never swallow the stream indefinitely.
 <!-- Hide a block bounded by explicit start and end lines -->
 <multiline_gag start="^You begin to read the tattered scroll\." end="^The scroll crumbles to dust\."/>
 ```
+
+### Diagnosing Gags
+
+General and multi-line gags match the raw server line, XML tags included. A
+gagged line's text is hidden, but its stream tags (`<pushStream>`,
+`<popStream/>`, `<clearStream>`) are still processed, so a gag can never leave
+text routed to the wrong window.
+
+Start Profanity with `--log-gags` to write every gagged line to the log file:
+
+```
+[gag] general /^(?:<.*>)?(?:The|A|An) (?:storm bull|ice archon).../ "<popStream/>A storm bull charges in!"
+```
+
+Each entry shows the gag type, the start of the pattern that matched, and the
+full raw line. Lines that carried a stream tag are marked `STREAM-TAG`.
 
 ### Notes
 

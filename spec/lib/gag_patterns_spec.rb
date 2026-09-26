@@ -196,6 +196,27 @@ RSpec.describe GagPatterns do
     end
   end
 
+  describe '.match_general' do
+    it 'returns the specific pattern that matched, not the union' do
+      described_class.add_general_pattern('^A storm bull')
+      described_class.add_general_pattern('You also see .* moth')
+
+      expect(described_class.match_general('You also see a large moth')).to eq(/You also see .* moth/)
+    end
+
+    it 'returns nil when no general gag matches' do
+      described_class.add_general_pattern('moth')
+
+      expect(described_class.match_general('A goblin arrives.')).to be_nil
+    end
+
+    it 'ignores combat gags' do
+      described_class.add_combat_pattern('swings')
+
+      expect(described_class.match_general('A goblin swings')).to be_nil
+    end
+  end
+
   describe '.load_defaults with multi-line gags' do
     it 'clears multi-line gags added before load_defaults' do
       described_class.add_multiline_gag('start')

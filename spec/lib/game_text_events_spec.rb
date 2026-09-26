@@ -29,9 +29,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
   end
   let(:state) do
     Struct.new(:need_prompt, :prompt_text, :skip_server_time_offset,
-               :room_title, :blue_links, :room_window_only, :server_time_offset) do
+               :room_title, :blue_links, :room_window_only, :server_time_offset, :log_gags) do
       def update_terminal_title = nil
-    end.new(false, '>', true, '', false, false, 0.0)
+    end.new(false, '>', true, '', false, false, 0.0, false)
   end
   let(:cmd_buffer) { Struct.new(:window).new(nil) }
   let(:xml_escapes) { { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' } }
