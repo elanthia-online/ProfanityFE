@@ -638,29 +638,7 @@ class Application
           next
         end
 
-        if ch == Curses::KEY_MOUSE
-          handle_mouse_event
-          next
-        end
-
-        if key_combo
-          if key_combo[ch].instance_of?(Proc)
-            key_combo[ch].call
-            key_combo = nil
-          elsif key_combo[ch].instance_of?(Hash)
-            key_combo = key_combo[ch]
-          else
-            key_combo = nil
-          end
-        elsif @key_binding[ch].instance_of?(Proc)
-          @key_binding[ch].call
-        elsif @key_binding[ch].instance_of?(Hash)
-          key_combo = @key_binding[ch]
-        elsif ch.instance_of?(String)
-          @cmd_buffer.put_ch(ch)
-          @cmd_buffer.refresh
-          CursesRenderer.doupdate
-        end
+        key_combo = handle_key(ch, key_combo)
       end # CursesRenderer.synchronize
     end
   rescue Interrupt
@@ -677,6 +655,47 @@ class Application
       # ignore
     end
     Curses.close_screen
+  end
+
+  # Dispatch one key press: a mouse event, a step through a key combo, a
+  # bound key action, or a character typed into the command line.
+  #
+  # An error raised by the action is logged and the key dropped, so one
+  # broken key action or mouse handler cannot end the session. Connection
+  # errors propagate to {#input_loop}, which ends it.
+  #
+  # @param ch [Integer, String] the key code or character from getch
+  # @param key_combo [Hash, nil] the pending key-combo map from earlier keys
+  # @return [Hash, nil] the key-combo map to use for the next key
+  def handle_key(ch, key_combo)
+    if ch == Curses::KEY_MOUSE
+      handle_mouse_event
+      return key_combo
+    end
+
+    if key_combo
+      if key_combo[ch].instance_of?(Proc)
+        key_combo[ch].call
+        nil
+      elsif key_combo[ch].instance_of?(Hash)
+        key_combo[ch]
+      end
+    elsif @key_binding[ch].instance_of?(Proc)
+      @key_binding[ch].call
+      nil
+    elsif @key_binding[ch].instance_of?(Hash)
+      @key_binding[ch]
+    elsif ch.instance_of?(String)
+      @cmd_buffer.put_ch(ch)
+      @cmd_buffer.refresh
+      CursesRenderer.doupdate
+      nil
+    end
+  rescue IOError, SystemCallError
+    raise
+  rescue StandardError => e
+    ProfanityLog.write('main', "input handler failed: #{e.message}", backtrace: e.backtrace)
+    nil
   end
 
   # ---- Mouse event handling ----

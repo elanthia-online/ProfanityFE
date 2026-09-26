@@ -35,6 +35,18 @@ class SinkWindow
   # @return [void]
   def redraw; end
 
+  # No-op: stands in for {ExpWindow#set_current} when a sink replaces the exp window.
+  # @return [void]
+  def set_current(*); end
+
+  # No-op: stands in for {ExpWindow#delete_skill} when a sink replaces the exp window.
+  # @return [void]
+  def delete_skill(*); end
+
+  # No-op: stands in for {PercWindow#clear_spells} when a sink replaces the spell window.
+  # @return [void]
+  def clear_spells; end
+
   # Always false — sinks have no buffer content.
   #
   # @param _prompt_text [String] ignored

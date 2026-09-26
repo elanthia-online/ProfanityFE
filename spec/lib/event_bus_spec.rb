@@ -153,11 +153,10 @@ RSpec.describe EventBus do
         bus.on(:test) { |_| calls << :new }
       end
       bus.emit(:test)
+      expect(calls).to eq %i[original]
 
-      # The new subscriber was added during iteration but Array#each
-      # sees it because it was appended. This is Ruby's Array#each
-      # behavior — we document it rather than prevent it.
-      expect(calls).to include(:original)
+      bus.emit(:test)
+      expect(calls).to eq %i[original original new]
     end
   end
 
@@ -167,6 +166,17 @@ RSpec.describe EventBus do
       bus.on(:test, &handler)
 
       expect { bus.emit(:test) }.not_to raise_error
+    end
+
+    it 'still calls the next handler when an earlier one removes itself' do
+      calls = []
+      first = proc { |_| calls << :first; bus.off(:test, first) }
+      bus.on(:test, &first)
+      bus.on(:test) { |_| calls << :second }
+
+      bus.emit(:test)
+
+      expect(calls).to eq %i[first second]
     end
   end
 

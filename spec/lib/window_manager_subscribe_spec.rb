@@ -7,6 +7,7 @@
 
 require_relative '../../lib/event_bus'
 require_relative '../../lib/window_manager'
+require_relative '../../lib/windows/sink_window' # real SinkWindow (spec_helper only declares the class)
 
 # Spy objects that record method calls for verification
 
@@ -405,6 +406,22 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
   end
 
   # ---- Special events ----
+
+  describe 'a sink window standing in for the exp and spell windows' do
+    # <window class='sink' value='exp,percWindow'/>
+    before do
+      sink = SinkWindow.new
+      wm.instance_variable_set(:@stream, { 'main' => main_window, 'exp' => sink, 'percWindow' => sink })
+    end
+
+    it 'silently absorbs exp and spell window events' do
+      expect do
+        event_bus.emit(:exp_set_current, skill: 'Athletics')
+        event_bus.emit(:exp_delete_skill)
+        event_bus.emit(:clear_spells)
+      end.not_to raise_error
+    end
+  end
 
   describe ':launch_url' do
     it 'displays URL in main window when remote is true' do
