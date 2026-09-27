@@ -52,9 +52,12 @@ RSpec.describe LinkExtractor do
       expect(described_class.extract_cmd('')).to be_nil
     end
 
-    it 'does not match cmd with double quotes (DR uses single quotes)' do
-      # DR protocol uses single quotes for cmd: cmd='...'
-      expect(described_class.extract_cmd('<d cmd="go door">')).to be_nil
+    it 'extracts cmd in double quotes, as DR sends in FLAG output' do
+      expect(described_class.extract_cmd('<d cmd="flag LogOn on">')).to eq 'flag LogOn on'
+    end
+
+    it 'keeps an apostrophe inside a double-quoted cmd' do
+      expect(described_class.extract_cmd(%(<d cmd="look Bob's sword">))).to eq "look Bob's sword"
     end
 
     it 'handles cmd with apostrophe in value — stops at first single quote' do
