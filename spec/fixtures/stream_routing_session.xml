@@ -1,0 +1,75 @@
+<clearStream id="percWindow"/>
+<pushStream id="percWindow"/>Regenerate  (Indefinite)
+<popStream/><prompt time="1787778955">&gt;</prompt>
+Fidon drums his fingers on his bucket rhythmically.
+<prompt time="1787778955">&gt;</prompt>
+Fidon drums his fingers on his bucket rhythmically.
+<prompt time="1787778955">&gt;</prompt>
+<prompt time="1787778962">&gt;</prompt>
+Throve puts his almanac in his scavenger's pack.
+<prompt time="1787778962">&gt;</prompt>
+Chieftain Jazriel just arrived.
+<component id='room players'>Also here: Chieftain Jazriel, Daydreamer Throve, Traveler Fidon, Emerald Knight Mahtra and Quilsilgas.</component>
+<prompt time="1787778963">&gt;</prompt>
+<output class="mono"/>
+Your body feels at full strength. (100%)
+Your spirit feels full of life. (100%)
+Fidon rummages through a scuffed traveler's pack but it's clear he hasn't a clue if what he is looking for is there.
+<prompt time="1787778964">&gt;</prompt>
+You touch Fidon.
+
+You sense a successful empathic link has been forged between you and Fidon.
+You feel the burning fire of pain and suffering building slowly as you instinctively draw out the truth behind Fidon's injuries.
+<pushStream id="familiar" /><pushStream id="familiar" ifClosedStyle="watching"/>
+Fidon's injuries include...
+... no injuries to speak of.
+
+Fidon has normal vitality.
+<popStream/><popStream/>
+You sense nothing wrong with Fidon.
+<prompt time="1787778964">&gt;</prompt>
+Jazriel visibly churns with an inner rage!
+<prompt time="1787778964">&gt;</prompt>
+You begin to lecture Throve on the proper use of the Scholarship skill.
+<prompt time="1787778964">&gt;</prompt>
+You touch Throve.
+
+You sense a successful empathic link has been forged between you and Throve.
+You feel the burning fire of pain and suffering building slowly as you instinctively draw out the truth behind Throve's injuries.
+<component id='room players'>Also here: Chieftain Jazriel, Daydreamer Throve, Emerald Knight Mahtra and Quilsilgas.</component>
+<prompt time="1787778965">&gt;</prompt>
+<clearStream id="percWindow"/>
+<pushStream id="percWindow"/>Regenerate  (Indefinite)
+<popStream/><prompt time="1787778965">&gt;</prompt>
+Throve roots around the area for a moment.
+Throve forages around the area.
+<component id='room objs'>You also see <pushBold/>a white-tailed leopard<popBold/>.</component>
+<crtrStatus exist="96263856" hostile="0" disengaged="1"/><prompt time="1787778965">&gt;</prompt>
+<component id='exp Attunement'><preset id='whisper'>      Attunement: 1474 98% dabbling      0.40     </preset></component>
+<clearStream id="percWindow"/>
+<roundTime value='1787778968'/>You reach out with your senses and see blazing (20/21) streams of vibrant blue and white Life mana flowing through the area.
+Letting your senses extend further, you feel there is luminous (14/21) mana to the south, and radiant (15/21) mana to the north.
+<pushStream id="percWindow"/>Regenerate  (Indefinite)
+<popStream/>You sense the Regenerate spell upon you, which will last until you fail to provide 19 mana for it.
+Roundtime: 3 sec.
+<pushStream id="atmospherics"/>The eyes of Gnarta's monk pendant flash white for a moment.
+<popStream/><prompt time="1787778973">&gt;</prompt>
+<pushStream id="atmospherics"/>The ka'hurst rivets on Gnarta's thighband shimmer with a strikingly green sheen.
+<popStream/><prompt time="1787778973">&gt;</prompt>
+A deep howl of bloodlust erupts from Jazriel as his chest puffs out from the strain of corded chest muscles tightening all at once!
+You manage to remain upright!
+A jeol moradu howls in encouragement!
+<pushStream id="combat" />A jeol moradu's back is blistered and seared as the rivulet of blue-white lava rolls over it.
+A faint sizzling sound fills the air as the stream of blue-white magma grazes a jeol moradu's back.
+<popStream id="combat" /><prompt time="1790396005">&gt;</prompt>
+Gnarta leaps from hiding and ambushes a jeol moradu!
+<pushStream id="combat" /><pushBold/>Gnarta's pernach lands a vicious strike that knocks the larynx clear back to the vertebrae (So much for last words!).  <popBold/>
+A jeol moradu comes crashing down.  The impact of the giant causes the ground to tremble beneath you!
+Emeshest manages to remain upright!
+You manage to remain upright!
+Gnarta manages to remain upright!
+A jeol moradu howls in encouragement!
+A jeol moradu breathes his last, and the ground finally stops heaving.
+The swirling confines of malevolent darkness wane from about a jeol moradu.
+<popStream id="combat" />Gnarta bends over the moradu's corpse briefly.
+<popStream id="combat" /><prompt time="1790396005">&gt;</prompt>

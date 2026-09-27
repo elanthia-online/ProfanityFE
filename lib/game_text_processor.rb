@@ -99,6 +99,9 @@ class GameTextProcessor
 
     # Stream and display state
     @current_stream = nil
+    # Open pushStreams, innermost last; a pop returns to the one below
+    # (see TagHandlers#handle_stream_close). Cleared at every <prompt>.
+    @stream_stack = []
     @bold_next_line = false
     @emptycount = 0
     @combat_next_line = nil

@@ -19,7 +19,7 @@ class TagHandlerHost
                 :open_color, :open_link, :current_stream, :combat_next_line,
                 :need_update, :need_room_render, :room_capture_mode
 
-  attr_reader :flushed_texts, :wm, :state, :cmd_buffer, :event_bus
+  attr_reader :flushed_texts, :wm, :state, :cmd_buffer, :event_bus, :stream_stack
 
   def initialize(wm:, state:, event_bus:)
     @wm = wm
@@ -34,6 +34,7 @@ class TagHandlerHost
     @open_color = []
     @open_link = []
     @current_stream = nil
+    @stream_stack = []
     @combat_next_line = nil
     @need_update = false
     @need_room_render = false
@@ -751,7 +752,6 @@ RSpec.describe TagHandlers do
     end
 
     it 'returns to the outer stream when a nested stream closes' do
-      pending 'nested pushStream spills the outer stream into main (audit §0.2; #42 reverted in #44)'
       host.dispatch_tag('<pushStream id="thoughts" />', String.new)
       host.dispatch_tag('<pushStream id="familiar" />', String.new)
       host.dispatch_tag('<popStream/>', String.new)
@@ -760,6 +760,165 @@ RSpec.describe TagHandlers do
 
     it 'clearStream for non-percWindow id does not crash' do
       expect { host.dispatch_tag('<clearStream id="other"/>', String.new) }.not_to raise_error
+    end
+  end
+
+  # Only pushStream/popStream nest; a <prompt> closes anything left open.
+  describe 'nested streams' do
+    def receive_tags(*tags)
+      tags.each { |tag| host.dispatch_tag(tag, String.new) }
+    end
+
+    # Text collected before +tag+, and the stream it was flushed to.
+    def flush_before(tag, text)
+      host.dispatch_tag(tag, +text)
+      host.flushed_texts.last.values_at(:text, :stream)
+    end
+
+    let(:prompt) { '<prompt time="1787778964">&gt;</prompt>' }
+
+    it 'sends the outer stream the text that follows a nested push and pop' do
+      receive_tags('<pushStream id="combat" />', '<pushStream id="moonWindow"/>', '<popStream/>')
+
+      expect(flush_before('<popStream id="combat" />', 'The moradu staggers.')).to eq ['The moradu staggers.', 'combat']
+      expect(host.current_stream).to be_nil
+    end
+
+    it 'unwinds three levels one bare pop at a time' do
+      receive_tags('<pushStream id="thoughts"/>', '<pushStream id="familiar"/>', '<pushStream id="moonWindow"/>')
+
+      streams = 3.times.map do
+        host.dispatch_tag('<popStream/>', String.new)
+        host.current_stream
+      end
+      expect(streams).to eq ['familiar', 'thoughts', nil]
+    end
+
+    it 'closes the named stream and anything opened after it on popStream id=' do
+      receive_tags('<pushStream id="thoughts"/>', '<pushStream id="combat" />', '<pushStream id="moonWindow"/>')
+
+      host.dispatch_tag('<popStream id="combat" />', String.new)
+
+      expect(host.current_stream).to eq 'thoughts'
+      expect(host.stream_stack).to eq ['thoughts']
+    end
+
+    it 'closes the innermost stream with that id when the id is open twice' do
+      receive_tags('<pushStream id="familiar" />', '<pushStream id="thoughts"/>', '<pushStream id="familiar" />')
+
+      host.dispatch_tag('<popStream id="familiar"/>', String.new)
+
+      expect(host.current_stream).to eq 'thoughts'
+    end
+
+    it 'closes one level when popStream names a stream that is not open' do
+      receive_tags('<pushStream id="thoughts"/>', '<pushStream id="familiar"/>')
+
+      host.dispatch_tag('<popStream id="combat" />', String.new)
+
+      expect(host.current_stream).to eq 'thoughts'
+    end
+
+    it 'stays on main when a pop arrives with nothing open' do
+      receive_tags('<popStream id="combat" />', '<popStream/>')
+
+      expect(host.current_stream).to be_nil
+      expect(host.stream_stack).to be_empty
+    end
+
+    it 'handles the empath-touch double familiar push and double pop from a real log' do
+      receive_tags('<pushStream id="familiar" />', '<pushStream id="familiar" ifClosedStyle="watching"/>')
+      expect(host.current_stream).to eq 'familiar'
+
+      host.dispatch_tag('<popStream/>', String.new)
+      expect(host.current_stream).to eq 'familiar'
+      host.dispatch_tag('<popStream/>', String.new)
+      expect(host.current_stream).to be_nil
+      expect(host.stream_stack).to be_empty
+    end
+
+    context 'with components' do
+      it 'returns to the enclosing pushStream when a component closes inside it' do
+        receive_tags('<pushStream id="familiar"/>', "<component id='room players'>")
+
+        expect(flush_before('</component>', 'Also here: Fidon.')).to eq ['Also here: Fidon.', 'room players']
+        expect(host.current_stream).to eq 'familiar'
+      end
+
+      it 'leaves the stack alone for a component pair' do
+        receive_tags('<pushStream id="thoughts"/>', "<component id='room objs'>", '</component>', '<popStream/>')
+
+        expect(host.current_stream).to be_nil
+        expect(host.stream_stack).to be_empty
+      end
+
+      it 'pushes nothing for a self-closing component that a later pop could restore' do
+        receive_tags("<component id='x'/>", '<pushStream id="thoughts"/>', '<popStream/>')
+
+        expect(host.current_stream).to be_nil
+        expect(host.stream_stack).to be_empty
+      end
+
+      it 'pushes nothing for a compDef pair' do
+        receive_tags('<pushStream id="thoughts"/>', "<compDef id='exp Bow'>", '</compDef>')
+
+        expect(host.stream_stack).to eq ['thoughts']
+        expect(host.current_stream).to eq 'thoughts'
+      end
+    end
+
+    context 'at a <prompt>' do
+      it 'sends text to main after a push that never got its pop' do
+        receive_tags('<pushStream id="moonWindow"/>', prompt)
+
+        expect(host.current_stream).to be_nil
+        expect(host.stream_stack).to be_empty
+        expect(flush_before('<popStream/>', 'You sense nothing wrong with Fidon.')).to eq ['You sense nothing wrong with Fidon.', nil]
+      end
+
+      it 'flushes text collected for the stale stream to that stream first' do
+        host.dispatch_tag('<pushStream id="moonWindow"/>', String.new)
+
+        expect(flush_before(prompt, 'Katamba is rising.')).to eq ['Katamba is rising.', 'moonWindow']
+      end
+
+      it 'sends text to main after a self-closing component' do
+        receive_tags("<component id='x'/>", prompt)
+
+        expect(host.current_stream).to be_nil
+      end
+
+      it 'clears a combat flag left by an unclosed combat push' do
+        receive_tags('<pushStream id="combat" />', prompt, '<unknownTag/>')
+
+        expect(host.combat_next_line).to be false
+        expect(host.current_stream).to be_nil
+      end
+
+      it 'changes nothing and flushes nothing when no stream is open' do
+        buf = +'text before the prompt'
+        host.dispatch_tag(prompt, buf)
+
+        expect(buf).to eq 'text before the prompt'
+        expect(host.flushed_texts).to be_empty
+      end
+
+      it 'does not stop a later push and pop from nesting' do
+        receive_tags('<pushStream id="moonWindow"/>', prompt, '<pushStream id="thoughts"/>',
+                     '<pushStream id="familiar"/>', '<popStream/>')
+
+        expect(host.current_stream).to eq 'thoughts'
+        expect(host.stream_stack).to eq ['thoughts']
+      end
+    end
+
+    it 'keeps only the 8 most recent unmatched pushes' do
+      ids = (1..11).map { |n| "s#{n}" }
+      receive_tags(*ids.map { |id| %(<pushStream id="#{id}"/>) })
+
+      expect(host.stream_stack).to eq ids.last(8)
+      8.times { host.dispatch_tag('<popStream/>', String.new) }
+      expect(host.current_stream).to be_nil
     end
   end
 
