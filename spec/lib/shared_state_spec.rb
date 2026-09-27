@@ -4,6 +4,7 @@
 # offset, blue_links, atomic update_prompt/consume_prompt!, and
 # terminal title generation with dedup.
 
+require 'tempfile'
 require_relative '../../lib/shared_state'
 
 RSpec.describe SharedState do
@@ -93,14 +94,89 @@ RSpec.describe SharedState do
   end
 
   describe '#update_terminal_title' do
+    let(:term) { 'xterm-256color' }
+
+    # Every example runs with file descriptor 1 redirected to a file, so
+    # title bytes never reach the rspec output and tty_bytes sees whatever
+    # was written, whether by this process or by a child that inherited it.
+    around do |example|
+      original_term = ENV.fetch('TERM', nil)
+      ENV['TERM'] = term
+      saved_stdout = $stdout.dup
+      Tempfile.create('tty') do |tty|
+        @tty = tty
+        $stdout.reopen(tty)
+        example.run
+      ensure
+        $stdout.reopen(saved_stdout)
+      end
+    ensure
+      saved_stdout&.close
+      ENV['TERM'] = original_term
+    end
+
+    # Run the title update and return the bytes it wrote to the terminal.
+    def tty_bytes
+      state.update_terminal_title
+      $stdout.flush
+      File.read(@tty.path, encoding: Encoding::UTF_8)
+    end
+
     before do
       state.char_name = 'Mahtra'
       state.no_status = false
-      # Stub both system() and Process.setproctitle to prevent forking
-      # during tests. system('printf', ...) forks a subprocess which
-      # can deadlock under rspec's signal handling.
       allow(Process).to receive(:setproctitle)
-      allow(state).to receive(:system).and_return(true)
+    end
+
+    it 'writes an OSC 0 sequence carrying the full title' do
+      state.prompt_text = 'H>'
+      state.room_title = 'Town Square'
+      expect(tty_bytes).to eq "\e]0;Mahtra [H:Town Square]\a"
+    end
+
+    it 'emits no screen/tmux window-name sequence outside screen/tmux' do
+      state.prompt_text = 'H>'
+      expect(tty_bytes).to eq "\e]0;Mahtra [H]\a"
+    end
+
+    context 'when TERM is a screen session' do
+      let(:term) { 'screen.xterm-256color' }
+
+      it 'writes the real ESC k name ESC \\ window-name sequence' do
+        state.prompt_text = 'H>'
+        expect(tty_bytes).to eq "\e]0;Mahtra [H]\a\ekMahtra\e\\"
+      end
+    end
+
+    context 'when TERM is a tmux session' do
+      let(:term) { 'tmux-256color' }
+
+      it 'writes the real ESC k name ESC \\ window-name sequence' do
+        state.prompt_text = 'H>'
+        expect(tty_bytes).to end_with "\ekMahtra\e\\"
+      end
+    end
+
+    context 'when the title text contains terminal control characters' do
+      let(:term) { 'screen' }
+
+      it 'strips them so the title cannot end or inject a sequence' do
+        state.char_name = "Mah\e\\\etra\a"
+        state.prompt_text = "H\u009c>"
+        state.room_title = "Room\e]0;pwned\a\x01\n\\"
+        expect(tty_bytes).to eq "\e]0;Mahtra [H:Room]0;pwned]\a\ekMahtra\e\\"
+      end
+    end
+
+    it 'writes from Ruby without spawning a subprocess' do
+      allow(state).to receive(:system)
+      allow(Process).to receive(:spawn)
+      allow(IO).to receive(:popen)
+      state.prompt_text = 'H>'
+      expect(tty_bytes).to start_with "\e]0;"
+      expect(state).not_to have_received(:system)
+      expect(Process).not_to have_received(:spawn)
+      expect(IO).not_to have_received(:popen)
     end
 
     it 'sets process title' do
