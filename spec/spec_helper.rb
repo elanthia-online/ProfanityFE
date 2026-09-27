@@ -125,16 +125,6 @@ PERC_TRANSFORMS = CONFIG.perc_transforms
 # Top-level helpers defined in profanity.rb
 # ---------------------------------------------------------------------------
 
-def safe_eval_arithmetic(expr)
-  normalized = expr.gsub(/\s+/, '')
-  return 0 unless normalized.match?(%r{\A[\d+\-*/()]+\z})
-  return 0 if normalized.include?('**')
-
-  eval(expr).to_i
-rescue SyntaxError, ZeroDivisionError
-  0
-end
-
 def get_color_pair_id(_fg, _bg) = 0
 
 def add_prompt(window, prompt_text, cmd = '')

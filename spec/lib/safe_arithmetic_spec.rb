@@ -1,0 +1,88 @@
+# frozen_string_literal: true
+
+# Tests SafeArithmetic.evaluate, the parser WindowManager uses to size every
+# window from layout expressions like "lines-2" or "cols/3+1".
+#
+# The suite used to test an eval-based copy in spec_helper that disagreed with
+# this parser on malformed input: the copy returned 0 where the real parser is
+# lenient. These examples pin the real parser's current behaviour so any
+# change to it is deliberate.
+
+require_relative '../../lib/safe_arithmetic'
+
+RSpec.describe SafeArithmetic do
+  # @param expr [String] expression to evaluate
+  # @return [Integer] the parser's result
+  def evaluate(expr) = described_class.evaluate(expr)
+
+  describe '.evaluate with well-formed expressions' do
+    it 'evaluates layout arithmetic with the usual precedence' do
+      expect(evaluate('24-2')).to eq 22
+      expect(evaluate('80/3+1')).to eq 27
+      expect(evaluate('1+2*3')).to eq 7
+      expect(evaluate('(1+2)*3')).to eq 9
+    end
+
+    it 'ignores whitespace around operators' do
+      expect(evaluate(' 1 + 2 ')).to eq 3
+    end
+
+    it 'handles unary minus, including doubled' do
+      expect(evaluate('-5')).to eq(-5)
+      expect(evaluate('--5')).to eq 5
+    end
+
+    it 'uses Ruby integer division, rounding toward negative infinity' do
+      expect(evaluate('7/2')).to eq 3
+      expect(evaluate('-7/2')).to eq(-4)
+    end
+
+    it 'returns 0 for division by zero' do
+      expect(evaluate('5/0')).to eq 0
+      expect(evaluate('5/(2-2)')).to eq 0
+    end
+  end
+
+  # Inputs where the old spec_helper copy returned 0.
+  describe '.evaluate with malformed expressions' do
+    it 'treats a missing closing parenthesis as closed' do
+      expect(evaluate('(10')).to eq 10
+      expect(evaluate('2*(3')).to eq 6
+    end
+
+    it 'joins digits separated by whitespace into one number' do
+      expect(evaluate('3 3')).to eq 33
+    end
+
+    it 'counts a missing trailing operand as 0' do
+      expect(evaluate('1+')).to eq 1
+      expect(evaluate('3-')).to eq 3
+    end
+
+    it 'ignores anything after the first complete expression' do
+      expect(evaluate('10)')).to eq 10
+    end
+
+    it 'counts a missing leading operand as 0' do
+      expect(evaluate('*3')).to eq 0
+      expect(evaluate('2**3')).to eq 0
+    end
+
+    it 'returns 0 for an empty expression or empty parentheses' do
+      expect(evaluate('')).to eq 0
+      expect(evaluate('()')).to eq 0
+    end
+  end
+
+  describe '.evaluate with unsafe characters' do
+    it 'returns 0 and warns instead of evaluating' do
+      expect { expect(evaluate('lines-2')).to eq 0 }
+        .to output(/Invalid layout expression \(unsafe characters\): lines-2/).to_stderr
+    end
+
+    it 'never runs Ruby code' do
+      expect { expect(evaluate('`touch /tmp/pwned`')).to eq 0 }.to output(/unsafe characters/).to_stderr
+      expect { expect(evaluate('1.5')).to eq 0 }.to output(/unsafe characters/).to_stderr
+    end
+  end
+end

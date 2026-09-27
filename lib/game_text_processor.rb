@@ -11,6 +11,7 @@ require_relative 'xml_tokenizer'
 require_relative 'tag_handlers'
 require_relative 'styled_text'
 require_relative 'event_bus'
+require_relative 'safe_arithmetic'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -319,7 +320,7 @@ class GameTextProcessor
   # @api private
   def fix_layout_number(str)
     str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
-    safe_eval_arithmetic(str)
+    SafeArithmetic.evaluate(str)
   end
 
   # Append a speech timestamp to text (e.g., "Hello (3:45:12)").
