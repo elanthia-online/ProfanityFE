@@ -146,7 +146,9 @@ module SettingsLoader
   # @param filename [String] path to the .profanity.xml file
   # @return [CachedElement] root element of the parsed settings
   def load_cached_xml(filename)
-    xml_string = File.read(filename)
+    # Settings files are UTF-8 (the bundled templates contain em-dashes);
+    # don't depend on the locale's default encoding, which is US-ASCII under C/POSIX.
+    xml_string = File.read(filename, encoding: Encoding::UTF_8)
     digest = Digest::SHA256.hexdigest(xml_string)
     cache_file = cache_path_for(filename)
 

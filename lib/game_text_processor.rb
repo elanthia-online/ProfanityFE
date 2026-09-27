@@ -177,6 +177,11 @@ class GameTextProcessor
   # @return [void]
   # @api private
   def process_server_line(line)
+    # Socket reads are BINARY. Treat them as UTF-8 (replacing invalid bytes)
+    # so a non-ASCII byte can't raise Encoding::CompatibilityError against
+    # the UTF-8 gag and highlight patterns loaded from settings.
+    line.force_encoding(Encoding::UTF_8).scrub!
+
     if line =~ %r{^<popBold/>}
       @bold_next_line = false
     elsif @bold_next_line == true
