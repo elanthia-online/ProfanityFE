@@ -177,6 +177,7 @@ module GagPatterns
   def self.combat_regexp = /\A\z/
   def self.load_defaults = nil
   def self.clear_custom = nil
+  def self.replace_custom(**) = nil
   def self.add_general_pattern(*) = nil
   def self.add_combat_pattern(*) = nil
   def self.add_multiline_gag(*) = nil

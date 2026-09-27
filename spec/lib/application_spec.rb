@@ -661,6 +661,72 @@ RSpec.describe Application do
     end
   end
 
+  # BUG FOUND (fixed here): .reload cleared highlights and perc transforms
+  # before parsing the file, so a typo in the settings file silently left
+  # the user without them; the only trace was a line in the log.
+  describe '.reload' do
+    let(:settings_path) { File.join(@dir, 'settings.xml') }
+    let(:settings) do
+      <<~XML
+        <settings>
+          <highlight fg='ff0000'>goblin</highlight>
+          <perc-transform pattern='Osrel Meraud' replace='OM'/>
+          <key id='ctrl+x' action='previous_command'/>
+          <layout id='default'>
+            <window class='text' top='0' left='0' height='4' width='60' value='main'/>
+            <window class='command' top='5' left='0' height='1' width='60'/>
+          </layout>
+        </settings>
+      XML
+    end
+    let(:main) { app.window_mgr.stream['main'] }
+
+    around do |example|
+      Dir.mktmpdir { |dir| @dir = dir; example.run }
+    end
+
+    before do
+      allow(ProfanityLog).to receive(:write)
+      stub_const('SETTINGS_FILENAME', settings_path)
+      File.write(settings_path, settings)
+      app.send(:load_settings_and_layout)
+    end
+
+    it 'keeps the settings and says why when the file is malformed' do
+      File.write(settings_path, settings.sub('goblin</highlight>', 'kobold</hilight>'))
+
+      app.execute_command('.reload')
+
+      expect(HIGHLIGHT).to eq(/goblin/ => ['ff0000', nil, nil])
+      expect(PERC_TRANSFORMS).to eq [[/Osrel Meraud/, 'OM']]
+      expect(app.key_binding).to include(24 => app.key_action['previous_command'])
+      expect(main.rows).to eq ['',
+                               '',
+                               '* Reload failed, settings unchanged: Missing end tag for',
+                               "  'highlight' (got 'hilight') (line 2)"]
+    end
+
+    it 'shows the error in the feedback color' do
+      File.write(settings_path, '<settings><gag>x</gags></settings>')
+      allow(main).to receive(:add_string).and_call_original
+
+      app.execute_command('.reload')
+
+      msg = "* Reload failed, settings unchanged: Missing end tag for 'gag' (got 'gags') (line 1)"
+      expect(main).to have_received(:add_string)
+        .with(msg, [{ start: 0, end: msg.length, fg: FEEDBACK_COLOR, bg: nil, ul: nil }])
+    end
+
+    it 'applies a good file without printing anything' do
+      File.write(settings_path, settings.sub('goblin', 'kobold'))
+
+      app.execute_command('.reload')
+
+      expect(HIGHLIGHT).to eq(/kobold/ => ['ff0000', nil, nil])
+      expect(main.rows).to eq ['', '', '', '']
+    end
+  end
+
   describe 'input loop' do
     # A command window whose getch returns the given keys, then raises
     # Interrupt (Ctrl+C) to end the loop.

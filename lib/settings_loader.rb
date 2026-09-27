@@ -28,11 +28,12 @@ end
 # On initial load, populates PRESET (color presets), LAYOUT (window layouts),
 # HIGHLIGHT (regex-based text highlighting), PERC_TRANSFORMS (percWindow text
 # substitutions), gag patterns (via GagPatterns), and key bindings.
-# On reload, only refreshes HIGHLIGHT, gag patterns, perc-transforms, and
-# key bindings -- PRESET and LAYOUT are preserved.
+# On reload, only refreshes HIGHLIGHT, gag patterns, perc-transforms, the
+# notification stream, and key bindings -- PRESET and LAYOUT are preserved.
 #
-# All operations are synchronized through SETTINGS_LOCK to prevent races
-# with the server read thread.
+# The file is parsed in full before anything is applied, so a file that
+# fails to load changes nothing. The new settings are then applied together
+# under SETTINGS_LOCK to prevent races with the server read thread.
 #
 # @example
 #   SettingsLoader.load('char.profanity.xml', key_binding, key_action, do_macro)
@@ -49,98 +50,144 @@ module SettingsLoader
   # Parses the XML and populates global constants. On initial load
   # (+reload: false+), processes all element types including +preset+
   # and +layout+. On reload (+reload: true+), skips presets and layouts
-  # and only refreshes highlights, gag patterns, perc-transforms, and
-  # key bindings.
+  # and only refreshes highlights, gag patterns, perc-transforms, the
+  # notification stream, and key bindings.
   #
-  # +key_binding+ is cleared and rebuilt from the file on every load, so
-  # bindings changed at runtime (e.g. by switch_arrow_mode) revert to the
-  # file's.
+  # The whole file is parsed before anything is applied, so a file that
+  # fails to load (malformed XML, or any other error that aborts the parse)
+  # changes nothing. A single invalid entry, such as a bad highlight regex,
+  # is warned about and skipped without failing the file.
+  #
+  # +key_binding+ is cleared and rebuilt from the file on every successful
+  # load, so bindings changed at runtime (e.g. by switch_arrow_mode) revert
+  # to the file's.
   #
   # @param filename [String] path to the .profanity.xml configuration file
   # @param key_binding [Hash] mutable hash of key bindings, replaced in place
   # @param key_action [Hash<String, Proc>] named action procs available for key binding
   # @param do_macro [Proc] proc that executes a macro string when called
   # @param reload [Boolean] when true, skip PRESET/LAYOUT population and only refresh dynamic settings
-  # @return [void]
-  # @raise [StandardError] caught internally; prints to $stdout and continues
+  # @return [StandardError, nil] nil when the settings were applied, otherwise
+  #   the error that stopped the load (logged with its backtrace); no setting
+  #   was changed
   def load(filename, key_binding, key_action, do_macro, reload: false)
-    setup_key = build_setup_key(key_action, do_macro)
-
     unless File.exist?(filename)
       warn "Settings file not found: #{filename}"
-      return
+      return Errno::ENOENT.new(filename)
     end
 
-    SETTINGS_LOCK.synchronize do
-      HIGHLIGHT.clear
-      PERC_TRANSFORMS.clear
-      # Restore the default so a <notification-stream> removed from the XML
-      # doesn't linger across a reload; the element below re-applies it.
-      CONFIG.notification_stream = Config::DEFAULT_NOTIFICATION_STREAM
-      GagPatterns.clear_custom if reload
-
-      xml_root = load_cached_xml(filename)
-      # Rebuild key bindings from the file so a <key> removed from the XML
-      # doesn't linger across a reload, and a key whose kind changed (action
-      # vs combo) isn't reported as conflicting with the previous load.
-      # Cleared only once the XML has parsed, so a broken file keeps the keys.
-      key_binding.clear
-      xml_root.elements.each do |e|
-        case e.name
-        when 'highlight'
-          begin
-            pattern = e.text&.strip
-            r = pattern && !pattern.empty? ? Regexp.new(pattern) : nil
-          rescue StandardError => e_err
-            r = nil
-            warn e
-            warn e_err
-          end
-          HIGHLIGHT[r] = [e.attributes['fg'], e.attributes['bg'], e.attributes['ul']] if r
-
-        when 'key'
-          setup_key.call(e, key_binding)
-
-        when 'gag'
-          GagPatterns.add_general_pattern(e.text) if e.text && !e.text.strip.empty?
-
-        when 'combat_gag'
-          GagPatterns.add_combat_pattern(e.text) if e.text && !e.text.strip.empty?
-
-        when 'multiline_gag'
-          start_pattern = e.attributes['start']
-          if start_pattern && !start_pattern.strip.empty?
-            GagPatterns.add_multiline_gag(start_pattern, e.attributes['end'])
-          end
-
-        when 'notification-stream'
-          CONFIG.notification_stream = e.text.strip if e.text && !e.text.strip.empty?
-
-        when 'perc-transform'
-          if e.attributes['pattern']
-            begin
-              pattern = Regexp.new(e.attributes['pattern'])
-              replacement = e.attributes['replace'] || ''
-              PERC_TRANSFORMS.push([pattern, replacement])
-            rescue RegexpError => e_err
-              warn "Invalid perc-transform pattern: #{e.attributes['pattern']} - #{e_err}"
-            end
-          end
-        end
-
-        # Presets and layouts are only loaded on initial load, not reload
-        next if reload
-
-        case e.name
-        when 'preset'
-          PRESET[e.attributes['id']] = [e.attributes['fg'], e.attributes['bg']]
-        when 'layout'
-          LAYOUT[e.attributes['id']] = e if e.attributes['id']
-        end
-      end
-    end
+    settings = parse(load_cached_xml(filename), key_action, do_macro, reload: reload)
+    apply(settings, key_binding, reload: reload)
+    nil
   rescue StandardError => e
     ProfanityLog.write('settings', e.message, backtrace: e.backtrace)
+    e
+  end
+
+  # Build the settings described by a parsed settings tree without touching
+  # any global state.
+  #
+  # @param xml_root [CachedElement] root element of the parsed settings
+  # @param key_action [Hash<String, Proc>] named action procs available for key binding
+  # @param do_macro [Proc] proc that executes a macro string when called
+  # @param reload [Boolean] when true, presets and layouts are not collected
+  # @return [Hash] the settings, for {apply}: +:highlight+, +:perc_transforms+,
+  #   +:notification_stream+, +:gags+ (keyword arguments for
+  #   GagPatterns.replace_custom), +:key_binding+, +:presets+ and +:layouts+
+  # @api private
+  def parse(xml_root, key_action, do_macro, reload: false)
+    setup_key = build_setup_key(key_action, do_macro)
+    # Key bindings start from an empty hash so a key whose kind changed
+    # (action vs combo) isn't reported as conflicting with the previous load.
+    settings = {
+      highlight: {}, perc_transforms: [], notification_stream: Config::DEFAULT_NOTIFICATION_STREAM,
+      gags: { general: [], multiline: [], combat: [] }, key_binding: {}, presets: {}, layouts: {}
+    }
+
+    xml_root.elements.each do |e|
+      case e.name
+      when 'highlight'
+        begin
+          pattern = e.text&.strip
+          r = pattern && !pattern.empty? ? Regexp.new(pattern) : nil
+        rescue StandardError => e_err
+          r = nil
+          warn e
+          warn e_err
+        end
+        settings[:highlight][r] = [e.attributes['fg'], e.attributes['bg'], e.attributes['ul']] if r
+
+      when 'key'
+        setup_key.call(e, settings[:key_binding])
+
+      when 'gag'
+        settings[:gags][:general] << e.text if e.text && !e.text.strip.empty?
+
+      when 'combat_gag'
+        settings[:gags][:combat] << e.text if e.text && !e.text.strip.empty?
+
+      when 'multiline_gag'
+        start_pattern = e.attributes['start']
+        if start_pattern && !start_pattern.strip.empty?
+          settings[:gags][:multiline] << { start: start_pattern, end: e.attributes['end'] }
+        end
+
+      when 'notification-stream'
+        settings[:notification_stream] = e.text.strip if e.text && !e.text.strip.empty?
+
+      when 'perc-transform'
+        if e.attributes['pattern']
+          begin
+            pattern = Regexp.new(e.attributes['pattern'])
+            replacement = e.attributes['replace'] || ''
+            settings[:perc_transforms].push([pattern, replacement])
+          rescue RegexpError => e_err
+            warn "Invalid perc-transform pattern: #{e.attributes['pattern']} - #{e_err}"
+          end
+        end
+      end
+
+      # Presets and layouts are only loaded on initial load, not reload
+      next if reload
+
+      case e.name
+      when 'preset'
+        settings[:presets][e.attributes['id']] = [e.attributes['fg'], e.attributes['bg']]
+      when 'layout'
+        settings[:layouts][e.attributes['id']] = e if e.attributes['id']
+      end
+    end
+
+    settings
+  end
+
+  # Apply settings built by {parse} to the global state, all under
+  # SETTINGS_LOCK so the server thread never sees a mix of old and new.
+  #
+  # Highlights, perc-transforms, custom gags and key bindings are replaced,
+  # so an entry removed from the file doesn't linger. The notification
+  # stream falls back to its default when the file doesn't set it. Presets
+  # and layouts are added on initial load only.
+  #
+  # @param settings [Hash] settings returned by {parse}
+  # @param key_binding [Hash] mutable hash of key bindings, replaced in place
+  # @param reload [Boolean] when true, presets and layouts are left as they are
+  # @return [void]
+  # @api private
+  def apply(settings, key_binding, reload: false)
+    SETTINGS_LOCK.synchronize do
+      # Gags go first: compiling them is the only step here that could
+      # raise, and GagPatterns replaces nothing until all have compiled.
+      GagPatterns.replace_custom(**settings[:gags])
+      HIGHLIGHT.replace(settings[:highlight])
+      PERC_TRANSFORMS.replace(settings[:perc_transforms])
+      CONFIG.notification_stream = settings[:notification_stream]
+      key_binding.replace(settings[:key_binding])
+      next if reload
+
+      PRESET.merge!(settings[:presets])
+      LAYOUT.merge!(settings[:layouts])
+    end
   end
 
   # Load the XML settings, using a Marshal cache when possible.
