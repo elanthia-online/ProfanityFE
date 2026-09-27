@@ -586,24 +586,34 @@ class GameTextProcessor
           elsif @current_stream == 'percWindow'
             @wm.stream['percWindow']
 
+            # Shorten the line. The color runs already on it (tag colors and
+            # the highlights applied above, on the text as sent) move with
+            # the text they color, so a highlight on a full spell name
+            # colors its abbreviation.
+            styled = StyledText.new(text, @line_colors)
+
             # Apply configurable text transformations from XML
             # Example: <perc-transform pattern=" (roisaen|roisan)" replace=""/>
             PERC_TRANSFORMS.each do |pattern, replacement|
-              text.sub!(pattern, replacement)
+              styled = styled.sub(pattern, replacement)
             end
 
-            paren_pos = text.index('(')
+            paren_pos = styled.text.index('(')
             if paren_pos && paren_pos > 1
-              spell_name = text[0..paren_pos - 2]
+              spell_name = styled.text[0..paren_pos - 2]
               # Shorten spell names
-              text.sub!(/^#{Regexp.escape(spell_name)}/, abbreviate_spell(spell_name)) if Games::DragonRealms::SPELL_ABBREVIATIONS.include?(spell_name.strip)
+              styled = styled.sub(/^#{Regexp.escape(spell_name)}/, abbreviate_spell(spell_name)) if Games::DragonRealms::SPELL_ABBREVIATIONS.include?(spell_name.strip)
             end
 
-            text.gsub!(/  /, ' ')
-            text.strip!
+            styled = styled.gsub(/  /, ' ').strip
+            text = styled.text
+            @line_colors = styled.runs
 
-            # Apply highlight patterns to percWindow text
-            HighlightProcessor.apply_highlights(text, @line_colors)
+            # Highlights that match the shortened text (e.g. on "POM" or on a
+            # transform's "Cyclic"); skip runs already carried over.
+            HighlightProcessor.apply_highlights(text, []).each do |run|
+              @line_colors.push(run) unless @line_colors.include?(run)
+            end
 
             if PRESET[@current_stream]
               @line_colors.push(start: 0, fg: PRESET[@current_stream][0], bg: PRESET[@current_stream][1],

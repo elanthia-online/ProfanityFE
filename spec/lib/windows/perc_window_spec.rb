@@ -212,5 +212,89 @@ RSpec.describe PercWindow do
 
       expect(visible_rows).to eq ['Bloodthorns (43)']
     end
+
+    # Spell lines are highlighted as the server sends them, then shortened
+    # (perc-transforms, spell abbreviations, double spaces). A highlight
+    # must end up on the text it matched, wherever that text now is.
+    describe 'highlights on a shortened spell line' do
+      let(:red) { Curses.color_pair(1) }
+
+      before do
+        allow(HighlightProcessor).to receive(:get_color_pair_id) { |fg, _bg| fg == 'ff0000' ? 1 : 0 }
+      end
+
+      # Columns of row +y+ drawn in the highlight color.
+      def red_columns(y)
+        (0...window.maxx).select { |x| window.attrs_at(y, x) == red }
+      end
+
+      it 'colors the abbreviation of a highlighted spell name, and nothing beyond it' do
+        HIGHLIGHT[/Osrel Meraud|Persistence of Mana/] = ['ff0000', nil, nil]
+
+        receive_from_server(*spell_block('Persistence of Mana  (OM)', 'Osrel Meraud  (96%)'))
+
+        expect(visible_rows).to eq ['OM (96%)', 'POM (OM)']
+        expect(red_columns(0)).to eq [0, 1]
+        expect(red_columns(1)).to eq [0, 1, 2]
+      end
+
+      it 'moves a highlight left when a transform deletes text before it' do
+        CONFIG.perc_transforms.push([/Khri /, ''])
+        HIGHLIGHT[/Avoidance/] = ['ff0000', nil, nil]
+
+        receive_from_server(*spell_block('Khri Avoidance  (31 roisaen)'))
+
+        expect(visible_rows).to eq ['Avoidance (31)']
+        expect(red_columns(0)).to eq (0...9).to_a
+      end
+
+      it 'moves a highlight left when the double space before it is collapsed' do
+        HIGHLIGHT[/44/] = ['ff0000', nil, nil]
+
+        receive_from_server(*spell_block('Bloodthorns  (44 roisaen)'))
+
+        expect(visible_rows).to eq ['Bloodthorns (44)']
+        expect(red_columns(0)).to eq [13, 14]
+      end
+
+      it 'still colors a highlight on the abbreviation itself' do
+        HIGHLIGHT[/\bPOM\b/] = ['ff0000', nil, nil]
+
+        receive_from_server(*spell_block('Persistence of Mana  (OM)'))
+
+        expect(visible_rows).to eq ['POM (OM)']
+        expect(red_columns(0)).to eq [0, 1, 2]
+      end
+
+      it 'still colors a highlight on text a transform produced' do
+        CONFIG.perc_transforms.push([/Indefinite/, 'Cyclic'])
+        HIGHLIGHT[/Cyclic/] = ['ff0000', nil, nil]
+
+        receive_from_server(*spell_block('Cheetah Swiftness  (Indefinite)'))
+
+        expect(visible_rows).to eq ['CS (Cyclic)']
+        expect(red_columns(0)).to eq (4...10).to_a
+      end
+
+      it 'sends a highlight that matches before and after shortening only once' do
+        HIGHLIGHT[/\(OM\)/] = ['ff0000', nil, nil]
+        sent = []
+        event_bus.on(:stream_text) { |data| sent << data[:colors] if data[:stream] == 'percWindow' }
+
+        receive_from_server(*spell_block('Persistence of Mana  (OM)'))
+
+        expect(red_columns(0)).to eq [4, 5, 6, 7]
+        expect(sent).to eq [[{ start: 4, end: 8, fg: 'ff0000', bg: nil, ul: nil }]]
+      end
+
+      it 'leaves a line with no highlight uncolored' do
+        HIGHLIGHT[/Osrel Meraud/] = ['ff0000', nil, nil]
+
+        receive_from_server(*spell_block('Bloodthorns  (44 roisaen)'))
+
+        expect(visible_rows).to eq ['Bloodthorns (44)']
+        expect(red_columns(0)).to be_empty
+      end
+    end
   end
 end

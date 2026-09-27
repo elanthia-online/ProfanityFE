@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 # Tests StyledText value object: immutable text + color runs bundling,
-# #slice, #lstrip, #wrap (word-wrap with run splitting), #<<, #add_run,
+# #slice, #lstrip, #replace_ranges and its #sub/#gsub/#strip, #wrap
+# (word-wrap with run splitting), #<<, #add_run,
 # and #dup_with_runs. Includes adversarial edge cases for wrapping.
 
 require 'timeout'
@@ -210,6 +211,110 @@ RSpec.describe StyledText do
       st = described_class.new("\t\thello", [{ start: 2, end: 7, fg: 'ff0000' }])
       result = st.lstrip
       expect(result.text).to eq 'hello'
+    end
+  end
+
+  describe '#replace_ranges' do
+    red = { fg: 'ff0000' }
+
+    it 'moves a run on kept text by the change in length before it' do
+      st = described_class.new('Khri Avoidance (31)', [red.merge(start: 5, end: 14)])
+      result = st.replace_ranges([[0, 5, '']])
+      expect(result.text).to eq 'Avoidance (31)'
+      expect(result.runs).to eq [red.merge(start: 0, end: 9)]
+    end
+
+    it 'puts a run on replaced text onto the whole replacement' do
+      st = described_class.new('Persistence of Mana (OM)', [red.merge(start: 0, end: 19)])
+      result = st.replace_ranges([[0, 19, 'POM']])
+      expect(result.text).to eq 'POM (OM)'
+      expect(result.runs).to eq [red.merge(start: 0, end: 3)]
+    end
+
+    it 'extends a run on part of a replaced span to the whole replacement' do
+      st = described_class.new('Persistence of Mana (OM)', [red.merge(start: 15, end: 19)])
+      expect(st.replace_ranges([[0, 19, 'POM']]).runs).to eq [red.merge(start: 0, end: 3)]
+    end
+
+    it 'drops a run on deleted text only' do
+      st = described_class.new('Bloodthorns (44 roisaen)', [red.merge(start: 15, end: 23)])
+      result = st.replace_ranges([[15, 23, '']])
+      expect(result.text).to eq 'Bloodthorns (44)'
+      expect(result.runs).to be_empty
+    end
+
+    it 'shrinks a run by the text deleted inside it' do
+      st = described_class.new('(44 roisaen)', [red.merge(start: 0, end: 12)])
+      expect(st.replace_ranges([[3, 11, '']]).runs).to eq [red.merge(start: 0, end: 4)]
+    end
+
+    it 'keeps runs that touch a replaced span off the replacement' do
+      st = described_class.new('ab--cd', [red.merge(start: 0, end: 2), red.merge(start: 4, end: 6)])
+      result = st.replace_ranges([[2, 4, '+']])
+      expect(result.text).to eq 'ab+cd'
+      expect(result.runs).to eq [red.merge(start: 0, end: 2), red.merge(start: 3, end: 5)]
+    end
+
+    it 'colors inserted text only when a run spans the insertion point' do
+      st = described_class.new('abcd', [red.merge(start: 0, end: 2), red.merge(start: 2, end: 4), red.merge(start: 1, end: 3)])
+      result = st.replace_ranges([[2, 2, 'XX']])
+      expect(result.text).to eq 'abXXcd'
+      expect(result.runs).to eq [red.merge(start: 0, end: 2), red.merge(start: 4, end: 6), red.merge(start: 1, end: 5)]
+    end
+
+    it 'applies several edits against the original positions, in any order' do
+      st = described_class.new('a  b  c', [red.merge(start: 6, end: 7)])
+      result = st.replace_ranges([[4, 6, ' '], [1, 3, ' ']])
+      expect(result.text).to eq 'a b c'
+      expect(result.runs).to eq [red.merge(start: 4, end: 5)]
+    end
+
+    it 'keeps the other attributes of a run' do
+      st = described_class.new('xab', [{ start: 1, end: 3, fg: 'ff0000', bg: '000000', ul: 'true' }])
+      expect(st.replace_ranges([[0, 1, '']]).runs).to eq [{ start: 0, end: 2, fg: 'ff0000', bg: '000000', ul: 'true' }]
+    end
+  end
+
+  describe '#sub' do
+    it 'replaces like String#sub, backreferences included, and moves the runs' do
+      st = described_class.new('Khri Avoidance (31)', [{ start: 5, end: 14, fg: 'ff0000' }])
+      result = st.sub(/Khri (\w+)/, '\1!')
+      expect(result.text).to eq 'Khri Avoidance (31)'.sub(/Khri (\w+)/, '\1!')
+      expect(result.runs).to eq [{ start: 0, end: 10, fg: 'ff0000' }]
+    end
+
+    it 'matches a String pattern literally' do
+      expect(described_class.new('a.c abc').sub('b', 'X').text).to eq 'a.c aXc'
+      expect(described_class.new('abc a.c').sub('.', 'X').text).to eq 'abc aXc'
+    end
+
+    it 'returns an unchanged copy when nothing matches' do
+      st = described_class.new('Instinct (13)', [{ start: 0, end: 8, fg: 'ff0000' }])
+      result = st.sub(/roisaen/, '')
+      expect([result.text, result.runs]).to eq [st.text, st.runs]
+    end
+  end
+
+  describe '#gsub' do
+    it 'replaces every match and moves the runs after each one' do
+      st = described_class.new('POM  (OM)  x', [{ start: 5, end: 9, fg: 'ff0000' }, { start: 11, end: 12, fg: 'ff0000' }])
+      result = st.gsub(/  /, ' ')
+      expect(result.text).to eq 'POM (OM) x'
+      expect(result.runs).to eq [{ start: 4, end: 8, fg: 'ff0000' }, { start: 9, end: 10, fg: 'ff0000' }]
+    end
+  end
+
+  describe '#strip' do
+    it 'removes leading and trailing whitespace and moves the runs' do
+      st = described_class.new('  POM (OM) ', [{ start: 2, end: 5, fg: 'ff0000' }, { start: 0, end: 11, fg: '00ff00' }])
+      result = st.strip
+      expect(result.text).to eq 'POM (OM)'
+      expect(result.runs).to eq [{ start: 0, end: 3, fg: 'ff0000' }, { start: 0, end: 8, fg: '00ff00' }]
+    end
+
+    it 'drops every run of an all-whitespace text' do
+      result = described_class.new('   ', [{ start: 0, end: 3, fg: 'ff0000' }]).strip
+      expect([result.text, result.runs]).to eq ['', []]
     end
   end
 
