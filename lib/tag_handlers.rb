@@ -75,9 +75,11 @@ module TagHandlers
   #   are tracked via text_buffer.length)
   # @return [void]
   def dispatch_tag(xml, text_buffer)
-    # Combat tracking: reset flag on any <popStream id="combat"...> tag.
+    # Combat tracking: reset flag on any <popStream> tag, bare or with an id.
+    # Every pop returns to main, so a combat block closed by a bare
+    # <popStream/> must not leave later unrecognized tags routed to combat.
     # This runs for every tag, before dispatch (matching original behavior).
-    @combat_next_line = false if xml.match?(%r{<popStream[^>]*id=["']combat["']})
+    @combat_next_line = false if xml.start_with?('<popStream')
 
     name = XmlTokenizer.tag_name(xml)
     closing = xml.start_with?('</')
