@@ -269,7 +269,7 @@ module SettingsLoader
                 KEY_NAME[id]
               end
         if key
-          # A multi-key sequence (e.g. alt+1 => [27, 49]) walks a combo map per prefix key.
+          # A multi-key sequence (e.g. alt+1 => [27, '1']) walks a combo map per prefix key.
           *prefix, final_key = key
           current_binding = prefix.reduce(binding) { |map, k| combo_map_for(map, k, id) }
           if (macro = xml.attributes['macro'])

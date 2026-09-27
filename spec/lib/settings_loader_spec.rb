@@ -107,7 +107,7 @@ RSpec.describe SettingsLoader do
       load_keys("<key id='escape' action='first'/><key id='alt+1' action='second'/>")
 
       expect(HIGHLIGHT.keys).to eq [/goblin/]
-      expect(key_binding[27]).to eq(49 => second_action)
+      expect(key_binding[27]).to eq('1' => second_action)
       expect_conflict_logged('alt+1')
     end
 
@@ -138,7 +138,7 @@ RSpec.describe SettingsLoader do
     it 'merges combos sharing a prefix without logging a conflict' do
       load_keys("<key id='alt+1' action='first'/><key id='alt+2' action='second'/>")
 
-      expect(key_binding[27]).to eq(49 => first_action, 50 => second_action)
+      expect(key_binding[27]).to eq('1' => first_action, '2' => second_action)
       expect(ProfanityLog).not_to have_received(:write)
     end
 
