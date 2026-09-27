@@ -9,6 +9,28 @@ $VERBOSE = original_verbose
 RSpec.describe GagPatterns do
   before(:each) { described_class.load_defaults }
 
+  describe 'when first loaded' do
+    # Reload the file to get the module's state before anything calls
+    # load_defaults or adds a pattern -- what a settings file with no gags
+    # leaves it in.
+    def freshly_loaded_gag_patterns
+      verbose = $VERBOSE
+      $VERBOSE = nil
+      load File.expand_path('../../lib/gag_patterns.rb', __dir__)
+      described_class
+    ensure
+      $VERBOSE = verbose
+    end
+
+    it 'matches nothing instead of raising before any gag is added' do
+      gags = freshly_loaded_gag_patterns
+
+      expect(gags.match_general('A goblin arrives.')).to be_nil
+      expect('A goblin swings').not_to match(gags.combat_regexp)
+      expect(gags.match_multiline_start('Knowledge from your sanowret crystal')).to be_nil
+    end
+  end
+
   describe '.load_defaults' do
     it 'creates regexps that match nothing' do
       expect('anything').not_to match(described_class.combat_regexp)

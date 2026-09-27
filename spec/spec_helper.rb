@@ -207,6 +207,9 @@ RSpec.configure do |config|
   # Reset all mutable runtime state between tests
   config.before(:each) do
     CONFIG.reset!
+    # Some spec files load the real GagPatterns over the stub above; start
+    # each example with no gags so patterns never leak between examples.
+    GagPatterns.load_defaults
     # Windows register themselves in per-class instance lists; start empty.
     BaseWindow.window_classes.each { |klass| klass.list.clear }
   end
