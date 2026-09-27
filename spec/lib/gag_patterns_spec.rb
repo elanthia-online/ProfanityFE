@@ -288,6 +288,77 @@ RSpec.describe GagPatterns do
     end
   end
 
+  # The server thread matches every line while .reload (input thread)
+  # replaces the gags. A read in the middle of an update must see the old
+  # gags or the new ones, never a mix. The read is injected into each
+  # Regexp.union call the update makes, standing in for the server thread
+  # being scheduled at that point.
+  describe 'reading while the gags are replaced' do
+    # Whether each probe line is gagged, read as the server thread does.
+    def gag_state
+      {
+        general_moth: !described_class.match_general('a moth').nil?,
+        general_bat: !described_class.match_general('a bat').nil?,
+        combat_sword: 'a sword'.match?(described_class.combat_regexp),
+        combat_axe: 'an axe'.match?(described_class.combat_regexp),
+        multiline_alpha: !described_class.match_multiline_start('alpha line').nil?,
+        multiline_beta: !described_class.match_multiline_start('beta line').nil?
+      }
+    end
+
+    # Run the update, recording gag_state at every Regexp.union call in it.
+    def states_read_during
+      states = []
+      allow(Regexp).to receive(:union).and_wrap_original do |original, *args|
+        states << gag_state
+        original.call(*args)
+      end
+      yield
+      states
+    end
+
+    let(:old_state) do
+      { general_moth: true, general_bat: false, combat_sword: true, combat_axe: false,
+        multiline_alpha: true, multiline_beta: false }
+    end
+
+    before do
+      described_class.replace_custom(general: ['moth'], combat: ['sword'], multiline: [{ start: 'alpha' }])
+    end
+
+    it 'sees entirely the old or entirely the new gags during replace_custom' do
+      new_state = { general_moth: false, general_bat: true, combat_sword: false, combat_axe: true,
+                    multiline_alpha: false, multiline_beta: true }
+
+      states = states_read_during do
+        described_class.replace_custom(general: ['bat'], combat: ['axe'], multiline: [{ start: 'beta' }])
+      end
+
+      expect(states).not_to be_empty
+      expect(states).to all(eq(old_state).or(eq(new_state)))
+      expect(gag_state).to eq(new_state)
+    end
+
+    it 'sees entirely the old gags or none during clear_custom' do
+      no_gags = old_state.transform_values { false }
+
+      states = states_read_during { described_class.clear_custom }
+
+      expect(states).not_to be_empty
+      expect(states).to all(eq(old_state).or(eq(no_gags)))
+      expect(gag_state).to eq(no_gags)
+    end
+
+    it 'does not change a gag list a reader already holds when a gag is added' do
+      held = described_class.multiline_gags
+
+      described_class.add_multiline_gag('beta')
+
+      expect(held.map { |gag| gag[:start] }).to eq([/alpha/])
+      expect(described_class.multiline_gags.map { |gag| gag[:start] }).to eq([/alpha/, /beta/])
+    end
+  end
+
   describe 'Regexp.union behavior edge cases' do
     it 'empty union matches nothing (not everything)' do
       described_class.load_defaults
