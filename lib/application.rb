@@ -102,43 +102,46 @@ class Application
   #
   # Dot-commands (e.g. .quit, .key, .reload) are handled locally;
   # everything else is forwarded to the server with '.' replaced by ';'.
+  # A dot-command matches case-insensitively and only as a whole word
+  # (its name followed by whitespace or end of input), so Lich scripts
+  # such as .arrows or .tabulate still reach the server.
   #
   # @param cmd [String] the command text to execute
   # @return [void]
   def execute_command(cmd)
-    if cmd =~ /^\.quit/i
+    if cmd =~ /^\.quit(?=\s|\z)/i
       exit
-    elsif cmd =~ /^\.key/i
+    elsif cmd =~ /^\.key(?=\s|\z)/i
       handle_dot_key
-    elsif cmd =~ /^\.fixcolor/i
+    elsif cmd =~ /^\.fixcolor(?=\s|\z)/i
       ColorManager.reinitialize_colors
-    elsif cmd =~ /^\.resync/i
+    elsif cmd =~ /^\.resync(?=\s|\z)/i
       @shared_state.skip_server_time_offset = false
-    elsif cmd =~ /^\.reload/i
+    elsif cmd =~ /^\.reload(?=\s|\z)/i
       SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro), reload: true)
-    elsif (match = cmd.match(/^\.layout\s+(?<layout>.+)/))
+    elsif (match = cmd.match(/^\.layout\s+(?<layout>.+)/i))
       @window_mgr.load_layout(match[:layout])
       @cmd_buffer.window = @window_mgr.command_window
       @key_action['resize'].call
-    elsif cmd =~ /^\.resize/i
+    elsif cmd =~ /^\.resize(?=\s|\z)/i
       @key_action['resize'].call
-    elsif (match = cmd.match(/^\.tab(?:\s+(?<arg>.+))?/i))
+    elsif (match = cmd.match(/^\.tab(?=\s|\z)(?:\s+(?<arg>.+))?/i))
       handle_dot_tab(match[:arg]&.strip)
-    elsif cmd =~ /^\.arrow/i
+    elsif cmd =~ /^\.arrow(?=\s|\z)/i
       handle_dot_arrow
-    elsif cmd =~ /^\.links/i
+    elsif cmd =~ /^\.links(?=\s|\z)/i
       handle_dot_links
-    elsif cmd =~ /^\.select/i
+    elsif cmd =~ /^\.select(?=\s|\z)/i
       handle_dot_select
-    elsif cmd =~ /^\.draghl/i
+    elsif cmd =~ /^\.draghl(?=\s|\z)/i
       handle_dot_draghl
-    elsif cmd =~ /^\.scrollcfg/i
+    elsif cmd =~ /^\.scrollcfg(?=\s|\z)/i
       @mouse_scroll.start_configuration
     elsif (match = cmd.match(/^\.unhighlight\s+(?<pattern>.+)/i))
       handle_dot_unhighlight(match[:pattern])
-    elsif (match = cmd.match(/^\.highlight(?:\s+(?<pattern>.+))?/i))
+    elsif (match = cmd.match(/^\.highlight(?=\s|\z)(?:\s+(?<pattern>.+))?/i))
       handle_dot_highlight(match[:pattern]&.strip)
-    elsif cmd =~ /^\.help/i
+    elsif cmd =~ /^\.help(?=\s|\z)/i
       handle_dot_help
     else
       @server.puts cmd.sub(/^\./, ';')

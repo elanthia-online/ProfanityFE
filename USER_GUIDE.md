@@ -1334,6 +1334,10 @@ them in the command input line. All dot-commands are case-insensitive.
 
 Any input starting with `.` that does not match a dot-command is forwarded to
 the game server with the leading `.` replaced by `;` (the Lich command prefix).
+A dot-command matches only when its full name is followed by a space or the end
+of the line, so Lich scripts whose names start with a dot-command name still
+reach Lich: `.arrows` is sent as `;arrows` and `.tabulate` as `;tabulate`,
+while `.arrow` and `.tab 2` are handled locally.
 
 ### .quit
 

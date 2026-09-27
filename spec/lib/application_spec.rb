@@ -193,6 +193,100 @@ RSpec.describe Application do
     it '.layout with unknown layout does not crash' do
       expect { app.execute_command('.layout nonexistent') }.not_to raise_error
     end
+
+    # ---- Whole-word matching ----
+    #
+    # BUG FOUND (fixed here): dot-commands matched by prefix, so a Lich
+    # script whose name merely started with a dot-command name was
+    # swallowed locally instead of being forwarded, and `.quitter` exited
+    # the client. A dot-command now matches only when its name is followed
+    # by whitespace or the end of the input.
+    describe 'whole-word matching' do
+      let(:server) { StringIO.new }
+
+      before { app.instance_variable_set(:@server, server) }
+
+      {
+        '.quitter'         => ";quitter\n",
+        '.arrows'          => ";arrows\n",
+        '.arrows 5'        => ";arrows 5\n",
+        '.linkstat'        => ";linkstat\n",
+        '.help-me'         => ";help-me\n",
+        '.keymaster'       => ";keymaster\n",
+        '.tabulate'        => ";tabulate\n",
+        '.tabulate skills' => ";tabulate skills\n",
+        '.selectgem'       => ";selectgem\n",
+        '.highlighter'     => ";highlighter\n",
+        '.reloadall'       => ";reloadall\n",
+        '.resizer'         => ";resizer\n",
+        '.ARROWS'          => ";ARROWS\n",
+      }.each do |typed, forwarded|
+        it "forwards the look-alike script command #{typed.inspect} to the server as #{forwarded.chomp.inspect}" do
+          expect { app.execute_command(typed) }.not_to raise_error
+          expect(server.string).to eq forwarded
+        end
+      end
+
+      it 'handles .arrow typed exactly as the local arrow-mode toggle' do
+        expect(app).to receive(:handle_dot_arrow)
+        app.execute_command('.arrow')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .links typed exactly as the local link toggle, not the links script' do
+        expect(app).to receive(:handle_dot_links)
+        app.execute_command('.links')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .help followed by trailing whitespace as the local help command' do
+        expect(app).to receive(:handle_dot_help)
+        app.execute_command('.help ')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .layout default locally by loading the named layout' do
+        expect(app.window_mgr).to receive(:load_layout).with('default')
+        app.execute_command('.layout default')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .tab thoughts locally by switching to the named tab' do
+        expect(app).to receive(:handle_dot_tab).with('thoughts')
+        app.execute_command('.tab thoughts')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .highlight goblin locally by adding an inline highlight' do
+        expect(app).to receive(:handle_dot_highlight).with('goblin')
+        app.execute_command('.highlight goblin')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .unhighlight goblin locally by removing an inline highlight' do
+        expect(app).to receive(:handle_dot_unhighlight).with('goblin')
+        app.execute_command('.unhighlight goblin')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .LAYOUT default case-insensitively like every other dot-command' do
+        expect(app.window_mgr).to receive(:load_layout).with('default')
+        app.execute_command('.LAYOUT default')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .TAB thoughts case-insensitively and keeps the argument as typed' do
+        expect(app).to receive(:handle_dot_tab).with('thoughts')
+        app.execute_command('.TAB thoughts')
+        expect(server.string).to be_empty
+      end
+
+      it 'handles .Arrow case-insensitively as the local arrow-mode toggle' do
+        expect(app).to receive(:handle_dot_arrow)
+        app.execute_command('.Arrow')
+        expect(server.string).to be_empty
+      end
+    end
   end
 
   # ---- Macro engine ----
