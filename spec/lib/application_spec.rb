@@ -606,7 +606,7 @@ RSpec.describe Application do
   # at once and .key printed "Detected keycode: " with no key.
   describe '.key' do
     # A command window that acts like curses: nodelay and timeout share one
-    # delay setting. getch returns nil in nodelay mode and the given key
+    # delay setting. get_char returns nil in nodelay mode and the given key
     # (or the result of the block) when waiting is allowed.
     def key_window(key = nil, &on_wait)
       window = Object.new
@@ -615,7 +615,7 @@ RSpec.describe Application do
       window.define_singleton_method(:nodelay=) { |on| delays << (on ? :nodelay : :blocking) }
       window.define_singleton_method(:timeout=) { |ms| delays << ms }
       window.define_singleton_method(:noutrefresh) { nil }
-      window.define_singleton_method(:getch) do
+      window.define_singleton_method(:get_char) do
         next nil if delays.last == :nodelay
 
         on_wait ? on_wait.call : key
@@ -653,7 +653,7 @@ RSpec.describe Application do
       expect(feedback_texts).not_to include(a_string_including('Detected keycode'))
     end
 
-    it 'restores nodelay when getch raises' do
+    it 'restores nodelay when the read raises' do
       window = key_window { raise IOError, 'terminal gone' }
       app.cmd_buffer.window = window
       expect { app.execute_command('.key') }.to raise_error(IOError)
@@ -837,12 +837,12 @@ RSpec.describe Application do
   end
 
   describe 'input loop' do
-    # A command window whose getch returns the given keys, then raises
+    # A command window whose get_char returns the given keys, then raises
     # Interrupt (Ctrl+C) to end the loop.
     def keyboard(*keys)
       window = Object.new
       window.define_singleton_method(:nodelay=) { |_| nil }
-      window.define_singleton_method(:getch) { keys.empty? ? raise(Interrupt) : keys.shift }
+      window.define_singleton_method(:get_char) { keys.empty? ? raise(Interrupt) : keys.shift }
       window
     end
 
@@ -850,7 +850,8 @@ RSpec.describe Application do
       handled = []
       app.key_binding[1] = proc { raise 'broken key action' }
       app.key_binding[2] = proc { handled << :second_key }
-      app.cmd_buffer.window = keyboard(1, 2)
+      # get_char returns ctrl+a and ctrl+b as one-character Strings
+      app.cmd_buffer.window = keyboard("\x01", "\x02")
       allow(IO).to receive(:select).and_return(nil)
       allow(ProfanityLog).to receive(:write)
 
@@ -860,9 +861,9 @@ RSpec.describe Application do
       expect(ProfanityLog).to have_received(:write).with('main', a_string_including('broken key action'), backtrace: anything)
     end
 
-    # Curses getch returns a printable key as a one-character String, so
-    # Alt+1 arrives as the Integer 27 (ESC) followed by the String "1".
-    it 'fires the alt+1 binding from the settings file when getch delivers 27 then the digit String' do
+    # Alt+1 arrives as ESC followed by "1"; get_char returns both as
+    # Strings, and the settings file binds it as [27, '1'].
+    it 'fires the alt+1 binding from the settings file when ESC then the digit arrive' do
       switched = []
       app.key_action['switch_tab_1'] = proc { switched << 1 }
       Dir.mktmpdir do |dir|
@@ -870,12 +871,103 @@ RSpec.describe Application do
         File.write(path, "<settings><key id='alt+1' action='switch_tab_1'/></settings>")
         SettingsLoader.load(path, app.key_binding, app.key_action, proc {})
       end
-      app.cmd_buffer.window = keyboard(27, '1')
+      app.cmd_buffer.window = keyboard("\e", '1')
       allow(IO).to receive(:select).and_return(nil)
 
       app.send(:input_loop)
 
       expect(switched).to eq [1]
+    end
+  end
+
+  # BUG FOUND (fixed here): the input loop read keys with getch, which
+  # returns a non-ASCII character's UTF-8 bytes one Integer at a time, and
+  # only Strings are typed into the command line, so "café" became "caf".
+  describe 'typing non-ASCII characters' do
+    let(:backspace) { 0x107 } # ncurses KEY_BACKSPACE; spec_helper's Curses stub lacks it
+
+    let(:screen) { ScreenLineWindow.new(30) }
+    let(:server) { StringIO.new }
+
+    # Make the command line window also act as the keyboard: the user types
+    # +keys+ (text, or Integer function-key codes), and each read returns what
+    # curses returns for it. getch returns printable ASCII as a String and any
+    # other byte, including each byte of a UTF-8 character, as an Integer;
+    # get_char returns a whole character as a String and a function key as
+    # its Integer code. Ctrl+C (Interrupt) ends the loop when keys run out.
+    def type(*keys)
+      chars = keys.flat_map { |k| k.is_a?(String) ? k.chars : [k] }
+      bytes = []
+      screen.define_singleton_method(:nodelay=) { |_| nil }
+      screen.define_singleton_method(:timeout=) { |_| nil }
+      screen.define_singleton_method(:get_char) { chars.empty? ? raise(Interrupt) : chars.shift }
+      screen.define_singleton_method(:getch) do
+        if bytes.empty?
+          raise Interrupt if chars.empty?
+
+          key = chars.shift
+          next key if key.is_a?(Integer) || key.match?(/\A[ -~]\z/)
+
+          bytes.concat(key.bytes)
+        end
+        bytes.shift
+      end
+      allow(IO).to receive(:select).and_return(nil)
+      app.send(:input_loop)
+    end
+
+    before do
+      app.cmd_buffer.window = screen
+      app.instance_variable_set(:@server, server)
+      app.key_binding[10] = app.key_action['send_command']
+      app.key_binding[Curses::KEY_LEFT] = app.key_action['cursor_left']
+      app.key_binding[backspace] = app.key_action['cursor_backspace']
+      app.key_binding[21] = app.key_action['cursor_kill_line'] # ctrl+u
+      app.key_binding[25] = app.key_action['cursor_yank'] # ctrl+y
+    end
+
+    it 'shows each typed character on the command line, with the cursor after it' do
+      type('café')
+      expect(screen.visible).to eq 'café'
+      expect(screen.curx).to eq 4
+    end
+
+    it 'sends the typed text to the server' do
+      type("café au lait\n")
+      expect(server.string).to eq "café au lait\n"
+    end
+
+    it 'backspaces over a non-ASCII character as one character' do
+      type('café', backspace, "e\n")
+      expect(server.string).to eq "cafe\n"
+    end
+
+    it 'moves the cursor over a non-ASCII character as one character' do
+      type('naïve', Curses::KEY_LEFT, Curses::KEY_LEFT, backspace, 'i')
+      expect(screen.visible).to eq 'naive'
+      expect(screen.curx).to eq 3
+    end
+
+    it 'kills and yanks text with non-ASCII characters' do
+      type("ñoño\x15", "say \x19\n")
+      expect(server.string).to eq "say ñoño\n"
+    end
+
+    it 'reports a non-ASCII key as the character typed for .key' do
+      type(".key\n", 'é')
+      expect(main_window.calls.map { |c| c[:text] }).to include('* Detected keycode: é')
+    end
+
+    it 'drops a key the locale cannot decode and keeps reading' do
+      # Under the C locale, get_char raises RangeError for a non-ASCII key.
+      reads = [-> { raise RangeError, 'invalid codepoint 0xC3 in US-ASCII' }, -> { 'a' }]
+      screen.define_singleton_method(:nodelay=) { |_| nil }
+      screen.define_singleton_method(:get_char) { reads.empty? ? raise(Interrupt) : reads.shift.call }
+      allow(IO).to receive(:select).and_return(nil)
+
+      app.send(:input_loop)
+
+      expect(screen.visible).to eq 'a'
     end
   end
 

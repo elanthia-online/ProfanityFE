@@ -256,18 +256,43 @@ class Application
 
   # Read one key from the command window, waiting up to DOT_KEY_TIMEOUT_MS.
   #
-  # {#input_loop} keeps the window in nodelay mode, where getch returns nil
+  # {#input_loop} keeps the window in nodelay mode, where a read returns nil
   # at once. This switches to a bounded wait for the one read, then puts
-  # nodelay back even if getch raises. The caller holds the curses monitor,
+  # nodelay back even if the read raises. The caller holds the curses monitor,
   # so the server thread cannot draw during the wait; the bound keeps that
   # pause short if no key comes.
   #
-  # @return [Integer, String, nil] the key read, or nil if none arrived
+  # @return [Integer, String, nil] the key read (see {#read_key}), or nil
+  #   if none arrived
   def wait_for_key
     @cmd_buffer.window.timeout = DOT_KEY_TIMEOUT_MS
-    @cmd_buffer.window.getch
+    read_key
   ensure
     @cmd_buffer.window.nodelay = true
+  end
+
+  # Read one key press from the command window.
+  #
+  # Reads with +get_char+ (wget_wch), not +getch+: getch hands back each
+  # byte of a non-ASCII character such as "é" as a separate Integer, so the
+  # character never reached the command line. Everything else keeps getch's
+  # shape so key bindings match as before: a function key is its Integer
+  # code, a control character (Enter, Tab, ESC, ctrl+letter, DEL) is its
+  # Integer byte, and a typed character is a one-character UTF-8 String.
+  #
+  # A key the locale cannot decode (a non-ASCII key under the C locale)
+  # raises RangeError in the curses binding; that key is dropped, as the
+  # stray bytes from getch were.
+  #
+  # @return [Integer, String, nil] the key, or nil if none was read
+  def read_key
+    key = @cmd_buffer.window.get_char
+    return key unless key.is_a?(String)
+    return key.ord if key.ord < 0x20 || key.ord == 0x7F
+
+    key.encode(Encoding::UTF_8)
+  rescue RangeError, EncodingError
+    nil
   end
 
   def handle_dot_tab(arg)
@@ -754,7 +779,7 @@ class Application
         # Drag held at a window edge keeps scrolling once per tick
         drag_scrolled = tick_drag_auto_scroll
 
-        ch = @cmd_buffer.window.getch
+        ch = read_key
         if ch.nil?
           Curses.doupdate if countdown_updated || drag_scrolled
           next
@@ -786,7 +811,7 @@ class Application
   # broken key action or mouse handler cannot end the session. Connection
   # errors propagate to {#input_loop}, which ends it.
   #
-  # @param ch [Integer, String] the key code or character from getch
+  # @param ch [Integer, String] the key code or character from {#read_key}
   # @param key_combo [Hash, nil] the pending key-combo map from earlier keys
   # @return [Hash, nil] the key-combo map to use for the next key
   def handle_key(ch, key_combo)
