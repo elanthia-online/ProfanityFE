@@ -46,6 +46,10 @@ class Application
   # How long .key waits for a key press before giving up, in milliseconds.
   DOT_KEY_TIMEOUT_MS = 5000
 
+  # Seconds to wait for the TCP connection to the game server before giving
+  # up, so an unreachable --host fails instead of hanging.
+  CONNECT_TIMEOUT = 10
+
   # Create a new application instance with the given CLI options.
   #
   # @param cli_options [Hash] parsed CLI options from OptionParser
@@ -54,6 +58,8 @@ class Application
   def initialize(cli_options)
     @cli_options = cli_options
     @server = nil
+    # Receives the server thread's outcome (see #start_server_thread)
+    @session_end = Queue.new
 
     @xml_escapes = {
       '&lt;'   => '<',
@@ -581,9 +587,8 @@ class Application
     SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro))
 
     if LAYOUT.empty?
-      $stderr.puts "ERROR: No layouts found in #{SETTINGS_FILENAME}."
-      $stderr.puts "The XML file may be malformed. Check for unclosed tags or encoding errors."
-      exit 1
+      fatal_error("ERROR: No layouts found in #{SETTINGS_FILENAME}.",
+                  'The XML file may be malformed. Check for unclosed tags or encoding errors.')
     end
 
     @window_mgr.load_layout('default')
@@ -591,15 +596,14 @@ class Application
     @window_mgr.room['room']&.links_enabled = @cli_options[:links]
 
     unless @cmd_buffer.window
-      $stderr.puts "ERROR: Layout has no command window. Add <window class='command'/> to your layout."
-      exit 1
+      fatal_error("ERROR: Layout has no command window. Add <window class='command'/> to your layout.")
     end
 
     TextWindow.list.each { |w| w.maxy.times { w.add_string "\n".dup } }
   end
 
   def connect_server
-    @server = TCPSocket.open(HOST, PORT)
+    @server = Socket.tcp(HOST, PORT, connect_timeout: CONNECT_TIMEOUT)
     @server.puts "SET_FRONTEND_PID #{Process.pid}"
     @server.flush
 
@@ -610,9 +614,25 @@ class Application
       sleep TIME_SYNC_DELAY
       @shared_state.skip_server_time_offset = false
     end
-  rescue Errno::ECONNREFUSED, Errno::ECONNRESET, SocketError => e
-    warn "Failed to connect to game server on port #{PORT}: #{e.message}"
-    warn 'Is the game server running?'
+  # SystemCallError covers refused, unreachable, timed out, and bad
+  # address; SocketError covers name lookup. IO::TimeoutError is what
+  # TCPSocket's connect_timeout raises, should the socket class change.
+  rescue SystemCallError, SocketError, IO::TimeoutError => e
+    fatal_error("Failed to connect to game server at #{HOST}:#{PORT}: #{e.message}",
+                'Is the game server running?')
+  end
+
+  # Print an error and exit with status 1, closing the curses screen first.
+  #
+  # Until +close_screen+, curses owns the terminal's alternate screen, which
+  # is discarded when the program exits, so an error printed earlier is
+  # never seen.
+  #
+  # @param lines [Array<String>] lines to print to stderr
+  # @return [void] never returns
+  def fatal_error(*lines)
+    Curses.close_screen
+    lines.each { |line| warn line }
     exit 1
   end
 
@@ -623,14 +643,54 @@ class Application
     # changes; re-fit the command line to the new width afterwards.
     @event_bus.on(:prompt_changed) { @cmd_buffer.redraw }
 
-    processor = GameTextProcessor.new(
+    @processor = GameTextProcessor.new(
       window_mgr: @window_mgr,
       shared_state: @shared_state,
       cmd_buffer: @cmd_buffer,
       xml_escapes: @xml_escapes,
       event_bus: @event_bus
     )
-    Thread.new { processor.run(@server) }
+    # The server thread only reports how the connection ended; the input
+    # loop picks that up and ends the session on the main thread.
+    Thread.new do
+      outcome = :crashed
+      outcome = @processor.run(@server)
+    ensure
+      @session_end << outcome
+    end
+  end
+
+  # End the session once the server thread reports that the connection is
+  # over. Called from {#input_loop}, so it runs on the main thread: the
+  # notice is drawn and the key read by the thread that owns the keyboard,
+  # with no competing getch. Exits through SystemExit, so the input loop's
+  # +ensure+ restores the terminal.
+  #
+  # @param outcome [Symbol] +:disconnected+ or +:crashed+, from
+  #   {GameTextProcessor#run}
+  # @return [void] never returns
+  def end_session(outcome)
+    unless outcome == :disconnected
+      fatal_error('ProfanityFE stopped: error reading from the game server. See the log file for details.')
+    end
+
+    @processor.show_disconnect_message
+    wait_for_exit_key
+    exit 0
+  end
+
+  # Block until a key is pressed. Resizes and mouse events are not key
+  # presses. A read error (nil) also ends the wait, so a lost terminal
+  # cannot spin here.
+  #
+  # @return [void]
+  def wait_for_exit_key
+    window = @cmd_buffer.window
+    window.nodelay = false
+    loop do
+      ch = window.getch
+      break unless [Curses::KEY_RESIZE, Curses::KEY_MOUSE].include?(ch)
+    end
   end
 
   # ---- Input loop ----
@@ -655,6 +715,7 @@ class Application
 
     loop do
       IO.select([$stdin], nil, nil, 0.1)
+      end_session(@session_end.pop) unless @session_end.empty?
 
       CursesRenderer.synchronize do
         # Tick countdowns on every iteration (~100ms), regardless of input

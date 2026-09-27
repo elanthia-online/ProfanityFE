@@ -127,14 +127,25 @@ class GameTextProcessor
     @current_raw_line = nil # Raw line with XML tags preserved for room object extraction
   end
 
+  # Socket errors that mean the connection closed normally rather than
+  # that ProfanityFE failed: the socket was closed by another thread
+  # (IOError), or Lich closed it (ECONNRESET when Lich closes with client
+  # data still unread, EPIPE, ECONNABORTED).
+  DISCONNECT_ERRORS = [IOError, Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED].freeze
+
   # Main processing loop. Blocks on +server.gets+ reading lines from the
   # game server socket and processes each through XML tag extraction,
   # stream routing, bold/color tracking, room data assembly, and window
-  # updates. Exits (calls +exit+) when the connection is closed or an
-  # unrecoverable error occurs.
+  # updates, until the connection ends.
+  #
+  # It does not show the disconnect message or exit: it reports how the
+  # connection ended, and {Application} ends the session on the main
+  # thread, which owns keyboard input.
   #
   # @param server [IO] TCP socket (or socket-like) connected to the game server
-  # @return [void] never returns normally; calls +exit+ on disconnect or error
+  # @return [Symbol] +:disconnected+ when the connection closed (EOF or one
+  #   of {DISCONNECT_ERRORS}); +:crashed+ when any other error ended the
+  #   loop (logged with its backtrace)
   def run(server)
     @server = server
     line = nil
@@ -149,19 +160,24 @@ class GameTextProcessor
 
       process_server_line(line)
     end
-    # After loop exits (connection closed):
-    show_disconnect_message
-    @cmd_buffer.window&.getch
-    exit
-  rescue IOError => e
-    # Normal disconnect — socket closed by another thread (e.g., Lich shutdown)
-    ProfanityLog.write('game_text_processor', "disconnected: #{e.message}")
-    show_disconnect_message
-    @cmd_buffer.window&.getch
-    exit
+    :disconnected
+  rescue *DISCONNECT_ERRORS => e
+    ProfanityLog.write('game_text_processor', "disconnected: #{e.class}: #{e.message}")
+    :disconnected
   rescue StandardError => e
     ProfanityLog.write('game_text_processor', e.to_s, backtrace: e.backtrace)
-    exit
+    :crashed
+  end
+
+  # Show the "Connection closed / Press any key to exit" notice in the
+  # main window and flush it to the screen.
+  #
+  # @return [void]
+  def show_disconnect_message
+    CursesRenderer.render do
+      @event_bus.emit(:disconnect)
+      @cmd_buffer.window&.noutrefresh
+    end
   end
 
   private
@@ -278,13 +294,6 @@ class GameTextProcessor
     raise
   rescue StandardError => e
     ProfanityLog.write('game_text_processor', "error processing line #{line.inspect}: #{e.message}", backtrace: e.backtrace)
-  end
-
-  def show_disconnect_message
-    @event_bus.emit(:disconnect)
-    CursesRenderer.render do
-      @cmd_buffer.window&.noutrefresh
-    end
   end
 
   # Parse a room subtitle attribute into a clean room title string.
