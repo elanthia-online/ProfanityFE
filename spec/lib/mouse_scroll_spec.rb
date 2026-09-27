@@ -37,6 +37,43 @@ RSpec.describe MouseScroll do
 
   subject(:mouse) { described_class.new(key_action, display_fn) }
 
+  # .scrollcfg turns on every mouse event, pointer motion included, to catch
+  # the wheel. Typing .scrollcfg again cancels and must put the mask back.
+  describe 'cancelling scroll wheel calibration' do
+    let(:masks) { [] }
+
+    before do
+      stub_const('Curses::ALL_MOUSE_EVENTS', Curses::REPORT_MOUSE_POSITION - 1)
+      allow(Curses).to receive(:mousemask) { |mask| masks << mask }
+    end
+
+    def calibrate_then_cancel
+      mouse.start_configuration
+      mouse.start_configuration
+    end
+
+    it 'goes back to reporting only clicks when links are on' do
+      mouse.enable_click_events
+      calibrate_then_cancel
+
+      expect(masks.last).to eq MouseScroll::CLICK_EVENTS
+    end
+
+    it 'goes back to reporting only the saved wheel buttons' do
+      allow(ProfanitySettings).to receive(:load_mouse_settings)
+        .and_return('BUTTON4_PRESSED_MASK' => 0x10000, 'BUTTON5_PRESSED_MASK' => 0x200000)
+      calibrate_then_cancel
+
+      expect(masks.last).to eq 0x210000
+    end
+
+    it 'stops mouse reporting when nothing else had turned it on' do
+      calibrate_then_cancel
+
+      expect(masks.last).to eq 0
+    end
+  end
+
   describe 'click-resolution save/restore' do
     it 'suppresses with interval 0 when enabling click events with drag highlight' do
       mouse.enable_click_events
