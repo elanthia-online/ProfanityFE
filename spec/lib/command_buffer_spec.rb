@@ -461,6 +461,107 @@ RSpec.describe CommandBuffer do
     end
   end
 
+  # Only consecutive kills share a kill-ring entry (readline). Any other
+  # command in between ends the sequence, even one that leaves the text
+  # and cursor exactly where the last kill left them.
+  describe 'kill sequences' do
+    let(:screen) { ScreenLineWindow.new(40) }
+
+    before { buf.window = screen }
+
+    # Send the line (as Enter does), yank onto the empty command line and
+    # return the cells left of the cursor: exactly the pasted text,
+    # trailing blanks included.
+    def yanked_line
+      buf.clear_and_get
+      buf.yank
+      screen.line[0, screen.curx]
+    end
+
+    it 'appends consecutive backward word kills' do
+      type('one two three')
+      buf.backspace_word
+      buf.backspace_word
+      expect(yanked_line).to eq 'two three'
+    end
+
+    it 'appends consecutive forward word kills' do
+      type('one two')
+      buf.cursor_home
+      buf.delete_word
+      buf.delete_word
+      expect(yanked_line).to eq 'one two'
+    end
+
+    it 'starts a new entry when text is typed between kills' do
+      type('one two')
+      buf.backspace_word
+      type(' three')
+      buf.backspace_word
+      expect(yanked_line).to eq 'three'
+    end
+
+    it 'starts a new entry when the cursor moves away and back between kills' do
+      type('one two three')
+      buf.backspace_word
+      buf.cursor_left
+      buf.cursor_right
+      buf.backspace_word
+      expect(yanked_line).to eq 'two '
+    end
+
+    it 'starts a new entry when a character is typed and erased between kills' do
+      type('one two')
+      buf.backspace_word
+      type('x')
+      buf.backspace
+      buf.backspace_word
+      expect(yanked_line).to eq 'one '
+    end
+
+    it 'starts a new entry when the line is sent and recalled between kills' do
+      type('foo bar')
+      buf.backspace_word
+      buf.add_to_history(buf.clear_and_get)
+      buf.previous_command
+      buf.backspace_word
+      expect(yanked_line).to eq 'foo '
+    end
+
+    # Every non-kill command ends the sequence, including ones that are
+    # no-ops here (cursor_right, delete_char, previous_command at the end
+    # of their range). The line starts as "alpha beta one two three four"
+    # recalled from the oldest history entry; the first kill takes "four".
+    {
+      'typing a character' => [-> { buf.put_ch('x') }, :backspace_word],
+      'cursor_left'        => [-> { buf.cursor_left }, :backspace_word],
+      'cursor_right'       => [-> { buf.cursor_right }, :backspace_word],
+      'cursor_word_left'   => [-> { buf.cursor_word_left }, :backspace_word],
+      'cursor_word_right'  => [-> { buf.cursor_word_right }, :backspace_word],
+      'cursor_home'        => [-> { buf.cursor_home }, :delete_word],
+      'cursor_end'         => [-> { buf.cursor_end }, :backspace_word],
+      'backspace'          => [-> { buf.backspace }, :backspace_word],
+      'delete_char'        => [-> { buf.delete_char }, :backspace_word],
+      'yank'               => [-> { buf.yank }, :backspace_word],
+      'previous_command'   => [-> { buf.previous_command }, :backspace_word],
+      'next_command'       => [-> { buf.next_command }, :backspace_word]
+    }.each do |name, (action, second_kill)|
+      it "yanks only the second kill when #{name} comes between kills" do
+        buf.add_to_history('alpha beta')
+        buf.add_to_history('gamma delta')
+        2.times { buf.previous_command }
+        type(' one two three four')
+        buf.backspace_word
+        instance_exec(&action)
+        text_before = buf.text.dup
+        buf.public_send(second_kill)
+        removed = text_before[buf.pos, text_before.length - buf.text.length]
+        expect(removed).not_to be_empty
+        expect(yanked_line).to eq removed
+      end
+    end
+  end
+
   # ==================================================================
   # History
   # ==================================================================

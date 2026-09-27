@@ -113,6 +113,7 @@ class CommandBuffer
   # @param ch [String] single character to insert
   # @return [void]
   def put_ch(ch)
+    @kill.end_sequence
     return unless @window
 
     @text.insert(@pos, ch)
@@ -128,6 +129,7 @@ class CommandBuffer
   #
   # @return [void]
   def cursor_left
+    @kill.end_sequence
     return unless @window
 
     @pos = [@pos - 1, 0].max
@@ -139,6 +141,7 @@ class CommandBuffer
   #
   # @return [void]
   def cursor_right
+    @kill.end_sequence
     return unless @window
 
     @pos = [@pos + 1, @text.length].min
@@ -152,6 +155,7 @@ class CommandBuffer
   #
   # @return [void]
   def cursor_word_left
+    @kill.end_sequence
     return unless @window && @pos > 0
 
     new_pos = if (m = @text[0...(@pos - 1)].match(/.*(\w[^\w\s]|\W\w|\s\S)/))
@@ -170,6 +174,7 @@ class CommandBuffer
   #
   # @return [void]
   def cursor_word_right
+    @kill.end_sequence
     return unless @window && @pos < @text.length
 
     new_pos = if (m = @text[@pos..-1].match(/\w[^\w\s]|\W\w|\s\S/))
@@ -187,6 +192,7 @@ class CommandBuffer
   #
   # @return [void]
   def cursor_home
+    @kill.end_sequence
     return unless @window
 
     @pos = 0
@@ -199,6 +205,7 @@ class CommandBuffer
   #
   # @return [void]
   def cursor_end
+    @kill.end_sequence
     return unless @window
 
     @pos = @text.length
@@ -215,6 +222,7 @@ class CommandBuffer
   #
   # @return [void]
   def backspace
+    @kill.end_sequence
     return unless @window && @pos > 0
 
     @pos -= 1
@@ -228,6 +236,7 @@ class CommandBuffer
   #
   # @return [void]
   def delete_char
+    @kill.end_sequence
     return unless @window
     return if @text.empty? || @pos >= @text.length
 
@@ -265,7 +274,7 @@ class CommandBuffer
   def kill_forward
     return unless @window && @pos < @text.length
 
-    @kill.before(@text, @pos)
+    @kill.before(@text)
     if @pos == 0
       @kill.buffer += @text
       @text = String.new
@@ -273,7 +282,7 @@ class CommandBuffer
       @kill.buffer += @text[@pos..-1]
       @text = @text[0..(@pos - 1)]
     end
-    @kill.after(@text, @pos)
+    @kill.after
     render
     @window.noutrefresh
   end
@@ -286,12 +295,12 @@ class CommandBuffer
     return unless @window
     return if @text.empty?
 
-    @kill.before(@text, @pos)
+    @kill.before(@text)
     @kill.buffer = @kill.original
     @text = String.new
     @pos = 0
     @offset = 0
-    @kill.after(@text, @pos)
+    @kill.after
     render
     @window.noutrefresh
   end
@@ -302,6 +311,7 @@ class CommandBuffer
   #
   # @return [void]
   def yank
+    @kill.end_sequence
     @kill.buffer.each_char { |c| put_ch(c) }
   end
 
@@ -315,6 +325,7 @@ class CommandBuffer
   #
   # @return [void]
   def previous_command
+    @kill.end_sequence
     return unless @window && @history_pos < (@history.length - 1)
 
     @history[@history_pos] = @text.dup
@@ -331,6 +342,7 @@ class CommandBuffer
   #
   # @return [void]
   def next_command
+    @kill.end_sequence
     return unless @window
 
     if @history_pos == 0
@@ -364,6 +376,7 @@ class CommandBuffer
   #
   # @return [String] the buffer contents before clearing
   def clear_and_get
+    @kill.end_sequence
     cmd = @text.dup
     @text.clear
     @pos = 0
@@ -489,8 +502,8 @@ class CommandBuffer
 
       deleted_alnum ||= next_char.alnum?
       deleted_nonspace = !next_char.space?
+      @kill.before(@text) if num_deleted.zero?
       num_deleted += 1
-      @kill.before(@text, @pos)
       if backward
         @kill.buffer = next_char + @kill.buffer
         backspace
@@ -498,7 +511,9 @@ class CommandBuffer
         @kill.buffer += next_char
         delete_char
       end
-      @kill.after(@text, @pos)
     end
+    # backspace/delete_char end the kill sequence as they go, so mark the
+    # whole word deletion as a kill once it is done.
+    @kill.after if num_deleted.positive?
   end
 end

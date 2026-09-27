@@ -4,20 +4,30 @@
 
 # Readline-style kill ring for cut/paste operations.
 #
-# Successive calls to kill/delete-word operations accumulate text into
-# the kill buffer as long as no other commands have changed the command
-# buffer. Call {#before} to detect discontinuity, mutate {#buffer},
-# then call {#after} to snapshot the current state for next time.
+# Consecutive kill commands accumulate text into one kill buffer; any
+# other editing command ends the kill sequence, so the next kill starts
+# a fresh buffer. Call {#before} at the start of a kill, mutate
+# {#buffer}, then call {#after}. Non-kill commands call {#end_sequence}.
+#
+# Whether a kill continues the sequence depends only on what the
+# previous command was, not on the buffer contents: moving the cursor
+# away and back, or typing and deleting a character, still ends it.
 #
 # @example
 #   ring = KillRing.new
-#   ring.before("hello world", 5)
-#   ring.buffer += "hello world"[5..]  # kill forward
-#   ring.after("hello", 5)
+#   ring.before("hello world")
+#   ring.buffer += " world"  # kill forward
+#   ring.after
 #   ring.buffer  # => " world"
 class KillRing
   # @return [String] accumulated killed text for yanking
   attr_accessor :buffer
+
+  # The full original text captured at the start of the current kill sequence.
+  # Used by kill_line to restore the entire line on yank.
+  #
+  # @return [String] original text before any kills in this sequence
+  attr_reader :original
 
   # Create a new kill ring with empty buffers.
   #
@@ -25,37 +35,36 @@ class KillRing
   def initialize
     @buffer = ''
     @original = ''
-    @last_text = ''
-    @last_pos = 0
+    @killing = false
   end
 
-  # Call before a kill operation. Resets the buffer if the command text
-  # or cursor position has changed since the last kill operation.
+  # Call before a kill operation. Starts a new kill buffer, capturing
+  # the current text as {#original}, unless the previous command was
+  # also a kill.
   #
   # @param current_text [String] current command buffer text
-  # @param current_pos [Integer] current cursor position
   # @return [void]
-  def before(current_text, current_pos)
-    return unless @last_text != current_text || @last_pos != current_pos
+  def before(current_text)
+    return if @killing
 
     @buffer = ''
-    @original = current_text
+    @original = current_text.dup
   end
 
-  # Call after a kill operation. Snapshots the current state so the next
-  # {#before} call can detect whether the buffer changed between kills.
+  # Call after a kill operation. Marks the kill sequence as ongoing so
+  # the next {#before} appends to the same buffer.
   #
-  # @param current_text [String] current command buffer text (after deletion)
-  # @param current_pos [Integer] current cursor position (after deletion)
   # @return [void]
-  def after(current_text, current_pos)
-    @last_text = current_text.dup
-    @last_pos = current_pos
+  def after
+    @killing = true
   end
 
-  # The full original text captured at the start of the current kill sequence.
-  # Used by kill_line to restore the entire line on yank.
+  # End the current kill sequence. Call for every non-kill command
+  # (insert, delete, movement, yank, history, send). The buffer is kept
+  # for yanking; only the next kill starts a new one.
   #
-  # @return [String] original text before any kills in this sequence
-  attr_reader :original
+  # @return [void]
+  def end_sequence
+    @killing = false
+  end
 end
