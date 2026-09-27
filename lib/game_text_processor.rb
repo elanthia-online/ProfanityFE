@@ -520,7 +520,10 @@ class GameTextProcessor
           return
         end
 
-        if @current_stream == 'thoughts' && (text =~ /^\[.+?\]-[A-z]+:[A-Z][a-z]+: "|^\[server\]: /)
+        # LNet chat arrives on the thoughts stream. Move it to the lnet window
+        # only when the layout has one; otherwise it stays on thoughts, which
+        # falls back to main when there is no thoughts window either.
+        if @current_stream == 'thoughts' && @wm.stream['lnet'] && (text =~ /^\[.+?\]-[A-z]+:[A-Z][a-z]+: "|^\[server\]: /)
           @current_stream = 'lnet'
         end
 
