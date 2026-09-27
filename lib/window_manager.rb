@@ -454,7 +454,6 @@ class WindowManager
         if t < Curses.lines && l < Curses.cols
           @command_window.resize(h, w)
           @command_window.move(t, l)
-          cmd_buffer&.redraw
           @command_window.noutrefresh
         end
       end
@@ -462,6 +461,8 @@ class WindowManager
       # The layout sizes above are for the layout's own prompt label;
       # widen the prompt again for the last prompt the game sent.
       @command_window&.noutrefresh if fit_prompt
+      # Refit the typed command to the command line's final width.
+      cmd_buffer&.redraw
 
       Curses.doupdate
     end # CursesRenderer.synchronize

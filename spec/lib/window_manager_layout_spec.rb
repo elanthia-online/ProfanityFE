@@ -8,6 +8,9 @@
 require 'rexml/document'
 require_relative '../../lib/event_bus'
 require_relative '../../lib/window_manager'
+require_relative '../../lib/kill_ring'
+require_relative '../../lib/string_classification'
+require_relative '../../lib/command_buffer'
 require_relative '../../lib/windows/sink_window' # real SinkWindow
 
 RSpec.describe WindowManager, '#load_layout' do
@@ -208,6 +211,20 @@ RSpec.describe WindowManager, '#load_layout' do
       expect(fitted).to eq [3, 3, 77]
       expect([prompt.maxx, command.begx, command.maxx]).to eq fitted
       expect(prompt.rows).to eq ['RH>']
+    end
+
+    it 'refits the typed command to the command line width left after fitting the prompt' do
+      event_bus = EventBus.new
+      window_manager.subscribe_to_events(event_bus)
+      event_bus.emit(:prompt_changed, text: 'RH>')
+      command = CommandBuffer.new
+      command.window = window_manager.command_window
+      "#{'a' * 85}XYZ".each_char { |ch| command.put_ch(ch) }
+
+      window_manager.resize(command)
+
+      expect(command.window.row(0)).to end_with('XYZ')
+      expect(command.window.curx).to eq 'XYZ'.length + command.window.row(0).index('XYZ')
     end
 
     it 'never sizes the prompt or command line below one column' do
