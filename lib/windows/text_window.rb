@@ -192,7 +192,15 @@ class TextWindow < BaseWindow
   def redraw_with_highlight
     return unless @selection_start && @selection_end
 
-    start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end)
+    repaint
+  end
+
+  # Repaint every visible row from the buffer, drawing the selected
+  # region, if any, in reverse video.
+  #
+  # @return [void]
+  def repaint
+    start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end) if has_highlight?
     visible_lines = [@buffer.length - @buffer_pos, maxy].min
 
     (0...maxy).each do |y|
@@ -204,7 +212,7 @@ class TextWindow < BaseWindow
       line_text, line_colors = @buffer[buffer_idx]
       id = @lines_appended - buffer_idx
 
-      if id >= start_id && id <= end_id
+      if start_id && id >= start_id && id <= end_id
         draw_line_with_selection(id, line_text, line_colors, start_id, start_x, end_id, end_x)
       else
         add_line(line_text, line_colors)

@@ -350,6 +350,13 @@ class TabbedTextWindow < BaseWindow
     noutrefresh
   end
 
+  # Repaint the tab bar and the active tab's visible text from its buffer.
+  #
+  # @return [void]
+  def repaint
+    redraw
+  end
+
   # Refresh the scrollbar to reflect the active tab's buffer and scroll state.
   #
   # @return [void]

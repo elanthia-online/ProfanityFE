@@ -95,6 +95,20 @@ RSpec.describe TextWindow do
     expect(window.link_cmd_at(row, 4)).to eq 'north'
   end
 
+  it 'removes the reverse-video highlight when the selection is cleared' do
+    %w[l1 l2 l3].each { |line| window.add_string(line) }
+    line_id, = window.selection_anchor_at(1, 0)
+    window.highlight_selection(line_id, 0, line_id, 2)
+
+    window.clear_highlight
+
+    reversed = (0...window.maxy).to_a.product((0...window.maxx).to_a).select do |y, x|
+      window.attrs_at(y, x).anybits?(Curses::A_REVERSE)
+    end
+    expect(reversed).to be_empty
+    expect(window.rows).to eq %w[l1 l2 l3]
+  end
+
   it 'shows a full page of older lines after scrolling back by the whole window height' do
     %w[l1 l2 l3 l4 l5 l6 l7 l8 l9].each { |line| window.add_string(line) }
 

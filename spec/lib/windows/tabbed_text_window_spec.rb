@@ -44,6 +44,18 @@ RSpec.describe TabbedTextWindow do
     expect(text_rows).to eq ['l1', '', 'l2']
   end
 
+  it 'removes the reverse-video highlight from the text when the selection is cleared' do
+    %w[l1 l2 l3].each { |line| window.add_string(line) }
+    line_id, = window.selection_anchor_at(2, 0)
+    window.highlight_selection(line_id, 0, line_id, 2)
+
+    window.clear_highlight
+
+    text_area = (TabbedTextWindow::TAB_BAR_HEIGHT...window.maxy).to_a.product((0...window.maxx).to_a)
+    expect(text_area.select { |y, x| window.attrs_at(y, x).anybits?(Curses::A_REVERSE) }).to be_empty
+    expect(text_rows).to eq %w[l1 l2 l3]
+  end
+
   it 'shows a full page of older lines after a page-up of the whole text area' do
     %w[l1 l2 l3 l4 l5 l6 l7 l8 l9].each { |line| window.add_string(line) }
 

@@ -358,13 +358,21 @@ class BaseWindow < Curses::Window
     !@selection_start.nil? && !@selection_end.nil?
   end
 
-  # Clear the selection highlight and redraw the window normally.
+  # Repaint the visible text from the window's buffer.
+  # Subclasses with line buffers (TextWindow, TabbedTextWindow) override
+  # this. The default is a no-op for window types without a buffer to
+  # repaint from.
+  #
+  # @return [void]
+  def repaint; end
+
+  # Clear the selection highlight and repaint the window normally.
   #
   # @return [void]
   def clear_highlight
     @selection_start = nil
     @selection_end = nil
-    redraw if respond_to?(:redraw)
+    repaint
   end
 
   # Extract selected text from the buffer.
