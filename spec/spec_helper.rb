@@ -36,6 +36,9 @@ module Curses
   A_UNDERLINE = 0x20000
   A_BOLD = 0x200000
   A_NORMAL = 0
+  A_STANDOUT = 0x10000
+  A_REVERSE = 0x40000
+  A_COLOR = 0xff00
   KEY_MOUSE = 0x199
   KEY_UP = 0x103
   KEY_DOWN = 0x102
@@ -47,7 +50,7 @@ module Curses
   BUTTON1_CLICKED = 0x8
   REPORT_MOUSE_POSITION = 0x8000000
 
-  def self.color_pair(_id) = 0
+  def self.color_pair(id) = (id << 8) & A_COLOR
   def self.lines = 24
   def self.cols = 80
   def self.can_change_color? = false
@@ -76,52 +79,11 @@ module Curses
   def self.noecho = nil
   def self.nonl = nil
   def self.stdscr = Window.new
-
-  # Spy-friendly stub window. Records all method calls for assertions.
-  #
-  # @example
-  #   win = Curses::Window.new(1, 80, 0, 0)
-  #   win.addstr("hello")
-  #   expect(win.call_log).to include([:addstr, ["hello"]])
-  class Window
-    attr_accessor :maxx, :maxy, :begy, :begx
-    attr_reader :call_log
-
-    def initialize(h = 1, w = 80, t = 0, l = 0)
-      @maxy = h
-      @maxx = w
-      @begy = t
-      @begx = l
-      @call_log = []
-    end
-
-    # Record all method calls for spy-style assertions
-    %i[
-      setpos addstr addch insch delch deleteln clrtoeol
-      noutrefresh refresh resize move erase close
-      scrollok keypad clear
-    ].each do |meth|
-      define_method(meth) do |*args|
-        @call_log << [meth, args]
-        nil
-      end
-    end
-
-    def nodelay=(val)
-      @call_log << [:nodelay=, [val]]
-    end
-
-    def getch
-      @call_log << [:getch, []]
-      nil
-    end
-
-    def attron(attrs)
-      @call_log << [:attron, [attrs]]
-      yield if block_given?
-    end
-  end
 end
+
+# Curses::Window: a virtual screen that records calls and models what the
+# window shows, so specs can assert on the visible result.
+require_relative 'support/virtual_screen'
 
 # ---------------------------------------------------------------------------
 # CursesRenderer stub
@@ -203,58 +165,11 @@ end
 # get_color_pair_id, defined above) so specs exercise production matching.
 require_relative '../lib/highlight_processor'
 
-# Stub window class hierarchies
-class BaseWindow < Curses::Window
-  def self.list = @list ||= []
-  def self.register_type(*) = nil
-  def self.type_registry = {}
-  def self.find_window_at(*) = nil
-
-  attr_accessor :layout
-
-  def route_string(text, colors, stream, **opts)
-    # No-op in base stub; specs that need recording override this
-  end
+# The real window classes, drawing onto the virtual screen above.
+%w[base_window text_window tabbed_text_window indicator_window progress_window
+   countdown_window exp_window perc_window room_window sink_window].each do |window|
+  require_relative "../lib/windows/#{window}"
 end
-
-class TextWindow < BaseWindow
-  def self.list = @list ||= []
-
-  def add_string(_text, _colors = []) = nil
-end
-
-class TabbedTextWindow < BaseWindow
-  def self.list = @list ||= []
-
-  def tabs = {}
-  def active_tab = nil
-end
-
-class IndicatorWindow < BaseWindow
-  def self.list = @list ||= []
-end
-
-class ProgressWindow < BaseWindow
-  def self.list = @list ||= []
-end
-
-class CountdownWindow < BaseWindow
-  def self.list = @list ||= []
-end
-
-class ExpWindow < BaseWindow
-  def self.list = @list ||= []
-end
-
-class PercWindow < BaseWindow
-  def self.list = @list ||= []
-end
-
-class RoomWindow < BaseWindow
-  def self.list = @list ||= []
-end
-
-class SinkWindow; end
 
 # Stub GagPatterns (real version loaded by specs that test it)
 module GagPatterns
@@ -292,5 +207,7 @@ RSpec.configure do |config|
   # Reset all mutable runtime state between tests
   config.before(:each) do
     CONFIG.reset!
+    # Windows register themselves in per-class instance lists; start empty.
+    BaseWindow.window_classes.each { |klass| klass.list.clear }
   end
 end
