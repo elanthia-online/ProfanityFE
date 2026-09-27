@@ -92,7 +92,8 @@ module ColorManager
     # In custom mode, reprograms a color slot via Curses.init_color.
     # In fixed mode, finds the nearest match in the 256-color palette.
     #
-    # @param code [String] 6-digit hex color code (e.g., "ff0000")
+    # @param code [String] 6-digit hex color code (e.g., "ff0000"); callers must
+    #   pass a valid code (see {.get_color_pair_id}, which normalizes input)
     # @return [Integer] curses color ID
     def get_color_id(code)
       if (color_id = @color_id_lookup[code])
@@ -132,10 +133,16 @@ module ColorManager
     # in the pool is in use, the least recently allocated pair is recycled
     # (its old fg/bg mapping is evicted and it is re-initialized).
     #
+    # Codes come from user settings XML and server/script +<color>+ tags, so
+    # they are normalized first: a leading "#" is stripped, and anything that
+    # is not 6 hex digits (e.g. "", "f00") falls back to the default color.
+    #
     # @param fg_code [String, nil] foreground hex color code, or nil for default
     # @param bg_code [String, nil] background hex color code, or nil for default
     # @return [Integer] curses color pair ID, always below {MAX_RENDERABLE_COLOR_PAIRS}
     def get_color_pair_id(fg_code, bg_code)
+      fg_code = normalize_color_code(fg_code)
+      bg_code = normalize_color_code(bg_code)
       fg_id = fg_code.nil? ? @default_color_id : get_color_id(fg_code)
       bg_id = bg_code.nil? ? @default_background_color_id : get_color_id(bg_code)
 
@@ -156,6 +163,18 @@ module ColorManager
     end
 
     private
+
+    # Normalize a color code to 6 hex digits.
+    #
+    # @param code [String, nil] color code, optionally prefixed with "#"
+    # @return [String, nil] the 6-digit hex code, or nil (default color) if
+    #   +code+ is nil or not a 6-digit hex color
+    def normalize_color_code(code)
+      return nil if code.nil?
+      return code if code.match?(/\A\h{6}\z/)
+
+      code[/\A#(\h{6})\z/, 1]
+    end
 
     # Convert curses RGB values (0-1000 range) to a 6-digit hex color code.
     # Each channel is zero-padded to two digits, so [1000, 0, 0] is "ff0000".

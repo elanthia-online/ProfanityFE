@@ -120,4 +120,33 @@ RSpec.describe ColorManager do
       expect(Curses).to have_received(:init_color).with(anything, 0, 1000, 0)
     end
   end
+
+  describe 'malformed color codes' do
+    [false, true].each do |custom|
+      context "with custom_colors: #{custom}" do
+        before do
+          ColorManager.configure(default_color_id: 7, default_background_color_id: 0, custom_colors: custom)
+        end
+
+        let(:default_pair) { ColorManager.get_color_pair_id(nil, nil) }
+
+        ['', 'f00', 'ff00000', 'zzzzzz', '#f00', '##ff0000'].each do |bad|
+          it "falls back to the default color for #{bad.inspect} instead of raising" do
+            expect(ColorManager.get_color_pair_id(bad, bad)).to eq(default_pair)
+          end
+        end
+
+        it 'treats "#ff0000" as "ff0000"' do
+          expect(ColorManager.get_color_pair_id('#ff0000', '#0000ff'))
+            .to eq(ColorManager.get_color_pair_id('ff0000', '0000ff'))
+        end
+      end
+    end
+
+    it 'resolves "#ff0000" to palette red in fixed mode' do
+      ColorManager.get_color_pair_id('#ff0000', nil)
+
+      expect(init_pair_calls.last).to eq([1, 9, 0])
+    end
+  end
 end
