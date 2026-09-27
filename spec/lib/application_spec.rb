@@ -13,6 +13,8 @@ require_relative '../../lib/mouse_scroll'
 require_relative '../../lib/autocomplete'
 require_relative '../../lib/selection_manager'
 require_relative '../../lib/application'
+require_relative '../../lib/key_codes'
+require_relative '../../lib/settings_loader'
 
 # Stub ColorManager for .fixcolor tests
 module ColorManager
@@ -676,6 +678,24 @@ RSpec.describe Application do
 
       expect(handled).to eq [:second_key]
       expect(ProfanityLog).to have_received(:write).with('main', a_string_including('broken key action'), backtrace: anything)
+    end
+
+    # Curses getch returns a printable key as a one-character String, so
+    # Alt+1 arrives as the Integer 27 (ESC) followed by the String "1".
+    it 'fires the alt+1 binding from the settings file when getch delivers 27 then the digit String' do
+      switched = []
+      app.key_action['switch_tab_1'] = proc { switched << 1 }
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'settings.xml')
+        File.write(path, "<settings><key id='alt+1' action='switch_tab_1'/></settings>")
+        SettingsLoader.load(path, app.key_binding, app.key_action, proc {})
+      end
+      app.cmd_buffer.window = keyboard(27, '1')
+      allow(IO).to receive(:select).and_return(nil)
+
+      app.send(:input_loop)
+
+      expect(switched).to eq [1]
     end
   end
 end

@@ -86,10 +86,12 @@ KEY_NAME = {
   'shift+down'    => 336,
   'shift+up'      => 337,
   'ctrl+up'       => 560,
-  # Alt+number for tab switching (alt + escape sequence)
-  'alt+1'         => [27, 49],  # ESC + '1'
-  'alt+2'         => [27, 50],  # ESC + '2'
-  'alt+3'         => [27, 51],  # ESC + '3'
-  'alt+4'         => [27, 52],  # ESC + '4'
-  'alt+5'         => [27, 53]   # ESC + '5'
+  # Alt+number for tab switching: the terminal sends ESC then the digit.
+  # Curses getch returns a printable key as a one-character String, not its
+  # Integer code, so the digit must be a String here to ever match.
+  'alt+1'         => [27, '1'],
+  'alt+2'         => [27, '2'],
+  'alt+3'         => [27, '3'],
+  'alt+4'         => [27, '4'],
+  'alt+5'         => [27, '5']
 }.freeze
