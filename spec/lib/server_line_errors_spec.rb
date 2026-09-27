@@ -72,9 +72,36 @@ RSpec.describe 'GameTextProcessor errors while processing a server line' do
   it 'still ends the session through the disconnect path when the connection is lost' do
     event_bus.on(:stream_text) { |data| displayed << data[:text] unless data[:text].empty? }
 
-    receive_from_server('You wave.', IOError.new('stream closed'), 'never read')
+    outcome = receive_from_server('You wave.', IOError.new('stream closed'), 'never read')
 
     expect(displayed).to eq ['You wave.']
-    expect(processor).to have_received(:show_disconnect_message)
+    expect(outcome).to eq :disconnected
+  end
+
+  it 'reports a disconnect at end of stream' do
+    expect(receive_from_server('You wave.')).to eq :disconnected
+  end
+
+  # Lich closing with client data still unread resets the connection
+  # instead of closing it cleanly; that is still a normal disconnect.
+  [Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED].each do |error_class|
+    it "reports a disconnect, not a crash, when the connection ends with #{error_class}" do
+      expect(receive_from_server('You wave.', error_class.new)).to eq :disconnected
+      expect(ProfanityLog).to have_received(:write)
+        .with('game_text_processor', a_string_including('disconnected', error_class.name))
+    end
+  end
+
+  it 'reports a crash, logged with its backtrace, for any other error' do
+    expect(receive_from_server(RuntimeError.new('reader exploded'))).to eq :crashed
+    expect(ProfanityLog).to have_received(:write)
+      .with('game_text_processor', 'reader exploded', backtrace: anything)
+  end
+
+  it 'leaves the disconnect notice and the exit to its caller' do
+    receive_from_server('You wave.', Errno::ECONNRESET.new)
+
+    expect(processor).not_to have_received(:show_disconnect_message)
+    expect(processor).not_to have_received(:exit)
   end
 end
