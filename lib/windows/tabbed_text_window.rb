@@ -218,36 +218,26 @@ class TabbedTextWindow < BaseWindow
   # @return [void]
   def add_string_to_tab(tab_name, string, string_colors = [], indent: nil)
     return unless @tabs.key?(tab_name)
-    return if string.nil? || string.chomp.empty?
 
-    string += format_timestamp if @time_stamp
+    string = buffer_text(string, @time_stamp)
 
     content_width = maxx - 1
     tab_buffer = @tabs[tab_name]
-    tab_buffer_pos = @buffer_positions[tab_name]
 
     effective_indent = indent.nil? ? @indent_word_wrap : indent
     wrap_text(string, content_width, string_colors, indent: effective_indent) do |line, line_colors, continuation|
       tab_buffer.unshift([line, line_colors, continuation])
       @lines_appended[tab_name] += 1
-      if tab_buffer.length > @max_buffer_size
-        tab_buffer.pop
-        max_pos = tab_buffer.length - content_height
-        @buffer_positions[tab_name] = max_pos if max_pos >= 0 && @buffer_positions[tab_name] > max_pos
-      end
+      tab_buffer.pop if tab_buffer.length > @max_buffer_size
 
       if tab_name == @active_tab
-        if tab_buffer_pos == 0
-          scrl(1) if tab_buffer.length > content_height
-          visible_lines = [tab_buffer.length, content_height].min
-          write_row = TAB_BAR_HEIGHT + visible_lines - 1
-          setpos(write_row, 0)
-          clrtoeol
-          add_line(line, line_colors)
+        if @buffer_positions[tab_name] == 0
+          draw_newest_line(line, line_colors, tab_buffer.length, TAB_BAR_HEIGHT, content_height)
         else
           @buffer_positions[tab_name] += 1
-          tab_buffer_pos = @buffer_positions[tab_name]
-          scrl(1) if @buffer_positions[tab_name] > (@max_buffer_size - content_height)
+          # Scrolled back to the oldest line of a full buffer: that line
+          # was just evicted, so move the view down onto the next one
+          scroll(1) if @buffer_positions[tab_name] > (@max_buffer_size - content_height)
           update_scrollbar
         end
       else
@@ -301,12 +291,7 @@ class TabbedTextWindow < BaseWindow
         setpos(TAB_BAR_HEIGHT, 0)
         scrl(scroll_num)
         setpos(TAB_BAR_HEIGHT, 0)
-        pos = @buffer_positions[@active_tab] + ch - 1
-        scroll_num.abs.times do
-          add_line(tab_buffer[pos][0], tab_buffer[pos][1])
-          addstr "\n"
-          pos -= 1
-        end
+        draw_buffer_lines(tab_buffer, @buffer_positions[@active_tab] + ch - 1, scroll_num.abs)
         noutrefresh
       end
       update_scrollbar
@@ -317,13 +302,7 @@ class TabbedTextWindow < BaseWindow
         setpos(TAB_BAR_HEIGHT, 0)
         scrl(scroll_num)
         setpos(TAB_BAR_HEIGHT + ch - scroll_num, 0)
-        pos = @buffer_positions[@active_tab] + scroll_num - 1
-        (scroll_num - 1).times do
-          add_line(tab_buffer[pos][0], tab_buffer[pos][1])
-          addstr "\n"
-          pos -= 1
-        end
-        add_line(tab_buffer[pos][0], tab_buffer[pos][1])
+        draw_buffer_lines(tab_buffer, @buffer_positions[@active_tab] + scroll_num - 1, scroll_num)
         noutrefresh
       end
     end
@@ -365,6 +344,13 @@ class TabbedTextWindow < BaseWindow
 
     update_scrollbar
     noutrefresh
+  end
+
+  # Repaint the tab bar and the active tab's visible text from its buffer.
+  #
+  # @return [void]
+  def repaint
+    redraw
   end
 
   # Refresh the scrollbar to reflect the active tab's buffer and scroll state.

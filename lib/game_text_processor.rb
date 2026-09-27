@@ -249,17 +249,15 @@ class GameTextProcessor
             last_line_was_movement = last_entry && last_entry[0] =~ MOVEMENT_PATTERN
           end
 
-          # Skip prompt and empty line after movement (use flag OR buffer check)
+          # Blank lines from the game are not displayed; a blank line is
+          # where a pending prompt is shown, except after movement (use
+          # flag OR buffer check), where the prompt is skipped too.
           if @last_was_movement || last_line_was_movement
             @state.need_prompt = false
             @last_was_movement = false
-            # Skip the empty line entirely
-          else
-            if @state.need_prompt
-              @state.need_prompt = false
-              @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
-            end
-            @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: String.new, colors: [])
+          elsif @state.need_prompt
+            @state.need_prompt = false
+            @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
             @need_update = true
           end
         end

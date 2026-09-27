@@ -46,6 +46,41 @@ class BaseWindow < Curses::Window
     HighlightProcessor.render_colored_text(self, line, line_colors, options)
   end
 
+  # Draw consecutive buffer lines on consecutive rows, starting at the
+  # cursor and moving from older lines (higher index) to newer ones.
+  # No newline follows the last line: on the bottom row of the scrolling
+  # region it would scroll the text up and blank that row.
+  #
+  # @param buffer [Array<Array(String, Array<Hash>)>] line buffer (newest first)
+  # @param from_index [Integer] buffer index of the first (oldest) line to draw
+  # @param count [Integer] number of lines to draw
+  # @return [void]
+  protected def draw_buffer_lines(buffer, from_index, count)
+    from_index.downto(from_index - count + 1).each_with_index do |index, drawn|
+      addstr "\n" if drawn.positive?
+      add_line(buffer[index][0], buffer[index][1])
+    end
+  end
+
+  # Draw a line just added to the newest end of a live (unscrolled) view.
+  # Lines fill the text area from its top row; once the area is full it
+  # scrolls up one row and the new line takes the bottom row. Every buffer
+  # line, blank ones included, gets its own row, so rows keep matching the
+  # row-to-line mapping of {AnchoredSelection} used for selection and links.
+  #
+  # @param line [String] the new line
+  # @param line_colors [Array<Hash>] color regions for the line
+  # @param buffer_length [Integer] buffer length, including the new line
+  # @param top [Integer] first row of the text area
+  # @param height [Integer] number of rows in the text area
+  # @return [void]
+  protected def draw_newest_line(line, line_colors, buffer_length, top, height)
+    scrl(1) if buffer_length > height
+    setpos(top + [buffer_length, height].min - 1, 0)
+    clrtoeol
+    add_line(line, line_colors)
+  end
+
   # All live instances of this window subclass.
   #
   # @return [Array<BaseWindow>]
@@ -101,6 +136,20 @@ class BaseWindow < Curses::Window
   # @api private
   def format_timestamp
     " [#{Time.now.hour.to_s.rjust(2, '0')}:#{Time.now.min.to_s.rjust(2, '0')}]"
+  end
+
+  # Text to store in a line buffer for an added string. A trailing newline
+  # is dropped (the startup blank fill adds "\n"): drawing it would move
+  # the cursor down a second row, and each buffer line owns exactly one
+  # row. Blank text stays blank and gets no timestamp.
+  #
+  # @param string [String, nil] the text being added
+  # @param time_stamp [Boolean] whether to append a timestamp
+  # @return [String]
+  # @api private
+  def buffer_text(string, time_stamp)
+    text = string.to_s.chomp
+    time_stamp && !text.empty? ? text + format_timestamp : text
   end
 
   # --- Scrollbar rendering (DRY: shared by TextWindow, TabbedTextWindow) ---
@@ -309,13 +358,21 @@ class BaseWindow < Curses::Window
     !@selection_start.nil? && !@selection_end.nil?
   end
 
-  # Clear the selection highlight and redraw the window normally.
+  # Repaint the visible text from the window's buffer.
+  # Subclasses with line buffers (TextWindow, TabbedTextWindow) override
+  # this. The default is a no-op for window types without a buffer to
+  # repaint from.
+  #
+  # @return [void]
+  def repaint; end
+
+  # Clear the selection highlight and repaint the window normally.
   #
   # @return [void]
   def clear_highlight
     @selection_start = nil
     @selection_end = nil
-    redraw if respond_to?(:redraw)
+    repaint
   end
 
   # Extract selected text from the buffer.

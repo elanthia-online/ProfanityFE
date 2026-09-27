@@ -60,15 +60,14 @@ class TextWindow < BaseWindow
   # @param string_colors [Array<Hash>] color region descriptors
   # @return [void]
   def add_string(string, string_colors = [], indent: nil)
-    string += format_timestamp if @time_stamp && string && !string.chomp.empty?
+    string = buffer_text(string, @time_stamp)
     effective_indent = indent.nil? ? @indent_word_wrap : indent
     wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors, continuation|
       @buffer.unshift([line, line_colors, continuation])
       @lines_appended += 1
       @buffer.pop if @buffer.length > @max_buffer_size
       if @buffer_pos == 0
-        addstr "\n" unless line.chomp.empty?
-        add_line(line, line_colors)
+        draw_newest_line(line, line_colors, @buffer.length, 0, maxy)
       else
         @buffer_pos += 1
         scroll(1) if @buffer_pos > (@max_buffer_size - maxy)
@@ -98,12 +97,7 @@ class TextWindow < BaseWindow
         @buffer_pos += scroll_num.abs
         scrl(scroll_num)
         setpos(0, 0)
-        pos = @buffer_pos + maxy - 1
-        scroll_num.abs.times do
-          add_line(@buffer[pos][0], @buffer[pos][1])
-          addstr "\n"
-          pos -= 1
-        end
+        draw_buffer_lines(@buffer, @buffer_pos + maxy - 1, scroll_num.abs)
         noutrefresh
       end
       update_scrollbar
@@ -113,13 +107,7 @@ class TextWindow < BaseWindow
         @buffer_pos -= scroll_num
         scrl(scroll_num)
         setpos(maxy - scroll_num, 0)
-        pos = @buffer_pos + scroll_num - 1
-        (scroll_num - 1).times do
-          add_line(@buffer[pos][0], @buffer[pos][1])
-          addstr "\n"
-          pos -= 1
-        end
-        add_line(@buffer[pos][0], @buffer[pos][1])
+        draw_buffer_lines(@buffer, @buffer_pos + scroll_num - 1, scroll_num)
         noutrefresh
       end
     end
@@ -204,7 +192,15 @@ class TextWindow < BaseWindow
   def redraw_with_highlight
     return unless @selection_start && @selection_end
 
-    start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end)
+    repaint
+  end
+
+  # Repaint every visible row from the buffer, drawing the selected
+  # region, if any, in reverse video.
+  #
+  # @return [void]
+  def repaint
+    start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end) if has_highlight?
     visible_lines = [@buffer.length - @buffer_pos, maxy].min
 
     (0...maxy).each do |y|
@@ -216,7 +212,7 @@ class TextWindow < BaseWindow
       line_text, line_colors = @buffer[buffer_idx]
       id = @lines_appended - buffer_idx
 
-      if id >= start_id && id <= end_id
+      if start_id && id >= start_id && id <= end_id
         draw_line_with_selection(id, line_text, line_colors, start_id, start_x, end_id, end_x)
       else
         add_line(line_text, line_colors)
