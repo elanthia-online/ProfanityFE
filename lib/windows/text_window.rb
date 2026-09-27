@@ -252,10 +252,12 @@ end
 BaseWindow.register_type('text') do |height, width, top, left, element, wm|
   next nil unless width > 1
 
-  if element.attributes['value'] && (window = wm.previous_stream[wm.previous_stream.keys.find do |key|
-    element.attributes['value'].split(',').include?(key)
-  end])
-    wm.previous_stream[element.attributes['value']] = nil
+  # Reuse the previous layout's text window for one of this slot's streams,
+  # then forget every stream it served so no later slot reuses it too.
+  # Only text windows qualify: a sink or tabbed window can't fill a text slot.
+  streams = element.attributes['value']&.split(',') || []
+  if (window = streams.map { |stream| wm.previous_stream[stream] }.find { |old| old.instance_of?(TextWindow) })
+    wm.previous_stream.delete_if { |_stream, old| old.equal?(window) }
     wm.old_windows.delete(window)
   else
     window = TextWindow.new(height, width - 1, top, left)
@@ -268,6 +270,6 @@ BaseWindow.register_type('text') do |height, width, top, left, element, wm|
   element.attributes['value'].split(',').each do |str|
     wm.stream[str] = window
   end
-  SCROLL_WINDOW.push(window)
+  SCROLL_WINDOW.push(window) unless SCROLL_WINDOW.include?(window)
   window
 end

@@ -63,6 +63,7 @@ class WindowManager
     @previous_progress = {}
     @previous_countdown = {}
     @old_windows = []
+    @prompt_text = nil
   end
 
   # Returns the live stream handler hash mapping stream names to window objects.
@@ -210,23 +211,8 @@ class WindowManager
     # ---- Prompt resize ----
 
     event_bus.on(:prompt_changed) do |data|
-      text = data[:text]
-      prompt_window = @indicator['prompt']
-      next unless prompt_window
-
-      init_h = fix_layout_number(prompt_window.layout[0])
-      init_w = fix_layout_number(prompt_window.layout[1])
-      new_w = text.length
-      prompt_window.resize(init_h, new_w)
-      diff = new_w - init_w
-      if @command_window
-        @command_window.resize(fix_layout_number(@command_window_layout[0]),
-                               fix_layout_number(@command_window_layout[1]) - diff)
-        ctop = fix_layout_number(@command_window_layout[2])
-        cleft = fix_layout_number(@command_window_layout[3]) + diff
-        @command_window.move(ctop, cleft)
-      end
-      prompt_window.label = text
+      @prompt_text = data[:text]
+      fit_prompt
     end
 
     # ---- Room events ----
@@ -325,10 +311,11 @@ class WindowManager
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
   #
   # Synchronized with +@handler_mutex+ to prevent races with the server
-  # read thread that constantly reads the handler hashes. Existing windows
-  # whose keys appear in the new layout are reused (moved/resized) rather
-  # than recreated, preserving their content buffers. Windows from the
-  # previous layout that are not present in the new one are closed.
+  # read thread that constantly reads the handler hashes. Text, indicator,
+  # progress, and countdown windows whose keys appear in the new layout are
+  # reused rather than recreated, preserving their content buffers. Every
+  # other window from the previous layout, of any window class, is closed
+  # and removed from its class list and from SCROLL_WINDOW.
   #
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
@@ -340,7 +327,7 @@ class WindowManager
     end
 
     @handler_mutex.synchronize do
-      @old_windows = IndicatorWindow.list | TextWindow.list | CountdownWindow.list | ProgressWindow.list
+      @old_windows = BaseWindow.all_windows
 
       @previous_indicator = @indicator
       @indicator = {}
@@ -378,20 +365,10 @@ class WindowManager
         builder&.call(height, width, top, left, e, self)
       end
 
-      if (current_scroll_window = SCROLL_WINDOW[0])
-        current_scroll_window.set_active(true)
-      end
+      @old_windows.each { |window| close_window(window) }
+      forget_previous_layout
 
-      @old_windows.each do |window|
-        IndicatorWindow.list.delete(window)
-        TextWindow.list.delete(window)
-        TabbedTextWindow.list.delete(window)
-        CountdownWindow.list.delete(window)
-        ProgressWindow.list.delete(window)
-        SCROLL_WINDOW.delete(window)
-        window.scrollbar.close if window.respond_to?(:scrollbar) && window.scrollbar
-        window.close
-      end
+      SCROLL_WINDOW[0]&.set_active(true)
 
       CursesRenderer.doupdate
     end
@@ -452,9 +429,11 @@ class WindowManager
         win.noutrefresh
       end
 
-      [ExpWindow, PercWindow, RoomWindow].each do |klass|
+      # The exp and spell builders leave the layout's last column unused;
+      # keep that margin so these windows don't widen on resize.
+      { ExpWindow => 1, PercWindow => 1, RoomWindow => 0 }.each do |klass, right_margin|
         klass.list.to_a.each do |win|
-          next unless safe_reposition(win)
+          next unless safe_reposition(win, right_margin: right_margin)
           win.redraw
           win.noutrefresh
         end
@@ -475,16 +454,73 @@ class WindowManager
         if t < Curses.lines && l < Curses.cols
           @command_window.resize(h, w)
           @command_window.move(t, l)
-          cmd_buffer&.redraw
           @command_window.noutrefresh
         end
       end
+
+      # The layout sizes above are for the layout's own prompt label;
+      # widen the prompt again for the last prompt the game sent.
+      @command_window&.noutrefresh if fit_prompt
+      # Refit the typed command to the command line's final width.
+      cmd_buffer&.redraw
 
       Curses.doupdate
     end # CursesRenderer.synchronize
   end
 
   private
+
+  # Size the prompt indicator to the last prompt the game sent and shift
+  # the command window over by the width it gained or lost, relative to
+  # their layout sizes. Does nothing until a +:prompt_changed+ event has
+  # arrived or when the layout has no prompt indicator.
+  #
+  # @return [Boolean] true if the prompt was fitted
+  def fit_prompt
+    prompt_window = @indicator['prompt']
+    return false unless prompt_window && @prompt_text
+
+    init_h = fix_layout_number(prompt_window.layout[0])
+    init_w = fix_layout_number(prompt_window.layout[1])
+    # Neither window may shrink below one column (an empty prompt, or one
+    # wider than the command line); curses rejects such sizes.
+    new_w = [@prompt_text.length, 1].max
+    prompt_window.resize(init_h, new_w)
+    diff = new_w - init_w
+    if @command_window
+      @command_window.resize(fix_layout_number(@command_window_layout[0]),
+                             [fix_layout_number(@command_window_layout[1]) - diff, 1].max)
+      ctop = fix_layout_number(@command_window_layout[2])
+      cleft = fix_layout_number(@command_window_layout[3]) + diff
+      @command_window.move(ctop, cleft)
+    end
+    prompt_window.label = @prompt_text
+    true
+  end
+
+  # Close a window the new layout did not reuse, and remove it from every
+  # list that could still hit-test, repaint, or scroll it.
+  #
+  # @param window [BaseWindow] a window from the previous layout
+  # @return [void]
+  def close_window(window)
+    window.class.unregister_instance(window)
+    SCROLL_WINDOW.delete(window)
+    window.scrollbar&.close
+    window.close
+  end
+
+  # Drop the previous-layout references the builders used during
+  # {#load_layout}, so closed windows are not kept reachable.
+  #
+  # @return [void]
+  def forget_previous_layout
+    @old_windows = []
+    @previous_indicator = {}
+    @previous_stream = {}
+    @previous_progress = {}
+    @previous_countdown = {}
+  end
 
   # Open a URL in the system browser without blocking the caller.
   #
@@ -531,9 +567,10 @@ class WindowManager
   # Safely reposition a window using its stored layout expressions.
   #
   # @param win [BaseWindow] the window to reposition
+  # @param right_margin [Integer] columns of the layout width to leave unused
   # @return [Boolean] true if repositioned, false if skipped
-  def safe_reposition(win)
-    safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]),
+  def safe_reposition(win, right_margin: 0)
+    safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - right_margin,
                      fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
   end
 
