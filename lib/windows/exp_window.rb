@@ -4,7 +4,8 @@
 
 # Experience and skills display window.
 #
-# Parses incoming skill strings (name, ranks, percent, mindstate) and
+# Parses incoming skill strings (name, ranks, percent, mindstate and,
+# in the DragonRealms form, learning rate) and
 # maintains a sorted skill map. Redraws the full skill list on every
 # update, applying highlights via {HighlightProcessor}.
 class ExpWindow < BaseWindow
@@ -44,17 +45,25 @@ class ExpWindow < BaseWindow
     @current_skill = skill
   end
 
+  # A skill line in the "[mindstate/34]" form: "Skill Name:  123 45%  [ 12/34]".
+  BRACKET_SKILL = %r{(?<name>.+):\s*(?<ranks>\d+) (?<percent>\d+)%  \[\s*(?<mindstate>\d+)/34\]}
+
+  # A skill line as DragonRealms sends it: the mindstate is one or two
+  # words and the learning rate follows it,
+  # e.g. "   Parry Ability: 1709 59% mind lock     0.37".
+  DR_SKILL = /(?<name>.+):\s*(?<ranks>\d+) (?<percent>\d+)% (?<mindstate>[a-z]+(?: [a-z]+)*)\s+(?<rate>\d+(?:\.\d+)?)/
+
   # Parse a skill text line and store the result under the current skill key.
-  # Expected format: "Skill Name:  123 45%  [ 12/34]"
+  # Accepts the {BRACKET_SKILL} and {DR_SKILL} forms; any other text (the
+  # favor, TDP, rested-exp and sleep components) is ignored.
   #
   # @param text [String] the skill text to parse
   # @param _line_colors [Array<Hash>] color regions (unused; highlights are recomputed)
   # @return [void]
   def add_string(text, _line_colors, indent: nil) # rubocop:disable Lint/UnusedMethodArgument
-    match = text.match(%r{(?<name>.+):\s*(?<ranks>\d+) (?<percent>\d+)%  \[\s*(?<mindstate>\d+)/34\]})
-    return unless match
+    skill = parse_skill(text)
+    return unless skill
 
-    skill = Skill.new(match[:name].strip, match[:ranks], match[:percent], match[:mindstate])
     @skills[@current_skill] = skill
     redraw
     @current_skill = ''
@@ -75,6 +84,18 @@ class ExpWindow < BaseWindow
       add_line(skill_text, skill_colors, newline: true)
     end
     noutrefresh
+  end
+
+  private
+
+  # @param text [String] the skill text
+  # @return [Skill, nil] the parsed skill, or nil when the text is not a skill line
+  def parse_skill(text)
+    if (match = text.match(BRACKET_SKILL))
+      Skill.new(match[:name].strip, match[:ranks], match[:percent], match[:mindstate])
+    elsif (match = text.match(DR_SKILL))
+      Skill.new(match[:name].strip, match[:ranks], match[:percent], match[:mindstate], rate: match[:rate])
+    end
   end
 end
 
