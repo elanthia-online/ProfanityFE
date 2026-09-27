@@ -49,7 +49,9 @@ class CommandBuffer
   # @return [Curses::Window, nil] the curses window used for display
   attr_accessor :window
 
-  # @return [Array<String>] list of previously entered commands
+  # @return [Array<String>] the line being edited (index 0) followed by
+  #   previously entered commands, newest first; at most
+  #   +CONFIG.history_size+ commands are kept
   attr_reader :history
 
   # @return [Integer] current index into the history stack
@@ -348,6 +350,7 @@ class CommandBuffer
       unless @text.empty?
         @history[@history_pos] = @text.dup
         @history.unshift String.new
+        trim_history
         @text.clear
         @pos = 0
         @offset = 0
@@ -385,23 +388,23 @@ class CommandBuffer
 
   # Save a command string to the history list.
   # Commands shorter than +min_history_length+ are skipped unless they
-  # consist entirely of digits. Duplicate consecutive entries are
-  # suppressed. Resets +history_pos+ to 0 and discards any draft saved
-  # by {#previous_command}.
+  # consist entirely of digits. A command identical to the newest entry
+  # is not added again (consecutive duplicates only; an older identical
+  # entry is kept). The oldest entries beyond +CONFIG.history_size+ are
+  # dropped. Resets +history_pos+ to 0 and discards any draft saved by
+  # {#previous_command}.
   #
   # @param cmd [String] the command to record
   # @return [void]
   def add_to_history(cmd)
     @history_pos = 0
     @draft = nil
-    return unless (cmd.length >= @min_history_length || cmd.match?(/^\d+$/)) && (cmd != @history[1])
+    return unless cmd.length >= @min_history_length || cmd.match?(/^\d+$/)
 
-    if @history[0].nil? || @history[0].empty?
-      @history[0] = cmd
-    else
-      @history.unshift cmd
-    end
+    @history.shift if @history[0].to_s.empty? || @history[0] == @history[1]
+    @history.unshift cmd unless cmd == @history[0]
     @history.unshift String.new
+    trim_history
   end
 
   # Refresh the window via noutrefresh.
@@ -434,6 +437,16 @@ class CommandBuffer
     draft = @draft || String.new
     @draft = nil
     draft
+  end
+
+  # Drop the oldest history entries beyond +CONFIG.history_size+. Index 0
+  # is the edit line, not an entry, so it is always kept.
+  #
+  # @return [void]
+  # @api private
+  def trim_history
+    excess = @history.length - 1 - CONFIG.history_size
+    @history.pop(excess) if excess.positive?
   end
 
   # Delete the character at the given position in the buffer.

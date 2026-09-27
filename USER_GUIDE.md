@@ -207,6 +207,7 @@ restarting. On reload, the following are refreshed:
 - Key bindings
 - Gag patterns (general and combat)
 - Perc-transforms
+- History size
 
 Presets and layouts are **not** reloaded by `.reload` -- they are only read on
 initial startup. To switch layouts at runtime, use `.layout <name>`.
@@ -1362,7 +1363,7 @@ displayed in the main window.
 ### .reload
 
 Hot-reload the settings XML file. Refreshes highlights, key bindings, gag
-patterns, and perc-transforms without restarting.
+patterns, perc-transforms, and the history size without restarting.
 
 ```
 .reload
@@ -2010,10 +2011,21 @@ standard Lich script command prefix. For example, typing `.e echo hello` sends
 
 - Commands shorter than 4 characters are not saved to history (except
   all-digit commands, which are always saved).
-- Consecutive duplicate commands are suppressed in history.
+- A command identical to the one before it is not saved again. The same
+  command sent earlier, with other commands in between, is saved.
 - Use Up/Down arrows to navigate history.
 - Pressing Down when at the newest entry clears the command line and saves the
   current text to history.
+- History keeps the newest 1000 commands; older ones are dropped. To keep a
+  different number, set it in the settings file (0 keeps none):
+
+  ```xml
+  <history-size>5000</history-size>
+  ```
+
+  The value must be a whole number; any other value is logged and the default
+  is used. It is refreshed on settings reload; a smaller size drops the oldest
+  commands with the next command you send.
 
 ### Kill Ring (Cut/Paste)
 

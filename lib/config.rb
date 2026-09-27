@@ -21,6 +21,10 @@ class Config
   # unless <notification-stream> overrides it.
   DEFAULT_NOTIFICATION_STREAM = 'familiar'
 
+  # Number of commands kept in the command history unless <history-size>
+  # overrides it.
+  DEFAULT_HISTORY_SIZE = 1000
+
   # @return [Hash<Regexp, Array>] highlight patterns mapping regex => [fg, bg, ul]
   attr_reader :highlight
 
@@ -43,6 +47,10 @@ class Config
   #   (set with <notification-stream> in the settings XML)
   attr_accessor :notification_stream
 
+  # @return [Integer] maximum number of commands kept in the command history
+  #   (set with <history-size> in the settings XML)
+  attr_accessor :history_size
+
   # @return [Mutex] synchronization lock for HIGHLIGHT reads during settings reload
   attr_reader :lock
 
@@ -54,6 +62,7 @@ class Config
     @room_objects = []
     @perc_transforms = []
     @notification_stream = DEFAULT_NOTIFICATION_STREAM
+    @history_size = DEFAULT_HISTORY_SIZE
     @lock = Mutex.new
   end
 
@@ -69,11 +78,13 @@ class Config
       @room_objects.clear
       @perc_transforms.clear
       @notification_stream = DEFAULT_NOTIFICATION_STREAM
+      @history_size = DEFAULT_HISTORY_SIZE
     end
   end
 
   # Clear only settings that are refreshed during hot-reload
-  # (highlights, perc-transforms, notification-stream). Presets and layouts are preserved.
+  # (highlights, perc-transforms, notification-stream, history-size). Presets
+  # and layouts are preserved.
   #
   # @return [void]
   def reset_dynamic!
@@ -81,6 +92,7 @@ class Config
       @highlight.clear
       @perc_transforms.clear
       @notification_stream = DEFAULT_NOTIFICATION_STREAM
+      @history_size = DEFAULT_HISTORY_SIZE
     end
   end
 end

@@ -523,6 +523,105 @@ RSpec.describe CommandBuffer do
     end
   end
 
+  describe 'history size and consecutive duplicates' do
+    let(:screen) { ScreenLineWindow.new(20) }
+
+    before { buf.window = screen }
+
+    # Press up-arrow +times+ times and return what the command line shows
+    # after each press.
+    def recall(times)
+      Array.new(times) do
+        buf.previous_command
+        screen.visible
+      end
+    end
+
+    it 'keeps the newest 1000 commands by default, dropping the oldest' do
+      1005.times { |i| buf.add_to_history("cmd_#{i}") }
+
+      shown = recall(1001)
+
+      expect(shown.first).to eq 'cmd_1004'
+      expect(shown[999]).to eq 'cmd_5'
+      expect(shown.last).to eq 'cmd_5'
+      expect(buf.history.length).to eq 1001 # 1000 commands plus the edit line
+    end
+
+    it 'follows the configured size' do
+      CONFIG.history_size = 3
+      %w[north south east west].each { |c| buf.add_to_history(c) }
+
+      expect(recall(4)).to eq %w[west east south south]
+    end
+
+    it 'drops the oldest commands when the size is lowered' do
+      %w[north south east west].each { |c| buf.add_to_history(c) }
+      CONFIG.history_size = 2
+      buf.add_to_history('look')
+
+      expect(recall(3)).to eq %w[look west west]
+    end
+
+    it 'keeps no commands when the size is 0' do
+      CONFIG.history_size = 0
+      buf.add_to_history('north')
+
+      buf.previous_command
+      expect(screen.visible).to eq ''
+    end
+
+    it 'keeps every command when the size is larger than any array index' do
+      CONFIG.history_size = 10**20
+      %w[north south].each { |c| buf.add_to_history(c) }
+
+      expect(recall(2)).to eq %w[south north]
+    end
+
+    it 'keeps text saved by down-arrow within the size' do
+      CONFIG.history_size = 2
+      %w[north south].each { |c| buf.add_to_history(c) }
+      type('east')
+      buf.next_command
+
+      expect(recall(3)).to eq %w[east south south]
+    end
+
+    it 'does not add a command identical to the one before it' do
+      %w[north look look].each { |c| buf.add_to_history(c) }
+
+      expect(recall(3)).to eq %w[look north north]
+    end
+
+    it 'adds a command identical to an older, non-adjacent one' do
+      %w[look north look].each { |c| buf.add_to_history(c) }
+
+      expect(recall(3)).to eq %w[look north look]
+    end
+
+    it 'does not add a command identical to text left by up-arrow' do
+      buf.add_to_history('north')
+      type('look')
+      buf.previous_command # stashes 'look', shows 'north'
+      buf.kill_line
+      type('look')
+      buf.add_to_history(buf.clear_and_get)
+
+      expect(recall(3)).to eq %w[look north north]
+    end
+
+    it 'does not add text left by up-arrow that repeats the command before it' do
+      %w[south north].each { |c| buf.add_to_history(c) }
+      type('north')
+      buf.previous_command # stashes 'north', shows 'north'
+      buf.kill_line
+      type('look')
+      buf.add_to_history(buf.clear_and_get)
+
+      expect(recall(4)).to eq %w[look north south south]
+    end
+  end
+
   describe '#previous_command / #next_command' do
     before do
       buf.add_to_history('first')
