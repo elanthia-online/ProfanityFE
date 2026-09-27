@@ -11,6 +11,7 @@ require_relative '../../lib/command_buffer'
 require_relative '../../lib/window_manager'
 require_relative '../../lib/mouse_scroll'
 require_relative '../../lib/autocomplete'
+require_relative '../../lib/selection_manager'
 require_relative '../../lib/application'
 
 # Stub ColorManager for .fixcolor tests
@@ -496,6 +497,31 @@ RSpec.describe Application do
       app.cmd_buffer.window.call_log.clear
       app.send(:tick_countdowns)
       expect(app.cmd_buffer.window.call_log.map(&:first)).not_to include(:noutrefresh)
+    end
+  end
+
+  describe 'input loop' do
+    # A command window whose getch returns the given keys, then raises
+    # Interrupt (Ctrl+C) to end the loop.
+    def keyboard(*keys)
+      window = Object.new
+      window.define_singleton_method(:nodelay=) { |_| nil }
+      window.define_singleton_method(:getch) { keys.empty? ? raise(Interrupt) : keys.shift }
+      window
+    end
+
+    it 'keeps handling keys after a key action raises' do
+      handled = []
+      app.key_binding[1] = proc { raise 'broken key action' }
+      app.key_binding[2] = proc { handled << :second_key }
+      app.cmd_buffer.window = keyboard(1, 2)
+      allow(IO).to receive(:select).and_return(nil)
+      allow(ProfanityLog).to receive(:write)
+
+      app.send(:input_loop)
+
+      expect(handled).to eq [:second_key]
+      expect(ProfanityLog).to have_received(:write).with('main', a_string_including('broken key action'), backtrace: anything)
     end
   end
 end

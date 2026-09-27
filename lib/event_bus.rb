@@ -30,13 +30,18 @@ class EventBus
     self
   end
 
-  # Emit an event to all registered handlers.
+  # Emit an event to all handlers registered when the emit starts.
+  #
+  # Handlers added or removed by a handler take effect from the next emit;
+  # iterating a snapshot keeps them from running (or being skipped) in the
+  # current one.
   #
   # @param event_type [Symbol] the event type
   # @param data [Hash] keyword arguments passed to each handler
   # @return [void]
+  # @raise [StandardError] whatever a handler raises; later handlers are skipped
   def emit(event_type, **data)
-    @subscribers[event_type].each { |h| h.call(data) }
+    @subscribers[event_type].dup.each { |h| h.call(data) }
   end
 
   # Remove a specific handler or all handlers for an event type.

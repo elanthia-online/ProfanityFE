@@ -147,101 +147,7 @@ class GameTextProcessor
         first_line = false
       end
 
-      if line =~ %r{^<popBold/>}
-        @bold_next_line = false
-      elsif @bold_next_line == true
-        line = "<pushBold/>#{line.chomp}<popBold/>\n"
-      elsif line =~ %r{<pushBold/>\r\n$}
-        @bold_next_line = true
-      end
-
-      line.chomp!
-
-      gagged = multiline_gag?(line)
-      if !gagged && (gag = GagPatterns.match_general(line))
-        log_gagged_line('general', gag, line)
-        gagged = true
-      end
-
-      if gagged
-        # A gag hides the line's text, never its stream tags: dropping a
-        # <popStream/> would leave routing stuck on that stream.
-        line = line.scan(STREAM_TAG_PATTERN).join
-        next if line.empty?
-      elsif line.empty?
-        @emptycount += 1
-        if @emptycount > 1
-          line = nil
-          next
-        end
-      else
-        @emptycount = 0
-      end
-
-      # Synchronize all curses operations (noutrefresh calls from indicator,
-      # text, countdown, and room window updates) with the final doupdate so
-      # that timer and input threads cannot flush a half-updated virtual screen. # -- flat indent avoids re-indent
-      CursesRenderer.synchronize do
-        if line.empty?
-          if @current_stream.nil?
-            # Check if last line in ANY tab was movement (backup check)
-            main_window = @wm.stream[MAIN_STREAM]
-            last_line_was_movement = false
-            if main_window.is_a?(TabbedTextWindow)
-              # Check all tabs for recent movement (movement could be in main, combat, etc.)
-              main_window.tabs.each_value do |tab_buffer|
-                last_entry = tab_buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-                if last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-                  last_line_was_movement = true
-                  break
-                end
-              end
-            elsif main_window.respond_to?(:buffer) && !main_window.buffer.empty?
-              last_entry = main_window.buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-              last_line_was_movement = last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-            end
-
-            # Skip prompt and empty line after movement (use flag OR buffer check)
-            if @last_was_movement || last_line_was_movement
-              @state.need_prompt = false
-              @last_was_movement = false
-              # Skip the empty line entirely
-            else
-              if @state.need_prompt
-                @state.need_prompt = false
-                @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
-              end
-              @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: String.new, colors: [])
-              @need_update = true
-            end
-          end
-        else
-          @current_raw_line = line.dup
-          process_line_tags(line)
-        end
-        #
-        # Flush screen update unless more game lines are waiting (batch rendering).
-        # IO.select returns nil (no data waiting) when we should flush now.
-        #
-        if @need_update && !IO.select([server], nil, nil, 0.001)
-          @need_update = false
-          if @need_room_render
-            @event_bus.emit(:room_render)
-            @need_room_render = false
-          end
-          @cmd_buffer.window&.noutrefresh
-          Curses.doupdate
-          if @first_render && BOOT_PROFILE
-            elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
-            ProfanityLog.write('boot-profile', "first screen render: #{elapsed}ms")
-            @first_render = false
-          end
-        end
-      end # CursesRenderer.synchronize
-      # Flush terminal title AFTER curses operations complete.
-      # Writing escape sequences to $stdout inside the synchronize block
-      # interleaves with curses output, causing visible artifacts.
-      @state.update_terminal_title
+      process_server_line(line)
     end
     # After loop exits (connection closed):
     show_disconnect_message
@@ -259,6 +165,115 @@ class GameTextProcessor
   end
 
   private
+
+  # Process one line from the server: bold carry-over, gags, blank-line
+  # collapsing, tag parsing and routing, and batched screen flushes.
+  #
+  # An error in one line is logged and the line is skipped, so a bad line
+  # (or a failing window handler) cannot end the session. Connection errors
+  # propagate to {#run}, which handles the disconnect.
+  #
+  # @param line [String] raw line read from the server
+  # @return [void]
+  # @api private
+  def process_server_line(line)
+    if line =~ %r{^<popBold/>}
+      @bold_next_line = false
+    elsif @bold_next_line == true
+      line = "<pushBold/>#{line.chomp}<popBold/>\n"
+    elsif line =~ %r{<pushBold/>\r\n$}
+      @bold_next_line = true
+    end
+
+    line.chomp!
+
+    gagged = multiline_gag?(line)
+    if !gagged && (gag = GagPatterns.match_general(line))
+      log_gagged_line('general', gag, line)
+      gagged = true
+    end
+
+    if gagged
+      # A gag hides the line's text, never its stream tags: dropping a
+      # <popStream/> would leave routing stuck on that stream.
+      line = line.scan(STREAM_TAG_PATTERN).join
+      return if line.empty?
+    elsif line.empty?
+      @emptycount += 1
+      return if @emptycount > 1
+    else
+      @emptycount = 0
+    end
+
+    # Synchronize all curses operations (noutrefresh calls from indicator,
+    # text, countdown, and room window updates) with the final doupdate so
+    # that timer and input threads cannot flush a half-updated virtual screen. # -- flat indent avoids re-indent
+    CursesRenderer.synchronize do
+      if line.empty?
+        if @current_stream.nil?
+          # Check if last line in ANY tab was movement (backup check)
+          main_window = @wm.stream[MAIN_STREAM]
+          last_line_was_movement = false
+          if main_window.is_a?(TabbedTextWindow)
+            # Check all tabs for recent movement (movement could be in main, combat, etc.)
+            main_window.tabs.each_value do |tab_buffer|
+              last_entry = tab_buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
+              if last_entry && last_entry[0] =~ MOVEMENT_PATTERN
+                last_line_was_movement = true
+                break
+              end
+            end
+          elsif main_window.respond_to?(:buffer) && !main_window.buffer.empty?
+            last_entry = main_window.buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
+            last_line_was_movement = last_entry && last_entry[0] =~ MOVEMENT_PATTERN
+          end
+
+          # Skip prompt and empty line after movement (use flag OR buffer check)
+          if @last_was_movement || last_line_was_movement
+            @state.need_prompt = false
+            @last_was_movement = false
+            # Skip the empty line entirely
+          else
+            if @state.need_prompt
+              @state.need_prompt = false
+              @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
+            end
+            @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: String.new, colors: [])
+            @need_update = true
+          end
+        end
+      else
+        @current_raw_line = line.dup
+        process_line_tags(line)
+      end
+      #
+      # Flush screen update unless more game lines are waiting (batch rendering).
+      # IO.select returns nil (no data waiting) when we should flush now.
+      #
+      if @need_update && !IO.select([@server], nil, nil, 0.001)
+        @need_update = false
+        if @need_room_render
+          @event_bus.emit(:room_render)
+          @need_room_render = false
+        end
+        @cmd_buffer.window&.noutrefresh
+        Curses.doupdate
+        if @first_render && BOOT_PROFILE
+          elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
+          ProfanityLog.write('boot-profile', "first screen render: #{elapsed}ms")
+          @first_render = false
+        end
+      end
+    end # CursesRenderer.synchronize
+    # Flush terminal title AFTER curses operations complete.
+    # Writing escape sequences to $stdout inside the synchronize block
+    # interleaves with curses output, causing visible artifacts.
+    @state.update_terminal_title
+  rescue IOError, SystemCallError
+    raise
+  rescue StandardError => e
+    ProfanityLog.write('game_text_processor', "error processing line #{line.inspect}: #{e.message}", backtrace: e.backtrace)
+  end
 
   def show_disconnect_message
     @event_bus.emit(:disconnect)
