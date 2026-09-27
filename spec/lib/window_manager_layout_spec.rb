@@ -6,6 +6,7 @@
 # leave every window the size the layout built it at.
 
 require 'rexml/document'
+require_relative '../../lib/event_bus'
 require_relative '../../lib/window_manager'
 require_relative '../../lib/windows/sink_window' # real SinkWindow
 
@@ -192,6 +193,21 @@ RSpec.describe WindowManager, '#load_layout' do
       window_manager.resize(nil)
 
       expect([window_manager.stream['exp'].maxx, window_manager.stream['percWindow'].maxx]).to eq built
+    end
+
+    it 'keeps the prompt and command line fitted to a prompt longer than the layout width' do
+      event_bus = EventBus.new
+      window_manager.subscribe_to_events(event_bus)
+      event_bus.emit(:prompt_changed, text: 'RH>')
+      prompt = window_manager.indicator['prompt']
+      command = window_manager.command_window
+      fitted = [prompt.maxx, command.begx, command.maxx]
+
+      window_manager.resize(nil)
+
+      expect(fitted).to eq [3, 3, 77]
+      expect([prompt.maxx, command.begx, command.maxx]).to eq fitted
+      expect(prompt.rows).to eq ['RH>']
     end
   end
 end

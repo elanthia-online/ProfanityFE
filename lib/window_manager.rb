@@ -63,6 +63,7 @@ class WindowManager
     @previous_progress = {}
     @previous_countdown = {}
     @old_windows = []
+    @prompt_text = nil
   end
 
   # Returns the live stream handler hash mapping stream names to window objects.
@@ -210,23 +211,8 @@ class WindowManager
     # ---- Prompt resize ----
 
     event_bus.on(:prompt_changed) do |data|
-      text = data[:text]
-      prompt_window = @indicator['prompt']
-      next unless prompt_window
-
-      init_h = fix_layout_number(prompt_window.layout[0])
-      init_w = fix_layout_number(prompt_window.layout[1])
-      new_w = text.length
-      prompt_window.resize(init_h, new_w)
-      diff = new_w - init_w
-      if @command_window
-        @command_window.resize(fix_layout_number(@command_window_layout[0]),
-                               fix_layout_number(@command_window_layout[1]) - diff)
-        ctop = fix_layout_number(@command_window_layout[2])
-        cleft = fix_layout_number(@command_window_layout[3]) + diff
-        @command_window.move(ctop, cleft)
-      end
-      prompt_window.label = text
+      @prompt_text = data[:text]
+      fit_prompt
     end
 
     # ---- Room events ----
@@ -473,11 +459,41 @@ class WindowManager
         end
       end
 
+      # The layout sizes above are for the layout's own prompt label;
+      # widen the prompt again for the last prompt the game sent.
+      @command_window&.noutrefresh if fit_prompt
+
       Curses.doupdate
     end # CursesRenderer.synchronize
   end
 
   private
+
+  # Size the prompt indicator to the last prompt the game sent and shift
+  # the command window over by the width it gained or lost, relative to
+  # their layout sizes. Does nothing until a +:prompt_changed+ event has
+  # arrived or when the layout has no prompt indicator.
+  #
+  # @return [Boolean] true if the prompt was fitted
+  def fit_prompt
+    prompt_window = @indicator['prompt']
+    return false unless prompt_window && @prompt_text
+
+    init_h = fix_layout_number(prompt_window.layout[0])
+    init_w = fix_layout_number(prompt_window.layout[1])
+    new_w = @prompt_text.length
+    prompt_window.resize(init_h, new_w)
+    diff = new_w - init_w
+    if @command_window
+      @command_window.resize(fix_layout_number(@command_window_layout[0]),
+                             fix_layout_number(@command_window_layout[1]) - diff)
+      ctop = fix_layout_number(@command_window_layout[2])
+      cleft = fix_layout_number(@command_window_layout[3]) + diff
+      @command_window.move(ctop, cleft)
+    end
+    prompt_window.label = @prompt_text
+    true
+  end
 
   # Close a window the new layout did not reuse, and remove it from every
   # list that could still hit-test, repaint, or scroll it.
