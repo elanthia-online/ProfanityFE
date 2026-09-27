@@ -43,6 +43,9 @@ class Application
     '.help              Show this help'
   ].freeze
 
+  # How long .key waits for a key press before giving up, in milliseconds.
+  DOT_KEY_TIMEOUT_MS = 5000
+
   # Create a new application instance with the given CLI options.
   #
   # @param cli_options [Hash] parsed CLI options from OptionParser
@@ -233,11 +236,32 @@ class Application
       window.add_string(msg, feedback_colors(msg))
       @cmd_buffer.refresh
       CursesRenderer.doupdate
-      msg = "* Detected keycode: #{@cmd_buffer.window.getch}"
+      ch = wait_for_key
+      msg = if ch.nil?
+              "* No key pressed within #{DOT_KEY_TIMEOUT_MS / 1000} seconds"
+            else
+              "* Detected keycode: #{ch}"
+            end
       window.add_string(msg, feedback_colors(msg))
       window.add_string('* ', feedback_colors('* '))
       CursesRenderer.doupdate
     end
+  end
+
+  # Read one key from the command window, waiting up to DOT_KEY_TIMEOUT_MS.
+  #
+  # {#input_loop} keeps the window in nodelay mode, where getch returns nil
+  # at once. This switches to a bounded wait for the one read, then puts
+  # nodelay back even if getch raises. The caller holds the curses monitor,
+  # so the server thread cannot draw during the wait; the bound keeps that
+  # pause short if no key comes.
+  #
+  # @return [Integer, String, nil] the key read, or nil if none arrived
+  def wait_for_key
+    @cmd_buffer.window.timeout = DOT_KEY_TIMEOUT_MS
+    @cmd_buffer.window.getch
+  ensure
+    @cmd_buffer.window.nodelay = true
   end
 
   def handle_dot_tab(arg)
