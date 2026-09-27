@@ -4,25 +4,37 @@
 
 # Active spells and effects display window.
 #
-# Collects spell/effect lines via {#add_string}, then sorts them by
-# remaining duration (highest first) on {#redraw}. Cyclic spells,
-# percentage-based effects, and the "Fading" state each receive a
-# fixed sort weight so the most important entries appear at the top.
+# The server sends the full list of active spells as one block:
+# +<clearStream id="percWindow"/>+ ({#clear_spells}) followed by one line
+# per spell ({#add_string}). The window keeps that batch as logical
+# (unwrapped) entries, sorts them by remaining duration (highest first),
+# and wraps each entry only when drawing, so a long spell's continuation
+# lines stay directly beneath it. Cyclic spells, percentage-based effects,
+# and the "Fading" state each receive a fixed sort weight so the most
+# important entries appear at the top.
+#
+# The window is redrawn after every change, so it always shows the batch
+# received so far; {#redraw} (used on terminal resize) repaints the same
+# batch at the current width.
 class PercWindow < BaseWindow
+  # Sort weight for entries without a parenthesised duration.
+  NO_DURATION_WEIGHT = 1000
+
   # Create a new active spells window.
   #
   # @param args [Array] arguments forwarded to {BaseWindow#initialize}
   def initialize(*args)
-    @spells = {}
+    @spells = {}.freeze
     @indent_word_wrap = true
     super
   end
 
-  # Return the spells hash as buffer entries for selection support.
+  # The displayed lines, top to bottom, for selection support.
   #
-  # @return [Array<Array(String, Array<Hash>)>] spell text/color pairs
+  # @return [Array<Array(String, Array<Hash>, Boolean)>] each wrapped line,
+  #   its color regions, and whether it continues the previous line
   def buffer_content
-    @spells.to_a
+    display_lines
   end
 
   # Render a spell line with a trailing newline and immediate refresh.
@@ -34,65 +46,92 @@ class PercWindow < BaseWindow
     super(line, line_colors, newline: true, refresh: true)
   end
 
-  # Append a spell/effect line to the buffer and spells hash.
-  # Word-wraps the text and stores the result for the next {#redraw}.
+  # Add a spell/effect line to the current batch and redraw the window.
+  #
+  # The line is stored unwrapped; wrapping happens when drawing. A line
+  # identical to one already in the batch replaces it. Blank lines are
+  # ignored.
   #
   # @param string [String] the spell/effect text
   # @param string_colors [Array<Hash>] color region descriptors
+  # @param indent [Boolean, nil] indent wrapped continuation lines
+  #   (nil uses the window default, true)
   # @return [void]
   def add_string(string, string_colors = [], indent: nil)
+    return if string.to_s.strip.empty?
+
     effective_indent = indent.nil? ? @indent_word_wrap : indent
-    wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors|
-      @spells.store(line, line_colors) unless line.chomp.empty?
-    end
+    # Copy the caller's text and colors, and replace the hash rather than
+    # mutating it, so a redraw from another thread always iterates a
+    # complete, unchanging batch.
+    @spells = @spells.merge(string.dup.freeze => [string_colors.dup.freeze, effective_indent]).freeze
+    redraw
   end
 
-  # Redraw all spells sorted by remaining duration (longest first).
-  # Clears the spells hash after rendering so the next batch starts fresh.
+  # Redraw the current batch, sorted by remaining duration (longest first)
+  # and wrapped to the current window width. The batch is kept, so a
+  # redraw after a terminal resize shows the same spells.
   #
   # @return [void]
   def redraw
     erase
-    setpos(0, 0)
-
-    # Atomically swap the spells hash before iterating to prevent
-    # data loss if add_string is called from the parser thread
-    # between sort and clear.
-    spells_to_render = @spells
-    @spells = {}
-
-    begin
-      spells_to_render.sort_by do |key, _val|
-        # Parse duration from spell text like "Spell Name (5 roisaen)" or "Spell (Cyclic)"
-        # Returns sort weight: higher = show first
-        duration_part = key.to_s.split(/\s+(?=\()/)[1]
-        if duration_part
-          duration_part.gsub(/\(|\)/, '')
-                       .sub(/\d+%/, '3000')
-                       .sub(/Cyclic/, '1500')
-                       .sub(/OM/, '2000')
-                       .sub(/Fading/, '0')
-                       .to_i
-        else
-          1000
-        end
-      end.reverse.each do |line, line_colors|
-        add_line(line, line_colors)
-      end
-    rescue StandardError => e
-      ProfanityLog.write('perc_window', "Error sorting spells: #{e}", backtrace: e.backtrace)
+    display_lines.first(maxy).each_with_index do |(line, line_colors), row|
+      setpos(row, 0)
+      add_line(line, line_colors)
     end
     noutrefresh
+  rescue StandardError => e
+    ProfanityLog.write('perc_window', "Error drawing spells: #{e}", backtrace: e.backtrace)
   end
 
-  # Clear the display and reset the spells hash.
+  # Start a new batch of spells and redraw the (now empty) window.
+  # Called for +<clearStream id="percWindow"/>+; the spell lines that
+  # follow are added with {#add_string}.
   #
   # @return [void]
   def clear_spells
-    erase
-    setpos(0, 0)
-    noutrefresh
+    @spells = {}.freeze
     redraw
+  end
+
+  private
+
+  # The current batch sorted by duration and wrapped to the window width.
+  # Entries with equal weight keep their arrival order.
+  #
+  # @return [Array<Array(String, Array<Hash>, Boolean)>] wrapped lines with
+  #   their color regions and continuation flags, top to bottom
+  # @api private
+  def display_lines
+    width = [maxx - 1, 1].max
+    sorted = @spells.each_with_index.sort_by { |(text, _), index| [-spell_weight(text), index] }
+    sorted.flat_map do |(text, (colors, indent)), _index|
+      lines = []
+      wrap_text(text, width, colors, indent: indent) do |line, line_colors, continuation|
+        lines << [line, line_colors, continuation]
+      end
+      lines
+    end
+  end
+
+  # Sort weight of a spell line: higher sorts first. Parsed from the first
+  # parenthesised part, e.g. "Spell Name (5)" is 5; percentages weigh 3000,
+  # "OM" 2000, "Cyclic" 1500, "Fading" 0, and lines without a duration
+  # {NO_DURATION_WEIGHT}.
+  #
+  # @param text [String] the spell line
+  # @return [Integer] the sort weight
+  # @api private
+  def spell_weight(text)
+    duration_part = text.to_s.split(/\s+(?=\()/)[1]
+    return NO_DURATION_WEIGHT unless duration_part
+
+    duration_part.gsub(/\(|\)/, '')
+                 .sub(/\d+%/, '3000')
+                 .sub(/Cyclic/, '1500')
+                 .sub(/OM/, '2000')
+                 .sub(/Fading/, '0')
+                 .to_i
   end
 end
 
