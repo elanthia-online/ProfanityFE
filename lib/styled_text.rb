@@ -119,6 +119,87 @@ class StyledText
     self.class.new(stripped, adjusted_runs)
   end
 
+  # Return a new StyledText with parts of the text replaced, keeping every
+  # run on the text it colored.
+  #
+  # Each edit replaces the characters +from...to+ (positions in this text)
+  # with +replacement+. Edits must not overlap; they are applied together,
+  # so every position refers to this text, not to the result of an earlier
+  # edit. Runs follow the text:
+  # - text that is kept keeps its runs, at its new position;
+  # - a run covering any part of a replaced span covers the whole
+  #   replacement (a highlight on "Persistence of Mana" colors "POM");
+  # - deleted text drops out of its runs, and a run left empty is dropped;
+  # - inserted text (+from == to+) is colored only by runs that span it.
+  #
+  # @example
+  #   st = StyledText.new('Persistence of Mana  (OM)', [{ start: 0, end: 19, fg: 'ff0000' }])
+  #   st.replace_ranges([[0, 19, 'POM']]).runs  # => [{ start: 0, end: 3, fg: 'ff0000' }]
+  #
+  # @param edits [Array<Array(Integer, Integer, String)>] +[from, to, replacement]+ triples
+  # @return [StyledText] a new instance with the edits applied
+  def replace_ranges(edits)
+    edits = edits.sort_by { |from, to, _| [from, to] }
+    new_text = +''
+    cursor = 0
+    edits.each do |from, to, replacement|
+      new_text << @text[cursor...from] << replacement
+      cursor = to
+    end
+    new_text << @text[cursor..]
+
+    new_runs = @runs.filter_map do |run|
+      new_start = map_run_start(run[:start] || 0, edits)
+      new_end = map_run_end(run[:end] || 0, edits)
+      next if new_end <= new_start
+
+      run.merge(start: new_start, end: new_end)
+    end
+
+    self.class.new(new_text, new_runs)
+  end
+
+  # Like String#sub (including +\\1+ backreferences in +replacement+), with
+  # runs moved as described in {#replace_ranges}.
+  #
+  # @param pattern [Regexp, String] what to replace (a String matches literally)
+  # @param replacement [String] the replacement text
+  # @return [StyledText] a new instance; an unchanged copy when nothing matches
+  def sub(pattern, replacement)
+    pattern = Regexp.new(Regexp.escape(pattern)) if pattern.is_a?(String)
+    match = @text.match(pattern)
+    return dup_with_runs unless match
+
+    # String#sub changes only the matched span, so the replacement is what
+    # lies between the unchanged head and tail of the result.
+    replaced = @text.sub(pattern, replacement)
+    tail = @text.length - match.end(0)
+    replace_ranges([[match.begin(0), match.end(0), replaced[match.begin(0)...(replaced.length - tail)]]])
+  end
+
+  # Replace every match of +pattern+ with +replacement+, inserted literally
+  # (no backreferences), with runs moved as described in {#replace_ranges}.
+  #
+  # @param pattern [Regexp] what to replace
+  # @param replacement [String] the literal replacement text
+  # @return [StyledText] a new instance
+  def gsub(pattern, replacement)
+    edits = []
+    @text.scan(pattern) { edits << [Regexp.last_match.begin(0), Regexp.last_match.end(0), replacement] }
+    replace_ranges(edits)
+  end
+
+  # Like String#strip, with runs moved as described in {#replace_ranges}.
+  #
+  # @return [StyledText] a new instance without leading or trailing whitespace
+  def strip
+    leading = @text.length - @text.lstrip.length
+    return replace_ranges([[0, @text.length, '']]) if leading == @text.length
+
+    trailing = @text.length - @text.rstrip.length
+    replace_ranges([[0, leading, ''], [@text.length - trailing, @text.length, '']])
+  end
+
   # Word-wrap the text to the given width, returning an array of
   # StyledText instances — one per wrapped line. Run positions are
   # correctly split across lines.
@@ -223,5 +304,43 @@ class StyledText
   # @return [String] inspection string for debugging
   def inspect
     "#<StyledText text=#{@text.inspect} runs=#{@runs.length}>"
+  end
+
+  private
+
+  # Where a run starting at +pos+ starts after +edits+ (sorted, as in
+  # {#replace_ranges}): a start inside a replaced span moves to the start
+  # of its replacement; a start at an insertion point moves past it.
+  #
+  # @param pos [Integer] run start in the original text
+  # @param edits [Array<Array(Integer, Integer, String)>] sorted edits
+  # @return [Integer] run start in the edited text
+  def map_run_start(pos, edits)
+    shift = 0
+    edits.each do |from, to, replacement|
+      return pos + shift if pos < from
+      return from + shift if pos < to
+
+      shift += replacement.length - (to - from)
+    end
+    pos + shift
+  end
+
+  # Where a run ending at +pos+ (exclusive) ends after +edits+: an end
+  # inside a replaced span moves to the end of its replacement; an end at
+  # an insertion point stays before it.
+  #
+  # @param pos [Integer] run end in the original text
+  # @param edits [Array<Array(Integer, Integer, String)>] sorted edits
+  # @return [Integer] run end in the edited text
+  def map_run_end(pos, edits)
+    shift = 0
+    edits.each do |from, to, replacement|
+      return pos + shift if pos <= from
+      return from + shift + replacement.length if pos <= to
+
+      shift += replacement.length - (to - from)
+    end
+    pos + shift
   end
 end
