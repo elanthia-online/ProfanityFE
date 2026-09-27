@@ -223,25 +223,21 @@ class TabbedTextWindow < BaseWindow
 
     content_width = maxx - 1
     tab_buffer = @tabs[tab_name]
-    tab_buffer_pos = @buffer_positions[tab_name]
 
     effective_indent = indent.nil? ? @indent_word_wrap : indent
     wrap_text(string, content_width, string_colors, indent: effective_indent) do |line, line_colors, continuation|
       tab_buffer.unshift([line, line_colors, continuation])
       @lines_appended[tab_name] += 1
-      if tab_buffer.length > @max_buffer_size
-        tab_buffer.pop
-        max_pos = tab_buffer.length - content_height
-        @buffer_positions[tab_name] = max_pos if max_pos >= 0 && @buffer_positions[tab_name] > max_pos
-      end
+      tab_buffer.pop if tab_buffer.length > @max_buffer_size
 
       if tab_name == @active_tab
-        if tab_buffer_pos == 0
+        if @buffer_positions[tab_name] == 0
           draw_newest_line(line, line_colors, tab_buffer.length, TAB_BAR_HEIGHT, content_height)
         else
           @buffer_positions[tab_name] += 1
-          tab_buffer_pos = @buffer_positions[tab_name]
-          scrl(1) if @buffer_positions[tab_name] > (@max_buffer_size - content_height)
+          # Scrolled back to the oldest line of a full buffer: that line
+          # was just evicted, so move the view down onto the next one
+          scroll(1) if @buffer_positions[tab_name] > (@max_buffer_size - content_height)
           update_scrollbar
         end
       else

@@ -116,4 +116,35 @@ RSpec.describe TextWindow do
 
     expect(window.rows).to eq %w[l4 l5 l6]
   end
+
+  context 'when the buffer is full and the user has scrolled back to its oldest lines' do
+    # Same window, but keeping only 6 lines.
+    let(:window) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='text' top='0' left='0' height='3' width='12' value='main' buffer-size='6'/></layout>
+      XML
+      window_manager = WindowManager.new
+      window_manager.load_layout('test')
+      window_manager.stream['main']
+    end
+
+    before do
+      %w[l1 l2 l3 l4 l5 l6].each { |line| window.add_string(line) }
+      window.scroll(-window.maxy)
+    end
+
+    it 'moves the view past the evicted oldest line and draws the next line on the bottom row' do
+      window.add_string('l7')
+
+      expect(window.rows).to eq %w[l2 l3 l4]
+    end
+
+    it 'shows the newest lines after scrolling back down past the new lines' do
+      %w[l7 l8].each { |line| window.add_string(line) }
+
+      window.scroll(window.maxy)
+
+      expect(window.rows).to eq %w[l6 l7 l8]
+    end
+  end
 end
