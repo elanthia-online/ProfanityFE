@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Tests Application's initialization, dot-command dispatch (.quit, .help,
-# .links, .arrow, .layout), macro engine (\\r, \\x, @), key action
+# .links, .arrow, .layout, .key), macro engine (\\r, \\x, @), key action
 # bindings, and countdown tick polling.
 
 require_relative '../../lib/shared_state'
@@ -591,6 +591,66 @@ RSpec.describe Application do
       app.cmd_buffer.window.call_log.clear
       app.send(:tick_countdowns)
       expect(app.cmd_buffer.window.call_log.map(&:first)).not_to include(:noutrefresh)
+    end
+  end
+
+  # BUG FOUND (fixed here): input_loop puts the command window in nodelay
+  # mode, and .key called getch on that same window, so getch returned nil
+  # at once and .key printed "Detected keycode: " with no key.
+  describe '.key' do
+    # A command window that acts like curses: nodelay and timeout share one
+    # delay setting. getch returns nil in nodelay mode and the given key
+    # (or the result of the block) when waiting is allowed.
+    def key_window(key = nil, &on_wait)
+      window = Object.new
+      delays = []
+      window.define_singleton_method(:delays) { delays }
+      window.define_singleton_method(:nodelay=) { |on| delays << (on ? :nodelay : :blocking) }
+      window.define_singleton_method(:timeout=) { |ms| delays << ms }
+      window.define_singleton_method(:noutrefresh) { nil }
+      window.define_singleton_method(:getch) do
+        next nil if delays.last == :nodelay
+
+        on_wait ? on_wait.call : key
+      end
+      window.nodelay = true # as input_loop leaves it
+      window
+    end
+
+    def feedback_texts = main_window.calls.map { |c| c[:text] }
+
+    it 'waits for a key and prints its keycode' do
+      app.cmd_buffer.window = key_window(Curses::KEY_UP)
+      app.execute_command('.key')
+      expect(feedback_texts).to include("* Detected keycode: #{Curses::KEY_UP}")
+    end
+
+    it 'bounds the wait with a timeout rather than blocking forever' do
+      window = key_window(65)
+      app.cmd_buffer.window = window
+      app.execute_command('.key')
+      expect(window.delays).to include(Application::DOT_KEY_TIMEOUT_MS)
+    end
+
+    it 'restores nodelay after reading the key' do
+      window = key_window(65)
+      app.cmd_buffer.window = window
+      app.execute_command('.key')
+      expect(window.delays.last(2)).to eq [Application::DOT_KEY_TIMEOUT_MS, :nodelay]
+    end
+
+    it 'reports that no key was pressed when the wait times out' do
+      app.cmd_buffer.window = key_window(nil)
+      app.execute_command('.key')
+      expect(feedback_texts).to include(a_string_including('No key pressed'))
+      expect(feedback_texts).not_to include(a_string_including('Detected keycode'))
+    end
+
+    it 'restores nodelay when getch raises' do
+      window = key_window { raise IOError, 'terminal gone' }
+      app.cmd_buffer.window = window
+      expect { app.execute_command('.key') }.to raise_error(IOError)
+      expect(window.delays.last).to eq :nodelay
     end
   end
 
