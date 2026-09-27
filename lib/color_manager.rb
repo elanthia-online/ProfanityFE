@@ -164,16 +164,16 @@ module ColorManager
 
     private
 
-    # Normalize a color code to 6 hex digits.
+    # Normalize a color code to 6 lower-case hex digits, so each color has
+    # one cache entry (and, in custom mode, one color slot).
     #
     # @param code [String, nil] color code, optionally prefixed with "#"
     # @return [String, nil] the 6-digit hex code, or nil (default color) if
     #   +code+ is nil or not a 6-digit hex color
     def normalize_color_code(code)
       return nil if code.nil?
-      return code if code.match?(/\A\h{6}\z/)
 
-      code[/\A#(\h{6})\z/, 1]
+      code[/\A#?(\h{6})\z/, 1]&.downcase
     end
 
     # Convert curses RGB values (0-1000 range) to a 6-digit hex color code.

@@ -140,6 +140,11 @@ RSpec.describe ColorManager do
           expect(ColorManager.get_color_pair_id('#ff0000', '#0000ff'))
             .to eq(ColorManager.get_color_pair_id('ff0000', '0000ff'))
         end
+
+        it 'treats upper-case "FF0000" as "ff0000"' do
+          expect(ColorManager.get_color_pair_id('FF0000', '#0000FF'))
+            .to eq(ColorManager.get_color_pair_id('ff0000', '0000ff'))
+        end
       end
     end
 
