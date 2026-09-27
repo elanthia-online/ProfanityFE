@@ -15,21 +15,19 @@ patterns with preset colors, and GS-specific text processing rules.
 # Ported from elanthia-online/ProfanityFE death/logon stream handling.
 module Games
   module GemStone
-    # GS death message pattern — matches the full death cry line and captures
-    # the optional prefix, character name, and area-specific death message.
+    # GS death messages, mapped to the short area code shown in the death
+    # window ("HH:MM Name AREA"). This table is the single source of truth:
+    # DEATH_PATTERN below is built from its keys, so every message listed here
+    # is recognized and no message is recognized without an area code.
     #
-    # @return [Regexp]
-    DEATH_PATTERN = /^\s\*\s(?<prefix>The death cry of )?(?<name>[A-Z][a-z]+)(?:['s]*) (?<area>just bit the dust!|life on land appears to be as rough as (?:his|her) life at sea\.|just got iced in the Hinterwilds!|is off to a rough start!\s+(?:He|She) just bit the dust!|echoes in your mind!|just got squashed!|has gone to feed the fishes!|just turned (?:his|her) last page!|is off to a rough start!\s+(?:He|She) was just put on ice!|was just put on ice!|just punched a one-way ticket!|is going home on (?:his|her) shield!|just took a long walk off of a short pier!|is dust in the wind!|is six hundred feet under!|just lost (?:his|her) way somewhere in the Settlement of Reim!|just gave up the ghost!|flame just burnt out in the Sea of Fire!|failed within the Bank at Bloodriven|was just defeated in Duskruin Arena!|was just defeated during round \d+ in (?:Endless )?Duskruin Arena!|failed to bring a shrubbery to the Night at the Academy!|just sank to the bottom of the (?:Great Western Sea|Tenebrous Cauldron)!|was just defeated in the Arena of the Abyss!|has just returned to Gosaena!)/.freeze
-
-    # GS death messages that should be suppressed (no area code)
-    DEATH_SUPPRESS_PATTERN = /^\s\*\s(?:The death cry of )?[A-Z][a-z]+(?:['s]*) (?:has been vaporized!|was just incinerated!)/.freeze
-
-    # Map area-specific death messages to short area codes.
-    # Used to consolidate verbose death cries into compact "Name AREA HH:MM" format.
+    # Each key matches the area-specific text that follows the character's
+    # name, starting at its first word (DEATH_PATTERN anchors it right after
+    # the name). resolve_death_area checks the keys in order and the first
+    # match wins, so a key must not also match an earlier key's messages.
     #
     # @return [Hash<Regexp, String>]
     DEATH_AREA_CODES = {
-      /just bit the dust!/                                                       => 'WL',
+      /(?:is off to a rough start!\s+(?:He|She) )?just bit the dust!/            => 'WL',
       /echoes in your mind!/                                                     => 'RIFT',
       /just got squashed!/                                                       => 'CY',
       /has gone to feed the fishes!/                                             => 'RR',
@@ -54,6 +52,16 @@ module Games
       /failed to bring a shrubbery to the Night at the Academy!/                 => 'NATA',
       /has just returned to Gosaena!/                                            => '??',
     }.freeze
+
+    # GS death message pattern — matches the full death cry line and captures
+    # the optional prefix, character name, and area-specific death message.
+    # The area alternatives are the keys of DEATH_AREA_CODES.
+    #
+    # @return [Regexp]
+    DEATH_PATTERN = /^\s\*\s(?<prefix>The death cry of )?(?<name>[A-Z][a-z]+)(?:['s]*) (?<area>#{Regexp.union(DEATH_AREA_CODES.keys)})/
+
+    # GS death messages that should be suppressed (no area code)
+    DEATH_SUPPRESS_PATTERN = /^\s\*\s(?:The death cry of )?[A-Z][a-z]+(?:['s]*) (?:has been vaporized!|was just incinerated!)/.freeze
 
     # Resolve a death area message to its short area code.
     #

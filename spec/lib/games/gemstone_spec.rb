@@ -102,22 +102,55 @@ RSpec.describe Games::GemStone do
     it 'returns original text for empty string' do
       expect(described_class.resolve_death_area('')).to eq ''
     end
+  end
 
-    # Every area code should be reachable
-    described_class::DEATH_AREA_CODES.each do |pattern, code|
-      it "resolves #{code} from its pattern" do
-        # Generate a matching string from the pattern
-        # Use the pattern source to build a sample text
-        sample = pattern.source
-                        .gsub('(?:his|her)', 'his')
-                        .gsub('(?:He|She)', 'He')
-                        .gsub('\d+', '5')
-                        .gsub('(?:Endless )?', '')
-                        .gsub('(?:Great Western Sea|Tenebrous Cauldron)', 'Great Western Sea')
-                        .gsub('\\s+', ' ')
-                        .gsub('\\', '')
-        expect(described_class.resolve_death_area(sample)).to eq code
+  describe 'DEATH_AREA_CODES and DEATH_PATTERN together' do
+    # One literal death line per DEATH_AREA_CODES key, with the code it must
+    # show. Written out by hand, not generated from the table's regexps, so a
+    # key that stops matching its real message fails here.
+    death_lines = {
+      ' * Mahtra just bit the dust!'                                           => 'WL',
+      ' * Mahtra is off to a rough start!  She just bit the dust!'             => 'WL',
+      ' * The death cry of Mahtra echoes in your mind!'                        => 'RIFT',
+      ' * Mahtra just got squashed!'                                           => 'CY',
+      ' * Mahtra has gone to feed the fishes!'                                 => 'RR',
+      " * Mahtra's life on land appears to be as rough as her life at sea."    => 'KF',
+      ' * Mahtra just turned her last page!'                                   => 'TI',
+      ' * Mahtra is off to a rough start!  She was just put on ice!'           => 'IMT',
+      ' * Mahtra was just put on ice!'                                         => 'IMT',
+      ' * Mahtra just sank to the bottom of the Tenebrous Cauldron!'           => 'OSA',
+      ' * Mahtra just gave up the ghost!'                                      => 'TRAIL',
+      ' * Mahtra just got iced in the Hinterwilds!'                            => 'HW',
+      ' * Mahtra just punched a one-way ticket!'                               => 'KD',
+      ' * Mahtra is going home on her shield!'                                 => 'TV',
+      ' * Mahtra just took a long walk off of a short pier!'                   => 'SOL',
+      ' * Mahtra is dust in the wind!'                                         => 'FWI',
+      ' * Mahtra is six hundred feet under!'                                   => 'ZUL',
+      ' * Mahtra just lost her way somewhere in the Settlement of Reim!'       => 'REIM',
+      ' * Bob may just be going home on his shield!'                           => 'RED',
+      " * Mahtra's flame just burnt out in the Sea of Fire!"                   => 'SOS',
+      ' * Mahtra failed within the Bank at Bloodriven'                         => 'DR-B',
+      ' * Mahtra was just defeated in Duskruin Arena!'                         => 'DR-A',
+      ' * Mahtra was just defeated during round 12 in Endless Duskruin Arena!' => 'DR-A',
+      ' * Mahtra was just defeated in the Arena of the Abyss!'                 => 'EG-A',
+      ' * Mahtra failed to bring a shrubbery to the Night at the Academy!'     => 'NATA',
+      ' * Mahtra has just returned to Gosaena!'                                => '??',
+    }.freeze
+
+    death_lines.each do |line, code|
+      it "recognizes #{line.strip.inspect} and resolves it to #{code}" do
+        match = line.match(described_class::DEATH_PATTERN)
+        expect(match).not_to be_nil
+        expect(described_class.resolve_death_area(match[:area])).to eq code
       end
+    end
+
+    it 'has a sample line above for every table entry' do
+      first_keys = death_lines.keys.filter_map do |line|
+        match = line.match(described_class::DEATH_PATTERN) or next
+        described_class::DEATH_AREA_CODES.keys.find { |key| match[:area].match?(key) }
+      end
+      expect(described_class::DEATH_AREA_CODES.keys - first_keys).to be_empty
     end
   end
 
