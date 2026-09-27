@@ -71,6 +71,10 @@ module ProfanitySettings
   #   2. <app_dir>/templates/name.xml (bundled template)
   #   3. <app_dir>/templates/default.xml (fallback)
   #
+  # Without --char, only step 3 applies. If nothing is found, prints
+  # "No settings file found" to stderr and exits 1; ~/.profanity.xml is
+  # never consulted.
+  #
   # @param char [String, nil] character name from --char flag
   # @param template [String, nil] explicit template filename from --template flag
   # @param settings_file [String, nil] explicit path from --settings-file flag
@@ -110,10 +114,6 @@ module ProfanitySettings
     # Default template
     default = File.join(app_dir, 'templates', 'default.xml')
     return default if File.exist?(default)
-
-    # Legacy fallback: ~/.profanity.xml
-    legacy = File.expand_path('~/.profanity.xml')
-    return legacy if File.exist?(legacy)
 
     $stderr.puts 'No settings file found. Use --char=<name>, --template=<file>, or --settings-file=<path>'
     $stderr.puts "Or create #{default}"

@@ -24,12 +24,13 @@
     THIS IS AN EXAMPLE. Do not use this file directly. Copy it to create
     your own settings file and customize it for your character:
 
-      cp mahtra.xml ~/.profanity.xml
+      cp mahtra.xml ~/.profanity/<yourchar>.xml
 
-    Then edit ~/.profanity.xml for your terminal size, guild, hunting areas,
+    Then edit ~/.profanity/<yourchar>.xml for your terminal size, guild, hunting areas,
     and personal preferences. See USER_GUIDE.md for full documentation.
 
-    Location: ~/.profanity.xml (or pass ..settings..file=PATH)
+    Location: ~/.profanity/<yourchar>.xml, loaded by ..char=<yourchar>
+              (or pass ..settings..file=PATH)
     Reload:   Type .reload in..game to hot..reload without restarting.
 
     This file configures:
