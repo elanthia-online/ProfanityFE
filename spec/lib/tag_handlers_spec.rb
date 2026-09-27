@@ -498,6 +498,18 @@ RSpec.describe TagHandlers do
       host.dispatch_tag('<LaunchURL src="/path/to/page"/>', String.new)
       expect(events.last).to include(url: 'https://www.play.net/path/to/page')
     end
+
+    it 'ignores a src that turns play.net into userinfo for another host' do
+      events = collect_events(:launch_url)
+      host.dispatch_tag('<LaunchURL src="@evil.example/x"/>', String.new)
+      expect(events).to be_empty
+    end
+
+    it 'ignores a src that extends the play.net host name' do
+      events = collect_events(:launch_url)
+      host.dispatch_tag('<LaunchURL src=".evil.example/x"/>', String.new)
+      expect(events).to be_empty
+    end
   end
 
   # ---- Stream window handler ----

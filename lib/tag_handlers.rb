@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require 'uri'
 require_relative 'xml_tokenizer'
 require_relative 'link_extractor'
 
@@ -19,6 +20,9 @@ require_relative 'link_extractor'
 # - handle_game_text, new_stun, fix_layout_number, parse_room_subtitle,
 #   add_prompt
 module TagHandlers
+  # Base URL that every <LaunchURL src="..."/> path is appended to.
+  LAUNCH_URL_BASE = 'https://www.play.net'
+
   # Dispatch table for opening and self-closing tags.
   TAG_DISPATCH = {
     'prompt'       => :handle_prompt_tag,
@@ -447,12 +451,34 @@ module TagHandlers
   end
 
   # Handle <LaunchURL src="..."/> tag.
+  #
+  # The server sends a path that is appended to the play.net base URL. A src
+  # that would make the result point anywhere other than
+  # +https://www.play.net/+ (e.g. +@evil.example/+, which becomes userinfo,
+  # or +.evil.example/+, which extends the host) is logged and ignored.
   def handle_launch_url(xml, _text_buffer)
     return unless (m = xml.match(/^<LaunchURL src="(?<src>[^"]+)"/))
 
-    url = "https://www.play.net#{m[:src]}"
+    url = "#{LAUNCH_URL_BASE}#{m[:src]}"
+    unless play_net_url?(url)
+      ProfanityLog.write('launch_url', "ignored LaunchURL outside play.net: #{m[:src].inspect}")
+      return
+    end
+
     @event_bus.emit(:launch_url, url: url, remote: @state.remote_url)
     @need_update = true
+  end
+
+  # Whether a URL is an https URL on www.play.net with no userinfo or
+  # non-default port.
+  #
+  # @param url [String] the candidate URL
+  # @return [Boolean]
+  def play_net_url?(url)
+    uri = URI.parse(url)
+    uri.scheme == 'https' && uri.host == 'www.play.net' && uri.userinfo.nil? && uri.port == 443
+  rescue URI::InvalidURIError
+    false
   end
 
   # Handle <streamWindow id='room' subtitle='...'/> tag.
