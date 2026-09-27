@@ -101,34 +101,6 @@ rescue StandardError
   nil
 end
 
-# @deprecated Use {BaseWindow.parse_color_attrs} instead.
-def parse_color_attrs(element, attr_name)
-  return unless element.attributes[attr_name]
-
-  element.attributes[attr_name].split(',').collect do |val|
-    val == 'nil' ? nil : val
-  end
-end
-
-# @deprecated Use RoomDataProcessor#parse_player_names instead.
-def parse_player_names(text)
-  text.sub(/^Also here:\s*/, '')
-      .sub(/ and (?<rest>.*)$/) { ", #{Regexp.last_match[:rest]}" }
-      .split(', ')
-      .map { |obj| obj.sub(/ (who|whose body)? ?(has|is|appears|glows) .+/, '').sub(/ \(.+\)/, '') }
-      .map { |obj| obj.strip.scan(/\w+$/).first }
-      .compact
-end
-
-# @deprecated Use {WindowManager#add_prompt} instead.
-#   Kept for backward compatibility with spec_helper and external callers.
-def add_prompt(window, prompt_text, cmd = '')
-  return if cmd.empty? && window.respond_to?(:duplicate_prompt?) && window.duplicate_prompt?(prompt_text)
-
-  prompt_colors = [{ start: 0, end: (prompt_text.length + cmd.length), fg: '555555' }]
-  window.route_string("#{prompt_text}#{cmd}", prompt_colors, MAIN_STREAM)
-end
-
 # ========== CLI CONFIGURATION ==========
 
 require 'optparse'

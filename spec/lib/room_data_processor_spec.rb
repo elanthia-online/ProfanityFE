@@ -97,4 +97,29 @@ RSpec.describe RoomDataProcessor do
       expect(windowless.room_pending_title).to be_nil
     end
   end
+
+  describe '#parse_player_names' do
+    subject(:host) { RoomTitleHost.new }
+
+    # @param text [String] an "Also here: ..." line
+    # @return [Array<String>] the names the room-players indicator shows
+    def names(text) = host.send(:parse_player_names, text)
+
+    it 'keeps the last player when the line ends with a period' do
+      expect(names('Also here: Bob and Alice.')).to eq %w[Bob Alice]
+    end
+
+    it 'keeps every player in a comma-separated list' do
+      expect(names('Also here: Bob, Carol and Alice.')).to eq %w[Bob Carol Alice]
+    end
+
+    it 'keeps a lone player followed by a period' do
+      expect(names('Also here: Bob.')).to eq %w[Bob]
+    end
+
+    it 'drops titles and status descriptions, keeping the bare name' do
+      expect(names('Also here: Grand Lord Treeze who is sitting and Dark Summoner Vlachodimos.'))
+        .to eq %w[Treeze Vlachodimos]
+    end
+  end
 end

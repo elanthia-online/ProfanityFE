@@ -526,6 +526,15 @@ RSpec.describe 'GameTextProcessor event emissions' do
       HIGHLIGHT.delete(/Navesi/)
     end
 
+    it 'shows every player in the indicator when the players line ends with a period' do
+      indicator_events = []
+      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
+
+      process_line("<component id='room players'>Also here: Bob and Alice.</component>")
+
+      expect(indicator_events.last).to include(label: 'Bob, Alice', value: true)
+    end
+
     it 'excludes partial highlight matches from indicator colors' do
       HIGHLIGHT[/ith/] = ['ff0000', nil, nil]
 
