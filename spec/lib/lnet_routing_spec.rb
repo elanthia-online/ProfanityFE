@@ -68,6 +68,17 @@ RSpec.describe 'LNet chat routing' do
     expect(shown_in('thoughts')).to be_empty
   end
 
+  it 'keeps a thoughts line in the thoughts window when its game code is not all letters' do
+    build('main', 'thoughts', 'lnet')
+    # '_' sits between 'Z' and 'a' in ASCII; LNet game codes are letters only.
+    not_chat = '[Private]-G_S:Bob: "hi"'
+
+    receive_lnet(not_chat)
+
+    expect(shown_in('thoughts')).to eq [not_chat]
+    expect(shown_in('lnet')).to be_empty
+  end
+
   it 'shows LNet chat in the thoughts window when the layout has no lnet window' do
     build('main', 'thoughts')
 
