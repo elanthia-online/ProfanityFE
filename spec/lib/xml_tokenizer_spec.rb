@@ -178,10 +178,16 @@ RSpec.describe XmlTokenizer do
 
     # ---- Adversarial: attribute edge cases ----
 
-    it 'handles attributes containing > inside quotes' do
+    it 'keeps a paired prompt tag whole when its content holds an escaped >' do
       line = %q{<prompt time="123">H&gt;</prompt>}
-      result = described_class.tokenize(line)
-      expect(result.first[0]).to eq :tag
+      expect(described_class.tokenize(line)).to eq [[:tag, line]]
+    end
+
+    it 'keeps a > inside a quoted attribute value within the tag' do
+      pending 'TAG_REGEX <[^>]*> ends the tag at the first >, even inside quotes (audit §4)'
+      line = %q{<d cmd="look >here">text</d>}
+      expect(described_class.tokenize(line))
+        .to eq [[:tag, '<d cmd="look >here">'], [:text, 'text'], [:tag, '</d>']]
     end
 
     it 'handles self-closing tags with extra spaces' do

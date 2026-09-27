@@ -157,10 +157,6 @@ RSpec.describe Games::GemStone do
   describe 'LOGON_PATTERNS' do
     let(:patterns) { described_class::LOGON_PATTERNS }
 
-    it 'has no duplicate keys' do
-      expect(patterns.keys.length).to eq patterns.keys.uniq.length
-    end
-
     it 'all values are valid hex color strings' do
       patterns.each_value do |color|
         expect(color).to match(/^[0-9a-f]{6}$/), "Invalid color: #{color}"

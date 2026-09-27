@@ -77,12 +77,6 @@ RSpec.describe Config do
       config.reset!
       expect(config.highlight).to be_empty
     end
-
-    it 'is thread-safe (sequential verification)' do
-      config.preset['test'] = ['aabbcc', nil]
-      config.reset!
-      expect(config.preset).to be_empty
-    end
   end
 
   describe '#notification_stream' do

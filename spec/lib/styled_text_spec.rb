@@ -351,12 +351,9 @@ RSpec.describe StyledText do
     it 'splits a run across two lines' do
       st = described_class.new('Hello world', [{ start: 0, end: 11, fg: 'ff0000' }])
       lines = st.wrap(8, indent: false)
-      # First line should have run clamped to its length
-      expect(lines.first.runs.first[:end]).to be <= lines.first.text.length
-      # Second line should have remaining run starting at 0
-      if lines.length > 1 && lines[1].runs.any?
-        expect(lines[1].runs.first[:start]).to eq 0
-      end
+      expect(lines.map(&:text)).to eq ['Hello ', 'world']
+      expect(lines[0].runs).to eq [{ start: 0, end: 6, fg: 'ff0000' }]
+      expect(lines[1].runs).to eq [{ start: 0, end: 5, fg: 'ff0000' }]
     end
 
     it 'preserves run colors through wrapping' do
@@ -453,19 +450,13 @@ RSpec.describe StyledText do
     it 'indent: true adds leading spaces to continuation lines' do
       st = described_class.new('Hello world foo bar baz')
       lines = st.wrap(12, indent: true)
-      if lines.length > 1
-        expect(lines[1].text).to start_with('  ')
-      end
+      expect(lines.map(&:text)).to eq ['Hello world ', '  foo bar ', '  baz']
     end
 
     it 'indent: false does not add leading spaces' do
       st = described_class.new('Hello world foo bar baz')
       lines = st.wrap(12, indent: false)
-      if lines.length > 1
-        # Should not have indent-added leading spaces
-        # (may have natural spaces from word breaks)
-        expect(lines[1].text).not_to start_with('  ')
-      end
+      expect(lines.map(&:text)).to eq ['Hello world ', 'foo bar baz']
     end
 
     it 'splits a run exactly at a word boundary' do

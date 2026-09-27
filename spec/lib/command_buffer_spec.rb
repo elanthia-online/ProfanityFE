@@ -555,6 +555,9 @@ RSpec.describe CommandBuffer do
       type('unsent')
       buf.next_command
       expect(buf.text).to eq ''
+      expect(buf.history[1]).to eq 'unsent'
+      buf.previous_command
+      expect(buf.text).to eq 'unsent'
     end
 
     it 'next_command at position 0 with empty buffer is a no-op' do

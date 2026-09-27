@@ -60,10 +60,8 @@ RSpec.describe LinkExtractor do
       expect(described_class.extract_cmd(%(<d cmd="look Bob's sword">))).to eq "look Bob's sword"
     end
 
-    it 'handles cmd with apostrophe in value — stops at first single quote' do
-      # cmd='it's complicated' would stop at the apostrophe
-      result = described_class.extract_cmd("<d cmd='it'>")
-      expect(result).to eq 'it'
+    it 'ends a single-quoted cmd at the next single quote (an unescaped apostrophe is malformed markup)' do
+      expect(described_class.extract_cmd("<d cmd='look Bob's sword'>")).to eq 'look Bob'
     end
 
     it 'handles exist with single quotes (GS uses double quotes)' do

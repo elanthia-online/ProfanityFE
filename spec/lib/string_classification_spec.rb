@@ -21,7 +21,7 @@ RSpec.describe StringClassification do
     it('rejects newline') { expect("\n".alnum?).to be false }
 
     # Adversarial
-    it('handles unicode letters') { expect('cafe'.alnum?).to be true }
+    it('accepts non-ASCII letters') { expect('café'.alnum?).to be true }
     it('rejects hyphen') { expect('-'.alnum?).to be false }
     it('rejects underscore') { expect('_'.alnum?).to be false }
   end

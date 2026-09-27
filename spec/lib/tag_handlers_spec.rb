@@ -703,10 +703,7 @@ RSpec.describe TagHandlers do
       buf = +''
       host.dispatch_tag('<pushBold/>', buf)
       host.dispatch_tag('<popBold/>', buf)
-      if host.line_colors.any?
-        region = host.line_colors.first
-        expect(region[:start]).to eq region[:end]
-      end
+      expect(host.line_colors).to contain_exactly(a_hash_including(start: 0, end: 0, fg: 'ff0000'))
     end
 
     it 'color region positions are correct after entity unescaping in text' do
@@ -753,11 +750,12 @@ RSpec.describe TagHandlers do
       expect(host.current_stream).to eq 'thoughts'
     end
 
-    it 'stream close after multiple opens resets to nil' do
-      host.dispatch_tag('<pushStream id="combat" />', String.new)
+    it 'returns to the outer stream when a nested stream closes' do
+      pending 'nested pushStream spills the outer stream into main (audit §0.2; #42 reverted in #44)'
       host.dispatch_tag('<pushStream id="thoughts" />', String.new)
+      host.dispatch_tag('<pushStream id="familiar" />', String.new)
       host.dispatch_tag('<popStream/>', String.new)
-      expect(host.current_stream).to be_nil
+      expect(host.current_stream).to eq 'thoughts'
     end
 
     it 'clearStream for non-percWindow id does not crash' do
@@ -785,7 +783,7 @@ RSpec.describe TagHandlers do
   describe 'adversarial: link edge cases' do
     before { state.blue_links = true }
 
-    it 'link with empty text produces zero-length cmd' do
+    it 'creates no link for a link with no text' do
       buf = +''
       host.dispatch_tag('<d>', buf)
       host.dispatch_tag('</d>', buf)

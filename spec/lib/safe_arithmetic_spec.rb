@@ -5,8 +5,9 @@
 #
 # The suite used to test an eval-based copy in spec_helper that disagreed with
 # this parser on malformed input: the copy returned 0 where the real parser is
-# lenient. These examples pin the real parser's current behaviour so any
-# change to it is deliberate.
+# lenient. The malformed-input examples are characterization specs: the
+# leniency is intentional and documented on SafeArithmetic.evaluate, and
+# they pin it so any change to it is deliberate.
 
 require_relative '../../lib/safe_arithmetic'
 
@@ -43,8 +44,9 @@ RSpec.describe SafeArithmetic do
     end
   end
 
-  # Inputs where the old spec_helper copy returned 0.
-  describe '.evaluate with malformed expressions' do
+  # Characterization: inputs where the old spec_helper copy returned 0. The
+  # parser is lenient on purpose (see the SafeArithmetic.evaluate docs).
+  describe '.evaluate with malformed expressions (characterization)' do
     it 'treats a missing closing parenthesis as closed' do
       expect(evaluate('(10')).to eq 10
       expect(evaluate('2*(3')).to eq 6

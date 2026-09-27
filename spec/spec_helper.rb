@@ -10,10 +10,27 @@
 # Specs exist to find bugs, not to confirm happy paths. Every spec
 # file must include adversarial edge-case tests that probe boundary
 # conditions, nil/missing inputs, unmatched pairs, malformed input,
-# concurrent access, and off-by-one errors. When a test finds a real
-# bug, document it with a "# BUG FOUND:" comment and assert the
-# actual (buggy) behavior so the test passes — making the bug
-# visible for future fixing.
+# concurrent access, and off-by-one errors.
+#
+# KNOWN BUGS: a spec for a known, unfixed bug asserts the CORRECT
+# behaviour and is marked pending with a short reason (and a link or
+# issue/audit reference):
+#
+#   it 'keeps the outer stream after an inner one closes' do
+#     pending 'nested pushStream spills into main (issue #NN)'
+#     ...
+#   end
+#
+# RSpec still runs a pending example. While it fails it is reported as
+# pending and the suite stays green; once the bug is fixed the example
+# passes and RSpec reports it as a FAILURE ("Expected pending ... to
+# fail"), which is the prompt to delete the `pending` line. Never assert
+# the buggy behaviour to make a spec pass: that pins the bug as
+# "expected" and makes the fix look like a regression.
+#
+# CHARACTERIZATION specs (asserting current behaviour as-is) are only
+# for intentional quirks, and must say so in their description or a
+# comment ("Characterization: ... intentional because ...").
 
 require 'rspec'
 require 'tmpdir'
