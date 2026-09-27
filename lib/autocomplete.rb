@@ -7,13 +7,17 @@ Tab-completion from command history for the command buffer.
 # Provides tab-completion from command history.
 #
 # When the user presses tab, searches command history for entries
-# that start with the current buffer text. If multiple matches exist,
+# that start with the whole command line. If multiple matches exist,
 # auto-progresses to the longest common prefix and displays options.
+#
+# The cursor position does not change what is matched: a completion
+# replaces the whole command line and leaves the cursor at the end, as
+# the original elanthia-online/ProfanityFE autocomplete did.
 #
 # Ported from elanthia-online/ProfanityFE.
 #
 # @example
-#   Autocomplete.complete(current_text, history_array, cmd_buffer, stream_window)
+#   Autocomplete.complete(cmd_buffer, stream_window)
 module Autocomplete
   HIGHLIGHT_COLOR = 'a6e22e'
 
@@ -78,13 +82,17 @@ module Autocomplete
 
   # Apply a completion string to the command buffer.
   #
+  # +completion+ starts with +original+ (the whole buffer), so moving the
+  # cursor to the end and typing the rest turns the command line into
+  # +completion+ wherever the cursor was.
+  #
   # @param cmd_buffer [CommandBuffer] the buffer to modify
   # @param completion [String] the full completion string
   # @param original [String] the original text (for calculating new chars)
   # @return [void]
   # @api private
   def self.apply_completion(cmd_buffer, completion, original)
-    # Type the remaining characters into the buffer
+    cmd_buffer.cursor_end
     completion[original.length..].each_char { |ch| cmd_buffer.put_ch(ch) }
     cmd_buffer.refresh
     CursesRenderer.doupdate
