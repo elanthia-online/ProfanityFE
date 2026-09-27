@@ -7,7 +7,7 @@
 # game text streaming) and RoomWindow (room panel rendering).
 #
 # Three command formats are supported:
-#   DR: <d cmd='go door'>the door</d>      => cmd = "go door"
+#   DR: <d cmd='go door'>the door</d>      => cmd = "go door" (cmd="..." also accepted)
 #   GS: <a exist="12345" noun="sword">...</a> => cmd = "look #12345"
 #   GS (no noun): <a exist="12345">...</a>    => cmd = "_drag #12345"
 #   Fallback: <d>north</d>                    => cmd = "north" (link text)
@@ -22,7 +22,8 @@ module LinkExtractor
   # @param xml [String] the full opening tag (e.g. "<d cmd='go door'>")
   # @return [String, nil] the command string, or nil if no cmd/exist attribute
   def extract_cmd(xml)
-    if (cmd_match = xml.match(/cmd='(?<cmd>[^']+)'/))
+    # Most DR links quote cmd with single quotes; some (e.g. FLAG output) use double quotes.
+    if (cmd_match = xml.match(/cmd=(?:'(?<cmd>[^']+)'|"(?<cmd>[^"]+)")/))
       cmd_match[:cmd]
     elsif (exist_match = xml.match(/exist="(?<id>[^"]+)"/))
       noun = xml.match(/noun="(?<n>[^"]+)"/)&.[](:n)
