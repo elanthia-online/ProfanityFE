@@ -150,6 +150,55 @@ RSpec.describe SettingsLoader do
     end
   end
 
+  describe 'key bindings on reload' do
+    let(:first_action) { proc {} }
+    let(:second_action) { proc {} }
+    let(:key_action) { { 'first' => first_action, 'second' => second_action } }
+    let(:key_binding) { {} }
+
+    def load_keys(body, reload: false)
+      path = write_settings(@dir, body)
+      described_class.load(path, key_binding, key_action, proc {}, reload: reload)
+    end
+
+    before { allow(ProfanityLog).to receive(:write) }
+
+    it 'drops a key removed from the file when settings are reloaded' do
+      load_keys("<key id='ctrl+x' action='first'/><key id='ctrl+y' action='second'/>")
+
+      load_keys("<key id='ctrl+y' action='second'/>", reload: true)
+
+      expect(key_binding).to eq(25 => second_action)
+    end
+
+    it 'logs no conflict when a key changes from an action to a combo across a reload' do
+      load_keys("<key id='escape' action='first'/>")
+
+      load_keys("<key id='alt+1' action='second'/>", reload: true)
+
+      expect(key_binding).to eq(27 => { '1' => second_action })
+      expect(ProfanityLog).not_to have_received(:write)
+    end
+
+    it 'logs no conflict when a key changes from a combo to an action across a reload' do
+      load_keys("<key id='alt+1' action='first'/>")
+
+      load_keys("<key id='escape' action='second'/>", reload: true)
+
+      expect(key_binding).to eq(27 => second_action)
+      expect(ProfanityLog).not_to have_received(:write)
+    end
+
+    it 'keeps the existing keys when the reloaded file is malformed' do
+      load_keys("<key id='ctrl+x' action='first'/>")
+
+      File.write(File.join(@dir, 'settings.xml'), '<settings><key id=')
+      described_class.load(File.join(@dir, 'settings.xml'), key_binding, key_action, proc {}, reload: true)
+
+      expect(key_binding).to eq(24 => first_action)
+    end
+  end
+
   describe 'settings cache' do
     it 'picks up an edit saved within the same filesystem clock tick as the cache' do
       path = write_settings(@dir, '<notification-stream>ooc</notification-stream>')

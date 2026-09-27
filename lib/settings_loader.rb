@@ -52,8 +52,12 @@ module SettingsLoader
   # and only refreshes highlights, gag patterns, perc-transforms, and
   # key bindings.
   #
+  # +key_binding+ is cleared and rebuilt from the file on every load, so
+  # bindings changed at runtime (e.g. by switch_arrow_mode) revert to the
+  # file's.
+  #
   # @param filename [String] path to the .profanity.xml configuration file
-  # @param key_binding [Hash] mutable hash of key bindings to populate
+  # @param key_binding [Hash] mutable hash of key bindings, replaced in place
   # @param key_action [Hash<String, Proc>] named action procs available for key binding
   # @param do_macro [Proc] proc that executes a macro string when called
   # @param reload [Boolean] when true, skip PRESET/LAYOUT population and only refresh dynamic settings
@@ -76,6 +80,11 @@ module SettingsLoader
       GagPatterns.clear_custom if reload
 
       xml_root = load_cached_xml(filename)
+      # Rebuild key bindings from the file so a <key> removed from the XML
+      # doesn't linger across a reload, and a key whose kind changed (action
+      # vs combo) isn't reported as conflicting with the previous load.
+      # Cleared only once the XML has parsed, so a broken file keeps the keys.
+      key_binding.clear
       xml_root.elements.each do |e|
         case e.name
         when 'highlight'
