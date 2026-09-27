@@ -218,9 +218,8 @@ class TabbedTextWindow < BaseWindow
   # @return [void]
   def add_string_to_tab(tab_name, string, string_colors = [], indent: nil)
     return unless @tabs.key?(tab_name)
-    return if string.nil? || string.chomp.empty?
 
-    string += format_timestamp if @time_stamp
+    string = buffer_text(string, @time_stamp)
 
     content_width = maxx - 1
     tab_buffer = @tabs[tab_name]
@@ -238,12 +237,7 @@ class TabbedTextWindow < BaseWindow
 
       if tab_name == @active_tab
         if tab_buffer_pos == 0
-          scrl(1) if tab_buffer.length > content_height
-          visible_lines = [tab_buffer.length, content_height].min
-          write_row = TAB_BAR_HEIGHT + visible_lines - 1
-          setpos(write_row, 0)
-          clrtoeol
-          add_line(line, line_colors)
+          draw_newest_line(line, line_colors, tab_buffer.length, TAB_BAR_HEIGHT, content_height)
         else
           @buffer_positions[tab_name] += 1
           tab_buffer_pos = @buffer_positions[tab_name]

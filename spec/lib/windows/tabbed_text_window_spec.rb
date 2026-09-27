@@ -30,6 +30,20 @@ RSpec.describe TabbedTextWindow do
     expect(window.rows).to eq [' 1:main', 'l3', 'l4', 'l5']
   end
 
+  it 'draws a blank line as an empty row between its neighbours, like a text window' do
+    ['l1', '', 'l2'].each { |line| window.add_string(line) }
+
+    expect(text_rows).to eq ['l1', '', 'l2']
+  end
+
+  it 'shows a blank line again when scrolled back to it' do
+    ['l1', '', 'l2', 'l3', 'l4'].each { |line| window.add_string(line) }
+
+    window.scroll(-2)
+
+    expect(text_rows).to eq ['l1', '', 'l2']
+  end
+
   it 'shows a full page of older lines after a page-up of the whole text area' do
     %w[l1 l2 l3 l4 l5 l6 l7 l8 l9].each { |line| window.add_string(line) }
 

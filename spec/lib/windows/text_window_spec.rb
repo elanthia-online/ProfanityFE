@@ -41,6 +41,60 @@ RSpec.describe TextWindow do
     expect(window.rows).to eq ['one two', '  three', '  four']
   end
 
+  it 'draws the first line of a new window on the top row' do
+    window.add_string('l1')
+
+    expect(window.rows).to eq ['l1', '', '']
+  end
+
+  it 'draws a blank line as an empty row between its neighbours' do
+    ['l1', '', 'l2'].each { |line| window.add_string(line) }
+
+    expect(window.rows).to eq ['l1', '', 'l2']
+  end
+
+  it 'keeps blank lines as empty rows once the window scrolls' do
+    ['l1', '', 'l2', '', 'l3'].each { |line| window.add_string(line) }
+
+    expect(window.rows).to eq ['l2', '', 'l3']
+  end
+
+  it 'puts the first line after the startup blank fill on the bottom row' do
+    window.maxy.times { window.add_string "\n".dup }
+    %w[l1 l2].each { |line| window.add_string(line) }
+
+    expect(window.rows).to eq ['', 'l1', 'l2']
+  end
+
+  it 'copies the text shown on the row the user selects when a blank line follows it' do
+    ['l1', '', 'l2'].each { |line| window.add_string(line) }
+    row = window.rows.index('l1')
+
+    line_id, = window.selection_anchor_at(row, 0)
+
+    expect(window.extract_selection(line_id, 0, line_id, 2)).to eq 'l1'
+  end
+
+  it 'leaves every row in place when a line after a blank line is highlighted' do
+    ['l1', '', 'l2'].each { |line| window.add_string(line) }
+    shown = window.rows
+    line_id, = window.selection_anchor_at(shown.index('l2'), 0)
+
+    window.highlight_selection(line_id, 0, line_id, 2)
+
+    expect(window.rows).to eq shown
+    expect(window.attrs_at(shown.index('l2'), 0) & Curses::A_REVERSE).to eq Curses::A_REVERSE
+  end
+
+  it 'opens the link shown on the row the user clicks when a blank line follows it' do
+    window.add_string('go north', [{ start: 3, end: 8, cmd: 'north' }])
+    window.add_string('')
+    window.add_string('l2')
+    row = window.rows.index('go north')
+
+    expect(window.link_cmd_at(row, 4)).to eq 'north'
+  end
+
   it 'shows a full page of older lines after scrolling back by the whole window height' do
     %w[l1 l2 l3 l4 l5 l6 l7 l8 l9].each { |line| window.add_string(line) }
 

@@ -62,6 +62,25 @@ class BaseWindow < Curses::Window
     end
   end
 
+  # Draw a line just added to the newest end of a live (unscrolled) view.
+  # Lines fill the text area from its top row; once the area is full it
+  # scrolls up one row and the new line takes the bottom row. Every buffer
+  # line, blank ones included, gets its own row, so rows keep matching the
+  # row-to-line mapping of {AnchoredSelection} used for selection and links.
+  #
+  # @param line [String] the new line
+  # @param line_colors [Array<Hash>] color regions for the line
+  # @param buffer_length [Integer] buffer length, including the new line
+  # @param top [Integer] first row of the text area
+  # @param height [Integer] number of rows in the text area
+  # @return [void]
+  protected def draw_newest_line(line, line_colors, buffer_length, top, height)
+    scrl(1) if buffer_length > height
+    setpos(top + [buffer_length, height].min - 1, 0)
+    clrtoeol
+    add_line(line, line_colors)
+  end
+
   # All live instances of this window subclass.
   #
   # @return [Array<BaseWindow>]
@@ -117,6 +136,20 @@ class BaseWindow < Curses::Window
   # @api private
   def format_timestamp
     " [#{Time.now.hour.to_s.rjust(2, '0')}:#{Time.now.min.to_s.rjust(2, '0')}]"
+  end
+
+  # Text to store in a line buffer for an added string. A trailing newline
+  # is dropped (the startup blank fill adds "\n"): drawing it would move
+  # the cursor down a second row, and each buffer line owns exactly one
+  # row. Blank text stays blank and gets no timestamp.
+  #
+  # @param string [String, nil] the text being added
+  # @param time_stamp [Boolean] whether to append a timestamp
+  # @return [String]
+  # @api private
+  def buffer_text(string, time_stamp)
+    text = string.to_s.chomp
+    time_stamp && !text.empty? ? text + format_timestamp : text
   end
 
   # --- Scrollbar rendering (DRY: shared by TextWindow, TabbedTextWindow) ---

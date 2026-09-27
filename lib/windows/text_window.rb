@@ -60,15 +60,14 @@ class TextWindow < BaseWindow
   # @param string_colors [Array<Hash>] color region descriptors
   # @return [void]
   def add_string(string, string_colors = [], indent: nil)
-    string += format_timestamp if @time_stamp && string && !string.chomp.empty?
+    string = buffer_text(string, @time_stamp)
     effective_indent = indent.nil? ? @indent_word_wrap : indent
     wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors, continuation|
       @buffer.unshift([line, line_colors, continuation])
       @lines_appended += 1
       @buffer.pop if @buffer.length > @max_buffer_size
       if @buffer_pos == 0
-        addstr "\n" unless line.chomp.empty?
-        add_line(line, line_colors)
+        draw_newest_line(line, line_colors, @buffer.length, 0, maxy)
       else
         @buffer_pos += 1
         scroll(1) if @buffer_pos > (@max_buffer_size - maxy)
