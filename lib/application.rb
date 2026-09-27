@@ -58,6 +58,8 @@ class Application
   def initialize(cli_options)
     @cli_options = cli_options
     @server = nil
+    # Receives the server thread's outcome (see #start_server_thread)
+    @session_end = Queue.new
 
     @xml_escapes = {
       '&lt;'   => '<',
@@ -641,14 +643,54 @@ class Application
     # changes; re-fit the command line to the new width afterwards.
     @event_bus.on(:prompt_changed) { @cmd_buffer.redraw }
 
-    processor = GameTextProcessor.new(
+    @processor = GameTextProcessor.new(
       window_mgr: @window_mgr,
       shared_state: @shared_state,
       cmd_buffer: @cmd_buffer,
       xml_escapes: @xml_escapes,
       event_bus: @event_bus
     )
-    Thread.new { processor.run(@server) }
+    # The server thread only reports how the connection ended; the input
+    # loop picks that up and ends the session on the main thread.
+    Thread.new do
+      outcome = :crashed
+      outcome = @processor.run(@server)
+    ensure
+      @session_end << outcome
+    end
+  end
+
+  # End the session once the server thread reports that the connection is
+  # over. Called from {#input_loop}, so it runs on the main thread: the
+  # notice is drawn and the key read by the thread that owns the keyboard,
+  # with no competing getch. Exits through SystemExit, so the input loop's
+  # +ensure+ restores the terminal.
+  #
+  # @param outcome [Symbol] +:disconnected+ or +:crashed+, from
+  #   {GameTextProcessor#run}
+  # @return [void] never returns
+  def end_session(outcome)
+    unless outcome == :disconnected
+      fatal_error('ProfanityFE stopped: error reading from the game server. See the log file for details.')
+    end
+
+    @processor.show_disconnect_message
+    wait_for_exit_key
+    exit 0
+  end
+
+  # Block until a key is pressed. Resizes and mouse events are not key
+  # presses. A read error (nil) also ends the wait, so a lost terminal
+  # cannot spin here.
+  #
+  # @return [void]
+  def wait_for_exit_key
+    window = @cmd_buffer.window
+    window.nodelay = false
+    loop do
+      ch = window.getch
+      break unless [Curses::KEY_RESIZE, Curses::KEY_MOUSE].include?(ch)
+    end
   end
 
   # ---- Input loop ----
@@ -673,6 +715,7 @@ class Application
 
     loop do
       IO.select([$stdin], nil, nil, 0.1)
+      end_session(@session_end.pop) unless @session_end.empty?
 
       CursesRenderer.synchronize do
         # Tick countdowns on every iteration (~100ms), regardless of input

@@ -5,6 +5,7 @@
 # bindings, and countdown tick polling.
 
 require 'socket'
+require 'rexml/document'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/kill_ring'
 require_relative '../../lib/string_classification'
@@ -13,6 +14,7 @@ require_relative '../../lib/window_manager'
 require_relative '../../lib/mouse_scroll'
 require_relative '../../lib/autocomplete'
 require_relative '../../lib/selection_manager'
+require_relative '../../lib/game_text_processor'
 require_relative '../../lib/application'
 require_relative '../../lib/key_codes'
 require_relative '../../lib/settings_loader'
@@ -799,6 +801,102 @@ RSpec.describe Application do
 
       expect(stderr_at_close).to eq ['']
       expect(output).to include('Connection refused')
+    end
+  end
+
+  # The server thread reports how the connection ended; the input loop ends
+  # the session on the main thread.
+  describe 'end of session' do
+    let(:screen) { [] }
+    let(:main_thread_window) do
+      screen = self.screen
+      obj = Object.new
+      obj.define_singleton_method(:add_string) { |text, *| screen << [Thread.current, text] }
+      obj
+    end
+
+    before do
+      app.window_mgr.instance_variable_set(:@stream, { 'main' => main_thread_window })
+      allow(IO).to receive(:select) { sleep 0.005 }
+      allow(ProfanityLog).to receive(:write)
+      allow(Curses).to receive(:close_screen)
+    end
+
+    # A game server whose gets raises the error, or returns nil (EOF) when
+    # the error is nil.
+    def server_that_ends_with(error)
+      server = Object.new
+      server.define_singleton_method(:gets) { error ? raise(error) : nil }
+      server.define_singleton_method(:close) { nil }
+      server
+    end
+
+    # A command window that returns no key while polled (nodelay) and
+    # +key+ once read blocking. Ends the loop with Interrupt if the session
+    # has not ended after 5 seconds.
+    def keyboard_with_key(key, screen)
+      window = Object.new
+      blocking = false
+      deadline = Time.now + 5
+      window.define_singleton_method(:nodelay=) { |value| blocking = !value }
+      window.define_singleton_method(:noutrefresh) { nil }
+      window.define_singleton_method(:getch) do
+        raise Interrupt if Time.now > deadline
+
+        screen << [Thread.current, blocking ? :blocking_getch : :polling_getch]
+        blocking ? key : nil
+      end
+      window
+    end
+
+    # Run the server thread and the input loop until the session ends.
+    # Returns the SystemExit raised, or nil if the loop ended without one.
+    def run_session(server)
+      app.cmd_buffer.window = keyboard_with_key('q', screen)
+      app.instance_variable_set(:@server, server)
+      app.send(:start_server_thread)
+      app.send(:input_loop)
+      nil
+    rescue SystemExit => e
+      e
+    end
+
+    def blocking_reads = screen.select { |_, event| event == :blocking_getch }
+
+    [nil, IOError.new('stream closed'), Errno::ECONNRESET.new, Errno::EPIPE.new, Errno::ECONNABORTED.new].each do |error|
+      it "on #{error ? error.class : 'EOF'}, shows the notice, waits for a key on the main thread, and exits 0" do
+        exit_error = run_session(server_that_ends_with(error))
+
+        expect(exit_error&.status).to eq 0
+        texts = screen.map(&:last)
+        expect(texts).to include('* Connection closed', '* Press any key to exit...')
+        expect(texts.index(:blocking_getch)).to be > texts.index('* Press any key to exit...')
+        expect(screen.map(&:first).uniq).to eq [Thread.current]
+      end
+    end
+
+    it 'waits past terminal resizes and mouse events for a real key' do
+      keys = [Curses::KEY_RESIZE, Curses::KEY_MOUSE, 'q', 'not read']
+      nodelay = []
+      window = Object.new
+      window.define_singleton_method(:nodelay=) { |value| nodelay << value }
+      window.define_singleton_method(:getch) { keys.shift }
+      app.cmd_buffer.window = window
+
+      app.send(:wait_for_exit_key)
+
+      expect(nodelay).to eq [false]
+      expect(keys).to eq ['not read']
+    end
+
+    it 'exits 1 without the disconnect notice when the server thread crashes' do
+      exit_error = nil
+      output = capture_stderr { exit_error = run_session(server_that_ends_with(RuntimeError.new('boom'))) }
+
+      expect(exit_error&.status).to eq 1
+      expect(screen.map(&:last)).not_to include('* Connection closed')
+      expect(blocking_reads).to be_empty
+      expect(output).to include('error reading from the game server')
     end
   end
 end
