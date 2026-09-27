@@ -357,7 +357,7 @@ module TagHandlers
 
     flush_text_buffer(text_buffer)
     new_stream = m[:id]
-    if (exp_match = new_stream.match(/^exp (?<skill>\w+\s?\w+?)/))
+    if (exp_match = new_stream.match(/^exp (?<skill>.+)/))
       @current_stream = 'exp'
       @event_bus.emit(:exp_set_current, skill: exp_match[:skill])
     else
