@@ -151,4 +151,35 @@ RSpec.describe WindowManager, '#load_layout' do
       expect(window_manager.stream['main']).to be_active
     end
   end
+
+  describe 'reusing text windows' do
+    it 'gives each layout slot its own window when a stream list is split across slots' do
+      load("<window class='text' top='0' left='0' height='10' width='40' value='main,death'/>")
+      original = window_manager.stream['main']
+      load(<<~XML)
+        <window class='text' top='0' left='0' height='10' width='40' value='main,death'/>
+        <window class='text' top='10' left='0' height='5' width='40' value='death'/>
+      XML
+
+      expect(window_manager.stream['main']).to be original
+      expect(window_manager.stream['death']).not_to be original
+      expect(TextWindow.list.size).to eq 2
+    end
+
+    it 'builds a text window for a stream that was sunk in the previous layout' do
+      load("#{main_only}<window class='sink' value='atmospherics'/>")
+
+      expect do
+        load("#{main_only}<window class='text' top='10' left='0' height='5' width='40' value='atmospherics'/>")
+      end.not_to raise_error
+      expect(window_manager.stream['atmospherics']).to be_a TextWindow
+    end
+
+    it 'builds a text window for a stream that was a tab in the previous layout' do
+      load("<window class='tabbed' top='0' left='0' height='10' width='40' tabs='main,thoughts'/>")
+      load(main_only)
+
+      expect(window_manager.stream['main']).to be_an_instance_of TextWindow
+    end
+  end
 end
