@@ -50,13 +50,8 @@ module ColorManager
       @custom_colors = custom_colors
 
       # Calculate color codes from curses
-      @default_color_code = Curses.color_content(@default_color_id).collect do |num|
-        ((num / 1000.0) * 255).round.to_s(16)
-      end.join('').rjust(6, '0')
-
-      @default_background_color_code = Curses.color_content(@default_background_color_id).collect do |num|
-        ((num / 1000.0) * 255).round.to_s(16)
-      end.join('').rjust(6, '0')
+      @default_color_code = curses_rgb_to_hex(Curses.color_content(@default_color_id))
+      @default_background_color_code = curses_rgb_to_hex(Curses.color_content(@default_background_color_id))
 
       # Initialize color ID lookup
       @color_id_lookup = {}
@@ -161,6 +156,15 @@ module ColorManager
     end
 
     private
+
+    # Convert curses RGB values (0-1000 range) to a 6-digit hex color code.
+    # Each channel is zero-padded to two digits, so [1000, 0, 0] is "ff0000".
+    #
+    # @param rgb [Array<Integer>] [r, g, b] each in 0..1000
+    # @return [String] 6-digit lowercase hex color code
+    def curses_rgb_to_hex(rgb)
+      format('%02x%02x%02x', *rgb.map { |num| ((num / 1000.0) * 255).round })
+    end
 
     # Convert a 6-digit hex color code to curses RGB values (0-1000 range).
     #

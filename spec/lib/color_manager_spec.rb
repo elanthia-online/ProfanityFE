@@ -87,4 +87,37 @@ RSpec.describe ColorManager do
       expect(init_pair_calls.size).to eq(calls)
     end
   end
+
+  describe 'default color codes' do
+    before do
+      allow(Curses).to receive(:color_content).with(1).and_return([1000, 0, 0])
+      allow(Curses).to receive(:color_content).with(4).and_return([0, 0, 933])
+    end
+
+    def configure_custom
+      ColorManager.configure(default_color_id: 1, default_background_color_id: 4, custom_colors: true)
+    end
+
+    it 'zero-pads each RGB channel when converting curses RGB to hex' do
+      configure_custom
+
+      expect(ColorManager.default_color_code).to eq('ff0000')
+      expect(ColorManager.default_background_color_code).to eq('0000ee')
+    end
+
+    it 'keys the default colors under their true hex in custom mode' do
+      configure_custom
+
+      expect(ColorManager.get_color_id('ff0000')).to eq(1)
+      expect(ColorManager.get_color_id('0000ee')).to eq(4)
+      expect(Curses).not_to have_received(:init_color)
+    end
+
+    it 'does not claim an unrelated color is a default' do
+      configure_custom
+
+      expect(ColorManager.get_color_id('00ff00')).not_to eq(1)
+      expect(Curses).to have_received(:init_color).with(anything, 0, 1000, 0)
+    end
+  end
 end
