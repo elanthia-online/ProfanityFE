@@ -122,36 +122,10 @@ ROOM_OBJECTS    = CONFIG.room_objects
 PERC_TRANSFORMS = CONFIG.perc_transforms
 
 # ---------------------------------------------------------------------------
-# Top-level helpers defined in profanity.rb
+# Top-level helper stubs (the real get_color_pair_id is in lib/color_manager.rb)
 # ---------------------------------------------------------------------------
 
-def safe_eval_arithmetic(expr)
-  normalized = expr.gsub(/\s+/, '')
-  return 0 unless normalized.match?(%r{\A[\d+\-*/()]+\z})
-  return 0 if normalized.include?('**')
-
-  eval(expr).to_i
-rescue SyntaxError, ZeroDivisionError
-  0
-end
-
 def get_color_pair_id(_fg, _bg) = 0
-
-def add_prompt(window, prompt_text, cmd = '')
-  return if cmd.empty? && window.respond_to?(:duplicate_prompt?) && window.duplicate_prompt?(prompt_text)
-
-  prompt_colors = [{ start: 0, end: (prompt_text.length + cmd.length), fg: '555555' }]
-  window.route_string("#{prompt_text}#{cmd}", prompt_colors, MAIN_STREAM)
-end
-
-def parse_player_names(text)
-  text.sub(/^Also here:\s*/, '')
-      .sub(/ and (?<rest>.*)$/) { ", #{Regexp.last_match[:rest]}" }
-      .split(', ')
-      .map { |obj| obj.sub(/ (who|whose body)? ?(has|is|appears|glows) .+/, '').sub(/ \(.+\)/, '') }
-      .map { |obj| obj.strip.scan(/\w+$/).first }
-      .compact
-end
 
 # ---------------------------------------------------------------------------
 # Stub modules that lib files reference at require time

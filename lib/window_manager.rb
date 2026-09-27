@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'safe_arithmetic'
+
 # Manages Curses window creation, layout loading, and handler hash access
 # for the profanity terminal UI.
 
@@ -305,7 +307,7 @@ class WindowManager
   # @return [Integer] computed pixel/cell dimension value
   def fix_layout_number(str)
     str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
-    safe_eval_arithmetic(str)
+    SafeArithmetic.evaluate(str)
   end
 
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.

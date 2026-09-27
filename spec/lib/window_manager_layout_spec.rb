@@ -238,4 +238,23 @@ RSpec.describe WindowManager, '#load_layout' do
       expect(window_manager.command_window.maxx).to eq 1
     end
   end
+
+  describe 'dimension expressions' do
+    # The spec screen is 24 lines by 80 columns. A text window gives one
+    # column to its scrollbar, so its maxx is the layout width minus one.
+    it 'sizes and places a window from lines/cols arithmetic' do
+      load("<window class='text' top='lines-20' left='cols/4' height='lines-10' width='cols/2+1' value='main'/>")
+      main = window_manager.stream['main']
+
+      expect([main.maxy, main.maxx, main.begy, main.begx]).to eq [14, 40, 4, 20]
+    end
+
+    # The layout parser is lenient; an eval-based parser would size these to 0.
+    it 'treats an unclosed parenthesis as closed and a missing operand as 0' do
+      load("<window class='text' top='0' left='0' height='(lines-14' width='cols/2+' value='main'/>")
+      main = window_manager.stream['main']
+
+      expect([main.maxy, main.maxx]).to eq [10, 39]
+    end
+  end
 end

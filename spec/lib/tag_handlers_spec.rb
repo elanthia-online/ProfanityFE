@@ -8,6 +8,7 @@
 require_relative '../../lib/event_bus'
 require_relative '../../lib/xml_tokenizer'
 require_relative '../../lib/tag_handlers'
+require_relative '../../lib/safe_arithmetic'
 
 # Minimal host class that includes TagHandlers, providing the instance
 # variables and helper methods the module expects.
@@ -50,10 +51,9 @@ class TagHandlerHost
     @open_link.clear
   end
 
-  # Stubs for methods defined in profanity.rb / GameTextProcessor
+  # Stubs for methods defined in GameTextProcessor
   def fix_layout_number(str)
-    str.gsub('lines', '24').gsub('cols', '80')
-    safe_eval_arithmetic(str.gsub('lines', '24').gsub('cols', '80'))
+    SafeArithmetic.evaluate(str.gsub('lines', '24').gsub('cols', '80'))
   end
 
   def parse_room_subtitle(subtitle)
