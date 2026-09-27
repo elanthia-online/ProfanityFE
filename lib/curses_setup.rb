@@ -14,3 +14,6 @@ Curses.start_color
 # Curses.mousemask(Curses::ALL_MOUSE_EVENTS | Curses::REPORT_MOUSE_POSITION)
 Curses.cbreak
 Curses.noecho
+# Keypad mode makes ncurses number the terminal's extended keys (ctrl/alt
+# arrows and the like), which key_codes reads when it is loaded.
+Curses.stdscr.keypad(true)
