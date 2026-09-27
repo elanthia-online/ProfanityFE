@@ -33,6 +33,21 @@ class MouseScroll
   # highlight-on-release).
   MOTION_EVENTS = defined?(Curses::REPORT_MOUSE_POSITION) ? Curses::REPORT_MOUSE_POSITION : 0
 
+  # Bitmask for every button-1 (left button) event. A left click or drag
+  # is never the scroll wheel, so calibration ignores these.
+  BUTTON1_EVENTS = %i[BUTTON1_PRESSED BUTTON1_RELEASED BUTTON1_CLICKED
+                      BUTTON1_DOUBLE_CLICKED BUTTON1_TRIPLE_CLICKED]
+                   .select { |name| Curses.const_defined?(name) }
+                   .inject(0) { |mask, name| mask | Curses.const_get(name) }
+
+  # Whether ncurses reports a wheel-down as pointer motion. Its version 1
+  # mouse ABI (six bits per button, as in macOS's system ncurses) has no
+  # button-5 events and reports a wheel-down as REPORT_MOUSE_POSITION.
+  # Version 2 (five bits per button) has BUTTON5_PRESSED, so there motion
+  # is never the wheel.
+  WHEEL_DOWN_IS_MOTION = Curses.const_defined?(:BUTTON2_PRESSED) &&
+                         Curses::BUTTON2_PRESSED == Curses::BUTTON1_PRESSED << 6
+
   # ncurses default click-resolution interval, in milliseconds. The curses
   # gem's mouseinterval returns a boolean (whether the interval was set),
   # not the previous interval, so the prior value cannot be read back;
@@ -246,6 +261,8 @@ class MouseScroll
   # @param bstate [Integer] the mouse button state bitmask
   # @return [void]
   def configure(bstate)
+    return unless wheel_candidate?(bstate)
+
     case @config_state
     when :up
       @bstate_counts[bstate] = (@bstate_counts[bstate] || 0) + 1
@@ -268,6 +285,19 @@ class MouseScroll
       ProfanitySettings.save_mouse_settings(@button4_mask, @button5_mask)
       @display_fn.call('[PROFANITY] Scroll wheel configuration complete!')
     end
+  end
+
+  # Whether a calibration event could be the wheel direction being learned.
+  # A left-button event never is, and neither is pointer motion, except a
+  # wheel-down where ncurses reports it as motion ({WHEEL_DOWN_IS_MOTION}).
+  #
+  # @param bstate [Integer] the mouse button state bitmask
+  # @return [Boolean]
+  def wheel_candidate?(bstate)
+    return false if bstate.anybits?(BUTTON1_EVENTS)
+    return true if bstate.nobits?(MOTION_EVENTS)
+
+    WHEEL_DOWN_IS_MOTION && @config_state == :down
   end
 
   # Dispatch a scroll-up or scroll-down action based on the button state.
