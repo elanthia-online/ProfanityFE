@@ -725,6 +725,115 @@ RSpec.describe Application do
       expect(HIGHLIGHT).to eq(/kobold/ => ['ff0000', nil, nil])
       expect(main.rows).to eq ['', '', '', '']
     end
+
+    # BUG FOUND (fixed here): .reload replaced the highlights with the
+    # file's, so a .highlight added in the session stopped coloring text
+    # while .highlight still listed it and .unhighlight claimed to remove it.
+    context 'with an inline highlight' do
+      let(:inline) { Application::INLINE_HIGHLIGHT_COLOR }
+      # A distinct color pair per highlight color, so the screen shows which
+      # color each character was drawn in.
+      let(:pairs) { { inline => 1, 'ff0000' => 2 } }
+
+      before do
+        allow(IO).to receive(:select).and_return(nil)
+        allow(HighlightProcessor).to receive(:get_color_pair_id) { |fg, _bg| pairs.fetch(fg, 0) }
+      end
+
+      # Feed lines through the real server thread, as the socket would, and
+      # wait for it to finish.
+      def receive_from_server(*lines)
+        queue = lines.map { |line| "#{line}\r\n" }
+        server = Object.new
+        server.define_singleton_method(:gets) { queue.shift&.dup }
+        app.instance_variable_set(:@server, server)
+        app.send(:start_server_thread)
+        app.instance_variable_get(:@session_end).pop
+      end
+
+      # The highlight color of +word+ on the newest main-window row showing
+      # +line+: a color code, nil when uncolored, or an Array when mixed.
+      def color_on_screen(line, word)
+        y = main.rows.rindex { |row| row.include?(line) }
+        x = main.row(y).index(word)
+        colors = (x...(x + word.length)).map { |col| pairs.key(main.attrs_at(y, col) >> 8) }.uniq
+        colors.size == 1 ? colors.first : colors
+      end
+
+      it 'keeps coloring text with it after a reload' do
+        app.execute_command('.highlight goblin')
+        File.write(settings_path, settings.sub('goblin', 'troll'))
+
+        app.execute_command('.reload')
+        receive_from_server('A goblin attacks a troll.')
+
+        expect(color_on_screen('A goblin attacks a troll.', 'goblin')).to eq inline
+        expect(color_on_screen('A goblin attacks a troll.', 'troll')).to eq 'ff0000'
+      end
+
+      it 'still lists it after a reload' do
+        app.execute_command('.highlight goblin')
+        app.execute_command('.reload')
+
+        app.execute_command('.highlight')
+
+        expect(main.rows.last(3)).to eq ['*', '*   goblin', '*']
+      end
+
+      it 'removes it with .unhighlight after a reload' do
+        app.execute_command('.highlight goblin')
+        File.write(settings_path, settings.sub('goblin', 'troll'))
+        app.execute_command('.reload')
+        receive_from_server('A goblin arrives.')
+        expect(color_on_screen('A goblin arrives.', 'goblin')).to eq inline
+
+        app.execute_command('.unhighlight goblin')
+        receive_from_server('A goblin attacks a troll.')
+
+        expect(main.rows).to include('* Highlight removed: goblin')
+        expect(color_on_screen('A goblin attacks a troll.', 'goblin')).to be_nil
+        expect(color_on_screen('A goblin attacks a troll.', 'troll')).to eq 'ff0000'
+      end
+
+      it 'colors a word the file also highlights the same after a reload as before it' do
+        app.execute_command('.highlight goblin')
+        receive_from_server('A goblin arrives.')
+        before_reload = color_on_screen('A goblin arrives.', 'goblin')
+
+        app.execute_command('.reload')
+        receive_from_server('A goblin arrives.')
+
+        expect(color_on_screen('A goblin arrives.', 'goblin')).to eq before_reload
+        expect(HIGHLIGHT.to_a).to eq [[/goblin/, ['ff0000', nil, nil]], [/goblin/i, [inline, nil, nil]]]
+      end
+
+      # The server thread reads HIGHLIGHT under SETTINGS_LOCK, so it can only
+      # see HIGHLIGHT as it is whenever the lock is released.
+      it 'is in the highlights every time the reload releases the settings lock' do
+        app.execute_command('.highlight goblin')
+        File.write(settings_path, settings.sub('goblin', 'troll'))
+        seen = []
+        allow(SETTINGS_LOCK).to receive(:synchronize).and_wrap_original do |original, &block|
+          original.call(&block).tap { seen << HIGHLIGHT.keys }
+        end
+
+        app.execute_command('.reload')
+
+        expect(seen).not_to be_empty
+        expect(seen).to all(include(/goblin/i))
+        expect(seen.last).to eq [/troll/, /goblin/i]
+      end
+
+      it 'is unchanged by a reload that fails' do
+        app.execute_command('.highlight goblin')
+        File.write(settings_path, settings.sub('goblin</highlight>', 'troll</hilight>'))
+
+        app.execute_command('.reload')
+        receive_from_server('A goblin arrives.')
+
+        expect(HIGHLIGHT.to_a).to eq [[/goblin/, ['ff0000', nil, nil]], [/goblin/i, [inline, nil, nil]]]
+      end
+    end
   end
 
   describe 'input loop' do

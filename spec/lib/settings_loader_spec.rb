@@ -321,6 +321,28 @@ RSpec.describe SettingsLoader do
       expect(key_binding).to eq(25 => second_action)
     end
 
+    it "keeps the given highlights after the file's, their colors winning for the same regex" do
+      path = File.join(@dir, 'settings.xml')
+      File.write(path, good_settings.sub('goblin', 'kobold').sub('<perc', "<highlight fg='ff0000'>troll</highlight><perc"))
+      keep = { /troll/ => ['00ffff', nil, nil], /orc/i => ['00ffff', nil, nil] }
+
+      described_class.load(path, key_binding, key_action, proc {}, reload: true, keep_highlights: keep)
+
+      expect(HIGHLIGHT.to_a).to eq [[/kobold/, ['ff0000', nil, nil]], [/troll/, ['00ffff', nil, nil]],
+                                    [/orc/i, ['00ffff', nil, nil]]]
+    end
+
+    it 'leaves the highlights as they were when the reloaded file is malformed' do
+      path = File.join(@dir, 'settings.xml')
+      File.write(path, '<settings>')
+
+      error = described_class.load(path, key_binding, key_action, proc {},
+                                   reload: true, keep_highlights: { /orc/i => ['00ffff', nil, nil] })
+
+      expect(error).to be_a(StandardError)
+      expect_good_settings_in_effect
+    end
+
     it 'skips an invalid pattern and applies the rest of the file' do
       error = nil
       expect {
