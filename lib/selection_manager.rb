@@ -247,8 +247,13 @@ module SelectionManager
                       end
 
       if clipboard_cmd
-        IO.popen(clipboard_cmd, 'w') { |io| io.write(text) }
-        ProfanityLog.write('Clipboard', "Copied #{text.length} chars via #{clipboard_cmd}")
+        begin
+          IO.popen(clipboard_cmd, 'w') { |io| io.write(text) }
+          ProfanityLog.write('Clipboard', "Copied #{text.length} chars via #{clipboard_cmd}")
+        rescue SystemCallError, IOError => e
+          # Tool not installed (ENOENT) or exited early (EPIPE): fall through.
+          ProfanityLog.write('Clipboard', "#{clipboard_cmd} failed (#{e.message}); using OSC 52 + file")
+        end
       else
         ProfanityLog.write('Clipboard', "No clipboard command available (no DISPLAY); using OSC 52 + file")
       end
