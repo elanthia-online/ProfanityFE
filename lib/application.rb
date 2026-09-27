@@ -619,6 +619,9 @@ class Application
   def start_server_thread
     @event_bus = EventBus.new
     @window_mgr.subscribe_to_events(@event_bus)
+    # WindowManager resizes the command window when the prompt width
+    # changes; re-fit the command line to the new width afterwards.
+    @event_bus.on(:prompt_changed) { @cmd_buffer.redraw }
 
     processor = GameTextProcessor.new(
       window_mgr: @window_mgr,
