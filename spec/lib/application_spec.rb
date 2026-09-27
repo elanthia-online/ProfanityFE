@@ -4,6 +4,7 @@
 # .links, .arrow, .layout, .key), macro engine (\\r, \\x, @), key action
 # bindings, and countdown tick polling.
 
+require 'socket'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/kill_ring'
 require_relative '../../lib/string_classification'
@@ -730,6 +731,74 @@ RSpec.describe Application do
       expect(screen.errors).to be_empty
       expect(screen.line).to eq 'jklmnopqr '
       expect(screen.curx).to eq 9
+    end
+  end
+
+  # Run a block with $stderr captured; returns what was written.
+  def capture_stderr
+    original = $stderr
+    $stderr = StringIO.new
+    yield
+    $stderr.string
+  ensure
+    $stderr = original
+  end
+
+  describe 'connecting to the game server' do
+    let(:stderr_at_close) { [] }
+
+    before do
+      stub_const('HOST', '192.0.2.10')
+      stub_const('PORT', 8000)
+      allow(Curses).to receive(:close_screen) { stderr_at_close << $stderr.string.dup }
+    end
+
+    # Make every way of opening the socket fail with the given error.
+    def fail_connection_with(error)
+      allow(Socket).to receive(:tcp).and_raise(error)
+      allow(TCPSocket).to receive(:open).and_raise(error)
+    end
+
+    it 'connects with a timeout so an unreachable host cannot hang' do
+      server = StringIO.new
+      expect(Socket).to receive(:tcp)
+        .with('192.0.2.10', 8000, connect_timeout: Application::CONNECT_TIMEOUT).and_return(server)
+
+      app.send(:connect_server)
+
+      expect(server.string).to start_with('SET_FRONTEND_PID ')
+    end
+
+    [
+      Errno::EHOSTUNREACH, Errno::ETIMEDOUT, Errno::ENETUNREACH, Errno::EADDRNOTAVAIL,
+      Errno::ECONNREFUSED, SocketError.new('getaddrinfo: nodename nor servname provided')
+    ].each do |error|
+      it "reports #{error.is_a?(Exception) ? error.class : error} with host and port, and exits 1" do
+        fail_connection_with(error)
+        exit_error = nil
+
+        output = capture_stderr do
+          app.send(:connect_server)
+        rescue SystemExit => e
+          exit_error = e
+        end
+
+        expect(exit_error&.status).to eq 1
+        expect(output).to include('Failed to connect to game server at 192.0.2.10:8000')
+      end
+    end
+
+    it 'closes the curses screen before printing, so the error is not wiped with it' do
+      fail_connection_with(Errno::ECONNREFUSED)
+
+      output = capture_stderr do
+        app.send(:connect_server)
+      rescue SystemExit
+        nil
+      end
+
+      expect(stderr_at_close).to eq ['']
+      expect(output).to include('Connection refused')
     end
   end
 end

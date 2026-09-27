@@ -46,6 +46,10 @@ class Application
   # How long .key waits for a key press before giving up, in milliseconds.
   DOT_KEY_TIMEOUT_MS = 5000
 
+  # Seconds to wait for the TCP connection to the game server before giving
+  # up, so an unreachable --host fails instead of hanging.
+  CONNECT_TIMEOUT = 10
+
   # Create a new application instance with the given CLI options.
   #
   # @param cli_options [Hash] parsed CLI options from OptionParser
@@ -581,9 +585,8 @@ class Application
     SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro))
 
     if LAYOUT.empty?
-      $stderr.puts "ERROR: No layouts found in #{SETTINGS_FILENAME}."
-      $stderr.puts "The XML file may be malformed. Check for unclosed tags or encoding errors."
-      exit 1
+      fatal_error("ERROR: No layouts found in #{SETTINGS_FILENAME}.",
+                  'The XML file may be malformed. Check for unclosed tags or encoding errors.')
     end
 
     @window_mgr.load_layout('default')
@@ -591,15 +594,14 @@ class Application
     @window_mgr.room['room']&.links_enabled = @cli_options[:links]
 
     unless @cmd_buffer.window
-      $stderr.puts "ERROR: Layout has no command window. Add <window class='command'/> to your layout."
-      exit 1
+      fatal_error("ERROR: Layout has no command window. Add <window class='command'/> to your layout.")
     end
 
     TextWindow.list.each { |w| w.maxy.times { w.add_string "\n".dup } }
   end
 
   def connect_server
-    @server = TCPSocket.open(HOST, PORT)
+    @server = Socket.tcp(HOST, PORT, connect_timeout: CONNECT_TIMEOUT)
     @server.puts "SET_FRONTEND_PID #{Process.pid}"
     @server.flush
 
@@ -610,9 +612,25 @@ class Application
       sleep TIME_SYNC_DELAY
       @shared_state.skip_server_time_offset = false
     end
-  rescue Errno::ECONNREFUSED, Errno::ECONNRESET, SocketError => e
-    warn "Failed to connect to game server on port #{PORT}: #{e.message}"
-    warn 'Is the game server running?'
+  # SystemCallError covers refused, unreachable, timed out, and bad
+  # address; SocketError covers name lookup. IO::TimeoutError is what
+  # TCPSocket's connect_timeout raises, should the socket class change.
+  rescue SystemCallError, SocketError, IO::TimeoutError => e
+    fatal_error("Failed to connect to game server at #{HOST}:#{PORT}: #{e.message}",
+                'Is the game server running?')
+  end
+
+  # Print an error and exit with status 1, closing the curses screen first.
+  #
+  # Until +close_screen+, curses owns the terminal's alternate screen, which
+  # is discarded when the program exits, so an error printed earlier is
+  # never seen.
+  #
+  # @param lines [Array<String>] lines to print to stderr
+  # @return [void] never returns
+  def fatal_error(*lines)
+    Curses.close_screen
+    lines.each { |line| warn line }
     exit 1
   end
 
