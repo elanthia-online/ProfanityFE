@@ -1817,7 +1817,8 @@ selects the whole line. Lines that were word-wrapped for display are copied
 as one logical line, without the mid-sentence breaks. A brief
 `[copied N chars]` note appears in the main window after each copy.
 Selected text is copied via
-OSC 52 (if your terminal supports it) and saved to `/tmp/profanity_selection.txt`.
+OSC 52 (if your terminal supports it) and saved to `~/.profanity/selection.txt`
+(readable only by you).
 Native terminal selection is unavailable while `.links` or `.select` is on
 because the terminal hands the mouse to Profanity — but nearly all terminal
 emulators bypass mouse capture when you hold a modifier: **Shift+drag**
