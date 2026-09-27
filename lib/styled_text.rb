@@ -123,10 +123,14 @@ class StyledText
   # StyledText instances — one per wrapped line. Run positions are
   # correctly split across lines.
   #
-  # @param width [Integer] maximum line width in characters
+  # @param width [Integer] maximum line width in characters; values below 1
+  #   (a window only one or two columns wide) are treated as 1
   # @param indent [Boolean] whether continuation lines get 2-space indent
   # @return [Array<StyledText>] wrapped lines
   def wrap(width, indent: true)
+    # A width of 0 never consumes text and loops forever; a negative width
+    # makes the slices nil.
+    width = [width, 1].max
     return [dup_with_runs] if @text.length <= width
 
     # Disable indent when width is too narrow (indent adds 2 chars,
