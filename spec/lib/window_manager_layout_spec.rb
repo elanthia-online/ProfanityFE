@@ -209,5 +209,16 @@ RSpec.describe WindowManager, '#load_layout' do
       expect([prompt.maxx, command.begx, command.maxx]).to eq fitted
       expect(prompt.rows).to eq ['RH>']
     end
+
+    it 'never sizes the prompt or command line below one column' do
+      event_bus = EventBus.new
+      window_manager.subscribe_to_events(event_bus)
+
+      event_bus.emit(:prompt_changed, text: '')
+      expect(window_manager.indicator['prompt'].maxx).to eq 1
+
+      event_bus.emit(:prompt_changed, text: '>' * 200)
+      expect(window_manager.command_window.maxx).to eq 1
+    end
   end
 end

@@ -481,12 +481,14 @@ class WindowManager
 
     init_h = fix_layout_number(prompt_window.layout[0])
     init_w = fix_layout_number(prompt_window.layout[1])
-    new_w = @prompt_text.length
+    # Neither window may shrink below one column (an empty prompt, or one
+    # wider than the command line); curses rejects such sizes.
+    new_w = [@prompt_text.length, 1].max
     prompt_window.resize(init_h, new_w)
     diff = new_w - init_w
     if @command_window
       @command_window.resize(fix_layout_number(@command_window_layout[0]),
-                             fix_layout_number(@command_window_layout[1]) - diff)
+                             [fix_layout_number(@command_window_layout[1]) - diff, 1].max)
       ctop = fix_layout_number(@command_window_layout[2])
       cleft = fix_layout_number(@command_window_layout[3]) + diff
       @command_window.move(ctop, cleft)
