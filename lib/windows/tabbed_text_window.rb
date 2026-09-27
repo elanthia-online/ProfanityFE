@@ -301,12 +301,7 @@ class TabbedTextWindow < BaseWindow
         setpos(TAB_BAR_HEIGHT, 0)
         scrl(scroll_num)
         setpos(TAB_BAR_HEIGHT, 0)
-        pos = @buffer_positions[@active_tab] + ch - 1
-        scroll_num.abs.times do
-          add_line(tab_buffer[pos][0], tab_buffer[pos][1])
-          addstr "\n"
-          pos -= 1
-        end
+        draw_buffer_lines(tab_buffer, @buffer_positions[@active_tab] + ch - 1, scroll_num.abs)
         noutrefresh
       end
       update_scrollbar
@@ -317,13 +312,7 @@ class TabbedTextWindow < BaseWindow
         setpos(TAB_BAR_HEIGHT, 0)
         scrl(scroll_num)
         setpos(TAB_BAR_HEIGHT + ch - scroll_num, 0)
-        pos = @buffer_positions[@active_tab] + scroll_num - 1
-        (scroll_num - 1).times do
-          add_line(tab_buffer[pos][0], tab_buffer[pos][1])
-          addstr "\n"
-          pos -= 1
-        end
-        add_line(tab_buffer[pos][0], tab_buffer[pos][1])
+        draw_buffer_lines(tab_buffer, @buffer_positions[@active_tab] + scroll_num - 1, scroll_num)
         noutrefresh
       end
     end

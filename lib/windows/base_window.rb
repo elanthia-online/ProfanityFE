@@ -46,6 +46,22 @@ class BaseWindow < Curses::Window
     HighlightProcessor.render_colored_text(self, line, line_colors, options)
   end
 
+  # Draw consecutive buffer lines on consecutive rows, starting at the
+  # cursor and moving from older lines (higher index) to newer ones.
+  # No newline follows the last line: on the bottom row of the scrolling
+  # region it would scroll the text up and blank that row.
+  #
+  # @param buffer [Array<Array(String, Array<Hash>)>] line buffer (newest first)
+  # @param from_index [Integer] buffer index of the first (oldest) line to draw
+  # @param count [Integer] number of lines to draw
+  # @return [void]
+  protected def draw_buffer_lines(buffer, from_index, count)
+    from_index.downto(from_index - count + 1).each_with_index do |index, drawn|
+      addstr "\n" if drawn.positive?
+      add_line(buffer[index][0], buffer[index][1])
+    end
+  end
+
   # All live instances of this window subclass.
   #
   # @return [Array<BaseWindow>]

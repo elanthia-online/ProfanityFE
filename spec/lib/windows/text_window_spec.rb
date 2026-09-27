@@ -40,4 +40,12 @@ RSpec.describe TextWindow do
     window.scroll(2)
     expect(window.rows).to eq ['one two', '  three', '  four']
   end
+
+  it 'shows a full page of older lines after scrolling back by the whole window height' do
+    %w[l1 l2 l3 l4 l5 l6 l7 l8 l9].each { |line| window.add_string(line) }
+
+    window.scroll(-window.maxy)
+
+    expect(window.rows).to eq %w[l4 l5 l6]
+  end
 end

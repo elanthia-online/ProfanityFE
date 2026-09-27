@@ -98,12 +98,7 @@ class TextWindow < BaseWindow
         @buffer_pos += scroll_num.abs
         scrl(scroll_num)
         setpos(0, 0)
-        pos = @buffer_pos + maxy - 1
-        scroll_num.abs.times do
-          add_line(@buffer[pos][0], @buffer[pos][1])
-          addstr "\n"
-          pos -= 1
-        end
+        draw_buffer_lines(@buffer, @buffer_pos + maxy - 1, scroll_num.abs)
         noutrefresh
       end
       update_scrollbar
@@ -113,13 +108,7 @@ class TextWindow < BaseWindow
         @buffer_pos -= scroll_num
         scrl(scroll_num)
         setpos(maxy - scroll_num, 0)
-        pos = @buffer_pos + scroll_num - 1
-        (scroll_num - 1).times do
-          add_line(@buffer[pos][0], @buffer[pos][1])
-          addstr "\n"
-          pos -= 1
-        end
-        add_line(@buffer[pos][0], @buffer[pos][1])
+        draw_buffer_lines(@buffer, @buffer_pos + scroll_num - 1, scroll_num)
         noutrefresh
       end
     end
