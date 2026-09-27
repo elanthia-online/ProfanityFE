@@ -2,6 +2,11 @@
 
 # Single-line command buffer with horizontal scrolling, kill ring, and history.
 # Wraps a Curses::Window for editing; all screen updates use noutrefresh.
+#
+# Every mutation or cursor move ends in a single repaint (+render+) that
+# clamps the horizontal scroll offset so the cursor is visible and redraws
+# the visible slice of the text. There is no incremental insch/delch
+# bookkeeping to drift out of sync with the buffer.
 
 require_relative 'kill_ring'
 require_relative 'string_classification'
@@ -13,6 +18,13 @@ using StringClassification
 # exceeds the window width. Cursor movement, deletion, word-level
 # operations, kill/yank (via KillRing), and command history are all
 # supported.
+#
+# The window shows +text[offset, maxx]+ on row 0 with the cursor at
+# column +pos - offset+. The offset is recomputed after every change:
+# the cursor always stays within columns 0..maxx-1, and the view never
+# stays scrolled past what the text needs (so deleting text scrolls
+# hidden leading text back into view). Widths are counted in characters;
+# double-width characters are not accounted for.
 #
 # All cursor and editing methods call +noutrefresh+ on the underlying
 # window but never call +Curses.doupdate+; the caller is responsible
@@ -66,11 +78,6 @@ class CommandBuffer
   # Window management
   # -------------------------------------------------------------------
 
-  # Assign the curses window used for display.
-  #
-  # @param win [Curses::Window] the window to render into
-  # @return [void]
-
   # Return the width of the attached window.
   # Falls back to DEFAULT_TERMINAL_WIDTH when no window is attached.
   #
@@ -79,28 +86,38 @@ class CommandBuffer
     @window&.maxx || DEFAULT_TERMINAL_WIDTH
   end
 
+  # Recompute the scroll offset for the window's current width and
+  # repaint the command line.
+  #
+  # Call after the command window is resized or replaced so the cursor
+  # and scroll offset match the new width. No-op when no window is
+  # attached.
+  #
+  # @return [void]
+  def redraw
+    return unless @window
+
+    render
+    @window.noutrefresh
+  end
+
   # -------------------------------------------------------------------
   # Character insertion
   # -------------------------------------------------------------------
 
   # Insert a character at the current cursor position.
-  # Handles horizontal scrolling when content exceeds window width.
+  # Scrolls the view when the cursor would pass the right edge.
+  #
+  # Does not call +noutrefresh+; the caller is responsible for flushing.
   #
   # @param ch [String] single character to insert
   # @return [void]
   def put_ch(ch)
     return unless @window
 
-    if (@pos - @offset + 1) >= maxx
-      @window.setpos(0, 0)
-      @window.delch
-      @offset += 1
-      @window.setpos(0, @pos - @offset)
-    end
     @text.insert(@pos, ch)
     @pos += 1
-    @window.insch(ch)
-    @window.setpos(0, @pos - @offset)
+    render
   end
 
   # -------------------------------------------------------------------
@@ -113,14 +130,8 @@ class CommandBuffer
   def cursor_left
     return unless @window
 
-    if (@offset > 0) && (@pos - @offset == 0)
-      @pos -= 1
-      @offset -= 1
-      @window.insch(@text[@pos])
-    else
-      @pos = [@pos - 1, 0].max
-    end
-    @window.setpos(0, @pos - @offset)
+    @pos = [@pos - 1, 0].max
+    render
     @window.noutrefresh
   end
 
@@ -130,25 +141,14 @@ class CommandBuffer
   def cursor_right
     return unless @window
 
-    if ((@text.length - @offset) >= (maxx - 1)) && (@pos - @offset + 1) >= maxx
-      if @pos < @text.length
-        @window.setpos(0, 0)
-        @window.delch
-        @offset += 1
-        @pos += 1
-        @window.setpos(0, @pos - @offset)
-        @window.insch(@text[@pos]) unless @pos >= @text.length
-      end
-    else
-      @pos = [@pos + 1, @text.length].min
-      @window.setpos(0, @pos - @offset)
-    end
+    @pos = [@pos + 1, @text.length].min
+    render
     @window.noutrefresh
   end
 
   # Move cursor left to the beginning of the previous word.
-  # Scrolls the window right when the target position is before the
-  # current visible offset.
+  # Scrolls the view so the target position is at the left edge when it
+  # is before the current visible offset.
   #
   # @return [void]
   def cursor_word_left
@@ -159,23 +159,14 @@ class CommandBuffer
               else
                 0
               end
-    if @offset > new_pos
-      @window.setpos(0, 0)
-      @text[new_pos, (@offset - new_pos)].split('').reverse.each do |ch|
-        @window.insch(ch)
-      end
-      @pos = new_pos
-      @offset = new_pos
-    else
-      @pos = new_pos
-    end
-    @window.setpos(0, @pos - @offset)
+    @pos = new_pos
+    render
     @window.noutrefresh
   end
 
   # Move cursor right to the beginning of the next word.
-  # Scrolls the window left when the target position exceeds the
-  # visible area.
+  # Scrolls the view so the target position is at the right edge when it
+  # exceeds the visible area.
   #
   # @return [void]
   def cursor_word_right
@@ -186,64 +177,32 @@ class CommandBuffer
               else
                 @text.length
               end
-    overflow = new_pos - maxx - @offset + 1
-    if overflow > 0
-      @window.setpos(0, 0)
-      overflow.times do
-        @window.delch
-        @offset += 1
-      end
-      @window.setpos(0, maxx - overflow)
-      @window.addstr @text[(maxx - overflow + @offset), overflow]
-    end
     @pos = new_pos
-    @window.setpos(0, @pos - @offset)
+    render
     @window.noutrefresh
   end
 
   # Move cursor to the beginning of the buffer.
-  # Scrolls the window to reveal any off-screen leading text.
+  # Scrolls the view back to reveal any off-screen leading text.
   #
   # @return [void]
   def cursor_home
     return unless @window
 
     @pos = 0
-    @window.setpos(0, 0)
-    (1..@offset).each do |num|
-      @window.insch(@text[@offset - num])
-    rescue StandardError => e
-      ProfanityLog.write('command_buffer', "#{e} text=#{@text.inspect} offset=#{@offset.inspect} num=#{num.inspect}", backtrace: e.backtrace)
-      return # rubocop:disable Lint/NonLocalExitFromIterator
-    end
-    @offset = 0
+    render
     @window.noutrefresh
   end
 
   # Move cursor to the end of the buffer.
-  # Scrolls the window left when the text extends past the visible area.
+  # Scrolls the view so the end of the text is visible.
   #
   # @return [void]
   def cursor_end
     return unless @window
 
-    if @text.length < (maxx - 1)
-      @pos = @text.length
-      @window.setpos(0, @pos)
-    else
-      scroll_left_num = @text.length - maxx + 1 - @offset
-      @window.setpos(0, 0)
-      scroll_left_num.times do
-        @window.delch
-        @offset += 1
-      end
-      @pos = @offset + maxx - 1 - scroll_left_num
-      @window.setpos(0, @pos - @offset)
-      scroll_left_num.times do
-        @window.addch(@text[@pos])
-        @pos += 1
-      end
-    end
+    @pos = @text.length
+    render
     @window.noutrefresh
   end
 
@@ -252,7 +211,7 @@ class CommandBuffer
   # -------------------------------------------------------------------
 
   # Delete the character before the cursor (backspace).
-  # Adjusts the display when content extends beyond the visible window.
+  # Scrolls hidden leading text back into view as the text shrinks.
   #
   # @return [void]
   def backspace
@@ -260,6 +219,7 @@ class CommandBuffer
 
     @pos -= 1
     delete_at_position(@pos)
+    render
     @window.noutrefresh
   end
 
@@ -272,6 +232,7 @@ class CommandBuffer
     return if @text.empty? || @pos >= @text.length
 
     delete_at_position(@pos)
+    render
     @window.noutrefresh
   end
 
@@ -313,7 +274,7 @@ class CommandBuffer
       @text = @text[0..(@pos - 1)]
     end
     @kill.after(@text, @pos)
-    @window.clrtoeol
+    render
     @window.noutrefresh
   end
 
@@ -331,8 +292,7 @@ class CommandBuffer
     @pos = 0
     @offset = 0
     @kill.after(@text, @pos)
-    @window.setpos(0, 0)
-    @window.clrtoeol
+    render
     @window.noutrefresh
   end
 
@@ -360,12 +320,8 @@ class CommandBuffer
     @history[@history_pos] = @text.dup
     @history_pos += 1
     @text = @history[@history_pos].dup
-    @offset = [(@text.length - maxx + 1), 0].max
     @pos = @text.length
-    @window.setpos(0, 0)
-    @window.deleteln
-    @window.addstr @text[@offset, (@text.length - @offset)]
-    @window.setpos(0, @pos - @offset)
+    render
     @window.noutrefresh
   end
 
@@ -382,22 +338,17 @@ class CommandBuffer
         @history[@history_pos] = @text.dup
         @history.unshift String.new
         @text.clear
-        @window.deleteln
         @pos = 0
         @offset = 0
-        @window.setpos(0, 0)
+        render
         @window.noutrefresh
       end
     else
       @history[@history_pos] = @text.dup
       @history_pos -= 1
       @text = @history[@history_pos].dup
-      @offset = [(@text.length - maxx + 1), 0].max
       @pos = @text.length
-      @window.setpos(0, 0)
-      @window.deleteln
-      @window.addstr @text[@offset, (@text.length - @offset)]
-      @window.setpos(0, @pos - @offset)
+      render
       @window.noutrefresh
     end
   end
@@ -409,16 +360,15 @@ class CommandBuffer
   # Clear the buffer and return its contents.
   # Resets position and offset, clears the curses window display.
   #
+  # Does not call +noutrefresh+; the caller is responsible for flushing.
+  #
   # @return [String] the buffer contents before clearing
   def clear_and_get
     cmd = @text.dup
     @text.clear
     @pos = 0
     @offset = 0
-    if @window
-      @window.deleteln
-      @window.setpos(0, 0)
-    end
+    render if @window
     cmd
   end
 
@@ -464,11 +414,7 @@ class CommandBuffer
   private
 
   # Delete the character at the given position in the buffer.
-  # Removes the character from +@text+, updates the window by deleting
-  # the on-screen character, and compensates for horizontal scroll when
-  # content extends beyond the visible window.
-  #
-  # Does not call +noutrefresh+; the caller is responsible for flushing.
+  # Removes the character from +@text+ only; the caller repaints.
   #
   # @param delete_pos [Integer] 0-based index of the character to remove
   # @return [void]
@@ -479,12 +425,45 @@ class CommandBuffer
             else
               @text[0..(delete_pos - 1)] + @text[(delete_pos + 1)..-1]
             end
-    @window.setpos(0, delete_pos - @offset)
-    @window.delch
-    return unless (@text.length - @offset + 1) > maxx
+  end
 
-    @window.setpos(0, maxx - 1)
-    @window.addch @text[maxx - @offset - 1]
+  # Clamp the horizontal scroll offset for the current window width.
+  #
+  # The cursor column (+pos - offset+) is kept within 0..width-1, and the
+  # offset never exceeds +text.length - width + 1+ so the view does not
+  # stay scrolled right while leading text is hidden and trailing columns
+  # are blank. With the cursor at the end of the text this places the
+  # cursor in the last column, matching the historical scroll position.
+  #
+  # @param width [Integer] visible columns (at least 1)
+  # @return [void]
+  # @api private
+  def clamp_offset(width)
+    max_offset = [@text.length - width + 1, 0].max
+    @offset = @offset.clamp(0, max_offset)
+    @offset = @pos if @pos < @offset
+    @offset = @pos - width + 1 if @pos - @offset >= width
+  end
+
+  # Repaint the command line from the buffer state.
+  #
+  # Clamps the offset (see {#clamp_offset}), then clears row 0 and
+  # writes +text[offset, width]+ before placing the cursor at
+  # +pos - offset+. The row is cleared before writing because writing
+  # the last column leaves the curses cursor there, where a trailing
+  # +clrtoeol+ would erase that character.
+  #
+  # Does not call +noutrefresh+; the caller is responsible for flushing.
+  #
+  # @return [void]
+  # @api private
+  def render
+    width = [maxx.to_i, 1].max
+    clamp_offset(width)
+    @window.setpos(0, 0)
+    @window.clrtoeol
+    visible = @text[@offset, width]
+    @window.addstr(visible) unless visible.nil? || visible.empty?
     @window.setpos(0, @pos - @offset)
   end
 

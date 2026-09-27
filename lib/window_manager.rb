@@ -404,9 +404,13 @@ class WindowManager
   # stored layout expressions. Triggers a full Curses screen update
   # afterward.
   #
-  # @param _cmd_buffer [CommandBuffer] unused, retained for call-site compatibility
+  # After the command window is resized, +cmd_buffer+ is redrawn so its
+  # cursor and horizontal scroll offset match the new width.
+  #
+  # @param cmd_buffer [CommandBuffer, nil] the command-line buffer shown in
+  #   the command window; redrawn after the resize when given
   # @return [void]
-  def resize(_cmd_buffer)
+  def resize(cmd_buffer)
     CursesRenderer.synchronize do
       window = Curses::Window.new(0, 0, 0, 0)
       window.refresh
@@ -471,6 +475,7 @@ class WindowManager
         if t < Curses.lines && l < Curses.cols
           @command_window.resize(h, w)
           @command_window.move(t, l)
+          cmd_buffer&.redraw
           @command_window.noutrefresh
         end
       end

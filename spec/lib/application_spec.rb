@@ -15,6 +15,8 @@ require_relative '../../lib/selection_manager'
 require_relative '../../lib/application'
 require_relative '../../lib/key_codes'
 require_relative '../../lib/settings_loader'
+require_relative '../../lib/event_bus'
+require_relative '../support/screen_line_window'
 
 # Stub ColorManager for .fixcolor tests
 module ColorManager
@@ -696,6 +698,38 @@ RSpec.describe Application do
       app.send(:input_loop)
 
       expect(switched).to eq [1]
+    end
+  end
+
+  describe 'prompt width changes' do
+    # The prompt indicator grows from 1 to 11 columns, so WindowManager's
+    # :prompt_changed handler shrinks the 20-column command window to 10.
+    let(:prompt_window) do
+      obj = Object.new
+      def obj.layout = %w[1 1 23 0]
+      def obj.resize(*) = nil
+      def obj.label=(_text); end
+      obj
+    end
+    let(:screen) { ScreenLineWindow.new(20) }
+
+    before do
+      stub_const('GameTextProcessor', Class.new { def initialize(**) = nil })
+      allow(Thread).to receive(:new)
+      app.window_mgr.instance_variable_set(:@indicator, { 'prompt' => prompt_window })
+      app.window_mgr.instance_variable_set(:@command_window, screen)
+      app.window_mgr.instance_variable_set(:@command_window_layout, %w[1 20 23 1])
+      app.cmd_buffer.window = screen
+      'abcdefghijklmnopqr'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
+      app.send(:start_server_thread)
+    end
+
+    it 'refits the command line to the resized command window' do
+      app.instance_variable_get(:@event_bus).emit(:prompt_changed, text: 'H 100 [RT]>')
+      expect(screen.maxx).to eq 10
+      expect(screen.errors).to be_empty
+      expect(screen.line).to eq 'jklmnopqr '
+      expect(screen.curx).to eq 9
     end
   end
 end

@@ -3,10 +3,15 @@
 # Tests CommandBuffer's text editing (insert, delete, word operations),
 # cursor movement, kill ring (kill-forward, kill-line, yank), command
 # history navigation, horizontal scrolling, and clear_and_get.
+#
+# Screen assertions use ScreenLineWindow (spec/support), a one-row fake
+# that models the visible cells and cursor column with ncurses semantics,
+# so specs check what the user sees rather than which curses calls ran.
 
 require_relative '../../lib/kill_ring'
 require_relative '../../lib/string_classification'
 require_relative '../../lib/command_buffer'
+require_relative '../support/screen_line_window'
 
 RSpec.describe CommandBuffer do
   subject(:buf) { described_class.new }
@@ -45,12 +50,12 @@ RSpec.describe CommandBuffer do
       expect(buf.pos).to eq 1
     end
 
-    it 'calls insch then setpos on the curses window' do
+    it 'shows the typed character with the cursor after it' do
+      screen = ScreenLineWindow.new(10)
+      buf.window = screen
       buf.put_ch('x')
-      insch_idx = window.call_log.index { |m, _| m == :insch }
-      setpos_idx = window.call_log.rindex { |m, _| m == :setpos }
-      expect(insch_idx).not_to be_nil
-      expect(setpos_idx).to be > insch_idx
+      expect(screen.visible).to eq 'x'
+      expect(screen.curx).to eq 1
     end
 
     # Adversarial
@@ -583,11 +588,13 @@ RSpec.describe CommandBuffer do
       expect(buf.clear_and_get).to eq ''
     end
 
-    it 'emits deleteln and setpos on window' do
-      type('hi')
-      window.call_log.clear
+    it 'blanks the line and homes the cursor' do
+      screen = ScreenLineWindow.new(10)
+      buf.window = screen
+      type('a' * 15)
       buf.clear_and_get
-      expect(window.call_log.map(&:first)).to include(:deleteln, :setpos)
+      expect(screen.visible).to eq ''
+      expect(screen.curx).to eq 0
     end
   end
 
@@ -645,10 +652,12 @@ RSpec.describe CommandBuffer do
       expect(buf.pos).to eq 0
     end
 
-    it 'emits delch when scrolling right' do
-      type('a' * 15)
-      delch_count = narrow.call_log.count { |m, _| m == :delch }
-      expect(delch_count).to be > 0
+    it 'shows the tail of the text with the cursor in the last column' do
+      screen = ScreenLineWindow.new(10)
+      buf.window = screen
+      type('abcdefghijklmno')
+      expect(screen.visible).to eq 'ghijklmno'
+      expect(screen.curx).to eq 9
     end
 
     it 'insert at cursor during scroll maintains consistency' do
@@ -666,29 +675,26 @@ RSpec.describe CommandBuffer do
   # ==================================================================
 
   describe 'curses call sequence' do
-    it 'put_ch produces insch followed by setpos' do
+    it 'put_ch ends by placing the cursor after writing' do
       buf.put_ch('a')
       methods = window.call_log.map(&:first)
-      insch_pos = methods.index(:insch)
-      setpos_pos = methods.rindex(:setpos)
-      expect(insch_pos).not_to be_nil
-      expect(setpos_pos).to be > insch_pos
+      expect(methods.last).to eq :setpos
+      expect(window.call_log.last).to eq [:setpos, [0, 1]]
     end
 
-    it 'backspace produces setpos followed by delch' do
+    it 'repaints by clearing the row before writing it' do
+      # Writing the last column leaves the curses cursor there; clearing
+      # afterwards would erase that character.
       type('ab')
       window.call_log.clear
       buf.backspace
       methods = window.call_log.map(&:first)
-      # delete_at_position does setpos then delch
-      expect(methods).to include(:setpos, :delch)
+      expect(methods.index(:clrtoeol)).to be < methods.index(:addstr)
     end
 
-    it 'clear_and_get produces deleteln' do
-      type('hello')
-      window.call_log.clear
-      buf.clear_and_get
-      expect(window.call_log.map(&:first)).to include(:deleteln)
+    it 'put_ch does not flush (callers call refresh)' do
+      buf.put_ch('a')
+      expect(window.call_log.map(&:first)).not_to include(:noutrefresh)
     end
 
     it 'kill_line produces setpos, clrtoeol, noutrefresh' do
@@ -699,14 +705,235 @@ RSpec.describe CommandBuffer do
       expect(methods).to include(:setpos, :clrtoeol, :noutrefresh)
     end
 
-    it 'cursor_home with offset produces insch to restore scrolled chars' do
-      narrow = Curses::Window.new(1, 5, 0, 0)
-      buf.window = narrow
-      type('a' * 10)
-      narrow.call_log.clear
+    it 'cursor_home with offset repaints the scrolled-off leading chars' do
+      screen = ScreenLineWindow.new(5)
+      buf.window = screen
+      type('abcdefghij')
       buf.cursor_home
-      # Should insert chars that were scrolled off the left
-      expect(narrow.call_log.map(&:first)).to include(:insch)
+      expect(screen.line).to eq 'abcde'
+      expect(screen.curx).to eq 0
+    end
+  end
+
+  # ==================================================================
+  # What the user sees while the line is scrolled
+  # ==================================================================
+
+  # Assert the screen shows a faithful window onto the buffer: the row is
+  # exactly the text starting at column 0's buffer index, the cursor sits
+  # on buffer position +pos+, no curses call was out of range, and the
+  # view is not scrolled right while it has blank columns to spare.
+  #
+  # Uses only buf.text, buf.pos and the screen, never buf.offset, so it
+  # applies to any rendering strategy.
+  def expect_faithful_screen(screen)
+    width = screen.maxx
+    start = buf.pos - screen.curx
+    expect(screen.errors).to be_empty
+    expect(screen.curx).to be_between(0, width - 1)
+    expect(start).to be_between(0, buf.text.length)
+    expect(screen.line).to eq buf.text[start, width].ljust(width)
+    # Hidden leading text is only acceptable when the rest fills the row
+    # (the cursor may occupy the last column past the end).
+    expect(buf.text.length - start).to be >= (width - 1) if start.positive?
+  end
+
+  describe 'visible line while scrolled' do
+    let(:screen) { ScreenLineWindow.new(10) }
+
+    before { buf.window = screen }
+
+    it 'never goes blank while text remains when backspacing from past the width' do
+      type('abcdefghijklmnopqrstuvwxy')
+      25.times do
+        buf.backspace
+        expect_faithful_screen(screen)
+        expect(screen.visible).not_to be_empty unless buf.text.empty?
+      end
+      expect(buf.text).to eq ''
+    end
+
+    it 'shows everything Enter would send once the text fits again' do
+      type('abcdefghijklmno')
+      6.times { buf.backspace }
+      shown = screen.visible
+      expect(shown).to eq 'abcdefghi'
+      expect(buf.clear_and_get).to eq shown
+    end
+
+    it 'backspace at the left edge while scrolled deletes the right char and scrolls back' do
+      type('abcdefghijklmnopqrst')
+      buf.cursor_left while screen.curx.positive?
+      expect(screen.line).to eq 'lmnopqrst '
+      buf.backspace
+      expect(buf.text).to eq 'abcdefghijlmnopqrst'
+      expect_faithful_screen(screen)
+      expect(screen.line).to eq 'lmnopqrst '
+      expect(screen.curx).to eq 0
+    end
+
+    it 'kill_forward, cursor_end, then typing keeps the text visible' do
+      type('abcdefghijklmnopqrst')
+      10.times { buf.cursor_left }
+      buf.kill_forward
+      expect(buf.text).to eq 'abcdefghij'
+      expect_faithful_screen(screen)
+      buf.cursor_end
+      expect_faithful_screen(screen)
+      type('XY')
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'defghijXY'
+      expect(screen.curx).to eq 9
+    end
+
+    it 'cursor_end on short text left by kill_forward puts the cursor after the text' do
+      type('abcdefghijklmno')
+      buf.cursor_left while screen.curx.positive?
+      buf.kill_forward
+      expect(buf.text).to eq 'abcdef'
+      buf.cursor_end
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'abcdef'
+      expect(screen.curx).to eq 6
+    end
+
+    it 'cursor_home after scrolling shows the start of the text' do
+      type('abcdefghijklmnopqrst')
+      buf.cursor_home
+      expect_faithful_screen(screen)
+      expect(screen.line).to eq 'abcdefghij'
+      expect(screen.curx).to eq 0
+    end
+
+    it 'cursor_home after backspacing a scrolled line does not lose the text' do
+      type('abcdefghijklmno')
+      12.times { buf.backspace }
+      buf.cursor_home
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'abc'
+      buf.put_ch('Z')
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'Zabc'
+    end
+
+    it 'cursor_word_left and cursor_word_right keep the cursor on screen' do
+      type('alpha beta gamma delta epsilon')
+      4.times do
+        buf.cursor_word_left
+        expect_faithful_screen(screen)
+      end
+      4.times do
+        buf.cursor_word_right
+        expect_faithful_screen(screen)
+      end
+    end
+
+    it 'recalling a long history entry shows its tail, a short one shows all of it' do
+      buf.add_to_history('abcdefghijklmnopqrst')
+      buf.add_to_history('short')
+      buf.previous_command
+      expect(screen.visible).to eq 'short'
+      buf.previous_command
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'lmnopqrst'
+      buf.next_command
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'short'
+    end
+
+    it 'yank past the width scrolls to show the pasted text' do
+      type('abcdefghijklmnop')
+      buf.cursor_home
+      buf.kill_forward
+      buf.yank
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'hijklmnop'
+    end
+  end
+
+  describe '#redraw' do
+    it 'refits pos/offset after the window gets narrower, then typing works' do
+      screen = ScreenLineWindow.new(20)
+      buf.window = screen
+      type('abcdefghijklmnopqr')
+      screen.resize(1, 10)
+      buf.redraw
+      expect_faithful_screen(screen)
+      expect(screen.line).to eq 'jklmnopqr '
+      expect(screen.curx).to eq 9
+      buf.put_ch('Z')
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'klmnopqrZ'
+    end
+
+    it 'scrolls hidden text back into view after the window gets wider' do
+      screen = ScreenLineWindow.new(10)
+      buf.window = screen
+      type('abcdefghijklmno')
+      screen.resize(1, 30)
+      buf.redraw
+      expect_faithful_screen(screen)
+      expect(screen.visible).to eq 'abcdefghijklmno'
+      expect(screen.curx).to eq 15
+    end
+
+    it 'keeps a mid-line cursor on screen after narrowing' do
+      screen = ScreenLineWindow.new(30)
+      buf.window = screen
+      type('abcdefghijklmnopqrstuvwxy')
+      buf.cursor_home
+      20.times { buf.cursor_right }
+      screen.resize(1, 8)
+      buf.redraw
+      expect_faithful_screen(screen)
+      expect(buf.pos).to eq 20
+    end
+
+    it 'flushes the window' do
+      buf.redraw
+      expect(window.call_log.map(&:first)).to include(:noutrefresh)
+    end
+
+    it 'is a no-op without a window' do
+      buf.window = nil
+      expect { buf.redraw }.not_to raise_error
+    end
+
+    it 'handles a one-column window' do
+      screen = ScreenLineWindow.new(1)
+      buf.window = screen
+      type('abc')
+      expect_faithful_screen(screen)
+      buf.cursor_left
+      expect_faithful_screen(screen)
+      expect(screen.line).to eq 'c'
+    end
+  end
+
+  describe 'randomized editing keeps the screen faithful' do
+    edit_ops = %i[put_ch put_ch put_ch put_ch backspace delete_char cursor_left cursor_right
+                  cursor_word_left cursor_word_right cursor_home cursor_end backspace_word
+                  delete_word kill_forward kill_line yank previous_command next_command]
+
+    [[1, false], [42, false], [999, false], [2024, false], [7, true], [314, true]].each do |seed, resizing|
+      it "holds after every operation (seed #{seed}#{', with resizes' if resizing})" do
+        ops = resizing ? edit_ops + [:resize] : edit_ops
+        rng = Random.new(seed)
+        screen = ScreenLineWindow.new(7)
+        buf.window = screen
+        %w[north southwest get\ my\ longsword\ from\ my\ back look].each { |c| buf.add_to_history(c) }
+        400.times do
+          op = ops[rng.rand(ops.length)]
+          case op
+          when :put_ch then buf.put_ch(['a', 'b', ' ', '.', 'z'][rng.rand(5)])
+          when :resize
+            screen.resize(1, rng.rand(1..12))
+            buf.redraw
+          else buf.public_send(op)
+          end
+          expect_faithful_screen(screen)
+        end
+      end
     end
   end
 
