@@ -18,6 +18,8 @@ Ported from elanthia-online/ProfanityFE.
 #   mouse.process(ch)          # call from input loop on KEY_MOUSE
 #   mouse.start_configuration  # call from .scrollcfg command
 class MouseScroll
+  # Events with the same button state needed during calibration before
+  # that state is taken as the scroll-up or scroll-down mask.
   MIN_EVENT_COUNT = 20
 
   # Bitmask for mouse events when .links is active.

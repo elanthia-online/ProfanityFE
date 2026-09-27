@@ -8,17 +8,18 @@ Contains death message formatting, logon message patterns, stun detection,
 spell abbreviations, and familiar notification patterns unique to DR.
 =end
 
-# DragonRealms-specific text processing rules.
-#
-# Provides pattern matching and formatting for DR game streams:
-# death messages, logon/logoff messages, Raise Dead stun detection,
-# Shadow Valley stun, nerve wound detection, and spell abbreviation
-# for the percWindow.
-#
-# @example
-#   include Games::DragonRealms
-#   abbreviate_spell('Aesandry Darlaeth')  #=> 'AD'
+# Namespace for per-game text processing rules.
 module Games
+  # DragonRealms-specific text processing rules.
+  #
+  # Provides pattern matching and formatting for DR game streams:
+  # death messages, logon/logoff messages, Raise Dead stun detection,
+  # Shadow Valley stun, nerve wound detection, and spell abbreviation
+  # for the percWindow.
+  #
+  # @example
+  #   include Games::DragonRealms
+  #   abbreviate_spell('Aesandry Darlaeth')  #=> 'AD'
   module DragonRealms
     # DR spell abbreviation lookup for percWindow.
     SPELL_ABBREVIATIONS = DR_SPELL_ABBREVIATIONS

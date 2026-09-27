@@ -62,7 +62,7 @@ class RoomWindow < BaseWindow
   # Update the room description with pre-computed link data.
   #
   # @param text [String] clean description text
-  # @param links [Array<Hash>] pre-computed link regions [{start:, end:, cmd:}]
+  # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
   # @return [void]
   def update_desc(text, links: [])
     @description = text.strip
@@ -72,7 +72,7 @@ class RoomWindow < BaseWindow
   # Update the room objects with pre-computed link and creature data.
   #
   # @param text [String] clean objects text
-  # @param links [Array<Hash>] pre-computed link regions [{start:, end:, cmd:}]
+  # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
   # @param creatures [Array<String>] creature names for monsterbold highlighting
   # @return [void]
   def update_objects(text, links: [], creatures: [])
@@ -85,7 +85,7 @@ class RoomWindow < BaseWindow
   # Update the room players with pre-computed link data.
   #
   # @param text [String] clean players text
-  # @param links [Array<Hash>] pre-computed link regions [{start:, end:, cmd:}]
+  # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
   # @return [void]
   def update_players(text, links: [])
     @players = text.strip
@@ -96,7 +96,7 @@ class RoomWindow < BaseWindow
   # Exits are typically the last component in a room update batch.
   #
   # @param text [String] clean exits text
-  # @param links [Array<Hash>] pre-computed link regions [{start:, end:, cmd:}]
+  # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
   # @return [void]
   def update_exits(text, links: [])
     @exits = text.strip
@@ -269,7 +269,7 @@ class RoomWindow < BaseWindow
   # Render a text section with pre-computed links and optional preset color.
   #
   # @param text [String] clean section text
-  # @param links [Array<Hash>] pre-computed link regions [{start:, end:, cmd:}]
+  # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
   # @param preset_name [String, nil] preset color key from the PRESET hash
   # @return [void]
   # @api private
@@ -347,7 +347,7 @@ class RoomWindow < BaseWindow
 
   # Build color regions from pre-computed link data when links are enabled.
   #
-  # @param links [Array<Hash>] [{start:, end:, cmd:}]
+  # @param links [Array<Hash>] `[{start:, end:, cmd:}]`
   # @return [Array<Hash>] color regions with link preset colors and :cmd
   # @api private
   def build_link_colors(links)

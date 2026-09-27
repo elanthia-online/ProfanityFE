@@ -6,14 +6,15 @@ Contains death message formatting with area consolidation, logon message
 patterns with preset colors, and GS-specific text processing rules.
 =end
 
-# GemStone IV-specific text processing rules.
-#
-# Provides pattern matching and formatting for GS game streams:
-# death messages with area code consolidation, logon/logoff/disconnect
-# messages with per-type preset colors.
-#
-# Ported from elanthia-online/ProfanityFE death/logon stream handling.
+# Namespace for per-game text processing rules.
 module Games
+  # GemStone IV-specific text processing rules.
+  #
+  # Provides pattern matching and formatting for GS game streams:
+  # death messages with area code consolidation, logon/logoff/disconnect
+  # messages with per-type preset colors.
+  #
+  # Ported from elanthia-online/ProfanityFE death/logon stream handling.
   module GemStone
     # GS death messages, mapped to the short area code shown in the death
     # window ("HH:MM Name AREA"). This table is the single source of truth:

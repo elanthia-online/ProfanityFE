@@ -71,6 +71,8 @@ class GameTextProcessor
   # Precomputed merged logon patterns (DR + GS) and matching regex.
   # Built once at load time instead of on every logon line.
   ALL_LOGON_PATTERNS = Games::DragonRealms::LOGON_PATTERNS.merge(Games::GemStone::LOGON_PATTERNS).freeze
+  # Matches a " * Name <message>" arrival/departure line whose message is a
+  # key of {ALL_LOGON_PATTERNS}; captures +name+ and the message as +type+.
   LOGON_REGEXP = /^\s\*\s(?<name>[A-Z][a-z]+) (?<type>#{ALL_LOGON_PATTERNS.keys.map { |k| Regexp.escape(k) }.join('|')})/
 
   # Create a new processor wired to the given window manager and shared state.

@@ -15,6 +15,7 @@ Tab-completion from command history for the command buffer.
 # @example
 #   Autocomplete.complete(current_text, history_array, cmd_buffer, stream_window)
 module Autocomplete
+  # Hex foreground color for autocomplete messages in the main window.
   HIGHLIGHT_COLOR = 'a6e22e'
 
   # Find all history entries that start with the current input.

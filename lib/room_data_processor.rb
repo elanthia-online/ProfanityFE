@@ -221,7 +221,7 @@ module RoomDataProcessor
   # Adjusts positions by the given offset (for leading whitespace removed by .strip).
   #
   # @param offset [Integer] number of chars stripped from the left of the text
-  # @return [Array<Hash>] [{start:, end:, cmd:}, ...]
+  # @return [Array<Hash>] `[{start:, end:, cmd:}, ...]`
   def extract_sax_links(offset = 0)
     @line_colors.select { |c| c[:cmd] }.map do |c|
       { start: c[:start] - offset, end: c[:end] - offset, cmd: c[:cmd] }
@@ -299,7 +299,7 @@ module RoomDataProcessor
   # may contain raw XML from @current_raw_line.
   #
   # @param raw_text [String] text potentially containing XML tags
-  # @return [Array(String, Array<Hash>)] [clean_text, [{start:, end:, cmd:}, ...]]
+  # @return [Array(String, Array<Hash>)] [clean_text, `[{start:, end:, cmd:}, ...]`]
   def structurize_text(raw_text)
     return [raw_text, []] if raw_text.empty?
 

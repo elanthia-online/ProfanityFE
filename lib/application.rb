@@ -22,6 +22,7 @@ class Application
   attr_reader :key_binding, :key_action, :cmd_buffer, :window_mgr,
               :shared_state, :mouse_scroll
 
+  # Help lines for the dot-commands, shown by .help.
   DOT_COMMAND_HELP = [
     '.quit              Exit Profanity immediately',
     '.key               Show raw keycode of next key press',
@@ -492,7 +493,7 @@ class Application
 
   # ---- Key action setup ----
 
-  # Register every named key action as a {Proc} in {#key_action}.
+  # Register every named key action as a Proc in {#key_action}.
   #
   # Each cursor/edit action delegates to {CommandBuffer}, which only stages
   # its changes to the curses virtual screen via +noutrefresh+. The physical

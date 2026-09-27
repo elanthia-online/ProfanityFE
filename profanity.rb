@@ -27,12 +27,19 @@
 require 'socket'
 require 'rexml/document'
 
+# True when started with --profile: boot timings are recorded and logged.
 BOOT_PROFILE = ARGV.include?('--profile')
 
 if BOOT_PROFILE
+  # Monotonic clock reading at startup; {#boot_mark} measures from here.
   BOOT_T0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+  # Recorded boot milestones as [label, elapsed milliseconds] pairs.
   BOOT_TIMINGS = []
 
+  # Record a boot milestone in {BOOT_TIMINGS}. Only defined with --profile.
+  #
+  # @param label [String] name of the milestone
+  # @return [Array<Array(String, Float)>] {BOOT_TIMINGS}
   def boot_mark(label)
     elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
     BOOT_TIMINGS << [label, elapsed]
@@ -154,10 +161,14 @@ end.parse!
 
 # ========== GLOBAL CONSTANTS ==========
 
+# Game server (Lich) port, from --port (default 8000).
 PORT = cli_options[:port]
+# Game server (Lich) host, from --host (default 127.0.0.1).
 HOST = cli_options[:host]
+# Character name from --char, or nil.
 CHAR_NAME = cli_options[:char]
 
+# Path of the settings XML chosen by {ProfanitySettings.resolve_template}.
 SETTINGS_FILENAME = ProfanitySettings.resolve_template(
   char: cli_options[:config] || cli_options[:char],
   template: cli_options[:template],
@@ -165,18 +176,24 @@ SETTINGS_FILENAME = ProfanitySettings.resolve_template(
   app_dir: File.dirname(__FILE__)
 )
 
+# Log file path chosen by {ProfanitySettings.resolve_log}.
 LOG_FILE = ProfanitySettings.resolve_log(
   char: cli_options[:char],
   log_file: cli_options[:log_file],
   log_dir: cli_options[:log_dir]
 )
 
+# Default foreground curses color id, from --default-color-id (default 7).
 DEFAULT_COLOR_ID = cli_options[:default_color_id]
+# Default background curses color id, from --default-background-color-id (default 0).
 DEFAULT_BACKGROUND_COLOR_ID = cli_options[:default_background_color_id]
 Curses.use_default_colors if cli_options[:use_default_colors]
+# Whether to redefine terminal colors: --custom-colors, else Curses.can_change_color?.
 CUSTOM_COLORS = cli_options[:custom_colors].nil? ? Curses.can_change_color? : cli_options[:custom_colors]
 
+# True when started with --no-status (no process title updates).
 NO_STATUS = cli_options[:no_status]
+# True when started with --speech-ts (timestamp speech, familiar and thoughts lines).
 SPEECH_TS = cli_options[:speech_ts]
 
 ColorManager.configure(
