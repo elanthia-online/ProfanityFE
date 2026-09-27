@@ -52,11 +52,11 @@ module GagPatterns
     # @return [void]
     # @raise [RegexpError] logged as warning if pattern string is invalid
     def add_combat_pattern(pattern)
-      regexp = pattern.is_a?(Regexp) ? pattern : Regexp.new(pattern)
+      regexp = compile_pattern(pattern, 'combat gag')
+      return unless regexp
+
       @combat_patterns << regexp
       rebuild_regexps
-    rescue RegexpError => e
-      warn "Invalid combat gag pattern: #{pattern} - #{e.message}"
     end
 
     # Add a general gag pattern (applies to all streams).
@@ -65,11 +65,11 @@ module GagPatterns
     # @return [void]
     # @raise [RegexpError] logged as warning if pattern string is invalid
     def add_general_pattern(pattern)
-      regexp = pattern.is_a?(Regexp) ? pattern : Regexp.new(pattern)
+      regexp = compile_pattern(pattern, 'gag')
+      return unless regexp
+
       @general_patterns << regexp
       rebuild_regexps
-    rescue RegexpError => e
-      warn "Invalid gag pattern: #{pattern} - #{e.message}"
     end
 
     # Add a multi-line gag. When a line matches +start_pattern+, that line
@@ -83,15 +83,34 @@ module GagPatterns
     # @return [void]
     # @raise [RegexpError] logged as warning if a pattern string is invalid
     def add_multiline_gag(start_pattern, end_pattern = nil)
-      start_regexp = start_pattern.is_a?(Regexp) ? start_pattern : Regexp.new(start_pattern)
-      end_regexp = nil
-      if end_pattern && !end_pattern.to_s.strip.empty?
-        end_regexp = end_pattern.is_a?(Regexp) ? end_pattern : Regexp.new(end_pattern)
-      end
-      @multiline_gags << { start: start_regexp, end: end_regexp }
+      gag = compile_multiline_gag(start_pattern, end_pattern)
+      return unless gag
+
+      @multiline_gags << gag
       rebuild_regexps
-    rescue RegexpError => e
-      warn "Invalid multiline gag pattern: #{start_pattern} / #{end_pattern} - #{e.message}"
+    end
+
+    # Replace every custom gag with the given ones, rebuilding the union
+    # regexps once. Used by settings load and reload so the gags from the
+    # settings file take effect together. All patterns are compiled before
+    # any set is replaced; an invalid pattern is warned about and skipped,
+    # as by the add methods.
+    #
+    # @param general [Array<String, Regexp>] general gag patterns
+    # @param multiline [Array<Hash>] multi-line gags, each
+    #   { start: String|Regexp, end: String|Regexp|nil } (see #add_multiline_gag)
+    # @param combat [Array<String, Regexp>] combat gag patterns
+    # @return [void]
+    def replace_custom(general: [], multiline: [], combat: [])
+      general_patterns = default_general_patterns + general.filter_map { |p| compile_pattern(p, 'gag') }
+      combat_patterns = default_combat_patterns + combat.filter_map { |p| compile_pattern(p, 'combat gag') }
+      multiline_gags = default_multiline_gags +
+                       multiline.filter_map { |gag| compile_multiline_gag(gag[:start], gag[:end]) }
+
+      @general_patterns = general_patterns
+      @combat_patterns = combat_patterns
+      @multiline_gags = multiline_gags
+      rebuild_regexps
     end
 
     # Find the multi-line gag whose start pattern matches the given line.
@@ -133,6 +152,38 @@ module GagPatterns
     end
 
     private
+
+    # Compile a single-line gag pattern.
+    #
+    # @param pattern [String, Regexp] pattern to compile
+    # @param kind [String] gag kind for the warning ("gag" or "combat gag")
+    # @return [Regexp, nil] the regexp, or nil (with a warning) if the pattern is invalid
+    # @api private
+    def compile_pattern(pattern, kind)
+      pattern.is_a?(Regexp) ? pattern : Regexp.new(pattern)
+    rescue RegexpError => e
+      warn "Invalid #{kind} pattern: #{pattern} - #{e.message}"
+      nil
+    end
+
+    # Compile a multi-line gag's start and optional end patterns. A blank
+    # end pattern means the block ends at the next prompt.
+    #
+    # @param start_pattern [String, Regexp] pattern that begins the block
+    # @param end_pattern [String, Regexp, nil] optional pattern that ends the block
+    # @return [Hash, nil] { start:, end: }, or nil (with a warning) if a pattern is invalid
+    # @api private
+    def compile_multiline_gag(start_pattern, end_pattern)
+      start_regexp = start_pattern.is_a?(Regexp) ? start_pattern : Regexp.new(start_pattern)
+      end_regexp = nil
+      if end_pattern && !end_pattern.to_s.strip.empty?
+        end_regexp = end_pattern.is_a?(Regexp) ? end_pattern : Regexp.new(end_pattern)
+      end
+      { start: start_regexp, end: end_regexp }
+    rescue RegexpError => e
+      warn "Invalid multiline gag pattern: #{start_pattern} / #{end_pattern} - #{e.message}"
+      nil
+    end
 
     # Rebuild the union regexps from the current pattern arrays.
     #

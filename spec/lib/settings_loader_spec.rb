@@ -1,14 +1,22 @@
 # frozen_string_literal: true
 
 # Tests that SettingsLoader applies <notification-stream> and restores the
-# default when the element is removed and settings are reloaded, and that
-# the settings cache never serves stale or foreign settings.
+# default when the element is removed and settings are reloaded, that a
+# reload replaces every setting or, when the file fails to load, none, and
+# that the settings cache never serves stale or foreign settings.
 
 require 'rexml/document'
 require 'tmpdir'
 require_relative '../../lib/key_codes'
 require_relative '../../lib/profanity_settings' # enables the settings cache (APP_DIR)
 require_relative '../../lib/settings_loader'
+
+# Load the REAL GagPatterns module (replaces the spec_helper stub) so reload
+# specs can check which lines are gagged.
+original_verbose = $VERBOSE
+$VERBOSE = nil
+load File.expand_path('../../lib/gag_patterns.rb', __dir__)
+$VERBOSE = original_verbose
 
 RSpec.describe SettingsLoader do
   def write_settings(dir, body)
@@ -199,7 +207,164 @@ RSpec.describe SettingsLoader do
     end
   end
 
+  describe 'reloading' do
+    let(:first_action) { proc {} }
+    let(:second_action) { proc {} }
+    let(:key_action) { { 'first' => first_action, 'second' => second_action } }
+    let(:key_binding) { {} }
+
+    let(:good_settings) do
+      <<~XML
+        <settings>
+          <highlight fg='ff0000'>goblin</highlight>
+          <perc-transform pattern='Osrel Meraud' replace='OM'/>
+          <gag>^A moth flutters</gag>
+          <combat_gag>^You feint</combat_gag>
+          <multiline_gag start='^Knowledge from your sanowret' end='^The knowledge fades'/>
+          <notification-stream>ooc</notification-stream>
+          <key id='ctrl+x' action='first'/>
+        </settings>
+      XML
+    end
+
+    def reload(xml)
+      path = File.join(@dir, 'settings.xml')
+      File.write(path, xml)
+      described_class.load(path, key_binding, key_action, proc {}, reload: true)
+    end
+
+    def expect_good_settings_in_effect
+      expect(HIGHLIGHT).to eq(/goblin/ => ['ff0000', nil, nil])
+      expect(PERC_TRANSFORMS).to eq [[/Osrel Meraud/, 'OM']]
+      expect(CONFIG.notification_stream).to eq 'ooc'
+      expect(key_binding).to eq(24 => first_action)
+      expect(GagPatterns.match_general('A moth flutters by.')).not_to be_nil
+      expect('You feint high.').to match(GagPatterns.combat_regexp)
+      expect(GagPatterns.match_multiline_start('Knowledge from your sanowret crystal')).not_to be_nil
+    end
+
+    before do
+      allow(ProfanityLog).to receive(:write)
+      path = File.join(@dir, 'settings.xml')
+      File.write(path, good_settings)
+      described_class.load(path, key_binding, key_action, proc {})
+    end
+
+    # BUG FOUND (fixed here): .reload cleared highlights, perc transforms,
+    # the notification stream and custom gags before parsing the file, so a
+    # typo in the settings file left the user with none of them.
+    it 'keeps every setting when the reloaded file is malformed' do
+      error = reload(good_settings.sub('</gag>', '</gags>').sub('goblin', 'kobold'))
+
+      expect_good_settings_in_effect
+      expect(error).to be_a(REXML::ParseException)
+    end
+
+    it 'keeps every setting when the reloaded file is empty' do
+      error = reload('')
+
+      expect_good_settings_in_effect
+      expect(error).to be_a(StandardError)
+    end
+
+    it 'reports the failure and logs the backtrace' do
+      reload('<settings><gag>x</gags></settings>')
+
+      expect(ProfanityLog).to have_received(:write)
+        .with('settings', a_string_including("Missing end tag for 'gag'"), backtrace: an_instance_of(Array))
+    end
+
+    it 'reports a missing file without changing any setting' do
+      File.delete(File.join(@dir, 'settings.xml'))
+
+      error = nil
+      expect { error = described_class.load(File.join(@dir, 'settings.xml'), key_binding, key_action, proc {}, reload: true) }
+        .to output(/Settings file not found/).to_stderr
+      expect(error).to be_a(Errno::ENOENT)
+      expect_good_settings_in_effect
+    end
+
+    it 'reports success with nil' do
+      expect(reload(good_settings)).to be_nil
+    end
+
+    it 'replaces the gags: a removed gag no longer gags and an added one does' do
+      reload(<<~XML)
+        <settings>
+          <gag>^A bat squeaks</gag>
+          <combat_gag>^You lunge</combat_gag>
+          <multiline_gag start='^Your ring glows'/>
+        </settings>
+      XML
+
+      expect(GagPatterns.match_general('A moth flutters by.')).to be_nil
+      expect(GagPatterns.match_general('A bat squeaks.')).not_to be_nil
+      expect('You feint high.').not_to match(GagPatterns.combat_regexp)
+      expect('You lunge low.').to match(GagPatterns.combat_regexp)
+      expect(GagPatterns.match_multiline_start('Knowledge from your sanowret crystal')).to be_nil
+      expect(GagPatterns.match_multiline_start('Your ring glows brightly.')).not_to be_nil
+    end
+
+    it 'replaces highlights, perc transforms, the notification stream and key bindings' do
+      reload(<<~XML)
+        <settings>
+          <highlight fg='00ff00'>kobold</highlight>
+          <perc-transform pattern='Mana' replace='M'/>
+          <notification-stream>thoughts</notification-stream>
+          <key id='ctrl+y' action='second'/>
+        </settings>
+      XML
+
+      expect(HIGHLIGHT).to eq(/kobold/ => ['00ff00', nil, nil])
+      expect(PERC_TRANSFORMS).to eq [[/Mana/, 'M']]
+      expect(CONFIG.notification_stream).to eq 'thoughts'
+      expect(key_binding).to eq(25 => second_action)
+    end
+
+    it 'skips an invalid pattern and applies the rest of the file' do
+      error = nil
+      expect {
+        error = reload(<<~XML)
+          <settings>
+            <highlight fg='ff0000'>(</highlight>
+            <highlight fg='00ff00'>kobold</highlight>
+            <gag>[unclosed</gag>
+            <gag>^A bat squeaks</gag>
+            <perc-transform pattern='(' replace='x'/>
+          </settings>
+        XML
+      }.to output(/Invalid gag pattern: \[unclosed/).to_stderr
+
+      expect(error).to be_nil
+      expect(HIGHLIGHT).to eq(/kobold/ => ['00ff00', nil, nil])
+      expect(PERC_TRANSFORMS).to be_empty
+      expect(GagPatterns.match_general('A bat squeaks.')).not_to be_nil
+    end
+  end
+
+  describe 'initial load of a malformed file' do
+    it 'loads no layouts and reports the failure' do
+      path = write_settings(@dir, "<layout id='default'><window class='text'/></layout><gag>x</gags>")
+
+      error = load_settings(path)
+
+      expect(error).to be_a(REXML::ParseException)
+      expect(LAYOUT).to be_empty
+    end
+  end
+
   describe 'settings cache' do
+    it 'reports a malformed file rather than using the cache of the previous version' do
+      path = write_settings(@dir, '<notification-stream>ooc</notification-stream>')
+      load_settings(path)
+
+      File.write(path, '<settings><notification-stream>thoughts</notification-stream')
+      error = load_settings(path, reload: true)
+
+      expect(CONFIG.notification_stream).to eq 'ooc'
+      expect(error).to be_a(REXML::ParseException)
+    end
+
     it 'picks up an edit saved within the same filesystem clock tick as the cache' do
       path = write_settings(@dir, '<notification-stream>ooc</notification-stream>')
       load_settings(path)

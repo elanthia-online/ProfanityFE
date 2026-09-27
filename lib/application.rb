@@ -127,7 +127,7 @@ class Application
     elsif cmd =~ /^\.resync(?=\s|\z)/i
       @shared_state.skip_server_time_offset = false
     elsif cmd =~ /^\.reload(?=\s|\z)/i
-      SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro), reload: true)
+      handle_dot_reload
     elsif (match = cmd.match(/^\.layout\s+(?<layout>.+)/i))
       @window_mgr.load_layout(match[:layout])
       @cmd_buffer.window = @window_mgr.command_window
@@ -357,6 +357,27 @@ class Application
             '* Drag highlight: OFF (highlight appears when you release)'
           end
     write_to_client(msg)
+  end
+
+  # Reload the settings file. A file that fails to load changes nothing,
+  # and a one-line error in the main window says why.
+  #
+  # @return [void]
+  def handle_dot_reload
+    error = SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro), reload: true)
+    write_to_client("* Reload failed, settings unchanged: #{settings_error_reason(error)}") if error
+  end
+
+  # Summarize a settings load error on one line: the first line of its
+  # message, plus the line number for an XML parse error.
+  #
+  # @param error [StandardError] the error returned by SettingsLoader.load
+  # @return [String] a one-line reason
+  def settings_error_reason(error)
+    reason = error.message.lines.first.to_s.strip
+    reason = error.class.name if reason.empty?
+    line = error.line if error.respond_to?(:line)
+    line.is_a?(Integer) && line.positive? ? "#{reason} (line #{line})" : reason
   end
 
   def handle_dot_highlight(pattern)

@@ -210,6 +210,47 @@ RSpec.describe GagPatterns do
     end
   end
 
+  describe '.replace_custom' do
+    it 'replaces all three custom pattern sets' do
+      described_class.add_general_pattern('moth')
+      described_class.add_combat_pattern('sword')
+      described_class.add_multiline_gag('alpha')
+
+      described_class.replace_custom(general: ['bat'], combat: ['axe'], multiline: [{ start: 'beta', end: 'end-b' }])
+
+      expect(described_class.match_general('a moth')).to be_nil
+      expect(described_class.match_general('a bat')).to eq(/bat/)
+      expect('sword').not_to match(described_class.combat_regexp)
+      expect('axe').to match(described_class.combat_regexp)
+      expect(described_class.match_multiline_start('alpha line')).to be_nil
+      expect(described_class.match_multiline_start('beta line')).to eq(start: /beta/, end: /end-b/)
+    end
+
+    it 'clears every set when given no patterns' do
+      described_class.add_general_pattern('moth')
+      described_class.add_combat_pattern('sword')
+      described_class.add_multiline_gag('alpha')
+
+      described_class.replace_custom
+
+      expect(described_class.match_general('moth')).to be_nil
+      expect('sword').not_to match(described_class.combat_regexp)
+      expect(described_class.match_multiline_start('alpha')).to be_nil
+    end
+
+    it 'warns about and skips an invalid pattern, keeping the valid ones' do
+      expect {
+        described_class.replace_custom(general: ['[unclosed', 'bat'], combat: ['(', 'axe'],
+                                       multiline: [{ start: '[', end: nil }, { start: 'beta', end: '   ' }])
+      }.to output(/Invalid gag pattern: \[unclosed.*Invalid combat gag pattern: \(.*Invalid multiline gag pattern: \[/m)
+        .to_stderr
+
+      expect(described_class.match_general('a bat')).to eq(/bat/)
+      expect('axe').to match(described_class.combat_regexp)
+      expect(described_class.match_multiline_start('beta line')).to eq(start: /beta/, end: nil)
+    end
+  end
+
   describe '.clear_custom with multi-line gags' do
     it 'removes multi-line gags' do
       described_class.add_multiline_gag('start')
