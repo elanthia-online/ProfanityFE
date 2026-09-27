@@ -182,4 +182,16 @@ RSpec.describe WindowManager, '#load_layout' do
       expect(window_manager.stream['main']).to be_an_instance_of TextWindow
     end
   end
+
+  describe 'then #resize' do
+    before { load(every_window_type) }
+
+    it 'keeps the exp and spell windows the width the layout built them at' do
+      built = [window_manager.stream['exp'].maxx, window_manager.stream['percWindow'].maxx]
+
+      window_manager.resize(nil)
+
+      expect([window_manager.stream['exp'].maxx, window_manager.stream['percWindow'].maxx]).to eq built
+    end
+  end
 end

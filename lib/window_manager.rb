@@ -443,9 +443,11 @@ class WindowManager
         win.noutrefresh
       end
 
-      [ExpWindow, PercWindow, RoomWindow].each do |klass|
+      # The exp and spell builders leave the layout's last column unused;
+      # keep that margin so these windows don't widen on resize.
+      { ExpWindow => 1, PercWindow => 1, RoomWindow => 0 }.each do |klass, right_margin|
         klass.list.to_a.each do |win|
-          next unless safe_reposition(win)
+          next unless safe_reposition(win, right_margin: right_margin)
           win.redraw
           win.noutrefresh
         end
@@ -546,9 +548,10 @@ class WindowManager
   # Safely reposition a window using its stored layout expressions.
   #
   # @param win [BaseWindow] the window to reposition
+  # @param right_margin [Integer] columns of the layout width to leave unused
   # @return [Boolean] true if repositioned, false if skipped
-  def safe_reposition(win)
-    safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]),
+  def safe_reposition(win, right_margin: 0)
+    safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - right_margin,
                      fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
   end
 
