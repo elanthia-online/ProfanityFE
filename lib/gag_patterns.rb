@@ -9,6 +9,20 @@
 # (single line), and multi-line (a start pattern that suppresses a block of
 # lines until an end pattern or the next game prompt).
 #
+# == Concurrency
+#
+# The server thread reads the gags on every line ({match_general},
+# {match_multiline_start}, {combat_regexp}) while the input thread may
+# replace them (+.reload+). All gag state lives in one frozen {Snapshot}:
+# the three pattern lists and their union regexps. A writer builds a
+# complete new snapshot off to the side and publishes it with a single
+# ivar assignment, so a reader sees either the old configuration or the
+# new one, never a mix, without taking a lock. Each reader loads the
+# snapshot once per call and uses only that. Writers ({load_defaults},
+# the +add_*+ methods, {clear_custom}, {replace_custom}) are serialized by
+# a mutex so concurrent adds are not lost. The lists returned by
+# {multiline_gags} are frozen and never change after they are returned.
+#
 # @example
 #   GagPatterns.load_defaults
 #   GagPatterns.add_general_pattern('You also see .* moth')
@@ -19,31 +33,59 @@
 #   GagPatterns.match_multiline_start('Knowledge from your sanowret crystal ...')
 #   # => { start: /.../, end: nil }
 module GagPatterns
-  @combat_patterns = []
-  @general_patterns = []
-  @multiline_gags = []
-  @combat_regexp = nil
-  @general_regexp = nil
-  @multiline_start_regexp = nil
+  # One complete, immutable gag configuration: the pattern lists and the
+  # union regexps built from them. Build with {.build}; never mutated.
+  #
+  # @!attribute [r] general_patterns
+  #   @return [Array<Regexp>] general gag patterns (frozen)
+  # @!attribute [r] combat_patterns
+  #   @return [Array<Regexp>] combat gag patterns (frozen)
+  # @!attribute [r] multiline_gags
+  #   @return [Array<Hash>] multi-line gags, each a frozen { start:, end: } (frozen)
+  # @!attribute [r] general_regexp
+  #   @return [Regexp] union of the general patterns
+  # @!attribute [r] combat_regexp
+  #   @return [Regexp] union of the combat patterns
+  # @!attribute [r] multiline_start_regexp
+  #   @return [Regexp] union of the multi-line start patterns
+  Snapshot = Data.define(:general_patterns, :combat_patterns, :multiline_gags,
+                         :general_regexp, :combat_regexp, :multiline_start_regexp) do
+    # Build a snapshot from pattern lists, freezing them and computing the
+    # union regexps.
+    #
+    # @param general [Array<Regexp>] general gag patterns
+    # @param combat [Array<Regexp>] combat gag patterns
+    # @param multiline [Array<Hash>] multi-line gags, each { start:, end: }
+    # @return [Snapshot]
+    def self.build(general:, combat:, multiline:)
+      general = general.dup.freeze
+      combat = combat.dup.freeze
+      multiline = multiline.map { |gag| gag.dup.freeze }.freeze
+      new(general_patterns: general, combat_patterns: combat, multiline_gags: multiline,
+          general_regexp: Regexp.union(general), combat_regexp: Regexp.union(combat),
+          multiline_start_regexp: Regexp.union(multiline.map { |gag| gag[:start] }))
+    end
+  end
+
+  @write_lock = Mutex.new
+  @snapshot = nil
 
   class << self
     # @return [Regexp] combined regexp matching any combat gag pattern
-    attr_reader :combat_regexp
+    def combat_regexp = @snapshot.combat_regexp
 
     # @return [Regexp] combined regexp matching any general gag pattern
-    attr_reader :general_regexp
+    def general_regexp = @snapshot.general_regexp
 
     # @return [Array<Hash>] multi-line gag definitions, each { start:, end: }
-    attr_reader :multiline_gags
+    #   (frozen; a later change publishes a new list instead)
+    def multiline_gags = @snapshot.multiline_gags
 
     # Initialize with default patterns (empty). Call at startup.
     #
     # @return [void]
     def load_defaults
-      @combat_patterns = default_combat_patterns.dup
-      @general_patterns = default_general_patterns.dup
-      @multiline_gags = default_multiline_gags.dup
-      rebuild_regexps
+      publish { defaults_snapshot }
     end
 
     # Add a combat stream gag pattern.
@@ -55,8 +97,7 @@ module GagPatterns
       regexp = compile_pattern(pattern, 'combat gag')
       return unless regexp
 
-      @combat_patterns << regexp
-      rebuild_regexps
+      publish { |current| rebuild(current, combat: current.combat_patterns + [regexp]) }
     end
 
     # Add a general gag pattern (applies to all streams).
@@ -68,8 +109,7 @@ module GagPatterns
       regexp = compile_pattern(pattern, 'gag')
       return unless regexp
 
-      @general_patterns << regexp
-      rebuild_regexps
+      publish { |current| rebuild(current, general: current.general_patterns + [regexp]) }
     end
 
     # Add a multi-line gag. When a line matches +start_pattern+, that line
@@ -86,15 +126,14 @@ module GagPatterns
       gag = compile_multiline_gag(start_pattern, end_pattern)
       return unless gag
 
-      @multiline_gags << gag
-      rebuild_regexps
+      publish { |current| rebuild(current, multiline: current.multiline_gags + [gag]) }
     end
 
-    # Replace every custom gag with the given ones, rebuilding the union
-    # regexps once. Used by settings load and reload so the gags from the
-    # settings file take effect together. All patterns are compiled before
-    # any set is replaced; an invalid pattern is warned about and skipped,
-    # as by the add methods.
+    # Replace every custom gag with the given ones in one step. Used by
+    # settings load and reload so the gags from the settings file take
+    # effect together. All patterns are compiled and the new snapshot is
+    # built before it is published; an invalid pattern is warned about and
+    # skipped, as by the add methods.
     #
     # @param general [Array<String, Regexp>] general gag patterns
     # @param multiline [Array<Hash>] multi-line gags, each
@@ -107,10 +146,7 @@ module GagPatterns
       multiline_gags = default_multiline_gags +
                        multiline.filter_map { |gag| compile_multiline_gag(gag[:start], gag[:end]) }
 
-      @general_patterns = general_patterns
-      @combat_patterns = combat_patterns
-      @multiline_gags = multiline_gags
-      rebuild_regexps
+      publish { Snapshot.build(general: general_patterns, combat: combat_patterns, multiline: multiline_gags) }
     end
 
     # Find the multi-line gag whose start pattern matches the given line.
@@ -119,12 +155,13 @@ module GagPatterns
     # no-match case costs a single match instead of one per gag.
     #
     # @param line [String] raw server line to test
-    # @return [Hash, nil] the matching { start:, end: } gag, or nil
+    # @return [Hash, nil] the matching { start:, end: } gag (frozen), or nil
     def match_multiline_start(line)
-      return nil if @multiline_gags.empty?
-      return nil unless line.match?(@multiline_start_regexp)
+      snapshot = @snapshot
+      return nil if snapshot.multiline_gags.empty?
+      return nil unless line.match?(snapshot.multiline_start_regexp)
 
-      @multiline_gags.find { |gag| line.match?(gag[:start]) }
+      snapshot.multiline_gags.find { |gag| line.match?(gag[:start]) }
     end
 
     # Find the general gag pattern that matches the given line.
@@ -135,9 +172,10 @@ module GagPatterns
     # @param line [String] raw server line to test
     # @return [Regexp, nil] the first matching pattern, or nil
     def match_general(line)
-      return nil unless line.match?(@general_regexp)
+      snapshot = @snapshot
+      return nil unless line.match?(snapshot.general_regexp)
 
-      @general_patterns.find { |pattern| line.match?(pattern) }
+      snapshot.general_patterns.find { |pattern| line.match?(pattern) }
     end
 
     # Reset to default patterns, discarding any custom patterns.
@@ -145,10 +183,7 @@ module GagPatterns
     #
     # @return [void]
     def clear_custom
-      @combat_patterns = default_combat_patterns.dup
-      @general_patterns = default_general_patterns.dup
-      @multiline_gags = default_multiline_gags.dup
-      rebuild_regexps
+      publish { defaults_snapshot }
     end
 
     private
@@ -185,14 +220,36 @@ module GagPatterns
       nil
     end
 
-    # Rebuild the union regexps from the current pattern arrays.
+    # Build the next snapshot under the write lock and publish it with a
+    # single assignment, so readers never see a partly built one.
     #
+    # @yieldparam current [Snapshot, nil] the published snapshot
+    # @yieldreturn [Snapshot] the snapshot to publish
     # @return [void]
     # @api private
-    def rebuild_regexps
-      @combat_regexp = Regexp.union(@combat_patterns)
-      @general_regexp = Regexp.union(@general_patterns)
-      @multiline_start_regexp = Regexp.union(@multiline_gags.map { |gag| gag[:start] })
+    def publish
+      @write_lock.synchronize { @snapshot = yield(@snapshot) }
+      nil
+    end
+
+    # Build a snapshot from +current+ with some pattern lists replaced.
+    #
+    # @param current [Snapshot] snapshot to start from
+    # @param general [Array<Regexp>] general gag patterns
+    # @param combat [Array<Regexp>] combat gag patterns
+    # @param multiline [Array<Hash>] multi-line gags
+    # @return [Snapshot]
+    # @api private
+    def rebuild(current, general: current.general_patterns, combat: current.combat_patterns,
+                multiline: current.multiline_gags)
+      Snapshot.build(general: general, combat: combat, multiline: multiline)
+    end
+
+    # @return [Snapshot] a snapshot holding only the default patterns
+    # @api private
+    def defaults_snapshot
+      Snapshot.build(general: default_general_patterns, combat: default_combat_patterns,
+                     multiline: default_multiline_gags)
     end
 
     # @return [Array<Regexp>] default combat gag patterns (empty)
