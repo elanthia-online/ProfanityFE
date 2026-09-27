@@ -67,17 +67,20 @@ module SettingsLoader
   # @param key_action [Hash<String, Proc>] named action procs available for key binding
   # @param do_macro [Proc] proc that executes a macro string when called
   # @param reload [Boolean] when true, skip PRESET/LAYOUT population and only refresh dynamic settings
+  # @param keep_highlights [Hash{Regexp => Array}] highlights to keep on top
+  #   of the file's (e.g. those added with +.highlight+), applied in the same
+  #   locked step so HIGHLIGHT is never without them
   # @return [StandardError, nil] nil when the settings were applied, otherwise
   #   the error that stopped the load (logged with its backtrace); no setting
   #   was changed
-  def load(filename, key_binding, key_action, do_macro, reload: false)
+  def load(filename, key_binding, key_action, do_macro, reload: false, keep_highlights: {})
     unless File.exist?(filename)
       warn "Settings file not found: #{filename}"
       return Errno::ENOENT.new(filename)
     end
 
     settings = parse(load_cached_xml(filename), key_action, do_macro, reload: reload)
-    apply(settings, key_binding, reload: reload)
+    apply(settings, key_binding, reload: reload, keep_highlights: keep_highlights)
     nil
   rescue StandardError => e
     ProfanityLog.write('settings', e.message, backtrace: e.backtrace)
@@ -169,17 +172,22 @@ module SettingsLoader
   # stream falls back to its default when the file doesn't set it. Presets
   # and layouts are added on initial load only.
   #
+  # +keep_highlights+ are merged over the file's highlights in the same
+  # step, after them and winning for the same regex, as if they had been
+  # added to the new highlights one by one.
+  #
   # @param settings [Hash] settings returned by {parse}
   # @param key_binding [Hash] mutable hash of key bindings, replaced in place
   # @param reload [Boolean] when true, presets and layouts are left as they are
+  # @param keep_highlights [Hash{Regexp => Array}] highlights to keep on top of the file's
   # @return [void]
   # @api private
-  def apply(settings, key_binding, reload: false)
+  def apply(settings, key_binding, reload: false, keep_highlights: {})
     SETTINGS_LOCK.synchronize do
       # Gags go first: compiling them is the only step here that could
       # raise, and GagPatterns replaces nothing until all have compiled.
       GagPatterns.replace_custom(**settings[:gags])
-      HIGHLIGHT.replace(settings[:highlight])
+      HIGHLIGHT.replace(settings[:highlight].merge(keep_highlights))
       PERC_TRANSFORMS.replace(settings[:perc_transforms])
       CONFIG.notification_stream = settings[:notification_stream]
       key_binding.replace(settings[:key_binding])

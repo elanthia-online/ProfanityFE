@@ -360,11 +360,13 @@ class Application
   end
 
   # Reload the settings file. A file that fails to load changes nothing,
-  # and a one-line error in the main window says why.
+  # and a one-line error in the main window says why. Highlights added with
+  # +.highlight+ are kept on top of the file's.
   #
   # @return [void]
   def handle_dot_reload
-    error = SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro), reload: true)
+    error = SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro),
+                                reload: true, keep_highlights: @inline_highlights || {})
     write_to_client("* Reload failed, settings unchanged: #{settings_error_reason(error)}") if error
   end
 
@@ -380,6 +382,13 @@ class Application
     line.is_a?(Integer) && line.positive? ? "#{reason} (line #{line})" : reason
   end
 
+  # Add an inline highlight for literal, case-insensitive text, or list the
+  # inline highlights when no text is given. Inline highlights are kept in
+  # HIGHLIGHT and in +@inline_highlights+ (regex => colors), which
+  # {#handle_dot_reload} keeps on top of the file's highlights.
+  #
+  # @param pattern [String, nil] the text to highlight, optionally in double quotes
+  # @return [void]
   def handle_dot_highlight(pattern)
     window = @window_mgr.stream[MAIN_STREAM]
     return unless window
@@ -412,10 +421,11 @@ class Application
       return
     end
 
+    colors = [INLINE_HIGHLIGHT_COLOR, nil, nil]
     SETTINGS_LOCK.synchronize do
-      HIGHLIGHT[regex] = [INLINE_HIGHLIGHT_COLOR, nil, nil]
+      HIGHLIGHT[regex] = colors
     end
-    @inline_highlights[regex] = true
+    @inline_highlights[regex] = colors
 
     msg = "* Highlight added: #{pattern}"
     window.add_string(msg, [{ start: 0, end: msg.length, fg: INLINE_HIGHLIGHT_COLOR, bg: nil, ul: nil }])
