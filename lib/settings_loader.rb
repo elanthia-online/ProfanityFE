@@ -244,6 +244,12 @@ module SettingsLoader
   # sequences (arrays from KEY_NAME), macro attributes, action attributes,
   # and nested +<key>+ children via self-referencing recursion.
   #
+  # A key maps either to a Proc (an action or macro) or to a Hash of the keys
+  # that may follow it (a combo prefix), never both. When a definition
+  # conflicts with an earlier one of the other kind, the later definition
+  # wins -- the same rule that applies when a key is bound twice -- and the
+  # conflict is logged.
+  #
   # This is a proc (not a method) because it self-references for recursion
   # and creates closures that late-bind to +do_macro+.
   #
@@ -254,52 +260,81 @@ module SettingsLoader
   def build_setup_key(key_action, do_macro)
     setup_key = nil
     setup_key = proc { |xml, binding|
-      if (key = xml.attributes['id'])
-        if key =~ /^[0-9]+$/
-          key = key.to_i
-        elsif key.instance_of?(String) && (key.length == 1)
-          nil
-        else
-          key = KEY_NAME[key]
-        end
-        if key
-          if key.instance_of?(Array)
-            current_binding = binding
-            key[0..-2].each do |k|
-              current_binding[k] ||= {}
-              current_binding = current_binding[k]
-            end
-            final_key = key[-1]
-            if (macro = xml.attributes['macro'])
-              current_binding[final_key] = proc { do_macro.call(macro) }
-            elsif xml.attributes['action']
-              if (action = key_action[xml.attributes['action']])
-                current_binding[final_key] = action
+      if (id = xml.attributes['id'])
+        key = if id =~ /^[0-9]+$/
+                id.to_i
+              elsif id.length == 1
+                id
               else
-                ProfanityLog.write('settings', "Unknown action '#{xml.attributes['action']}' for key '#{xml.attributes['id']}'")
+                KEY_NAME[id]
               end
-            else
-              current_binding[final_key] ||= {}
-              xml.elements.each do |e|
-                setup_key.call(e, current_binding[final_key])
-              end
-            end
-          elsif (macro = xml.attributes['macro'])
-            binding[key] = proc { do_macro.call(macro) }
+        if key
+          # A multi-key sequence (e.g. alt+1 => [27, 49]) walks a combo map per prefix key.
+          *prefix, final_key = key
+          current_binding = prefix.reduce(binding) { |map, k| combo_map_for(map, k, id) }
+          if (macro = xml.attributes['macro'])
+            bind_key(current_binding, final_key, id, proc { do_macro.call(macro) })
           elsif xml.attributes['action']
             if (action = key_action[xml.attributes['action']])
-              binding[key] = action
+              bind_key(current_binding, final_key, id, action)
             else
-              ProfanityLog.write('settings', "Unknown action '#{xml.attributes['action']}' for key '#{xml.attributes['id']}'")
+              ProfanityLog.write('settings', "Unknown action '#{xml.attributes['action']}' for key '#{id}'")
             end
           else
-            binding[key] ||= {}
+            combo = combo_map_for(current_binding, final_key, id)
             xml.elements.each do |e|
-              setup_key.call(e, binding[key])
+              setup_key.call(e, combo)
             end
           end
         end
       end
     }
+  end
+
+  # Bind a key to an action or macro proc. A combo map already at that key
+  # is replaced (the later definition wins) and the conflict logged.
+  #
+  # @param binding [Hash] binding map to modify
+  # @param key [Integer, String] key code or character
+  # @param id [String] the +<key>+ element's id, for the log message
+  # @param handler [Proc] action or macro to run when the key is pressed
+  # @return [void]
+  # @api private
+  def bind_key(binding, key, id, handler)
+    log_key_conflict(id, key, 'an action/macro', 'key combo') if binding[key].is_a?(Hash)
+    binding[key] = handler
+  end
+
+  # Return the combo map for a key, creating it if needed. An action or macro
+  # already bound to that key is replaced (the later definition wins) and the
+  # conflict logged.
+  #
+  # @param binding [Hash] binding map to look in
+  # @param key [Integer, String] key code or character used as a combo prefix
+  # @param id [String] the +<key>+ element's id, for the log message
+  # @return [Hash] the combo map of keys that may follow +key+
+  # @api private
+  def combo_map_for(binding, key, id)
+    existing = binding[key]
+    return existing if existing.is_a?(Hash)
+
+    log_key_conflict(id, key, 'a key combo prefix', 'action/macro') if existing
+    binding[key] = {}
+  end
+
+  # Log a key binding conflict between two definitions of different kinds.
+  #
+  # @param id [String] the id of the later +<key>+ element, which wins
+  # @param key [Integer, String] the conflicting key code or character
+  # @param new_kind [String] what the later definition uses the key as
+  # @param old_kind [String] what the earlier definition bound the key to
+  # @return [void]
+  # @api private
+  def log_key_conflict(id, key, new_kind, old_kind)
+    names = KEY_NAME.select { |_name, code| code == key }.keys
+    label = names.empty? ? key.inspect : "#{key.inspect} (#{names.join('/')})"
+    ProfanityLog.write('settings',
+                       "Key binding conflict: <key id='#{id}'> uses key #{label} as #{new_kind}, " \
+                       "replacing the earlier #{old_kind} bound to it (later definition wins)")
   end
 end
