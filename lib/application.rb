@@ -153,7 +153,7 @@ class Application
     elsif cmd =~ /^\.help(?=\s|\z)/i
       handle_dot_help
     else
-      @server.puts cmd.sub(/^\./, ';')
+      send_to_server(cmd.sub(/^\./, ';'))
     end
   end
 
@@ -477,6 +477,20 @@ class Application
     CursesRenderer.doupdate
     @cmd_buffer.add_to_history(cmd)
     execute_command(cmd)
+  end
+
+  # Write one line to the game server, never while holding the render lock.
+  #
+  # Key handlers run inside {CursesRenderer.synchronize}. If the server
+  # stops reading and the socket's send buffer fills, the write blocks; with
+  # the lock held that would also stop the server thread from drawing. So
+  # the write waits until the lock is released (see
+  # {CursesRenderer.outside_lock}); lines keep the order they were sent in.
+  #
+  # @param line [String] the command to send
+  # @return [void]
+  def send_to_server(line)
+    CursesRenderer.outside_lock { @server.puts line }
   end
 
   def send_history_command(index)
@@ -944,7 +958,7 @@ class Application
         CursesRenderer.doupdate
       end
       @cmd_buffer.add_to_history(link_cmd)
-      @server.puts link_cmd
+      send_to_server(link_cmd)
       true
     end
   end

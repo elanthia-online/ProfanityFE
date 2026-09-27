@@ -32,6 +32,9 @@ require 'monitor'
 module CursesRenderer
   @monitor = Monitor.new
 
+  # Fiber-local key for the blocks {.outside_lock} deferred on this thread.
+  DEFERRED_KEY = :curses_renderer_deferred
+
   module_function
 
   # Serialize a block of curses (or terminal I/O) operations.
@@ -43,7 +46,7 @@ module CursesRenderer
   # @yield block of operations to serialize
   # @return [Object] the block's return value
   def synchronize(&block)
-    @monitor.synchronize(&block)
+    hold(&block)
   end
 
   # Flush the virtual screen to the physical terminal, synchronized.
@@ -53,7 +56,7 @@ module CursesRenderer
   #
   # @return [void]
   def doupdate
-    @monitor.synchronize { Curses.doupdate }
+    hold { Curses.doupdate }
   end
 
   # Execute rendering operations and flush to screen atomically.
@@ -64,9 +67,42 @@ module CursesRenderer
   # @yield block that performs +noutrefresh+ calls on one or more windows
   # @return [void]
   def render
-    @monitor.synchronize do
+    hold do
       yield
       Curses.doupdate
     end
   end
+
+  # Run a block that may block (such as a write to the game server socket)
+  # without holding the lock.
+  #
+  # Runs it now if this thread does not hold the lock. Otherwise it runs
+  # just after this thread's outermost {.synchronize}, {.render} or
+  # {.doupdate} releases the lock, in the order deferred. A write that
+  # blocks then stalls only its own thread, not every thread that draws.
+  #
+  # @yield the operation to run outside the lock
+  # @return [Object, nil] the block's return value if run now, else nil
+  def outside_lock(&block)
+    return yield unless @monitor.mon_owned?
+
+    (Thread.current[DEFERRED_KEY] ||= []) << block
+    nil
+  end
+
+  # Hold the lock for the block, then run the blocks {.outside_lock}
+  # deferred once this thread no longer holds it.
+  def hold(&block)
+    @monitor.synchronize(&block)
+  ensure
+    run_deferred unless @monitor.mon_owned?
+  end
+
+  def run_deferred
+    return unless (deferred = Thread.current[DEFERRED_KEY])
+
+    Thread.current[DEFERRED_KEY] = nil
+    deferred.each(&:call)
+  end
+  private_class_method :hold, :run_deferred
 end

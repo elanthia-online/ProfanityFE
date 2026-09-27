@@ -147,8 +147,12 @@ module TagHandlers
 
     if @first_prompt
       @first_prompt = false
-      @server.puts 'look'
-      @server.flush
+      # Sent once the render lock is released, so a full socket send
+      # buffer cannot block drawing (see CursesRenderer.outside_lock).
+      CursesRenderer.outside_lock do
+        @server.puts 'look'
+        @server.flush
+      end
       if BOOT_PROFILE
         elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
         ProfanityLog.write('boot-profile', "first prompt (sent look): #{elapsed}ms")
