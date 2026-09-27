@@ -62,6 +62,21 @@ RSpec.describe 'GameTextProcessor gagged lines' do
     processor.run(server)
   end
 
+  describe 'with a settings file that defines no gags' do
+    it 'still shows server text' do
+      # Reload GagPatterns to its state before any gag is added or defaults
+      # are loaded, as a settings file with no <gag> elements leaves it.
+      verbose = $VERBOSE
+      $VERBOSE = nil
+      load File.expand_path('../../lib/gag_patterns.rb', __dir__)
+      $VERBOSE = verbose
+
+      receive_from_server('A goblin arrives.')
+
+      expect(displayed).to eq [['main', 'A goblin arrives.']]
+    end
+  end
+
   describe 'stream tags on a gagged line' do
     # Sequence from a real DragonRealms log: the spell window closes on the
     # same line as a creature death message that the user gags.

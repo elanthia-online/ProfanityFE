@@ -162,4 +162,10 @@ module GagPatterns
       []
     end
   end
+
+  # Start with the (empty) defaults so matching works before any gag is
+  # added. Nothing else calls load_defaults, and the regexps were only
+  # built when a gag was added, so a settings file with no gags left them
+  # nil and every server line raised.
+  load_defaults
 end
