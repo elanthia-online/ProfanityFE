@@ -82,6 +82,74 @@ RSpec.describe SettingsLoader do
     end
   end
 
+  describe 'key binding conflicts' do
+    let(:first_action) { proc {} }
+    let(:second_action) { proc {} }
+    let(:key_action) { { 'first' => first_action, 'second' => second_action } }
+    let(:key_binding) { {} }
+
+    def load_keys(body)
+      path = write_settings(@dir, "#{body}<highlight fg='ff0000'>goblin</highlight>")
+      described_class.load(path, key_binding, key_action, proc {})
+    end
+
+    def expect_conflict_logged(id)
+      expect(ProfanityLog).to have_received(:write)
+        .with('settings', a_string_including('Key binding conflict', "id='#{id}'", 'later definition wins'))
+    end
+
+    before do
+      allow(ProfanityLog).to receive(:write)
+      HIGHLIGHT.clear
+    end
+
+    it 'lets a combo using a bound key as its prefix replace the binding and keeps loading' do
+      load_keys("<key id='escape' action='first'/><key id='alt+1' action='second'/>")
+
+      expect(HIGHLIGHT.keys).to eq [/goblin/]
+      expect(key_binding[27]).to eq(49 => second_action)
+      expect_conflict_logged('alt+1')
+    end
+
+    it 'lets a nested combo on a bound key replace the binding and keeps loading' do
+      load_keys("<key id='ctrl+x' action='first'/><key id='ctrl+x'><key id='a' action='second'/></key>")
+
+      expect(HIGHLIGHT.keys).to eq [/goblin/]
+      expect(key_binding[24]).to eq('a' => second_action)
+      expect_conflict_logged('ctrl+x')
+    end
+
+    it 'lets an action on a combo prefix replace the combo and logs the conflict' do
+      load_keys("<key id='alt+1' action='first'/><key id='escape' action='second'/>")
+
+      expect(key_binding[27]).to be second_action
+      expect(HIGHLIGHT.keys).to eq [/goblin/]
+      expect_conflict_logged('escape')
+    end
+
+    it 'lets a macro on a nested combo prefix replace the combo and logs the conflict' do
+      load_keys("<key id='ctrl+x'><key id='a' action='first'/></key><key id='ctrl+x' macro='look'/>")
+
+      expect(key_binding[24]).to be_a(Proc)
+      expect(HIGHLIGHT.keys).to eq [/goblin/]
+      expect_conflict_logged('ctrl+x')
+    end
+
+    it 'merges combos sharing a prefix without logging a conflict' do
+      load_keys("<key id='alt+1' action='first'/><key id='alt+2' action='second'/>")
+
+      expect(key_binding[27]).to eq(49 => first_action, 50 => second_action)
+      expect(ProfanityLog).not_to have_received(:write)
+    end
+
+    it 'rebinds a key to a different action without logging a conflict' do
+      load_keys("<key id='ctrl+x' action='first'/><key id='ctrl+x' action='second'/>")
+
+      expect(key_binding[24]).to be second_action
+      expect(ProfanityLog).not_to have_received(:write)
+    end
+  end
+
   describe 'settings cache' do
     it 'picks up an edit saved within the same filesystem clock tick as the cache' do
       path = write_settings(@dir, '<notification-stream>ooc</notification-stream>')
