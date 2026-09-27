@@ -268,6 +268,6 @@ BaseWindow.register_type('text') do |height, width, top, left, element, wm|
   element.attributes['value'].split(',').each do |str|
     wm.stream[str] = window
   end
-  SCROLL_WINDOW.push(window)
+  SCROLL_WINDOW.push(window) unless SCROLL_WINDOW.include?(window)
   window
 end

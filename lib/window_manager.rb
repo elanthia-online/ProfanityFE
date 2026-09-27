@@ -325,10 +325,11 @@ class WindowManager
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
   #
   # Synchronized with +@handler_mutex+ to prevent races with the server
-  # read thread that constantly reads the handler hashes. Existing windows
-  # whose keys appear in the new layout are reused (moved/resized) rather
-  # than recreated, preserving their content buffers. Windows from the
-  # previous layout that are not present in the new one are closed.
+  # read thread that constantly reads the handler hashes. Text, indicator,
+  # progress, and countdown windows whose keys appear in the new layout are
+  # reused rather than recreated, preserving their content buffers. Every
+  # other window from the previous layout, of any window class, is closed
+  # and removed from its class list and from SCROLL_WINDOW.
   #
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
@@ -340,7 +341,7 @@ class WindowManager
     end
 
     @handler_mutex.synchronize do
-      @old_windows = IndicatorWindow.list | TextWindow.list | CountdownWindow.list | ProgressWindow.list
+      @old_windows = BaseWindow.all_windows
 
       @previous_indicator = @indicator
       @indicator = {}
@@ -378,20 +379,10 @@ class WindowManager
         builder&.call(height, width, top, left, e, self)
       end
 
-      if (current_scroll_window = SCROLL_WINDOW[0])
-        current_scroll_window.set_active(true)
-      end
+      @old_windows.each { |window| close_window(window) }
+      forget_previous_layout
 
-      @old_windows.each do |window|
-        IndicatorWindow.list.delete(window)
-        TextWindow.list.delete(window)
-        TabbedTextWindow.list.delete(window)
-        CountdownWindow.list.delete(window)
-        ProgressWindow.list.delete(window)
-        SCROLL_WINDOW.delete(window)
-        window.scrollbar.close if window.respond_to?(:scrollbar) && window.scrollbar
-        window.close
-      end
+      SCROLL_WINDOW[0]&.set_active(true)
 
       CursesRenderer.doupdate
     end
@@ -485,6 +476,30 @@ class WindowManager
   end
 
   private
+
+  # Close a window the new layout did not reuse, and remove it from every
+  # list that could still hit-test, repaint, or scroll it.
+  #
+  # @param window [BaseWindow] a window from the previous layout
+  # @return [void]
+  def close_window(window)
+    window.class.unregister_instance(window)
+    SCROLL_WINDOW.delete(window)
+    window.scrollbar&.close
+    window.close
+  end
+
+  # Drop the previous-layout references the builders used during
+  # {#load_layout}, so closed windows are not kept reachable.
+  #
+  # @return [void]
+  def forget_previous_layout
+    @old_windows = []
+    @previous_indicator = {}
+    @previous_stream = {}
+    @previous_progress = {}
+    @previous_countdown = {}
+  end
 
   # Open a URL in the system browser without blocking the caller.
   #

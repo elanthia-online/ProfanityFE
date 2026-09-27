@@ -463,15 +463,24 @@ class BaseWindow < Curses::Window
     window_classes << klass unless window_classes.include?(klass)
   end
 
-  # Hook called when a subclass is defined. Initializes the subclass instance
-  # list and registers it in the window class registry.
+  # Every live window of every registered window class.
+  #
+  # @return [Array<BaseWindow>] a new array, safe to iterate while windows
+  #   are removed from their class lists
+  def self.all_windows
+    BaseWindow.window_classes.flat_map(&:list)
+  end
+
+  # Hook called when a subclass is defined, including subclasses of
+  # subclasses. Initializes the subclass instance list and registers it in
+  # the {BaseWindow.window_classes} registry.
   #
   # @param subclass [Class] the newly defined subclass
   # @return [void]
   def self.inherited(subclass)
     super
     subclass.instance_variable_set(:@list, [])
-    register_window_class(subclass)
+    BaseWindow.register_window_class(subclass)
   end
 
   # Find the window instance whose screen bounds contain the given coordinates.
