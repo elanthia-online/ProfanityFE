@@ -101,6 +101,16 @@ RSpec.describe Curses::Window do
     end
   end
 
+  describe 'moving the cursor' do
+    it 'ignores a setpos outside the window, so later text goes where the cursor was' do
+      win = window(3, 5)
+      win.setpos(1, 2)
+      [[-1, 0], [0, -1], [3, 0], [0, 5]].each { |y, x| win.setpos(y, x) }
+      win.addstr('ab')
+      expect(screen(win)).to eq(rows: ['', '  ab', ''], cursor: [1, 4])
+    end
+  end
+
   describe 'editing' do
     it 'insch inserts at the cursor and delch deletes at the cursor' do
       win = window(1, 6)

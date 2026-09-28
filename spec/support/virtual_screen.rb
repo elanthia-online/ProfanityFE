@@ -74,8 +74,12 @@ module Curses
 
     # --- Cursor and output ---
 
+    # Like wmove, a position outside the window fails (ERR) and leaves
+    # the cursor where it was.
     def setpos(y, x)
       log(:setpos, y, x)
+      return nil if y.negative? || x.negative? || y >= @maxy || x >= @maxx
+
       @cury = y
       @curx = x
       nil
