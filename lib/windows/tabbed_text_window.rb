@@ -123,7 +123,9 @@ class TabbedTextWindow < BaseWindow
 
   # Draw the tab bar at the top of the window.
   # Active tab is rendered with reverse video; background tabs with
-  # unread content show an asterisk (*) activity indicator.
+  # unread content show an asterisk (*) activity indicator. A bar wider
+  # than the window is cut off at its right edge (tabs past it are still
+  # reachable by index or cycling), so it never spills onto the text rows.
   #
   # @return [void]
   def draw_tab_bar
@@ -131,23 +133,16 @@ class TabbedTextWindow < BaseWindow
     clrtoeol
 
     tab_names = @tab_buffers.keys
-    x_pos = 0
+    # Writing a window's last column moves the cursor to the next row,
+    # which scrolls a one-row window: leave that column blank there.
+    room = maxy > 1 ? maxx : maxx - 1
 
     tab_names.each_with_index do |name, idx|
       activity = @tab_activity[name] && name != @active_tab ? '*' : ''
       label = " #{idx + 1}:#{name}#{activity} "
 
-      if name == @active_tab
-        attron(Curses::A_REVERSE) do
-          addstr(label)
-        end
-      else
-        addstr(label)
-      end
-      x_pos += label.length
-
-      addstr('|') if idx < tab_names.length - 1
-      x_pos += 1
+      room = add_tab_bar_text(label, room, name == @active_tab ? Curses::A_REVERSE : Curses::A_NORMAL)
+      room = add_tab_bar_text('|', room) if idx < tab_names.length - 1
     end
 
     noutrefresh
@@ -268,6 +263,18 @@ class TabbedTextWindow < BaseWindow
   # @return [LineBuffer, nil] nil before the first tab is added
   private def shown_buffer
     @tab_buffers[@active_tab]
+  end
+
+  # Write tab-bar text at the cursor, cut to the columns the bar has left.
+  #
+  # @param text [String] the text to write
+  # @param room [Integer] columns left for the tab bar
+  # @param attrs [Integer] curses attributes for the text
+  # @return [Integer] columns left after writing
+  private def add_tab_bar_text(text, room, attrs = Curses::A_NORMAL)
+    shown = text[0, [room, 0].max]
+    attron(attrs) { addstr(shown) } unless shown.empty?
+    room - shown.length
   end
 end
 
