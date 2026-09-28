@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'dot_command'
+require_relative 'streams'
 
 # Default BOOT_PROFILE to false when loaded outside profanity.rb (e.g. specs)
 BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
@@ -364,7 +365,7 @@ class Application
       # Keep mouse capture when .select is still on
       @mouse_scroll.disable_click_events
     end
-    if (room_win = @window_mgr.room['room'])
+    if (room_win = @window_mgr.room[Streams::ROOM])
       room_win.links_enabled = @shared_state.blue_links
       room_win.render
     end
@@ -697,7 +698,7 @@ class Application
 
     @window_mgr.load_layout('default')
     @cmd_buffer.window = @window_mgr.command_window
-    @window_mgr.room['room']&.links_enabled = @cli_options[:links]
+    @window_mgr.room[Streams::ROOM]&.links_enabled = @cli_options[:links]
 
     unless @cmd_buffer.window
       fatal_error("ERROR: Layout has no command window. Add <window class='command'/> to your layout.")

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../streams'
+
 # Active spells/effects display with duration-based sorting.
 
 # Active spells and effects display window.
@@ -138,6 +140,6 @@ end
 BaseWindow.register_type('percWindow') do |height, width, top, left, element, wm|
   window = PercWindow.new(height, width - 1, top, left)
   window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
-  wm.stream['percWindow'] = window
+  wm.stream[Streams::PERC] = window
   window
 end
