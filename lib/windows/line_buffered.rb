@@ -81,7 +81,11 @@ module LineBuffered
     height = content_height
     if scroll_num < 0
       moved = line_buffer.scroll_back(scroll_num.abs, height)
-      if moved.positive?
+      if moved > height
+        # More than a page: drawing the uncovered rows from the top would
+        # run past the text area, so repaint it
+        paint_content
+      elsif moved.positive?
         scrl(-moved)
         setpos(content_top, 0)
         draw_buffer_lines(line_buffer.lines, line_buffer.pos + height - 1, moved)
@@ -90,7 +94,11 @@ module LineBuffered
       update_scrollbar
     elsif scroll_num > 0
       moved = line_buffer.scroll_forward(scroll_num)
-      if moved.positive?
+      if moved > height
+        # More than a page: the rows to draw would start above the text
+        # area (on the tab bar, or outside the window), so repaint it
+        paint_content
+      elsif moved.positive?
         scrl(moved)
         setpos(content_top + height - moved, 0)
         draw_buffer_lines(line_buffer.lines, line_buffer.pos + moved - 1, moved)

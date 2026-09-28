@@ -72,6 +72,40 @@ RSpec.describe LineBuffered do
       expect(window.buffer_pos).to eq 2
     end
 
+    context 'when scrolled back two pages' do
+      before do
+        %w[l6 l7 l8 l9 l10 l11 l12].each { |line| window.add_string(line) }
+        2.times { window.scroll(-window.content_height) }
+      end
+
+      it 'shows the newest lines on jumping to the bottom (the bottom key)' do
+        window.scroll(window.max_buffer_size)
+
+        expect(text_rows).to eq %w[l10 l11 l12]
+        expect(window.buffer_pos).to eq 0
+      end
+
+      it 'shows the next page on scrolling forward exactly one text area' do
+        window.scroll(window.content_height)
+
+        expect(text_rows).to eq %w[l7 l8 l9]
+      end
+
+      it 'shows the right lines on scrolling forward more than one text area' do
+        window.scroll(window.content_height + 1)
+
+        expect(text_rows).to eq %w[l8 l9 l10]
+      end
+    end
+
+    it 'shows the right lines on scrolling back more than one text area' do
+      %w[l6 l7 l8 l9 l10 l11 l12].each { |line| window.add_string(line) }
+
+      window.scroll(-(window.content_height + 1))
+
+      expect(text_rows).to eq %w[l6 l7 l8]
+    end
+
     it 'keeps a highlight on its text when the view scrolls' do
       line_id, = window.selection_anchor_at(window_row(1), 0)
       window.highlight_selection(line_id, 0, line_id, 2)
@@ -101,6 +135,30 @@ RSpec.describe LineBuffered do
       window.switch_tab('combat')
 
       expect(window.rows).to eq [' 1:main | 2:combat', 'c1', '', '']
+    end
+
+    it 'keeps text off the tab bar on jumping to the bottom from one line more than a page back' do
+      %w[l1 l2 l3 l4 l5 l6 l7].each { |line| window.add_string(line) }
+      window.scroll(-window.content_height)
+      window.scroll(-1)
+
+      window.scroll(window.max_buffer_size)
+
+      expect(window.rows).to eq [' 1:main | 2:combat', 'l5', 'l6', 'l7']
+    end
+
+    context 'when the tab bar leaves room on its row' do
+      let(:window) { build("<window class='tabbed' top='0' left='0' height='4' width='31' tabs='main,combat'/>") }
+
+      it 'keeps old text off the tab bar on jumping to the bottom right after the tab bar is redrawn' do
+        %w[l1 l2 l3 l4 l5 l6 l7 l8 l9 l10 l11 l12].each { |line| window.add_string(line) }
+        2.times { window.scroll(-window.content_height) }
+        window.add_string_to_tab('combat', 'c1') # marks the tab: redraws the tab bar
+
+        window.scroll(window.max_buffer_size)
+
+        expect(window.rows).to eq [' 1:main | 2:combat*', 'l10', 'l11', 'l12']
+      end
     end
   end
 end
