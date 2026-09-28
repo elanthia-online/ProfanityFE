@@ -90,13 +90,72 @@ RSpec.describe LineBuffer do
   end
 
   describe '#width=' do
-    it 'wraps lines added afterwards to the new width and leaves stored rows alone' do
-      buffer.push('one two three', [], indent: false)
+    it 're-wraps every stored line to the new width' do
+      buffer.push('one two three', [{ start: 4, end: 13, fg: 'ff0000' }], indent: false)
+      push_lines('l2')
 
       buffer.width = 20
-      buffer.push('one two three', [], indent: false)
 
-      expect(buffer.lines.map(&:first)).to eq ['one two three', 'three', 'one two ']
+      expect(buffer.lines).to eq [['l2', [], false], ['one two three', [{ start: 4, end: 13, fg: 'ff0000' }], false]]
+    end
+
+    it 'wraps each line with its own indent setting' do
+      buffer.width = 20
+      buffer.push('one two three', [], indent: false)
+      buffer.push('one two three', [], indent: true)
+
+      buffer.width = 10
+
+      expect(buffer.lines.map(&:first)).to eq ['  three', 'one two ', 'three', 'one two ']
+    end
+
+    it 'keeps the line on the bottom row there' do
+      wide = described_class.new(cap: 10, width: 20)
+      ['l1', 'l2', 'l3', 'one two three four'].each { |text| wide.push(text, [], indent: true) }
+      wide.scroll_back(1, 2)
+      expect(wide.line_at_row(1, 2).last.first).to eq 'l3'
+
+      wide.width = 10
+
+      expect(wide.line_at_row(1, 2).last.first).to eq 'l3'
+      expect(wide.pos).to eq 3
+    end
+
+    it 'stays live when live' do
+      push_lines('l1')
+      buffer.push('one two three four', [], indent: true)
+
+      buffer.width = 20
+
+      expect(buffer).to be_live
+    end
+
+    it 'gives the new rows IDs no old row had, so old anchors match nothing' do
+      push_lines('l1', 'l2')
+
+      buffer.width = 20
+
+      expect(buffer.lines_appended).to eq 4
+      expect(buffer.extract(1, 0, 2, 2)).to eq ''
+      expect(buffer.extract(3, 0, 4, 2)).to eq "l1\nl2"
+    end
+
+    it 'keeps the lines as added, unaffected by later changes to the caller\'s colors' do
+      colors = [{ start: 0, end: 3, fg: 'ff0000' }]
+      buffer.push('one two three', colors, indent: false)
+      colors.first[:fg] = '00ff00'
+
+      buffer.width = 20
+
+      expect(buffer.lines.first[1]).to eq [{ start: 0, end: 3, fg: 'ff0000' }]
+    end
+
+    it 'does nothing when the width is unchanged' do
+      push_lines('l1')
+
+      buffer.width = 10
+
+      expect(buffer.lines_appended).to eq 1
     end
   end
 

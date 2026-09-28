@@ -4,6 +4,7 @@
 # repaint, selection and link lookup.
 
 require_relative '../line_buffer'
+require_relative '../selection_manager'
 
 # Draws a {LineBuffer} into a window's text area and maps the area's
 # rows back to buffer lines, for windows whose text area is all or part
@@ -193,6 +194,31 @@ module LineBuffered
     paint_content
   end
 
+  # Fit every buffer to the window's current size, after a resize.
+  # Stored lines are re-wrapped to the new width, keeping the logical
+  # line on each buffer's bottom row there, and a view scrolled back past
+  # the oldest row of a taller text area moves down onto it. A re-wrap
+  # clears the selection: its row IDs no longer exist. The caller
+  # repaints.
+  #
+  # @return [void]
+  def rewrap
+    width = wrap_width
+    height = content_height
+    rewrapping = line_buffers.any? { |line_buffer| line_buffer.width != width }
+    line_buffers.each do |line_buffer|
+      line_buffer.width = width
+      line_buffer.pos = line_buffer.pos.clamp(0, [line_buffer.length - height, 0].max)
+    end
+    return unless rewrapping
+
+    @selection_start = nil
+    @selection_end = nil
+    # A drag in progress, or the highlight kept after one, is anchored to
+    # the old rows too
+    SelectionManager.clear_selection if SelectionManager.active_window.equal?(self)
+  end
+
   # Find a clickable link command at the given window-relative coordinates.
   # Scans the color regions of the line shown at (rel_y, rel_x) for a
   # :cmd entry whose span covers the column.
@@ -228,6 +254,14 @@ module LineBuffered
     raise NotImplementedError, "#{self.class} must implement shown_buffer"
   end
 
+  # Every buffer the window keeps, shown or not.
+  #
+  # @abstract
+  # @return [Array<LineBuffer>]
+  private def line_buffers
+    raise NotImplementedError, "#{self.class} must implement line_buffers"
+  end
+
   # Append a string to a buffer as one logical line; the buffer wraps it
   # to the window width. When the buffer is shown and live, the new rows
   # are drawn at once; when it is scrolled back, shown or not, the view
@@ -245,8 +279,6 @@ module LineBuffered
   private def append_string(line_buffer, string, string_colors, indent:, shown:)
     string = buffer_text(string, @time_stamp)
     effective_indent = indent.nil? ? @indent_word_wrap : indent
-    # Wrap to the window's current width; rows already stored keep theirs
-    line_buffer.width = wrap_width
     length_before = line_buffer.length
     added = line_buffer.push(string, string_colors, indent: effective_indent)
     height = content_height

@@ -303,6 +303,13 @@ class TabbedTextWindow < BaseWindow
     attron(attrs) { addstr(shown) } unless shown.empty?
     room - shown.length
   end
+
+  # Every tab's buffer.
+  #
+  # @return [Array<LineBuffer>]
+  private def line_buffers
+    @tab_buffers.values
+  end
 end
 
 BaseWindow.register_type('tabbed') do |height, width, top, left, element, wm|

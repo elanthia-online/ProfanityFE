@@ -381,6 +381,9 @@ class WindowManager
   # stored layout expressions. Triggers a full Curses screen update
   # afterward.
   #
+  # Text and tabbed windows re-wrap their stored lines, every tab's, to
+  # the new width and repaint (see {LineBuffered#rewrap}).
+  #
   # After the command window is resized, +cmd_buffer+ is redrawn so its
   # cursor and horizontal scroll offset match the new width.
   #
@@ -405,8 +408,8 @@ class WindowManager
                                      fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
         win.scrollbar.resize([win.maxy, 1].max, 1)
         win.scrollbar.move(win.begy, win.begx + win.maxx)
-        win.scroll(-win.maxy)
-        win.scroll(win.maxy)
+        win.rewrap
+        win.repaint
         win.clear_scrollbar
         if first_text_window
           win.update_scrollbar
@@ -422,8 +425,7 @@ class WindowManager
           win.scrollbar.resize([win.maxy, 1].max, 1)
           win.scrollbar.move(win.begy, win.begx + win.maxx)
         end
-        win.scroll(-win.maxy)
-        win.scroll(win.maxy)
+        win.rewrap
         win.clear_scrollbar
         win.redraw
         win.noutrefresh
