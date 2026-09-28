@@ -390,6 +390,23 @@ RSpec.describe Application do
       expect(server.string).to include('look')
     end
 
+    it 'scroll_current_window_bottom returns to the newest rows when scrolled back more rows than the buffer size' do
+      # Keeps 2 lines, wrapped at 10 columns: 9 rows.
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='text' top='0' left='0' height='3' width='12' value='main' buffer-size='2'/></layout>
+      XML
+      app.window_mgr.load_layout('test')
+      window = app.window_mgr.stream['main']
+      ['one two three four five six seven', 'one two three four'].each { |line| window.add_string(line) }
+      window.scroll(-window.maxy)
+      expect(window.buffer_pos).to be > window.max_buffer_size
+
+      app.key_action['scroll_current_window_bottom'].call
+
+      expect(window.rows).to eq ['one two', '  three', '  four']
+      expect(window.buffer_pos).to eq 0
+    end
+
     context 'with an unsent draft stashed by the up arrow' do
       let(:server) { StringIO.new }
       let(:screen) { ScreenLineWindow.new(20) }

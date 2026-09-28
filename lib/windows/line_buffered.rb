@@ -36,17 +36,17 @@ module LineBuffered
     maxy
   end
 
-  # The shown buffer's lines.
+  # The shown buffer's display rows.
   #
-  # @return [Array<Array(String, Array<Hash>)>] lines, newest first (empty
+  # @return [Array<Array(String, Array<Hash>)>] rows, newest first (empty
   #   when no buffer is shown)
   def buffer
     shown_buffer&.lines || []
   end
 
-  # Return the shown buffer's lines for selection support.
+  # Return the shown buffer's display rows for selection support.
   #
-  # @return [Array<Array(String, Array<Hash>)>] lines, newest first (empty
+  # @return [Array<Array(String, Array<Hash>)>] rows, newest first (empty
   #   when no buffer is shown)
   def buffer_content
     shown_buffer&.lines || []
@@ -54,13 +54,13 @@ module LineBuffered
 
   # Return the shown buffer's scroll offset.
   #
-  # @return [Integer] number of lines scrolled back from the newest
+  # @return [Integer] number of rows scrolled back from the newest
   def buffer_pos
     shown_buffer&.pos || 0
   end
 
-  # Monotonic count of lines ever appended to the shown buffer. Gives
-  # each buffer line a stable ID for selection anchoring
+  # Monotonic count of rows ever appended to the shown buffer. Gives
+  # each buffer row a stable ID for selection anchoring
   # (see {AnchoredSelection}).
   #
   # @return [Integer]
@@ -228,41 +228,49 @@ module LineBuffered
     raise NotImplementedError, "#{self.class} must implement shown_buffer"
   end
 
-  # Append a string to a buffer, word-wrapping it to the window width.
-  # When the buffer is shown and live, each new line is drawn at once;
-  # when it is scrolled back, shown or not, the view keeps its place. A
-  # buffer that isn't shown draws nothing, and the block, if given, is
-  # called once per stored line.
+  # Append a string to a buffer as one logical line; the buffer wraps it
+  # to the window width. When the buffer is shown and live, the new rows
+  # are drawn at once; when it is scrolled back, shown or not, the view
+  # keeps its place (moving onto the oldest row left if an eviction
+  # dropped the rows it reached). A buffer that isn't shown draws
+  # nothing, and the block, if given, is called.
   #
   # @param line_buffer [LineBuffer] the buffer to append to
   # @param string [String] the text to append
   # @param string_colors [Array<Hash>] color region descriptors
   # @param indent [Boolean, nil] indent continuation lines (nil = window default)
   # @param shown [Boolean] whether the text area shows +line_buffer+
-  # @yield once per line stored in a buffer that isn't shown
+  # @yield once, when +line_buffer+ isn't shown
   # @return [void]
   private def append_string(line_buffer, string, string_colors, indent:, shown:)
     string = buffer_text(string, @time_stamp)
     effective_indent = indent.nil? ? @indent_word_wrap : indent
-    wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors, continuation|
-      line_buffer.push(line, line_colors, continuation)
-      if !shown
-        # Scrolled back: keep the view in place, as the shown path below
-        # does, but draw nothing
-        unless line_buffer.live?
-          line_buffer.pos += 1
-          line_buffer.scroll_forward(1) if line_buffer.pos > (line_buffer.cap - content_height)
-        end
-        yield if block_given?
-      elsif line_buffer.live?
-        draw_newest_line(line, line_colors, line_buffer.length, content_top, content_height)
+    # Wrap to the window's current width; rows already stored keep theirs
+    line_buffer.width = wrap_width
+    length_before = line_buffer.length
+    added = line_buffer.push(string, string_colors, indent: effective_indent)
+    height = content_height
+    if !shown
+      # Scrolled back: keep the view in place, as the shown path below
+      # does, but draw nothing. Evictions may have dropped rows it reached.
+      line_buffer.pos += added unless line_buffer.live?
+      line_buffer.pos = line_buffer.pos.clamp(0, [line_buffer.length - height, 0].max)
+      yield if block_given?
+    elsif line_buffer.live?
+      if line_buffer.length < [length_before + added, height].min
+        # An eviction left too few rows to fill the text area, so every
+        # row moved up: redraw them all
+        paint_content
       else
-        line_buffer.pos += 1
-        # Scrolled back to the oldest line of a full buffer: that line
-        # was just evicted, so move the view down onto the next one
-        scroll(1) if line_buffer.pos > (line_buffer.cap - content_height)
-        update_scrollbar
+        (added - 1).downto(0).each_with_index do |index, drawn|
+          line, line_colors = line_buffer.lines[index]
+          draw_newest_line(line, line_colors, length_before + drawn + 1, content_top, height)
+        end
       end
+    else
+      line_buffer.pos += added
+      keep_view_on_stored_rows(line_buffer, height)
+      update_scrollbar
     end
     return unless shown && line_buffer.live?
 
@@ -272,6 +280,32 @@ module LineBuffered
     else
       noutrefresh
     end
+  end
+
+  # After an eviction, move a scrolled-back view that reaches past the
+  # oldest stored row down onto it: the rows shown above it are gone.
+  #
+  # @param line_buffer [LineBuffer] the shown buffer
+  # @param height [Integer] rows in the text area
+  # @return [void]
+  private def keep_view_on_stored_rows(line_buffer, height)
+    excess = line_buffer.pos - [line_buffer.length - height, 0].max
+    return unless excess.positive?
+
+    if excess < height && line_buffer.length >= height
+      scroll(excess)
+    else
+      line_buffer.pos -= excess
+      paint_content
+    end
+  end
+
+  # Column width lines are wrapped to: one column narrower than the
+  # window.
+  #
+  # @return [Integer]
+  private def wrap_width
+    maxx - 1
   end
 
   # Clear and redraw every row of the text area from the shown buffer,

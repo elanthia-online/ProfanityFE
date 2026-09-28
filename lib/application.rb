@@ -625,7 +625,8 @@ class Application
     }
 
     @key_action['scroll_current_window_bottom'] = proc {
-      SCROLL_WINDOW[0]&.scroll(SCROLL_WINDOW[0]&.max_buffer_size)
+      # buffer_pos counts rows; the buffer size counts (wrapped) lines
+      SCROLL_WINDOW[0]&.scroll(SCROLL_WINDOW[0]&.buffer_pos)
       @cmd_buffer.refresh
       CursesRenderer.doupdate
     }

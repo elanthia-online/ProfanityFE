@@ -118,10 +118,71 @@ RSpec.describe LineBuffered do
     end
   end
 
+  # Both windows have 3 text rows and wrap at 10 columns. The cap counts
+  # game lines: 'one two three four' is one line shown on 3 rows.
+  shared_examples 'a text area with a capped buffer' do
+    # @return [Array<String>] the visible text-area rows
+    def text_rows
+      window.rows.drop(window.content_top)
+    end
+
+    it 'keeps a wrapped line whole while it is under the cap' do
+      ['one two three four', 'l1', 'l2', 'l3'].each { |line| window.add_string(line) }
+
+      window.scroll(-window.content_height)
+
+      expect(text_rows).to eq ['one two', '  three', '  four']
+    end
+
+    it 'moves a view showing only an evicted line onto the oldest line left' do
+      ['one two three four', 'l1', 'l2', 'l3'].each { |line| window.add_string(line) }
+      window.scroll(-window.content_height)
+
+      window.add_string('l4')
+
+      expect(text_rows).to eq %w[l1 l2 l3]
+    end
+
+    it 'moves a view showing part of an evicted line up by the rows it lost' do
+      ['one two three four', 'l1', 'l2', 'l3'].each { |line| window.add_string(line) }
+      window.scroll(-2)
+      expect(text_rows).to eq ['  three', '  four', 'l1']
+
+      window.add_string('l4')
+
+      expect(text_rows).to eq %w[l1 l2 l3]
+      expect(window.buffer_pos).to eq 1
+    end
+
+    it 'keeps a selection on its text when an eviction drops several rows' do
+      ['one two three four', 'l1', 'l2', 'l3'].each { |line| window.add_string(line) }
+      line_id, = window.selection_anchor_at(window.content_top + 1, 0)
+      window.highlight_selection(line_id, 0, line_id, 2)
+
+      window.add_string('l4')
+
+      expect(text_rows).to eq %w[l2 l3 l4]
+      expect(window.attrs_at(window.content_top, 0) & Curses::A_REVERSE).to eq Curses::A_REVERSE
+      expect(window.extract_selection(line_id, 0, line_id, 2)).to eq 'l2'
+    end
+  end
+
   context 'with a text window' do
     let(:window) { build("<window class='text' top='0' left='0' height='3' width='21' value='main'/>") }
 
     it_behaves_like 'a line-buffer text area'
+  end
+
+  context 'with a text window keeping 4 lines' do
+    let(:window) { build("<window class='text' top='0' left='0' height='3' width='12' value='main' buffer-size='4'/>") }
+
+    it_behaves_like 'a text area with a capped buffer'
+  end
+
+  context 'with a tabbed window keeping 4 lines per tab' do
+    let(:window) { build("<window class='tabbed' top='0' left='0' height='4' width='12' tabs='main' buffer-size='4'/>") }
+
+    it_behaves_like 'a text area with a capped buffer'
   end
 
   context 'with a tabbed window' do
