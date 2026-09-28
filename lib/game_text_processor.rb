@@ -64,6 +64,11 @@ class GameTextProcessor
   # logging flags them.
   STREAM_TAG_PATTERN = /<(?:pushStream|popStream|clearStream)\b[^>]*>/
 
+  # A <pushBold/> or <popBold/> tag, in any form the tag dispatcher reads
+  # as one; captures +push+ or +pop+. Used to tell whether a line leaves
+  # bold open (see #carry_bold).
+  BOLD_TAG_PATTERN = /<(push|pop)Bold\b[^>]*>/
+
   # Longest gag pattern source quoted in a gag log line. Some gags are long
   # alternations; the prefix is enough to find the gag in the settings XML.
   GAG_LOG_PATTERN_LIMIT = 80
@@ -203,16 +208,8 @@ class GameTextProcessor
     # so a non-ASCII byte can't raise Encoding::CompatibilityError against
     # the UTF-8 gag and highlight patterns loaded from settings.
     line.force_encoding(Encoding::UTF_8).scrub!
-
-    if line =~ %r{^<popBold/>}
-      @bold_next_line = false
-    elsif @bold_next_line == true
-      line = "<pushBold/>#{line.chomp}<popBold/>\n"
-    elsif line =~ %r{<pushBold/>\r\n$}
-      @bold_next_line = true
-    end
-
     line.chomp!
+    line = carry_bold(line)
 
     gagged = multiline_gag?(line)
     if !gagged && (gag = GagPatterns.match_general(line))
@@ -298,6 +295,31 @@ class GameTextProcessor
     raise
   rescue StandardError => e
     ProfanityLog.write('game_text_processor', "error processing line #{line.inspect}: #{e.message}", backtrace: e.backtrace)
+  end
+
+  # Carry bold across line ends. The game can open bold on one line and
+  # close it on a later one, but the tag parser drops any bold region still
+  # open at the end of a line (it colors nothing). So a line that leaves
+  # bold open gets a closing <popBold/>, and each following line gets an
+  # opening <pushBold/>, until a line closes bold. Whichever bold tag comes
+  # last on the line decides whether it leaves bold open. A prompt ends
+  # carried bold, as it ends an open stream.
+  #
+  # Runs before gags, so a gagged line still opens or closes bold. A blank
+  # line is left blank (it is where a pending prompt shows).
+  #
+  # @param line [String] server line, line ending removed
+  # @return [String] the line with carried bold made explicit
+  # @api private
+  def carry_bold(line)
+    return line if line.empty?
+
+    # Carried bold closed at the very start of the line colors nothing.
+    line = "<pushBold/>#{line}" if @bold_next_line && !line.start_with?('<popBold/>')
+    open = line.scan(BOLD_TAG_PATTERN).last == ['push']
+    line = "#{line}<popBold/>" if open
+    @bold_next_line = open && !line.match?(/<prompt\b/)
+    line
   end
 
   # Parse a room subtitle attribute into a clean room title string.
