@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'profanity_settings'
+
 # selection_manager.rb: Mouse text selection and clipboard operations for ProfanityFE.
 
 # Manages mouse text selection state and clipboard operations.
@@ -16,7 +18,7 @@
 # The highlight persists after release so the user can see what was
 # selected. It is cleared on the next mouse press or link click.
 # Selected text is copied to the system clipboard (pbcopy/xclip/wl-copy),
-# OSC 52 (for remote/SSH sessions), and /tmp/profanity_selection.txt.
+# OSC 52 (for remote/SSH sessions), and ~/.profanity/selection.txt.
 module SelectionManager
   # Minimum seconds between highlight redraws during a live drag.
   # Motion events can flood; redrawing every one of them is what caused
@@ -232,7 +234,7 @@ module SelectionManager
     #
     # Tries platform-native clipboard commands first (pbcopy on macOS,
     # xclip or wl-copy on Linux), then OSC 52 for remote/SSH sessions,
-    # and always writes to /tmp/profanity_selection.txt as a fallback.
+    # and always writes to ~/.profanity/selection.txt as a fallback.
     #
     # @param text [String] the text to copy
     # @return [void]
@@ -289,8 +291,10 @@ module SelectionManager
         nil # /dev/tty may not be available in all environments
       end
 
-      # Always write to file as fallback
-      File.write('/tmp/profanity_selection.txt', text)
+      # Always write to file as fallback: per-user, owner-only, and never
+      # through a symlink (a shared /tmp file exposed the text to other
+      # users and let them redirect the write).
+      File.write(ProfanitySettings.file('selection.txt'), text, perm: 0o600, flags: File::NOFOLLOW)
     rescue StandardError => e
       ProfanityLog.write('Clipboard', "Error: #{e.message}")
     end
