@@ -219,4 +219,68 @@ RSpec.describe TabbedTextWindow do
       expect(text_rows).to eq %w[l6 l7 l8]
     end
   end
+
+  context 'when the window is one row high' do
+    # The tab bar takes the only row, leaving no rows for text. The
+    # height follows the terminal (24 rows in specs), so a resize can
+    # make the window taller.
+    let(:window_manager) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='tabbed' top='0' left='0' height='lines-23' width='12' tabs='main'/></layout>
+      XML
+      WindowManager.new.tap { |manager| manager.load_layout('test') }
+    end
+    let(:window) { window_manager.stream['main'] }
+
+    # Each example starts from a correctly drawn tab bar.
+    before do
+      %w[l1 l2 l3].each { |line| window.add_string(line) }
+      window.redraw
+    end
+
+    it 'shows just the tab bar as lines arrive' do
+      window.add_string('l4')
+
+      expect(window.rows).to eq [' 1:main']
+      expect((0...window.maxx).select { |x| window.attrs_at(0, x).anybits?(Curses::A_REVERSE) }).to eq (0..7).to_a
+    end
+
+    it 'shows just the tab bar when scrolled back and forward' do
+      window.scroll(-1)
+      expect(window.rows).to eq [' 1:main']
+
+      window.scroll(1)
+      expect(window.rows).to eq [' 1:main']
+    end
+
+    it 'shows just the tab bar when a drag reaches its top row' do
+      window.drag_auto_scroll(0)
+
+      expect(window.rows).to eq [' 1:main']
+    end
+
+    it 'shows just the tab bar when text is highlighted and the highlight cleared' do
+      window.highlight_selection(1, 0, 3, 2)
+      expect(window.rows).to eq [' 1:main']
+
+      window.clear_highlight
+      expect(window.rows).to eq [' 1:main']
+    end
+
+    it 'shows just the tab bar after the terminal is resized' do
+      window_manager.resize(nil)
+
+      expect(window.rows).to eq [' 1:main']
+    end
+
+    it 'shows the kept lines once a resize makes the window taller' do
+      window.scroll(-1)
+      window.add_string('l4')
+      allow(Curses).to receive(:lines).and_return(27)
+
+      window_manager.resize(nil)
+
+      expect(window.rows).to eq [' 1:main', 'l2', 'l3', 'l4']
+    end
+  end
 end

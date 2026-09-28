@@ -70,13 +70,13 @@ module LineBuffered
 
   # Scroll the shown buffer by the given number of lines.
   # Negative values scroll up (toward older content), positive values scroll
-  # down (toward newer content).
+  # down (toward newer content). A text area with no rows doesn't scroll.
   #
   # @param scroll_num [Integer] lines to scroll (negative = up, positive = down)
   # @return [void]
   def scroll(scroll_num)
     line_buffer = shown_buffer
-    return unless line_buffer
+    return unless line_buffer && content_height.positive?
 
     height = content_height
     if scroll_num < 0

@@ -148,9 +148,11 @@ module Curses
       nil
     end
 
+    # Like wsetscrreg, rejects a region outside the window or of fewer
+    # than two rows and keeps the previous one.
     def setscrreg(top, bottom)
       log(:setscrreg, top, bottom)
-      @region = [top, bottom]
+      @region = [top, bottom] if top >= 0 && bottom < @maxy && bottom > top
       nil
     end
 

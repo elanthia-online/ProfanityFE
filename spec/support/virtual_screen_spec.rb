@@ -99,6 +99,25 @@ RSpec.describe Curses::Window do
       win.addstr("x\ny")
       expect(screen(win)).to eq(rows: ['', '', 'x', 'y'], cursor: [3, 1])
     end
+
+    it 'rejects a scrolling region of one row, so scrl moves the whole window' do
+      win = window(3, 5)
+      win.scrollok(true)
+      win.addstr("T\n2\n3")
+      win.setscrreg(1, 1)
+      win.scrl(1)
+      expect(screen(win)).to eq(rows: ['2', '3', ''], cursor: [2, 1])
+    end
+
+    it 'keeps the previous scrolling region when setscrreg is rejected' do
+      win = window(4, 5)
+      win.scrollok(true)
+      win.addstr("T\n2\n3\n4")
+      win.setscrreg(1, 3)
+      win.setscrreg(2, 2)
+      win.scrl(1)
+      expect(screen(win)).to eq(rows: ['T', '3', '4', ''], cursor: [3, 1])
+    end
   end
 
   describe 'moving the cursor' do
