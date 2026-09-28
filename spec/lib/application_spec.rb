@@ -573,15 +573,18 @@ RSpec.describe Application do
       expect { app.send(:tick_countdowns) }.not_to raise_error
     end
 
-    it 'handles multiple countdown windows' do
+    it 'updates every countdown window and reports a change from any of them' do
+      no_change = Object.new
+      def no_change.update = false
       stun_window = Object.new
-      def stun_window.update = true
+      def stun_window.updates = @updates ||= 0
+      def stun_window.update = (@updates = updates + 1).positive?
       app.window_mgr.instance_variable_set(:@countdown, {
-        'roundtime' => countdown_window,
+        'roundtime' => no_change,
         'stunned'   => stun_window,
       })
       expect(app.send(:tick_countdowns)).to be true
-      expect(countdown_window.updates.length).to eq 1
+      expect(stun_window.updates).to eq 1
     end
 
     it 'returns false when all countdowns return false (no change)' do

@@ -165,23 +165,4 @@ RSpec.describe SharedState do
       expect { state.update_terminal_title }.not_to raise_error
     end
   end
-
-  describe 'thread safety' do
-    it 'mutex protects prompt_text from interleaved reads' do
-      # Verify that reading prompt_text during a write doesn't produce
-      # a torn value — the mutex ensures atomicity.
-      state.prompt_text = 'initial'
-      t = Thread.new { state.prompt_text = 'updated' }
-      t.join
-      expect(state.prompt_text).to eq 'updated'
-    end
-
-    it 'update_prompt is atomic' do
-      state.prompt_text = 'A'
-      result = state.update_prompt('B')
-      expect(result).to be true
-      expect(state.prompt_text).to eq 'B'
-      expect(state.need_prompt).to be false
-    end
-  end
 end

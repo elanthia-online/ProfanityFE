@@ -249,7 +249,8 @@ RSpec.describe WindowManager, '#load_layout' do
       expect([main.maxy, main.maxx, main.begy, main.begx]).to eq [14, 40, 4, 20]
     end
 
-    # The layout parser is lenient; an eval-based parser would size these to 0.
+    # Characterization: the layout parser is lenient on purpose (documented on
+    # SafeArithmetic.evaluate); an eval-based parser would size these to 0.
     it 'treats an unclosed parenthesis as closed and a missing operand as 0' do
       load("<window class='text' top='0' left='0' height='(lines-14' width='cols/2+' value='main'/>")
       main = window_manager.stream['main']

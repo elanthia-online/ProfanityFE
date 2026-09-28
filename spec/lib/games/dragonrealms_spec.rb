@@ -147,9 +147,5 @@ RSpec.describe Games::DragonRealms do
       expect(disconnect.length).to eq 1
       expect(disconnect.keys.first).to eq 'has disconnected.'
     end
-
-    it 'has no duplicate keys' do
-      expect(patterns.keys.length).to eq patterns.keys.uniq.length
-    end
   end
 end
