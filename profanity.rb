@@ -76,6 +76,7 @@ end
 
 # Initialize curses
 require_relative 'lib/curses_setup'
+CursesSetup.start
 boot_mark('curses init') if BOOT_PROFILE
 
 # Load global constants (HIGHLIGHT, PRESET, LAYOUT, etc.)
