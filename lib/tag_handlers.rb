@@ -148,10 +148,12 @@ module TagHandlers
   # prompt is not taken for the game's copy of it and dropped.
   def handle_prompt_tag(xml, _text_buffer)
     @last_stream_text = nil
-    return unless (m = xml.match(%r{^<prompt time=(?<q>'|")(?<time>[0-9]+)\k<q>.*?>(?<text>.*?)&gt;</prompt>$}))
+    # time must be the first attribute; the text starts after the first >.
+    return unless xml.start_with?('<prompt time=') && (time = XmlTokenizer.attrs(xml)['time'])&.match?(/\A[0-9]+\z/)
+    return unless (m = xml.match(%r{\A.*?>(?<text>.*?)&gt;</prompt>$}))
 
     unless @state.skip_server_time_offset
-      @state.server_time_offset = Time.now.to_f - m[:time].to_f
+      @state.server_time_offset = Time.now.to_f - time.to_f
       @state.skip_server_time_offset = true
     end
 
@@ -199,9 +201,9 @@ module TagHandlers
   # The countdown display is polled by Application#tick_countdowns
   # on every input loop iteration (~100ms).
   def handle_roundtime_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<roundTime value=(?<q>'|")(?<value>[0-9]+)\k<q>/))
+    return unless (value = countdown_value(xml, '<roundTime value='))
 
-    @event_bus.emit(:countdown_update, id: 'roundtime', end_time: m[:value].to_i)
+    @event_bus.emit(:countdown_update, id: 'roundtime', end_time: value)
     @need_update = true
   end
 
@@ -209,10 +211,23 @@ module TagHandlers
   # The countdown display is polled by Application#tick_countdowns
   # on every input loop iteration (~100ms).
   def handle_casttime_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<castTime value=(?<q>'|")(?<value>[0-9]+)\k<q>/))
+    return unless (value = countdown_value(xml, '<castTime value='))
 
-    @event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: m[:value].to_i)
+    @event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: value)
     @need_update = true
+  end
+
+  # The end time a <roundTime> or <castTime> tag carries.
+  #
+  # @param xml [String] the tag
+  # @param prefix [String] how the tag must start: its value attribute first
+  # @return [Integer, nil] the value, or nil unless the tag starts with
+  #   +prefix+ and the value is all digits
+  def countdown_value(xml, prefix)
+    return unless xml.start_with?(prefix)
+
+    value = XmlTokenizer.attrs(xml)['value']
+    value.to_i if value&.match?(/\A[0-9]+\z/)
   end
 
   # Handle <compass>...<dir value="n"/>...</compass> paired tag.
@@ -335,9 +350,9 @@ module TagHandlers
   # Handle <style id='...'> tag (both opening and "closing" via empty id).
   # The game protocol uses <style id=""> as a close marker rather than </style>.
   def handle_style_tag(xml, text_buffer)
-    return unless (m = xml.match(/^<style id=(?<q>'|")(?<id>.*?)\k<q>/))
+    # id must be the first attribute.
+    return unless xml.start_with?('<style id=') && (style_id = XmlTokenizer.attrs(xml)['id'])
 
-    style_id = m[:id]
     if style_id.empty?
       # Empty id = closing style
       if @room_capture_mode == :title || @room_capture_mode == :desc
@@ -530,11 +545,12 @@ module TagHandlers
   # +https://www.play.net/+ (e.g. +@evil.example/+, which becomes userinfo,
   # or +.evil.example/+, which extends the host) is logged and ignored.
   def handle_launch_url(xml, _text_buffer)
-    return unless (m = xml.match(/^<LaunchURL src="(?<src>[^"]+)"/))
+    # src must be the first attribute, in double quotes.
+    return unless xml.start_with?('<LaunchURL src="') && (src = XmlTokenizer.attrs(xml)['src']) && !src.empty?
 
-    url = "#{LAUNCH_URL_BASE}#{m[:src]}"
+    url = "#{LAUNCH_URL_BASE}#{src}"
     unless play_net_url?(url)
-      ProfanityLog.write('launch_url', "ignored LaunchURL outside play.net: #{m[:src].inspect}")
+      ProfanityLog.write('launch_url', "ignored LaunchURL outside play.net: #{src.inspect}")
       return
     end
 

@@ -68,6 +68,30 @@ RSpec.describe LinkExtractor do
       # GS protocol uses double quotes for exist: exist="..."
       expect(described_class.extract_cmd("<a exist='12345'>")).to be_nil
     end
+
+    # Which spellings of a link tag give which command: quote style,
+    # attribute order, names that merely contain cmd/exist/noun, empty values.
+    it 'reads cmd, exist and noun wherever they appear in the tag' do
+      {
+        "<d  cmd='go'>"               => 'go',
+        "<d x='1' cmd='go'>"          => 'go',
+        "<d xcmd='go'>"               => 'go',
+        %(<d title="cmd='go'">)       => 'go',
+        "<d cmd='' cmd='go'>"         => 'go',
+        "<d cmd=''>"                  => nil,
+        '<a exist="1" noun="sword">'  => 'look #1',
+        '<a noun="sword" exist="1">'  => 'look #1',
+        %(<a exist="1" noun='sword'>) => '_drag #1',
+        '<a exist="1" xnoun="sword">' => 'look #1',
+        '<a pexist="1">'              => '_drag #1',
+        '<a exist="">'                => nil,
+        %(<a exist="1" noun="">)      => '_drag #1',
+        "<a exist='1' cmd='go'>"      => 'go',
+        '<a exist="1" cmd="">'        => '_drag #1'
+      }.each do |tag, cmd|
+        expect(described_class.extract_cmd(tag)).to eq(cmd), tag
+      end
+    end
   end
 
   describe '.extract_links' do

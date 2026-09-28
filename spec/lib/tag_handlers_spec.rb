@@ -130,6 +130,10 @@ RSpec.describe TagHandlers do
       host.dispatch_tag('<pushBold/>', buf)
     end
 
+    it 'has a handler for every paired tag but inv, whose content is only swallowed' do
+      expect(XmlTokenizer::PAIRED_TAGS - described_class::TAG_DISPATCH.keys).to eq ['inv']
+    end
+
     it 'dispatches closing tags to CLOSING_TAG_DISPATCH' do
       buf = String.new
       expect(host).to receive(:handle_close_preset).with('</preset>', buf)
@@ -986,6 +990,213 @@ RSpec.describe TagHandlers do
 
       link = host.line_colors.find { |c| c[:cmd] }
       expect(link[:cmd]).to eq 'go #12345 door'
+    end
+  end
+
+  # Which spellings of each tag a handler accepts: quote style, attribute
+  # order, spacing, attribute names that merely contain the one read, extra
+  # attributes. Each row is what the handler does with that exact tag.
+  describe 'attribute acceptance' do
+    # @param tags [Hash{String => Object}] tag => expected result
+    # @yieldparam host [TagHandlerHost] a fresh host for each tag
+    # @yieldparam tag [String] the tag to dispatch
+    # @yieldreturn [Object] what the handler did
+    def expect_each(tags)
+      tags.each do |tag, expected|
+        fresh = TagHandlerHost.new(wm: wm, state: SharedState.new.tap { |s| s.skip_server_time_offset = true }, event_bus: EventBus.new)
+        actual = yield(fresh, tag)
+        expect(actual).to eq(expected), "#{tag} gave #{actual.inspect}, expected #{expected.inspect}"
+      end
+    end
+
+    # @return [Array<Hash>] every event of +type+ emitted while dispatching +tag+
+    def events_of(host, tag, type)
+      events = []
+      host.event_bus.on(type) { |data| events << data }
+      host.dispatch_tag(tag, String.new)
+      events
+    end
+
+    it 'reads prompt time only as the first attribute, after one space' do
+      expect_each(
+        '<prompt time="1">H&gt;</prompt>'       => 'H>',
+        "<prompt time='1'>H&gt;</prompt>"       => 'H>',
+        "<prompt time='1' x='y'>H&gt;</prompt>" => 'H>',
+        "<prompt x='y' time='1'>H&gt;</prompt>" => nil,
+        "<prompt  time='1'>H&gt;</prompt>"      => nil,
+        "<prompt ptime='1'>H&gt;</prompt>"      => nil,
+        "<prompt time='1a'>H&gt;</prompt>"      => nil,
+        "<prompt time=''>H&gt;</prompt>"        => nil
+      ) { |h, tag| events_of(h, tag, :prompt_changed).last&.fetch(:text) }
+    end
+
+    it 'reads roundTime and castTime values only as the first attribute, after one space' do
+      tags = {
+        "<TAG value='5'/>"           => 5,
+        '<TAG value="5"/>'           => 5,
+        "<TAG value='5' value='6'/>" => 5,
+        "<TAG x='1' value='5'/>"     => nil,
+        "<TAG  value='5'/>"          => nil,
+        "<TAG pvalue='5'/>"          => nil,
+        "<TAG value='-5'/>"          => nil,
+        "<TAG value=''/>"            => nil
+      }
+      expect_each(tags.transform_keys { |t| t.gsub('TAG', 'roundTime') }) { |h, tag| events_of(h, tag, :countdown_update).last&.fetch(:end_time) }
+      expect_each(tags.transform_keys { |t| t.gsub('TAG', 'castTime') }) { |h, tag| events_of(h, tag, :countdown_update).last&.fetch(:secondary_end_time) }
+    end
+
+    it 'reads the style id only as the first attribute, after one space' do
+      expect_each(
+        "<style id='roomName'/>"       => :title,
+        '<style id="roomName"/>'       => :title,
+        "<style id='roomName' x='1'/>" => :title,
+        "<style x='1' id='roomName'/>" => nil,
+        "<style  id='roomName'/>"      => nil,
+        "<style pid='roomName'/>"      => nil
+      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.room_capture_mode } }
+    end
+
+    it 'reads LaunchURL src only double-quoted, as the first attribute, after one space' do
+      expect_each(
+        '<LaunchURL src="/p"/>'        => 'https://www.play.net/p',
+        "<LaunchURL src='/p'/>"        => nil,
+        %(<LaunchURL x="1" src="/p"/>) => nil,
+        '<LaunchURL  src="/p"/>'       => nil,
+        '<LaunchURL src=""/>'          => nil
+      ) { |h, tag| events_of(h, tag, :launch_url).last&.fetch(:url) }
+    end
+
+    it 'reads compass dir values only double-quoted, as the first attribute, after one space' do
+      expect_each(
+        %(<compass><dir value="n"/><dir value="s"/></compass>)  => %w[n s],
+        "<compass><dir value='n'/><dir value=\"s\"/></compass>" => %w[s],
+        %(<compass><dir x="1" value="n"/></compass>)            => [],
+        %(<compass><dir  value="n"/></compass>)                 => [],
+        %(<compass><dir value=""/></compass>)                   => [''],
+        %(<compass><dirx value="n"/></compass>)                 => []
+      ) { |h, tag| events_of(h, tag, :compass_update).last[:dirs] }
+    end
+
+    it 'reads indicator id and visible only in that order, one space apart' do
+      expect_each(
+        "<indicator id='IconSTUNNED' visible='y'/>"       => ['stunned', true],
+        %(<indicator id="IconSTUNNED" visible='n'/>)      => ['stunned', false],
+        "<indicator visible='y' id='IconSTUNNED'/>"       => nil,
+        "<indicator id='IconSTUNNED'  visible='y'/>"      => nil,
+        "<indicator x='1' id='IconSTUNNED' visible='y'/>" => nil,
+        "<indicator id='Iconstunned' visible='y'/>"       => nil,
+        "<indicator id='IconSTUNNED' visible='yes'/>"     => nil
+      ) { |h, tag| events_of(h, tag, :countdown_active).last&.values_at(:id, :active) }
+    end
+
+    it 'reads image id and name only in that order, one space apart' do
+      expect_each(
+        "<image id='chest' name='Injury2'/>"  => ['chest', 2],
+        %(<image id="chest" name='Injury2'/>) => ['chest', 2],
+        "<image name='Injury2' id='chest'/>"  => nil,
+        "<image id='chest'  name='Injury2'/>" => nil,
+        "<image id='elbow' name='Injury2'/>"  => nil
+      ) { |h, tag| events_of(h, tag, :indicator_update).last&.values_at(:id, :value) }
+    end
+
+    it 'reads progressBar attributes only single-quoted, in id/value/text order, one space apart' do
+      expect_each(
+        "<progressBar id='health' value='75' text='health 75%'/>"       => { id: 'health', value: 75, max: 100 },
+        %(<progressBar id="health" value="75" text="health 75%"/>)      => nil,
+        "<progressBar value='75' id='health' text='health 75%'/>"       => nil,
+        "<progressBar id='health'  value='75' text='health 75%'/>"      => nil,
+        "<progressBar id='pbarStance' value='80'/>"                     => { id: 'stance', value: 80, max: 100 },
+        "<progressBar id='encumlevel' value='20' text='Overloaded'/>"   => { id: 'encumbrance', value: 110, max: 110 },
+        "<progressBar id='mindState' value='5' text='x'/>"              => { id: 'mind', value: 5, max: 110 },
+        "<progressBar id='health' value='9' text='health 456/456'/>"    => { id: 'health', value: 456, max: 456 },
+        # A value can run past its closing quote to reach the next attribute.
+        "<progressBar id='mindState' value='5' b' text='x'/>"           => { id: 'mind', value: 5, max: 110 },
+        "<progressBar id='a' b' value='9' text='x 1/2'/>"               => { id: "a' b", value: 1, max: 2 },
+        # Of two ids, the value runs from the first to the second.
+        "<progressBar id='x' id='health' value='9' text='health 4/5'/>" => { id: "x' id='health", value: 4, max: 5 }
+      ) { |h, tag| events_of(h, tag, :progress_update).last }
+    end
+
+    it 'reads arbProgress attributes only single-quoted, in id/max/current/label/colors order' do
+      expect_each(
+        "<arbProgress id='bar' max='10' current='5' label='Foo' colors='red,blue'/>" =>
+          { id: 'bar', value: 5, max: 10, label: 'Foo', bg: ['red'], fg: ['blue'] },
+        %(<arbProgress id="bar" max='10' current='5'/>) => nil,
+        "<arbProgress max='10' id='bar' current='5'/>" => nil,
+        "<arbProgress id='bar' max='10' current='5' colors='red,blue' label='Foo'/>" => { id: 'bar', value: 5, max: 10, bg: ['red'], fg: ['blue'] },
+        %(<arbProgress id='bar' max='10' current='5' label="Foo"/>) => { id: 'bar', value: 5, max: 10 },
+        %(<arbProgress id='bar' max='10' current='5' colors="red,blue"/>) => { id: 'bar', value: 5, max: 10 },
+        # An empty label swallows the next attribute.
+        "<arbProgress id='bar' max='10' current='5' label='' colors='red,blue'/>" => { id: 'bar', value: 5, max: 10, label: "' colors=" }
+      ) { |h, tag| events_of(h, tag, :progress_update).last }
+    end
+
+    it 'reads the preset id only as the only attribute, running to the last quote' do
+      PRESET['speech'] = ['aa', nil]
+      PRESET["a'b"] = ['bb', nil]
+      expect_each(
+        "<preset id='speech'>"       => { start: 0, fg: 'aa', bg: nil },
+        '<preset id="speech">'       => { start: 0, fg: 'aa', bg: nil },
+        "<preset id='speech' x='1'>" => { start: 0 },
+        "<preset x='1' id='speech'>" => nil,
+        "<preset id='speech'/>"      => nil,
+        "<preset id='a'b'>"          => { start: 0, fg: 'bb', bg: nil }
+      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_preset.last } }
+    end
+
+    it 'reads a stream id wherever id= appears, even inside another name or value' do
+      expect_each(
+        "<pushStream id='combat'/>"                    => 'combat',
+        '<pushStream id="combat"/>'                    => 'combat',
+        "<pushStream x='1' id='combat'/>"              => 'combat',
+        "<pushStream pid='combat'/>"                   => 'combat',
+        "<component x-id='room objs' id='room desc'/>" => 'room objs',
+        %(<compDef title="id='exp'" id='room'/>)       => 'exp',
+        "<pushStream junk id='combat'/>"               => 'combat'
+      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.current_stream } }
+    end
+
+    it 'reads a room subtitle wherever subtitle= appears' do
+      expect_each(
+        "<component id='room' subtitle=' - [Hall]'/>"  => 'Hall',
+        "<component subtitle=' - [Hall]' id='room'/>"  => 'Hall',
+        "<component id='room' xsubtitle=' - [Hall]'/>" => 'Hall'
+      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.state.room_title } }
+    end
+
+    it 'reads a popStream id after any non-word character' do
+      expect_each(
+        "<popStream id='combat'/>"          => 'percWindow',
+        %(<popStream id="combat"/>)         => 'percWindow',
+        "<popStream x-id='combat'/>"        => 'percWindow',
+        "<popStream pid='combat'/>"         => 'combat',
+        %(<popStream title="id='combat'"/>) => 'percWindow'
+      ) do |h, tag|
+        %w[percWindow combat familiar].each { |id| h.dispatch_tag("<pushStream id='#{id}'/>", String.new) }
+        h.dispatch_tag(tag, String.new)
+        h.current_stream
+      end
+    end
+
+    it 'clears the spell window for id=percWindow in any quotes, even mismatched' do
+      expect_each(
+        '<clearStream id="percWindow"/>'  => 1,
+        "<clearStream id='percWindow'/>"  => 1,
+        %(<clearStream id="percWindow'/>) => 1,
+        "<clearStream xid='percWindow'/>" => 1,
+        "<clearStream id='percWindowX'/>" => 0
+      ) { |h, tag| events_of(h, tag, :clear_spells).size }
+    end
+
+    it 'reads a room streamWindow only with id first and single-quoted' do
+      expect_each(
+        %(<streamWindow id='room' subtitle=" - [Hall]"/>)              => 'Hall',
+        %(<streamWindow id='room' title='Room' subtitle=' - [Hall]'/>) => 'Hall',
+        %(<streamWindow id="room" subtitle=" - [Hall]"/>)              => '',
+        %(<streamWindow subtitle=" - [Hall]" id='room'/>)              => '',
+        %(<streamWindow id='room' xsubtitle=" - [Hall]"/>)             => 'Hall',
+        %(<streamWindow id='room' title="subtitle=' - [Hall]'"/>)      => 'Hall'
+      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.state.room_title } }
     end
   end
 
