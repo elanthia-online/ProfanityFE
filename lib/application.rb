@@ -973,7 +973,9 @@ class Application
   # Copy the finished selection and show brief feedback in the main window.
   def finalize_selection
     chars = SelectionManager.end_selection
-    write_to_client("* [copied #{chars} chars]") if chars&.positive?
+    # write_to_client flushes when it shows the notice
+    return if chars&.positive? && write_to_client("* [copied #{chars} chars]")
+
     CursesRenderer.doupdate
   end
 
