@@ -6,9 +6,11 @@
 # {Application#execute_command} dispatches through that list, and +.help+
 # prints each command's help lines in that order.
 #
-# A command matches case-insensitively and only as a whole word: its name
-# followed by whitespace or the end of the input, so the Lich script
-# +.tabulate+ is not +.tab+. What may follow the name depends on +args+:
+# A command matches case-insensitively, only at the start of the input and
+# only as a whole word: its name followed by whitespace or the end of the
+# input, so the Lich script +.tabulate+ is not +.tab+. Input that spans
+# lines (from a macro containing a newline) is one command, so a dot-command
+# on a later line is not run. What may follow the name depends on +args+:
 #
 # - +:none+: the handler gets no argument, and any text after the name is
 #   ignored.
@@ -51,11 +53,11 @@ DotCommand = Data.define(:name, :args, :help, :handler) do
     name = Regexp.escape(self.name)
     case args
     when :none
-      [] if cmd.match?(/^\.#{name}(?=\s|\z)/i)
+      [] if cmd.match?(/\A\.#{name}(?=\s|\z)/i)
     when :optional
-      (m = cmd.match(/^\.#{name}(?=\s|\z)(?:\s+(?<arg>.+))?/i)) && [m[:arg]&.strip]
+      (m = cmd.match(/\A\.#{name}(?=\s|\z)(?:\s+(?<arg>.+))?/i)) && [m[:arg]&.strip]
     when :required
-      (m = cmd.match(/^\.#{name}\s+(?<arg>.+)/i)) && [m[:arg]]
+      (m = cmd.match(/\A\.#{name}\s+(?<arg>.+)/i)) && [m[:arg]]
     end
   end
 end

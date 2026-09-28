@@ -165,10 +165,11 @@ class Application
   #
   # The first of {DOT_COMMANDS} that matches (see {DotCommand#match}) is
   # handled locally; everything else is forwarded to the server with a
-  # leading '.' replaced by ';'. A dot-command matches case-insensitively
-  # and only as a whole word (its name followed by whitespace or end of
-  # input), so Lich scripts such as .arrows or .tabulate still reach the
-  # server.
+  # leading '.' replaced by ';'. A dot-command matches case-insensitively,
+  # at the start of the input and only as a whole word (its name followed by
+  # whitespace or end of input), so Lich scripts such as .arrows or
+  # .tabulate still reach the server, and a dot-command on a later line of
+  # multi-line input (from a macro containing a newline) is not run.
   #
   # @param cmd [String] the command text to execute
   # @return [void]
