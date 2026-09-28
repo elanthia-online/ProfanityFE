@@ -1052,6 +1052,31 @@ RSpec.describe Application do
 
       expect(saved_masks).to eq [[wheel_up, Curses::REPORT_MOUSE_POSITION]]
     end
+
+    # Every event of the middle (2) and right (3) buttons.
+    def middle_and_right_clicks(times)
+      events = %w[2 3].flat_map do |button|
+        %w[PRESSED RELEASED CLICKED DOUBLE_CLICKED TRIPLE_CLICKED].map { |event| Curses.const_get("BUTTON#{button}_#{event}") }
+      end
+      times.times { events.each { |bstate| mouse_event(bstate) } }
+    end
+
+    { 'a wheel button' => [false, 0x200000], 'pointer motion' => [true, Curses::REPORT_MOUSE_POSITION] }
+      .each do |reported_as, (wheel_down_is_motion, wheel_down)|
+      it "learns the wheel past middle and right clicks, so they do not scroll (wheel-down as #{reported_as})" do
+        stub_const('MouseScroll::WHEEL_DOWN_IS_MOTION', wheel_down_is_motion)
+        wheel_up = 0x10000
+        app.execute_command('.scrollcfg')
+        middle_and_right_clicks(20)
+        mouse_event(wheel_up, times: 20)
+        middle_and_right_clicks(20)
+        mouse_event(wheel_down, times: 20)
+
+        middle_and_right_clicks(1)
+        expect(window.rows).to eq %w[l2 l3 l4]
+        expect(saved_masks).to eq [[wheel_up, wheel_down]]
+      end
+    end
   end
 
   describe 'input loop' do

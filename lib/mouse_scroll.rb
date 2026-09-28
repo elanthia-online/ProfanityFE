@@ -35,12 +35,12 @@ class MouseScroll
   # highlight-on-release).
   MOTION_EVENTS = defined?(Curses::REPORT_MOUSE_POSITION) ? Curses::REPORT_MOUSE_POSITION : 0
 
-  # Bitmask for every button-1 (left button) event. A left click or drag
-  # is never the scroll wheel, so calibration ignores these.
-  BUTTON1_EVENTS = %i[BUTTON1_PRESSED BUTTON1_RELEASED BUTTON1_CLICKED
-                      BUTTON1_DOUBLE_CLICKED BUTTON1_TRIPLE_CLICKED]
-                   .select { |name| Curses.const_defined?(name) }
-                   .inject(0) { |mask, name| mask | Curses.const_get(name) }
+  # Bitmask for every event of buttons 1 to 3 (left, middle and right).
+  # A click or drag is never the scroll wheel, so calibration ignores these.
+  BUTTON_EVENTS = (1..3).to_a.product(%w[PRESSED RELEASED CLICKED DOUBLE_CLICKED TRIPLE_CLICKED])
+                  .map { |button, event| :"BUTTON#{button}_#{event}" }
+                  .select { |name| Curses.const_defined?(name) }
+                  .inject(0) { |mask, name| mask | Curses.const_get(name) }
 
   # Whether ncurses reports a wheel-down as pointer motion. Its version 1
   # mouse ABI (six bits per button, as in macOS's system ncurses) has no
@@ -293,13 +293,13 @@ class MouseScroll
   end
 
   # Whether a calibration event could be the wheel direction being learned.
-  # A left-button event never is, and neither is pointer motion, except a
+  # A button 1 to 3 event never is, and neither is pointer motion, except a
   # wheel-down where ncurses reports it as motion ({WHEEL_DOWN_IS_MOTION}).
   #
   # @param bstate [Integer] the mouse button state bitmask
   # @return [Boolean]
   def wheel_candidate?(bstate)
-    return false if bstate.anybits?(BUTTON1_EVENTS)
+    return false if bstate.anybits?(BUTTON_EVENTS)
     return true if bstate.nobits?(MOTION_EVENTS)
 
     WHEEL_DOWN_IS_MOTION && @config_state == :down
