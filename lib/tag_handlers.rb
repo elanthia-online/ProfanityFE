@@ -23,6 +23,9 @@ module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
 
+  # progressBar ids of the DragonRealms vitals, whose text is a percentage.
+  DR_VITALS = %w[health mana spirit stamina concentration].freeze
+
   # Body parts (and +nsys+) an <image> tag can report on.
   IMAGE_IDS = %w[back leftHand rightHand head rightArm abdomen leftEye leftArm chest rightLeg neck leftLeg nsys rightEye].freeze
 
@@ -243,37 +246,42 @@ module TagHandlers
   # Handle <progressBar .../> tags for vitals, stance, encumbrance, mind.
   # Dispatches to game-specific sub-patterns based on id and text format.
   def handle_progress_bar_tag(xml, _text_buffer)
-    if (m = xml.match(/^<progressBar id='encumlevel' value='(?<value>[0-9]+)' text='(?<text>.*?)'/))
-      value = m[:text] == 'Overloaded' ? 110 : m[:value].to_i
+    id, value, text = XmlTokenizer.attrs(xml).values_at('id', 'value', 'text')
+    return unless id && value
+
+    number = value.match?(/\A[0-9]+\z/)
+    if id == 'encumlevel' && number && text
+      value = text == 'Overloaded' ? 110 : value.to_i
       @event_bus.emit(:progress_update, id: 'encumbrance', value: value, max: 110)
       @need_update = true
-    elsif (m = xml.match(/^<progressBar id='pbarStance' value='(?<value>[0-9]+)'/))
-      @event_bus.emit(:progress_update, id: 'stance', value: m[:value].to_i, max: 100)
+    elsif id == 'pbarStance' && number
+      @event_bus.emit(:progress_update, id: 'stance', value: value.to_i, max: 100)
       @need_update = true
-    elsif (m = xml.match(/^<progressBar id='mindState' value='(?<value>.*?)' text='(?<text>.*?)'/))
-      value = m[:text] == 'saturated' ? 110 : m[:value].to_i
+    elsif id == 'mindState' && text
+      value = text == 'saturated' ? 110 : value.to_i
       @event_bus.emit(:progress_update, id: 'mind', value: value, max: 110)
       @need_update = true
-    elsif (m = xml.match(/^<progressBar id='(?<id>.*?)' value='[0-9]+' text='.*?\s+(?<cur>-?[0-9]+)\/(?<max>[0-9]+)'/))
+    elsif number && (m = text&.match(%r{\s(?<cur>-?[0-9]+)/(?<max>[0-9]+)\z}))
       # GemStone vitals: text contains current/max (e.g., "health 456/456")
-      @event_bus.emit(:progress_update, id: m[:id], value: m[:cur].to_i, max: m[:max].to_i)
+      @event_bus.emit(:progress_update, id: id, value: m[:cur].to_i, max: m[:max].to_i)
       @need_update = true
-    elsif (m = xml.match(/^<progressBar id='(?<id>health|mana|spirit|stamina|concentration)' value='(?<value>[0-9]+)' text='(?:health|mana|spirit|fatigue|concentration|inner fire) [0-9]+\%'/))
+    elsif number && DR_VITALS.include?(id) && text&.match?(/\A(?:health|mana|spirit|fatigue|concentration|inner fire) [0-9]+%\z/)
       # DragonRealms vitals: text contains percentage (e.g., "health 75%")
-      @event_bus.emit(:progress_update, id: m[:id], value: m[:value].to_i, max: 100)
+      @event_bus.emit(:progress_update, id: id, value: value.to_i, max: 100)
       @need_update = true
     end
   end
 
   # Handle <arbProgress id='...' max='...' current='...'/> user-defined progress bars.
   def handle_arb_progress_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<arbProgress id='(?<id>[a-zA-Z0-9]+)' max='(?<max>\d+)' current='(?<cur>\d+)'(?:\s+label='(?<label>.+?)')?(?:\s+colors='(?<colors>\S+?)')?/))
+    id, max, cur, label, colors = XmlTokenizer.attrs(xml).values_at('id', 'max', 'current', 'label', 'colors')
+    return unless id&.match?(/\A[a-zA-Z0-9]+\z/) && max&.match?(/\A\d+\z/) && cur&.match?(/\A\d+\z/)
 
-    current = [m[:cur].to_i, m[:max].to_i].min
-    data = { id: m[:id], value: current, max: m[:max].to_i }
-    data[:label] = m[:label] if m[:label]
-    if m[:colors]
-      bg, fg = m[:colors].split(',')
+    current = [cur.to_i, max.to_i].min
+    data = { id: id, value: current, max: max.to_i }
+    data[:label] = label unless label.nil? || label.empty?
+    if colors&.match?(/\A\S+\z/)
+      bg, fg = colors.split(',')
       data[:bg] = [bg] if bg
       data[:fg] = [fg] if fg
     end
@@ -301,9 +309,9 @@ module TagHandlers
 
   # Handle <preset id='...'> opening tag.
   def handle_open_preset(xml, text_buffer)
-    return unless (m = xml.match(/^<preset id=(?<q>'|")(?<id>.*?)\k<q>>$/))
+    return if xml.end_with?('/>') # an empty preset has nothing to color
+    return unless (preset_id = XmlTokenizer.attrs(xml)['id'])
 
-    preset_id = m[:id]
     if preset_id == 'roomDesc' && @wm.room['room']
       flush_text_buffer(text_buffer)
       @room_capture_mode = :desc

@@ -1100,48 +1100,48 @@ RSpec.describe TagHandlers do
       ) { |h, tag| events_of(h, tag, :indicator_update).last&.values_at(:id, :value) }
     end
 
-    it 'reads progressBar attributes only single-quoted, in id/value/text order, one space apart' do
+    it 'reads progressBar attributes in either quotes and any order' do
       expect_each(
         "<progressBar id='health' value='75' text='health 75%'/>"       => { id: 'health', value: 75, max: 100 },
-        %(<progressBar id="health" value="75" text="health 75%"/>)      => nil,
-        "<progressBar value='75' id='health' text='health 75%'/>"       => nil,
-        "<progressBar id='health'  value='75' text='health 75%'/>"      => nil,
+        %(<progressBar id="health" value="75" text="health 75%"/>)      => { id: 'health', value: 75, max: 100 },
+        "<progressBar value='75' id='health' text='health 75%'/>"       => { id: 'health', value: 75, max: 100 },
+        "<progressBar id='health'  value='75' text='health 75%'/>"      => { id: 'health', value: 75, max: 100 },
         "<progressBar id='pbarStance' value='80'/>"                     => { id: 'stance', value: 80, max: 100 },
         "<progressBar id='encumlevel' value='20' text='Overloaded'/>"   => { id: 'encumbrance', value: 110, max: 110 },
         "<progressBar id='mindState' value='5' text='x'/>"              => { id: 'mind', value: 5, max: 110 },
         "<progressBar id='health' value='9' text='health 456/456'/>"    => { id: 'health', value: 456, max: 456 },
-        # A value can run past its closing quote to reach the next attribute.
-        "<progressBar id='mindState' value='5' b' text='x'/>"           => { id: 'mind', value: 5, max: 110 },
-        "<progressBar id='a' b' value='9' text='x 1/2'/>"               => { id: "a' b", value: 1, max: 2 },
-        # Of two ids, the value runs from the first to the second.
-        "<progressBar id='x' id='health' value='9' text='health 4/5'/>" => { id: "x' id='health", value: 4, max: 5 }
+        # A value ends at its closing quote; what follows isn't an attribute.
+        "<progressBar id='mindState' value='5' b' text='x'/>"           => nil,
+        "<progressBar id='a' b' value='9' text='x 1/2'/>"               => nil,
+        # Of two ids, the first counts.
+        "<progressBar id='x' id='health' value='9' text='health 4/5'/>" => { id: 'x', value: 4, max: 5 }
       ) { |h, tag| events_of(h, tag, :progress_update).last }
     end
 
-    it 'reads arbProgress attributes only single-quoted, in id/max/current/label/colors order' do
+    it 'reads arbProgress attributes in either quotes and any order' do
+      full = { id: 'bar', value: 5, max: 10, label: 'Foo', bg: ['red'], fg: ['blue'] }
       expect_each(
-        "<arbProgress id='bar' max='10' current='5' label='Foo' colors='red,blue'/>" =>
-          { id: 'bar', value: 5, max: 10, label: 'Foo', bg: ['red'], fg: ['blue'] },
-        %(<arbProgress id="bar" max='10' current='5'/>) => nil,
-        "<arbProgress max='10' id='bar' current='5'/>" => nil,
-        "<arbProgress id='bar' max='10' current='5' colors='red,blue' label='Foo'/>" => { id: 'bar', value: 5, max: 10, bg: ['red'], fg: ['blue'] },
-        %(<arbProgress id='bar' max='10' current='5' label="Foo"/>) => { id: 'bar', value: 5, max: 10 },
-        %(<arbProgress id='bar' max='10' current='5' colors="red,blue"/>) => { id: 'bar', value: 5, max: 10 },
-        # An empty label swallows the next attribute.
-        "<arbProgress id='bar' max='10' current='5' label='' colors='red,blue'/>" => { id: 'bar', value: 5, max: 10, label: "' colors=" }
+        "<arbProgress id='bar' max='10' current='5' label='Foo' colors='red,blue'/>" => full,
+        %(<arbProgress id="bar" max='10' current='5'/>)                              => { id: 'bar', value: 5, max: 10 },
+        "<arbProgress max='10' id='bar' current='5'/>"                               => { id: 'bar', value: 5, max: 10 },
+        "<arbProgress id='bar' max='10' current='5' colors='red,blue' label='Foo'/>" => full,
+        %(<arbProgress id='bar' max='10' current='5' label="Foo"/>)                  => { id: 'bar', value: 5, max: 10, label: 'Foo' },
+        %(<arbProgress id='bar' max='10' current='5' colors="red,blue"/>)            => { id: 'bar', value: 5, max: 10, bg: ['red'], fg: ['blue'] },
+        # An empty label is no label.
+        "<arbProgress id='bar' max='10' current='5' label='' colors='red,blue'/>"    => { id: 'bar', value: 5, max: 10, bg: ['red'], fg: ['blue'] }
       ) { |h, tag| events_of(h, tag, :progress_update).last }
     end
 
-    it 'reads the preset id only as the only attribute, running to the last quote' do
+    it 'reads the preset id in either quotes, among other attributes, but not self-closing' do
       PRESET['speech'] = ['aa', nil]
       PRESET["a'b"] = ['bb', nil]
       expect_each(
         "<preset id='speech'>"       => { start: 0, fg: 'aa', bg: nil },
         '<preset id="speech">'       => { start: 0, fg: 'aa', bg: nil },
-        "<preset id='speech' x='1'>" => { start: 0 },
-        "<preset x='1' id='speech'>" => nil,
+        "<preset id='speech' x='1'>" => { start: 0, fg: 'aa', bg: nil },
+        "<preset x='1' id='speech'>" => { start: 0, fg: 'aa', bg: nil },
         "<preset id='speech'/>"      => nil,
-        "<preset id='a'b'>"          => { start: 0, fg: 'bb', bg: nil }
+        "<preset id='a'b'>"          => { start: 0 }
       ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_preset.last } }
     end
 
