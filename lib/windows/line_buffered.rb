@@ -222,9 +222,9 @@ module LineBuffered
 
   # Append a string to a buffer, word-wrapping it to the window width.
   # When the buffer is shown and live, each new line is drawn at once;
-  # when it is shown but scrolled back, the view keeps its place. A
-  # buffer that isn't shown only stores the lines, and the block, if
-  # given, is called once per stored line.
+  # when it is scrolled back, shown or not, the view keeps its place. A
+  # buffer that isn't shown draws nothing, and the block, if given, is
+  # called once per stored line.
   #
   # @param line_buffer [LineBuffer] the buffer to append to
   # @param string [String] the text to append
@@ -239,6 +239,12 @@ module LineBuffered
     wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors, continuation|
       line_buffer.push(line, line_colors, continuation)
       if !shown
+        # Scrolled back: keep the view in place, as the shown path below
+        # does, but draw nothing
+        unless line_buffer.live?
+          line_buffer.pos += 1
+          line_buffer.scroll_forward(1) if line_buffer.pos > (line_buffer.cap - content_height)
+        end
         yield if block_given?
       elsif line_buffer.live?
         draw_newest_line(line, line_colors, line_buffer.length, content_top, content_height)
