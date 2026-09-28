@@ -19,12 +19,13 @@ RSpec.describe 'profanity.rb startup errors' do
 
   after { FileUtils.remove_entry(home) }
 
-  # Run +script+ (profanity.rb by default) with +args+ in the sandboxed HOME.
+  # Run +script+ (profanity.rb by default) with +args+ in the sandboxed HOME,
+  # passing +ruby_opts+ to the ruby interpreter.
   #
   # @return [Array(String, String, Integer)] stdout, stderr and exit status
-  def run_client(*args, script: File.join(repo, 'profanity.rb'))
+  def run_client(*args, script: File.join(repo, 'profanity.rb'), ruby_opts: [])
     env = { 'HOME' => home, 'TERM' => 'xterm-256color', 'GEM_PATH' => Gem.path.join(File::PATH_SEPARATOR) }
-    stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, script, *args, chdir: home, stdin_data: '')
+    stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, *ruby_opts, script, *args, chdir: home, stdin_data: '')
     # RubyGems' own notice about a locally installed gem whose extension
     # isn't built, not the client's output.
     [stdout, stderr.gsub(/^Ignoring \S+ because its extensions are not built\..*\n/, ''), status.exitstatus]
@@ -42,6 +43,22 @@ RSpec.describe 'profanity.rb startup errors' do
 
     expect([stdout, stderr, status]).to eq(['', "profanity.rb: invalid argument: --port=abc\n" \
                                                 "Try 'profanity.rb --help' for the list of options.\n", 1])
+  end
+
+  # BUG FOUND (fixed here): the option error was printed with Kernel#warn,
+  # which prints nothing when warnings are off (ruby -W0), so the client
+  # exited 1 without saying why.
+  it 'still prints an unknown option with warnings turned off (ruby -W0)' do
+    stdout, stderr, status = run_client('--bogus', ruby_opts: ['-W0'])
+
+    expect([stdout, stderr, status]).to eq(['', "profanity.rb: invalid option: --bogus\n" \
+                                                "Try 'profanity.rb --help' for the list of options.\n", 1])
+  end
+
+  it 'still prints a missing --settings-file with warnings turned off (ruby -W0)' do
+    stdout, stderr, status = run_client('--settings-file=/nonexistent/profanity.xml', ruby_opts: ['-W0'])
+
+    expect([stdout, stderr, status]).to eq(['', "Settings file not found: /nonexistent/profanity.xml\n", 1])
   end
 
   it 'prints --help to stdout and exits 0' do

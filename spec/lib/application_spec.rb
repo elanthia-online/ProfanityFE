@@ -1391,6 +1391,28 @@ RSpec.describe Application do
       end
     end
 
+    # BUG FOUND (fixed here): fatal errors were printed with Kernel#warn,
+    # which prints nothing when warnings are off (ruby -W0, $VERBOSE nil),
+    # so the client exited 1 without saying why.
+    it 'still reports the failure with warnings turned off (ruby -W0)' do
+      fail_connection_with(Errno::ECONNREFUSED)
+      verbose = $VERBOSE
+      $VERBOSE = nil
+
+      output = capture_stderr do
+        app.send(:connect_server)
+      rescue SystemExit
+        nil
+      ensure
+        $VERBOSE = verbose
+      end
+
+      expect(output.lines.map(&:chomp)).to eq [
+        'Failed to connect to game server at 192.0.2.10:8000: Connection refused',
+        'Is the game server running?'
+      ]
+    end
+
     it 'closes the curses screen before printing, so the error is not wiped with it' do
       fail_connection_with(Errno::ECONNREFUSED)
 

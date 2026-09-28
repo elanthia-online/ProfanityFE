@@ -722,7 +722,7 @@ class Application
   # @return [void] never returns
   def fatal_error(*lines)
     Curses.close_screen
-    lines.each { |line| warn line }
+    lines.each { |line| $stderr.puts line }
     exit 1
   end
 
