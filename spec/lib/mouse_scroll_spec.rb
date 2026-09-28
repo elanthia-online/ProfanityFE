@@ -72,6 +72,26 @@ RSpec.describe MouseScroll do
 
       expect(masks.last).to eq 0
     end
+
+    # Cancelling while it waits for the wheel-down must also drop the
+    # wheel-up it has just learned: only a finished calibration is saved.
+    it 'keeps the saved wheel buttons when cancelled after learning the wheel-up' do
+      allow(ProfanitySettings).to receive(:load_mouse_settings)
+        .and_return('BUTTON4_PRESSED_MASK' => 0x10000, 'BUTTON5_PRESSED_MASK' => 0x200000)
+      scrolled = []
+      key_action['scroll_current_window_up_one'] = -> { scrolled << :up }
+      new_wheel_up = Struct.new(:bstate).new(0x80000)
+      saved_wheel_up = Struct.new(:bstate).new(0x10000)
+
+      mouse.start_configuration
+      20.times { mouse.process(new_wheel_up) }
+      mouse.start_configuration
+      mouse.process(new_wheel_up)
+      mouse.process(saved_wheel_up)
+
+      expect(masks.last).to eq 0x210000
+      expect(scrolled).to eq [:up]
+    end
   end
 
   describe 'click-resolution save/restore' do

@@ -70,6 +70,7 @@ class MouseScroll
     @listener_enabled = false
     @button4_mask = nil
     @button5_mask = nil
+    @learned_up_mask = nil
     @bstate_counts = {}
 
     @click_events_enabled = false
@@ -251,17 +252,21 @@ class MouseScroll
     apply_mouse_mask
   end
 
-  # Cancel calibration, reset state to idle and replace the
-  # every-event calibration mask with the steady-state mask.
+  # Cancel calibration, reset state to idle, drop any wheel-up it has
+  # learned and replace the every-event calibration mask with the
+  # steady-state mask.
   #
   # @return [void]
   def reset_configuration
     @config_state = :idle
+    @learned_up_mask = nil
     @bstate_counts = {}
     apply_mouse_mask
   end
 
   # Process a mouse event during calibration to detect scroll-up/down masks.
+  # The learned wheel-up is held apart until the wheel-down is learned too,
+  # so a cancelled calibration leaves the masks in use unchanged.
   #
   # @param bstate [Integer] the mouse button state bitmask
   # @return [void]
@@ -273,17 +278,19 @@ class MouseScroll
       @bstate_counts[bstate] = (@bstate_counts[bstate] || 0) + 1
       return unless @bstate_counts[bstate] >= MIN_EVENT_COUNT
 
-      @button4_mask = bstate
+      @learned_up_mask = bstate
       @config_state = :down
       @bstate_counts = {}
       @display_fn.call('[PROFANITY] Scroll down with your mouse wheel or trackpad')
     when :down
-      return if bstate == @button4_mask
+      return if bstate == @learned_up_mask
 
       @bstate_counts[bstate] = (@bstate_counts[bstate] || 0) + 1
       return unless @bstate_counts[bstate] >= MIN_EVENT_COUNT
 
+      @button4_mask = @learned_up_mask
       @button5_mask = bstate
+      @learned_up_mask = nil
       @config_state = :idle
       @bstate_counts = {}
       apply_mouse_mask
