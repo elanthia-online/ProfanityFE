@@ -16,12 +16,18 @@ require_relative 'link_extractor'
 # - @line_colors, @open_monsterbold, @open_preset, @open_style,
 #   @open_color, @open_link
 # - @current_stream, @combat_next_line, @need_update, @need_room_render
+# - @stream_stack (an empty Array: the open pushStreams, innermost last)
 # - @room_capture_mode
 # - handle_game_text, new_stun, fix_layout_number, parse_room_subtitle,
 #   add_prompt
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
+
+  # Most pushStreams tracked as open at once. The deepest real nesting is
+  # two (the empath familiar double push); the cap only stops unmatched
+  # pushes from piling up between prompts.
+  MAX_STREAM_DEPTH = 8
 
   # Dispatch table for opening and self-closing tags.
   TAG_DISPATCH = {
@@ -76,10 +82,12 @@ module TagHandlers
   # @return [void]
   def dispatch_tag(xml, text_buffer)
     # Combat tracking: reset flag on any <popStream> tag, bare or with an id.
-    # Every pop returns to main, so a combat block closed by a bare
-    # <popStream/> must not leave later unrecognized tags routed to combat.
+    # A combat block closed by a bare <popStream/> must not leave later
+    # unrecognized tags routed to combat.
     # This runs for every tag, before dispatch (matching original behavior).
     @combat_next_line = false if xml.start_with?('<popStream')
+    # A prompt is the stream resync point: it closes any stream left open.
+    resync_streams_at_prompt(text_buffer) if xml.match?(/\A<prompt\b/)
 
     name = XmlTokenizer.tag_name(xml)
     closing = xml.start_with?('</')
@@ -358,6 +366,11 @@ module TagHandlers
 
   # Handle <pushStream>, <component>, or <compDef> stream-opening tag.
   # Flushes accumulated text and switches the current stream.
+  #
+  # Only a +<pushStream>+ is recorded on +@stream_stack+, so a later pop
+  # can return to it. A component or compDef (including a self-closing
+  # +<component id='…'/>+) only switches the current stream: nothing a pop
+  # could later restore.
   def handle_stream_open(xml, text_buffer)
     return unless (m = xml.match(%r{id=(?<q>"|')(?<id>.*?)\k<q>}))
 
@@ -376,13 +389,20 @@ module TagHandlers
         end
       end
     end
+    push_open_stream(@current_stream) if xml.start_with?('<pushStream')
 
     @combat_next_line = true if @current_stream == 'combat'
   end
 
   # Handle <popStream.../>, </component>, or </compDef> stream-closing tag.
-  # Flushes accumulated text and clears the current stream.
-  def handle_stream_close(_xml, text_buffer)
+  # Flushes accumulated text, then returns to the innermost pushStream
+  # still open (the main window when none is).
+  #
+  # A +<popStream>+ first closes its pushStream on +@stream_stack+ (see
+  # {#pop_open_stream}); a component or compDef close leaves the stack
+  # alone. So after a nested push/pop the outer stream's remaining text
+  # keeps going to the outer stream instead of spilling into main.
+  def handle_stream_close(xml, text_buffer)
     if text_buffer.empty? && @current_stream&.start_with?('room')
       # Empty room components (e.g., <component id='room players'></component>)
       # are meaningful — they clear the displayed data. Since flush_text_buffer
@@ -398,7 +418,56 @@ module TagHandlers
       flush_text_buffer(text_buffer)
     end
     @event_bus.emit(:exp_delete_skill) if @current_stream == 'exp'
+    pop_open_stream(xml[/\bid=(["'])(.*?)\1/, 2]) if xml.start_with?('<popStream')
+    @current_stream = @stream_stack.last
+  end
+
+  # Record a pushStream as open, dropping the oldest entry beyond
+  # {MAX_STREAM_DEPTH} so unmatched pushes can't accumulate.
+  #
+  # @param stream [String] the stream the push switched to
+  # @return [void]
+  def push_open_stream(stream)
+    @stream_stack.push(stream)
+    @stream_stack.shift while @stream_stack.length > MAX_STREAM_DEPTH
+  end
+
+  # Close a pushStream on +@stream_stack+.
+  #
+  # With an id that is open, close the innermost stream with that id and
+  # discard anything opened after it (an inner push that never got its
+  # pop). With no id, or an id that isn't open, close the innermost stream.
+  # An empty stack stays empty.
+  #
+  # @param id [String, nil] the popStream's +id+ attribute
+  # @return [void]
+  def pop_open_stream(id)
+    index = id && @stream_stack.rindex(id)
+    if index
+      @stream_stack.slice!(index..)
+    else
+      @stream_stack.pop
+    end
+  end
+
+  # Resynchronize stream routing at a <prompt>.
+  #
+  # The game only sends a prompt in main-window context, so any stream
+  # still open there was never closed (a dropped or missing pop). Close
+  # them all: flush text already collected for the stale stream to it,
+  # empty the stack and route to main. This is the resync point that keeps
+  # one unmatched push from misrouting text for the rest of the session.
+  # A no-op in the normal case (nothing open).
+  #
+  # @param text_buffer [String] mutable text accumulator
+  # @return [void]
+  def resync_streams_at_prompt(text_buffer)
+    return unless @current_stream || !@stream_stack.empty? || @combat_next_line
+
+    flush_text_buffer(text_buffer)
+    @stream_stack.clear
     @current_stream = nil
+    @combat_next_line = false
   end
 
   # Handle <clearStream id="percWindow"/> tag.
