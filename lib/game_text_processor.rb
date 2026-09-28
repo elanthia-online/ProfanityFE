@@ -110,7 +110,10 @@ class GameTextProcessor
     @first_render = true
     @first_prompt = true
 
-    # Track content sent to dedicated stream windows to prevent duplicates to main
+    # The last line sent to a stream window, stripped. The game sends some
+    # stream text again as the next main line (DR whispers); that copy is
+    # dropped. Only the next main-bound line is compared, and it uses the
+    # text up whether or not it matched; a <prompt> also clears it.
     @last_stream_text = nil
 
     # Track movement messages to suppress prompts/empty lines after them
@@ -629,7 +632,7 @@ class GameTextProcessor
           unless text =~ /^\[server\]: "(?:kill|connect)/
             @event_bus.emit(:stream_text, stream: @current_stream, text: text, colors: @line_colors)
             @need_update = true
-            # Track content sent to stream windows to prevent duplicate to main
+            # Remembered so the game's main copy of it, if next, is dropped
             @last_stream_text = text.strip
           end
         elsif @current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics)$/
@@ -647,13 +650,19 @@ class GameTextProcessor
             emit_prompt_if_needed
             @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: text, colors: @line_colors)
             @need_update = true
+            # Shown in main, so it is the next main-bound line: the stored
+            # stream-window text expires. Not compared: this is stream text
+            # itself, never the game's main copy of a stream line.
+            @last_stream_text = nil
           end
         end
       elsif @wm.stream[MAIN_STREAM]
-        # Skip duplicate content that was already sent to a stream window
-        if @last_stream_text && text.strip == @last_stream_text
-          @last_stream_text = nil
-        else
+        # Drop the game's main copy of the line just sent to a stream window.
+        # Only this next main-bound line is compared; the stored text is used
+        # up either way, so a later main line with the same text still shows.
+        duplicate = @last_stream_text && text.strip == @last_stream_text
+        @last_stream_text = nil
+        unless duplicate
           # Detect movement messages to suppress following prompts/empty lines
           is_movement = text =~ MOVEMENT_PATTERN
           emit_prompt_if_needed

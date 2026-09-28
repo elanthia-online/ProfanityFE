@@ -145,7 +145,10 @@ module TagHandlers
 
   # Handle <prompt time='...'>text&gt;</prompt> paired tag.
   # Syncs server time offset and updates the prompt display.
+  # Also forgets the last stream-window line, so a main line after the
+  # prompt is not taken for the game's copy of it and dropped.
   def handle_prompt_tag(xml, _text_buffer)
+    @last_stream_text = nil
     return unless (m = xml.match(%r{^<prompt time=(?<q>'|")(?<time>[0-9]+)\k<q>.*?>(?<text>.*?)&gt;</prompt>$}))
 
     unless @state.skip_server_time_offset
