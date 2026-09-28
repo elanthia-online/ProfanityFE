@@ -2,6 +2,9 @@
 
 require 'fileutils'
 require 'json'
+# DEFAULT_LOG_FILE: profanity.rb resolves the log path before it loads the
+# rest of lib (and before curses starts), so load it here.
+require_relative 'constants'
 
 =begin
 Application settings directory and file management for ProfanityFE.
