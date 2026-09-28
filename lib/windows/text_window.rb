@@ -85,7 +85,6 @@ BaseWindow.register_type('text') do |height, width, top, left, element, wm|
     window = TextWindow.new(height, width - 1, top, left)
     window.scrollbar = Curses::Window.new(window.maxy, 1, window.begy, window.begx + window.maxx)
   end
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   window.scrollok(true)
   window.max_buffer_size = element.attributes['buffer-size'] || 1000
   window.time_stamp = BaseWindow.parse_flag_attr(element, 'timestamp')

@@ -384,7 +384,6 @@ end
 
 BaseWindow.register_type('room') do |height, width, top, left, element, wm|
   window = RoomWindow.new(height, width, top, left)
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   window.scrollok(false)
   window.title_preset = element.attributes['title-preset'] || Presets::ROOM_NAME
   window.desc_preset = element.attributes['desc-preset']

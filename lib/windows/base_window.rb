@@ -2,6 +2,7 @@
 
 require_relative '../styled_text'
 require_relative '../anchored_selection'
+require_relative '../window_layout'
 
 # Base class for all ProfanityFE window types.
 # Provides shared rendering, word-wrap, scrollbar, selection, and window registry.
@@ -22,7 +23,9 @@ class BaseWindow < Curses::Window
   # Right-pointing triangle shown at the top of the scrollbar for the active window.
   ACTIVE_INDICATOR = "\u25B6" # right-pointing triangle
 
-  # @return [Hash, nil] layout definition for this window
+  # @return [WindowLayout, nil] where the layout file puts this window;
+  #   set by {WindowManager#load_layout} and used to place the window
+  #   again when the terminal is resized
   attr_accessor :layout
 
   # Create a new window and register it in the class instance list.
@@ -452,7 +455,8 @@ class BaseWindow < Curses::Window
 
   # Registry mapping XML class names to window builder procs.
   # Each builder proc receives (height, width, top, left, element, window_manager)
-  # and returns a configured window (or nil).
+  # and returns a configured window (or nil). {WindowManager#load_layout}
+  # sets the +layout+ of a returned BaseWindow; builders need not.
   #
   # @return [Hash<String, Proc>]
   def self.type_registry

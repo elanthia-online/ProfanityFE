@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-require_relative 'safe_arithmetic'
 require_relative 'streams'
 require_relative 'feedback'
+require_relative 'window_layout'
 
 # Manages Curses window creation, layout loading, and handler hash access
 # for the profanity terminal UI.
@@ -296,16 +296,6 @@ class WindowManager
     end
   end
 
-  # Evaluate a layout dimension string to an integer, substituting
-  # Curses terminal dimensions for the tokens "lines" and "cols".
-  #
-  # @param str [String] dimension expression (e.g. "lines-2", "cols/3")
-  # @return [Integer] computed pixel/cell dimension value
-  def fix_layout_number(str)
-    str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
-    SafeArithmetic.evaluate(str)
-  end
-
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
   #
   # The server read thread reads the handler hashes, so call this before
@@ -315,6 +305,9 @@ class WindowManager
   # reused rather than recreated, preserving their content buffers. Every
   # other window from the previous layout, of any window class, is closed
   # and removed from its class list and from SCROLL_WINDOW.
+  #
+  # Each window built from a BaseWindow subclass gets the element's
+  # {WindowLayout} as its +layout+, which {#resize} places it by.
   #
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
@@ -351,16 +344,15 @@ class WindowManager
         next
       end
 
-      height = fix_layout_number(e.attributes['height'])
-      width = fix_layout_number(e.attributes['width'])
-      top = fix_layout_number(e.attributes['top'])
-      left = fix_layout_number(e.attributes['left'])
+      layout = WindowLayout.from_element(e)
+      size = layout.geometry
 
-      next unless (height > 0) && (width > 0) && (top >= 0) && (left >= 0) &&
-                  (top < Curses.lines) && (left < Curses.cols)
+      next unless (size.height > 0) && (size.width > 0) && (size.top >= 0) && (size.left >= 0) &&
+                  (size.top < Curses.lines) && (size.left < Curses.cols)
 
       builder = BaseWindow.type_registry[e.attributes['class']]
-      builder&.call(height, width, top, left, e, self)
+      window = builder&.call(size.height, size.width, size.top, size.left, e, self)
+      window.layout = layout if window.is_a?(BaseWindow)
     end
 
     @old_windows.each { |window| close_window(window) }
@@ -401,8 +393,7 @@ class WindowManager
 
       first_text_window = true
       TextWindow.list.to_a.each do |win|
-        next unless safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - 1,
-                                     fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
+        next unless win.layout.place(win, right_margin: 1)
         win.scrollbar.resize([win.maxy, 1].max, 1)
         win.scrollbar.move(win.begy, win.begx + win.maxx)
         win.rewrap
@@ -416,8 +407,7 @@ class WindowManager
       end
 
       TabbedTextWindow.list.to_a.each do |win|
-        next unless safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - 1,
-                                     fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
+        next unless win.layout.place(win, right_margin: 1)
         if win.scrollbar
           win.scrollbar.resize([win.maxy, 1].max, 1)
           win.scrollbar.move(win.begy, win.begx + win.maxx)
@@ -432,7 +422,7 @@ class WindowManager
       # keep that margin so these windows don't widen on resize.
       { ExpWindow => 1, PercWindow => 1, RoomWindow => 0 }.each do |klass, right_margin|
         klass.list.to_a.each do |win|
-          next unless safe_reposition(win, right_margin: right_margin)
+          next unless win.layout.place(win, right_margin: right_margin)
           win.redraw
           win.noutrefresh
         end
@@ -440,21 +430,13 @@ class WindowManager
 
       [IndicatorWindow, ProgressWindow, CountdownWindow].each do |klass|
         klass.list.to_a.each do |win|
-          next unless safe_reposition(win)
+          next unless win.layout.place(win)
           win.noutrefresh
         end
       end
 
-      if @command_window && @command_window_layout
-        h = [fix_layout_number(@command_window_layout[0]), 1].max
-        w = [fix_layout_number(@command_window_layout[1]), 1].max
-        t = [fix_layout_number(@command_window_layout[2]), 0].max
-        l = [fix_layout_number(@command_window_layout[3]), 0].max
-        if t < Curses.lines && l < Curses.cols
-          @command_window.resize(h, w)
-          @command_window.move(t, l)
-          @command_window.noutrefresh
-        end
+      if @command_window && @command_window_layout && @command_window_layout.place(@command_window)
+        @command_window.noutrefresh
       end
 
       # The layout sizes above are for the layout's own prompt label;
@@ -479,19 +461,17 @@ class WindowManager
     prompt_window = @indicator['prompt']
     return false unless prompt_window && @prompt_text
 
-    init_h = fix_layout_number(prompt_window.layout[0])
-    init_w = fix_layout_number(prompt_window.layout[1])
+    init_h = WindowLayout.evaluate(prompt_window.layout.height)
+    init_w = WindowLayout.evaluate(prompt_window.layout.width)
     # Neither window may shrink below one column (an empty prompt, or one
     # wider than the command line); curses rejects such sizes.
     new_w = [@prompt_text.length, 1].max
     prompt_window.resize(init_h, new_w)
     diff = new_w - init_w
     if @command_window
-      @command_window.resize(fix_layout_number(@command_window_layout[0]),
-                             [fix_layout_number(@command_window_layout[1]) - diff, 1].max)
-      ctop = fix_layout_number(@command_window_layout[2])
-      cleft = fix_layout_number(@command_window_layout[3]) + diff
-      @command_window.move(ctop, cleft)
+      command = @command_window_layout.geometry
+      @command_window.resize(command.height, [command.width - diff, 1].max)
+      @command_window.move(command.top, command.left + diff)
     end
     prompt_window.label = @prompt_text
     true
@@ -541,47 +521,13 @@ class WindowManager
   rescue SystemCallError => e
     ProfanityLog.write('launch_url', "could not open #{url}: #{e.message}")
   end
-
-  # Safely resize and move a window, clamping dimensions to valid ranges.
-  # ncurses segfaults on negative/zero dimensions or out-of-bounds positions.
-  #
-  # @param win [BaseWindow, Curses::Window] the window to resize and move
-  # @param height [Integer] desired height
-  # @param width [Integer] desired width
-  # @param top [Integer] desired top position
-  # @param left [Integer] desired left position
-  # @return [Boolean] true if the window was resized, false if skipped
-  def safe_resize_move(win, height, width, top, left)
-    height = [height, 1].max
-    width = [width, 1].max
-    top = [top, 0].max
-    left = [left, 0].max
-    return false unless top < Curses.lines && left < Curses.cols
-
-    win.resize(height, width)
-    win.move(top, left)
-    true
-  end
-
-  # Safely reposition a window using its stored layout expressions.
-  #
-  # @param win [BaseWindow] the window to reposition
-  # @param right_margin [Integer] columns of the layout width to leave unused
-  # @return [Boolean] true if repositioned, false if skipped
-  def safe_reposition(win, right_margin: 0)
-    safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - right_margin,
-                     fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
-  end
 end
 
 # Register the command window type. This is a plain Curses::Window (not a
 # BaseWindow subclass), so it lives here rather than in a window file.
 BaseWindow.register_type('command') do |height, width, top, left, element, wm|
   wm.instance_variable_set(:@command_window, Curses::Window.new(height, width, top, left)) unless wm.command_window
-  wm.instance_variable_set(:@command_window_layout, [
-                             element.attributes['height'], element.attributes['width'],
-                             element.attributes['top'], element.attributes['left']
-                           ])
+  wm.instance_variable_set(:@command_window_layout, WindowLayout.from_element(element))
   wm.command_window.scrollok(false)
   wm.command_window.keypad(true)
   wm.command_window

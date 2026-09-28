@@ -137,9 +137,8 @@ class PercWindow < BaseWindow
   end
 end
 
-BaseWindow.register_type('percWindow') do |height, width, top, left, element, wm|
+BaseWindow.register_type('percWindow') do |height, width, top, left, _element, wm|
   window = PercWindow.new(height, width - 1, top, left)
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   wm.stream[Streams::PERC] = window
   window
 end

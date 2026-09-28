@@ -90,7 +90,6 @@ BaseWindow.register_type('progress') do |height, width, top, left, element, wm|
   else
     window = ProgressWindow.new(height, width, top, left)
   end
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   window.scrollok(false)
   window.label = element.attributes['label'] if element.attributes['label']
   window.fg = BaseWindow.parse_color_attrs(element, 'fg') if element.attributes['fg']

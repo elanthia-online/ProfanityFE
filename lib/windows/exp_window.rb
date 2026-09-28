@@ -101,9 +101,8 @@ class ExpWindow < BaseWindow
   end
 end
 
-BaseWindow.register_type('exp') do |height, width, top, left, element, wm|
+BaseWindow.register_type('exp') do |height, width, top, left, _element, wm|
   window = ExpWindow.new(height, width - 1, top, left)
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   wm.stream[Streams::EXP] = window
   window
 end

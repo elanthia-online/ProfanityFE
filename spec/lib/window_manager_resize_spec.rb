@@ -23,7 +23,7 @@ RSpec.describe WindowManager, '#resize' do
     end
     wm.instance_variable_set(:@command_window, screen)
     # Curses.cols is 80 in the spec stub, so the command window becomes 10 wide.
-    wm.instance_variable_set(:@command_window_layout, %w[1 cols-70 23 0])
+    wm.instance_variable_set(:@command_window_layout, WindowLayout.new(height: '1', width: 'cols-70', top: '23', left: '0'))
     buf.window = screen
     'abcdefghijklmnopqrstuvwxy'.each_char { |ch| buf.put_ch(ch) }
   end
