@@ -2,6 +2,7 @@
 
 require_relative 'safe_arithmetic'
 require_relative 'streams'
+require_relative 'feedback'
 
 # Manages Curses window creation, layout loading, and handler hash access
 # for the profanity terminal UI.
@@ -291,12 +292,7 @@ class WindowManager
     end
 
     event_bus.on(:disconnect) do |_data|
-      window = @stream[MAIN_STREAM]
-      next unless window
-
-      ['* ', '* Connection closed', '* Press any key to exit...', '* '].each do |msg|
-        window.add_string(msg, [{ start: 0, end: msg.length, fg: FEEDBACK_COLOR, bg: nil, ul: nil }])
-      end
+      Feedback.write(@stream[MAIN_STREAM], '* Connection closed', '* Press any key to exit...', banner: true)
     end
   end
 

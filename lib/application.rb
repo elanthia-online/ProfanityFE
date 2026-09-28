@@ -2,6 +2,7 @@
 
 require_relative 'dot_command'
 require_relative 'streams'
+require_relative 'feedback'
 
 # Default BOOT_PROFILE to false when loaded outside profanity.rb (e.g. specs)
 BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
@@ -247,37 +248,39 @@ class Application
     ProfanityLog.write('boot-profile', "Startup timing:\n#{lines.join("\n")}")
   end
 
-  def feedback_colors(text)
-    [{ start: 0, end: text.length, fg: FEEDBACK_COLOR, bg: nil, ul: nil }]
-  end
+  # Show feedback lines in the main window (see {Feedback.write}). With
+  # no main window nothing is drawn, the command line is not redrawn and
+  # the screen is not flushed. Takes no lock of its own: it runs inside
+  # the render lock only if the caller holds it.
+  #
+  # @param lines [Array<String>] the lines, oldest first
+  # @param fg [String] hex foreground color of the lines
+  # @param banner [Boolean] frame the lines with {Feedback::BANNER} rows
+  # @param refresh [Boolean] redraw the command line afterwards, which
+  #   puts the cursor back on it
+  # @param doupdate [Boolean] flush the screen afterwards with
+  #   {CursesRenderer.doupdate}
+  # @return [Boolean] whether there was a main window
+  def write_to_client(*lines, fg: FEEDBACK_COLOR, banner: false, refresh: true, doupdate: true)
+    return false unless Feedback.write(@window_mgr.stream[MAIN_STREAM], *lines, fg: fg, banner: banner)
 
-  def write_to_client(text)
-    if (window = @window_mgr.stream[MAIN_STREAM])
-      window.add_string(text, feedback_colors(text))
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    end
+    @cmd_buffer.refresh if refresh
+    CursesRenderer.doupdate if doupdate
+    true
   end
 
   # ---- Dot-command handlers ----
 
   def handle_dot_key
-    if (window = @window_mgr.stream[MAIN_STREAM])
-      msg = '* Waiting for key press...'
-      window.add_string('* ', feedback_colors('* '))
-      window.add_string(msg, feedback_colors(msg))
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-      ch = wait_for_key
-      msg = if ch.nil?
-              "* No key pressed within #{DOT_KEY_TIMEOUT_MS / 1000} seconds"
-            else
-              "* Detected keycode: #{ch}"
-            end
-      window.add_string(msg, feedback_colors(msg))
-      window.add_string('* ', feedback_colors('* '))
-      CursesRenderer.doupdate
-    end
+    return unless write_to_client(Feedback::BANNER, '* Waiting for key press...')
+
+    ch = wait_for_key
+    msg = if ch.nil?
+            "* No key pressed within #{DOT_KEY_TIMEOUT_MS / 1000} seconds"
+          else
+            "* Detected keycode: #{ch}"
+          end
+    write_to_client(msg, Feedback::BANNER, refresh: false)
   end
 
   # Read one key from the command window, waiting up to DOT_KEY_TIMEOUT_MS.
@@ -323,16 +326,15 @@ class Application
 
   def handle_dot_tab(arg)
     if TabbedTextWindow.list.empty?
-      msg = '* No tabbed windows configured'
-      @window_mgr.stream[MAIN_STREAM]&.add_string(msg, feedback_colors(msg))
+      write_to_client('* No tabbed windows configured', refresh: false, doupdate: false)
     elsif arg.nil? || arg.empty?
-      TabbedTextWindow.list.each do |win|
+      lines = TabbedTextWindow.list.map do |win|
         tabs_info = win.tabs.keys.each_with_index.map do |name, i|
           "#{i + 1}:#{name}#{name == win.active_tab ? '*' : ''}"
         end.join(' ')
-        msg = "* Tabs: #{tabs_info}"
-        @window_mgr.stream[MAIN_STREAM]&.add_string(msg, feedback_colors(msg))
+        "* Tabs: #{tabs_info}"
       end
+      write_to_client(*lines, refresh: false, doupdate: false)
     elsif arg =~ /^\d+$/
       TabbedTextWindow.list.each { |w| w.switch_tab_by_index(arg.to_i) }
       CursesRenderer.doupdate
@@ -344,18 +346,14 @@ class Application
 
   def handle_dot_arrow
     @key_action['switch_arrow_mode'].call
-    if (window = @window_mgr.stream[MAIN_STREAM])
-      mode = if @key_binding[Curses::KEY_UP] == @key_action['previous_command']
-               'history'
-             elsif @key_binding[Curses::KEY_UP] == @key_action['scroll_current_window_up_page']
-               'page scroll'
-             else
-               'line scroll'
-             end
-      msg = "* Arrow mode: #{mode}"
-      window.add_string(msg, feedback_colors(msg))
-      CursesRenderer.doupdate
-    end
+    mode = if @key_binding[Curses::KEY_UP] == @key_action['previous_command']
+             'history'
+           elsif @key_binding[Curses::KEY_UP] == @key_action['scroll_current_window_up_page']
+             'page scroll'
+           else
+             'line scroll'
+           end
+    write_to_client("* Arrow mode: #{mode}", refresh: false)
   end
 
   def handle_dot_links
@@ -370,17 +368,14 @@ class Application
       room_win.links_enabled = @shared_state.blue_links
       room_win.render
     end
-    if (window = @window_mgr.stream[MAIN_STREAM])
-      msg = if @shared_state.blue_links
-              '* Links: ON (clickable links + drag-to-select; Shift+drag for native selection)'
-            elsif @selection_enabled
-              '* Links: OFF (drag-to-select still on via .select)'
-            else
-              '* Links: OFF (native terminal selection)'
-            end
-      window.add_string(msg, feedback_colors(msg))
-      CursesRenderer.doupdate
-    end
+    msg = if @shared_state.blue_links
+            '* Links: ON (clickable links + drag-to-select; Shift+drag for native selection)'
+          elsif @selection_enabled
+            '* Links: OFF (drag-to-select still on via .select)'
+          else
+            '* Links: OFF (native terminal selection)'
+          end
+    write_to_client(msg, refresh: false)
   end
 
   def handle_dot_select
@@ -441,23 +436,16 @@ class Application
   # @param pattern [String, nil] the text to highlight, optionally in double quotes
   # @return [void]
   def handle_dot_highlight(pattern)
-    window = @window_mgr.stream[MAIN_STREAM]
-    return unless window
+    return unless @window_mgr.stream[MAIN_STREAM]
 
     if pattern.nil? || pattern.empty?
       @inline_highlights ||= {}
       if @inline_highlights.empty?
-        msg = '* No inline highlights active'
-        window.add_string(msg, feedback_colors(msg))
+        write_to_client('* No inline highlights active', refresh: false)
       else
-        window.add_string('* ', feedback_colors('* '))
-        @inline_highlights.each do |regex, _|
-          msg = "*   #{regex.source}"
-          window.add_string(msg, [{ start: 0, end: msg.length, fg: INLINE_HIGHLIGHT_COLOR, bg: nil, ul: nil }])
-        end
-        window.add_string('* ', feedback_colors('* '))
+        write_to_client(*@inline_highlights.keys.map { |regex| "*   #{regex.source}" },
+                        fg: INLINE_HIGHLIGHT_COLOR, banner: true, refresh: false)
       end
-      CursesRenderer.doupdate
       return
     end
 
@@ -466,9 +454,7 @@ class Application
     begin
       regex = Regexp.new(Regexp.escape(pattern), Regexp::IGNORECASE)
     rescue RegexpError => e
-      msg = "* Invalid pattern: #{e.message}"
-      window.add_string(msg, feedback_colors(msg))
-      CursesRenderer.doupdate
+      write_to_client("* Invalid pattern: #{e.message}", refresh: false)
       return
     end
 
@@ -478,22 +464,17 @@ class Application
     end
     @inline_highlights[regex] = colors
 
-    msg = "* Highlight added: #{pattern}"
-    window.add_string(msg, [{ start: 0, end: msg.length, fg: INLINE_HIGHLIGHT_COLOR, bg: nil, ul: nil }])
-    CursesRenderer.doupdate
+    write_to_client("* Highlight added: #{pattern}", fg: INLINE_HIGHLIGHT_COLOR, refresh: false)
   end
 
   def handle_dot_unhighlight(pattern)
-    window = @window_mgr.stream[MAIN_STREAM]
-    return unless window
+    return unless @window_mgr.stream[MAIN_STREAM]
 
     @inline_highlights ||= {}
     pattern = pattern.sub(/^"(.*)"$/, '\1')
     target = @inline_highlights.keys.find { |r| r.source == Regexp.escape(pattern) }
     unless target
-      msg = "* No inline highlight found for: #{pattern}"
-      window.add_string(msg, feedback_colors(msg))
-      CursesRenderer.doupdate
+      write_to_client("* No inline highlight found for: #{pattern}", refresh: false)
       return
     end
 
@@ -502,18 +483,11 @@ class Application
     end
     @inline_highlights.delete(target)
 
-    msg = "* Highlight removed: #{pattern}"
-    window.add_string(msg, feedback_colors(msg))
-    CursesRenderer.doupdate
+    write_to_client("* Highlight removed: #{pattern}", refresh: false)
   end
 
   def handle_dot_help
-    if (window = @window_mgr.stream[MAIN_STREAM])
-      window.add_string('* ', feedback_colors('* '))
-      DOT_COMMANDS.flat_map(&:help).each { |line| msg = "*   #{line}"; window.add_string(msg, feedback_colors(msg)) }
-      window.add_string('* ', feedback_colors('* '))
-      CursesRenderer.doupdate
-    end
+    write_to_client(*DOT_COMMANDS.flat_map(&:help).map { |line| "*   #{line}" }, banner: true, refresh: false)
   end
 
   # ---- Command sending ----
