@@ -62,6 +62,13 @@ class TextWindow < BaseWindow
   private def shown_buffer
     @line_buffer
   end
+
+  # The window's one buffer.
+  #
+  # @return [Array<LineBuffer>]
+  private def line_buffers
+    [@line_buffer]
+  end
 end
 
 BaseWindow.register_type('text') do |height, width, top, left, element, wm|
