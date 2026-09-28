@@ -34,6 +34,7 @@ require 'rexml/document'
 require_relative 'lib/version'
 require_relative 'lib/cli_options'
 require_relative 'lib/profanity_settings'
+require_relative 'lib/profanity_log'
 
 # ~/.profanity holds the settings cache, settings.json, selection.txt and,
 # with --char, the log. Created first thing, even for --help or a bad option.
@@ -49,7 +50,7 @@ rescue CliOptions::UsageError => e
 end
 
 # Path of the settings XML chosen by {ProfanitySettings.resolve_template}.
-SETTINGS_FILENAME = begin
+settings_filename = begin
   ProfanitySettings.resolve_template(
     char: cli_options[:config] || cli_options[:char],
     template: cli_options[:template],
@@ -62,11 +63,11 @@ rescue ProfanitySettings::NotFoundError => e
 end
 
 # Log file path chosen by {ProfanitySettings.resolve_log}.
-LOG_FILE = ProfanitySettings.resolve_log(
+ProfanityLog.configure(path: ProfanitySettings.resolve_log(
   char: cli_options[:char],
   log_file: cli_options[:log_file],
   log_dir: cli_options[:log_dir]
-)
+))
 
 # True when started with --profile (or an abbreviation such as --prof):
 # boot timings are recorded and logged.
@@ -125,7 +126,6 @@ require_relative 'lib/gag_patterns'
 require_relative 'lib/shared_state'
 require_relative 'lib/kill_ring'
 require_relative 'lib/string_classification'
-require_relative 'lib/profanity_log'
 require_relative 'lib/command_buffer'
 require_relative 'lib/window_manager'
 require_relative 'lib/settings_loader'
@@ -151,11 +151,6 @@ end
 
 # ========== GLOBAL CONSTANTS ==========
 
-# Game server (Lich) port, from --port (default 8000).
-PORT = cli_options[:port]
-# Game server (Lich) host, from --host (default 127.0.0.1).
-HOST = cli_options[:host]
-
 # Default foreground curses color id, from --default-color-id (default 7).
 DEFAULT_COLOR_ID = cli_options[:default_color_id]
 # Default background curses color id, from --default-background-color-id (default 0).
@@ -176,4 +171,7 @@ ColorManager.configure(
 # ========== RUN ==========
 boot_mark('constants + color config') if BOOT_PROFILE
 
-Application.new(cli_options).run
+Application.new(cli_options,
+                settings_file: settings_filename,
+                host: cli_options[:host],
+                port: cli_options[:port]).run

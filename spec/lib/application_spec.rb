@@ -54,7 +54,18 @@ RSpec.describe Application do
     }
   end
 
-  let(:app) { described_class.new(cli_options) }
+  # The settings file, game host and port handed to Application. Groups that
+  # load settings or connect override them.
+  let(:settings_path) { File.join(SPEC_HOME, 'settings.xml') }
+  let(:host) { '127.0.0.1' }
+  let(:port) { 8000 }
+  let(:app) { new_app }
+
+  # Build an Application with the given CLI options and the settings file,
+  # host and port above.
+  def new_app(options = cli_options)
+    described_class.new(options, settings_file: settings_path, host: host, port: port)
+  end
 
   # Mock window for recording calls
   let(:main_window) do
@@ -119,7 +130,7 @@ RSpec.describe Application do
     end
 
     it 'sets blue_links from cli_options' do
-      app_with_links = described_class.new(cli_options.merge(links: true))
+      app_with_links = new_app(cli_options.merge(links: true))
       expect(app_with_links.shared_state.blue_links).to be true
     end
   end
@@ -590,12 +601,12 @@ RSpec.describe Application do
 
   describe 'adversarial initialization' do
     it 'handles nil char_name' do
-      app_nil = described_class.new(cli_options.merge(char: nil))
+      app_nil = new_app(cli_options.merge(char: nil))
       expect(app_nil.shared_state.char_name).to eq 'ProfanityFE'
     end
 
     it 'capitalizes char_name' do
-      app_char = described_class.new(cli_options.merge(char: 'mahtra'))
+      app_char = new_app(cli_options.merge(char: 'mahtra'))
       expect(app_char.shared_state.char_name).to eq 'Mahtra'
     end
 
@@ -765,7 +776,6 @@ RSpec.describe Application do
 
     before do
       allow(ProfanityLog).to receive(:write)
-      stub_const('SETTINGS_FILENAME', settings_path)
       File.write(settings_path, settings)
       app.send(:load_settings_and_layout)
     end
@@ -958,7 +968,6 @@ RSpec.describe Application do
       allow(ProfanityLog).to receive(:write)
       allow(Curses).to receive(:lines) { terminal[:lines] }
       allow(Curses).to receive(:cols) { terminal[:cols] }
-      stub_const('SETTINGS_FILENAME', settings_path)
       File.write(settings_path, settings)
       app.send(:load_settings_and_layout)
     end
@@ -1018,7 +1027,7 @@ RSpec.describe Application do
     let(:app) do
       allow(MouseScroll).to receive(:new).and_call_original
       allow(ProfanitySettings).to receive(:load_mouse_settings).and_return(nil)
-      described_class.new(cli_options)
+      new_app
     end
     # The window the wheel scrolls; calibration messages go to main below it
     let(:window) do
@@ -1299,7 +1308,6 @@ RSpec.describe Application do
     before do
       allow(ProfanityLog).to receive(:write)
       allow(Curses).to receive(:close_screen)
-      stub_const('SETTINGS_FILENAME', settings_path)
     end
 
     # Start up with the given settings file content.
@@ -1341,11 +1349,10 @@ RSpec.describe Application do
   end
 
   describe 'connecting to the game server' do
+    let(:host) { '192.0.2.10' }
     let(:stderr_at_close) { [] }
 
     before do
-      stub_const('HOST', '192.0.2.10')
-      stub_const('PORT', 8000)
       allow(Curses).to receive(:close_screen) { stderr_at_close << $stderr.string.dup }
     end
 
@@ -1395,6 +1402,95 @@ RSpec.describe Application do
 
       expect(stderr_at_close).to eq ['']
       expect(output).to include('Connection refused')
+    end
+  end
+
+  # Application used to read SETTINGS_FILENAME, HOST and PORT, constants only
+  # profanity.rb defined, so lib/application.rb couldn't be used without the
+  # entry script. It now uses the values it is constructed with.
+  describe 'the settings file, host and port it is given' do
+    let(:settings_path) { File.join(@dir, 'given.xml') }
+
+    around do |example|
+      Dir.mktmpdir { |dir| @dir = dir; example.run }
+    end
+
+    before do
+      allow(ProfanityLog).to receive(:write)
+      allow(Curses).to receive(:close_screen)
+    end
+
+    # A settings file with one highlight and a layout with a command window.
+    def settings_highlighting(word)
+      <<~XML
+        <settings>
+          <highlight fg='ff0000'>#{word}</highlight>
+          <layout id='default'>
+            <window class='text' value='main' top='0' left='0' height='5' width='60'/>
+            <window class='command' top='5' left='0' height='1' width='60'/>
+          </layout>
+        </settings>
+      XML
+    end
+
+    it 'loads that settings file at startup and again on .reload' do
+      File.write(settings_path, settings_highlighting('goblin'))
+      app.send(:load_settings_and_layout)
+      expect(HIGHLIGHT.keys).to eq [/goblin/]
+
+      File.write(settings_path, settings_highlighting('troll'))
+      app.execute_command('.reload')
+
+      expect(HIGHLIGHT.keys).to eq [/troll/]
+    end
+
+    it 'names that settings file when it has no layout' do
+      File.write(settings_path, '<settings/>')
+
+      output = capture_stderr do
+        app.send(:load_settings_and_layout)
+      rescue SystemExit
+        nil
+      end
+
+      expect(output).to start_with("ERROR: No layouts found in #{settings_path}.\n")
+    end
+
+    context 'with a game server listening on an ephemeral port' do
+      let(:listener) { TCPServer.new('127.0.0.1', 0) }
+      let(:port) { listener.addr[1] }
+
+      after do
+        app.instance_variable_get(:@server)&.close
+        listener.close
+      end
+
+      it 'connects to that host and port' do
+        app.send(:connect_server)
+        client = listener.accept
+
+        expect(client.gets).to eq "SET_FRONTEND_PID #{Process.pid}\n"
+      ensure
+        client&.close
+      end
+    end
+
+    context 'with nothing listening on the port' do
+      # A port that was free a moment ago: bind, note it, and close.
+      let(:port) { TCPServer.open('127.0.0.1', 0).then { |server| server.addr[1].tap { server.close } } }
+
+      it 'names that host and port in the error and exits 1' do
+        status = nil
+
+        output = capture_stderr do
+          app.send(:connect_server)
+        rescue SystemExit => e
+          status = e.status
+        end
+
+        expect(status).to eq 1
+        expect(output).to start_with("Failed to connect to game server at 127.0.0.1:#{port}: ")
+      end
     end
   end
 
