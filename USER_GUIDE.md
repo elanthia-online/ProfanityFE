@@ -67,7 +67,7 @@ ProfanityFE connects to `127.0.0.1` on the specified port.
 | `--port=<port>` | `8000` | TCP port to connect to on localhost |
 | `--char=<name>` | -- | Character name (for log file and process title) |
 | `--config=<name>` | same as `--char` | Config name to load (use when multiple characters share one config) |
-| `--template=<file>` | -- | Template filename from `templates/` subfolder |
+| `--template=<file>` | -- | Template filename from `templates/` subfolder (looked up as typed, then lowercased) |
 | `--no-status` | off | Disable process title updates |
 | `--links` | off | Enable in-game link highlighting |
 | `--speech-ts` | off | Add timestamps to speech, familiar, and thought windows |
@@ -280,7 +280,7 @@ game output. Text windows have a 1-column scrollbar on the right edge.
 | `height` | yes | Height in rows (expression) |
 | `width` | yes | Width in columns (expression); 1 column is reserved for the scrollbar |
 | `value` | yes | Comma-separated list of stream names to display in this window |
-| `buffer-size` | no | Maximum lines retained in the scroll buffer (default: `1000`) |
+| `buffer-size` | no | Maximum game lines retained in the scroll buffer, however many rows each wraps to (default: `1000`) |
 | `timestamp` | no | Set to `'true'` to append `[HH:MM]` timestamps to each line; leave it out or set `'false'` for none |
 
 **Examples:**
@@ -321,10 +321,10 @@ tabs that have received new content since you last viewed them.
 | `class` | yes | Must be `'tabbed'` |
 | `top` | yes | Top row position (expression) |
 | `left` | yes | Left column position (expression) |
-| `height` | yes | Height in rows (expression); 1 row is reserved for the tab bar |
+| `height` | yes | Height in rows (expression); 1 row is reserved for the tab bar (a 1-row tabbed window shows only its tab bar) |
 | `width` | yes | Width in columns (expression); 1 column reserved for scrollbar |
 | `tabs` or `value` | yes | Comma-separated list of tab names (and stream names to route) |
-| `buffer-size` | no | Maximum lines per tab buffer (default: `1000`) |
+| `buffer-size` | no | Maximum game lines per tab buffer, however many rows each wraps to (default: `1000`) |
 | `timestamp` | no | Set to `'true'` to append timestamps; leave it out or set `'false'` for none |
 
 Each tab name listed in `tabs` (or `value`) becomes both a tab and a stream
@@ -941,6 +941,9 @@ The following key names can be used in the `id` attribute:
 | `num_1` through `num_9` | Numpad 1-9 |
 | `num_enter` | Numpad Enter |
 
+These names use PDCurses keycodes, which ncurses (macOS and Linux) never
+sends, so bindings to them don't fire.
+
 **Modifier combinations:**
 
 | Name | Key |
@@ -954,12 +957,14 @@ The following key names can be used in the `id` attribute:
 | `alt+page_up`, `alt+page_down` | Alt + Page Up/Down |
 | `alt+1` through `alt+5` | Alt + number (for tab switching) |
 | `ctrl+?` | Ctrl + ? (keycode 127) |
-| `resize` | Terminal resize event |
+| `resize` | Terminal resize event (runs the `resize` action when not bound) |
 
-**Single characters:** Any single character can be used directly as a key name
-(e.g., `id='a'`).
+**Single characters:** Any single character other than a digit can be used
+directly as a key name (e.g., `id='a'`).
 
-**Numeric keycodes:** Raw keycode integers can be used (e.g., `id='410'`).
+**Numeric keycodes:** Raw keycode integers can be used (e.g., `id='410'`). An
+id made only of digits is always a keycode, so `id='7'` means keycode 7
+(Ctrl+G), not the 7 key.
 
 ### Available Actions
 
@@ -1051,7 +1056,7 @@ sequences:
 <!-- F3 clears the buffer and types a new command -->
 <key id='f3' macro='\xattack\r'/>
 
-<!-- Numpad directions -->
+<!-- Numpad directions (num_* names don't fire under ncurses; see Numpad keys above) -->
 <key id='num_8' macro='north\r'/>
 <key id='num_2' macro='south\r'/>
 <key id='num_4' macro='west\r'/>
@@ -1122,7 +1127,7 @@ use those key names.
 <key id='ctrl+n' action='next_tab'/>
 <key id='ctrl+p' action='prev_tab'/>
 
-<!-- Numpad movement macros -->
+<!-- Numpad movement macros (num_* names don't fire under ncurses; see Numpad keys above) -->
 <key id='num_8' macro='north\r'/>
 <key id='num_2' macro='south\r'/>
 <key id='num_6' macro='east\r'/>
@@ -1134,7 +1139,7 @@ use those key names.
 <key id='num_5' macro='out\r'/>
 <key id='num_enter' macro='go gate\r'/>
 
-<!-- Resize on terminal resize event -->
+<!-- Optional: a terminal resize runs the resize action even without this -->
 <key id='resize' action='resize'/>
 ```
 
@@ -1386,6 +1391,11 @@ triggers a resize.
 Manually recalculate all window positions and sizes for the current terminal
 dimensions. Use this when automatic resize detection does not fire (for
 example, inside GNU Screen or tmux).
+
+A resize, automatic or by `.resize`, re-wraps the text already in every text
+and tabbed window (every tab) to the new width, so widening or narrowing the
+terminal loses no text. The bottom line of each window stays at the bottom,
+and any text selection is cleared.
 
 ```
 .resize
@@ -1647,8 +1657,9 @@ Inactive windows have a plain pipe (`|`) scrollbar.
 ### Buffer Size
 
 Each text window has a configurable buffer size (via the `buffer-size`
-attribute, default 1000 lines). When the buffer exceeds this limit, the oldest
-lines are discarded.
+attribute, default 1000). It counts game lines, however many rows each one
+wraps to on screen. When the buffer exceeds this limit, the oldest game line is
+discarded whole, never just part of it.
 
 ---
 
@@ -1669,7 +1680,10 @@ There are several ways to switch tabs:
 <key id='alt+3' action='switch_tab_3'/>
 <key id='ctrl+n' action='next_tab'/>
 <key id='ctrl+p' action='prev_tab'/>
+<key id='shift+tab' action='switch_tab_reverse'/>
 ```
+
+`ctrl+tab` can't be bound: terminals send it as a plain Tab.
 
 **By dot-command:**
 
@@ -1695,12 +1709,15 @@ Switching to that tab clears the activity indicator.
 
 The tab bar occupies the top row of the tabbed window. Each tab is shown as
 ` N:name ` where N is the 1-based index. The active tab is displayed with
-reverse video (inverted colors). Tabs are separated by `|`.
+reverse video (inverted colors). Tabs are separated by `|`. A tab bar wider
+than the window is cut off at its right edge; tabs past the edge can still be
+reached with their index (`alt+N`, `.tab N`) or by cycling.
 
 ### Per-Tab Scroll Position
 
 Each tab maintains its own independent scroll position. Scrolling in one tab
-does not affect the others.
+does not affect the others, and a tab you scrolled back in keeps showing the
+same lines while new text arrives for it in the background.
 
 ---
 
@@ -1818,9 +1835,11 @@ selection, double-click selects the word under the cursor, and triple-click
 selects the whole line. Lines that were word-wrapped for display are copied
 as one logical line, without the mid-sentence breaks. A brief
 `[copied N chars]` note appears in the main window after each copy.
-Selected text is copied via
-OSC 52 (if your terminal supports it) and saved to `~/.profanity/selection.txt`
-(readable only by you).
+Selected text is copied to the system clipboard with `pbcopy` (macOS),
+`wl-copy` (Wayland) or `xclip` (X11), sent via OSC 52 (if your terminal
+supports it), and saved to `~/.profanity/selection.txt` (readable only by
+you, even if the file already existed). If the clipboard tool is missing or
+fails, that is noted in the log and the other two still work.
 Native terminal selection is unavailable while `.links` or `.select` is on
 because the terminal hands the mouse to Profanity — but nearly all terminal
 emulators bypass mouse capture when you hold a modifier: **Shift+drag**
@@ -1854,7 +1873,12 @@ events, calibration is required.
 
 Run the `.scrollcfg` command to start the interactive calibration wizard. It
 will prompt you to scroll up and then scroll down so it can learn the keycodes
-your terminal sends. Follow the on-screen instructions.
+your terminal sends. Follow the on-screen instructions. Mouse clicks (left,
+middle and right) are ignored while it listens, so a click can't be learned as
+the wheel.
+
+Run `.scrollcfg` again before it finishes to cancel. Cancelling keeps the wheel
+settings you had before; nothing learned so far is used or saved.
 
 ### Saved Settings
 
@@ -1952,8 +1976,18 @@ support title updates or you find it distracting.
 
 **Key does not work or produces unexpected behavior:**
 - Use `.key` to discover the actual keycode your terminal sends for that key.
+- Check the log for `Unknown key id '<id>', binding ignored`: a binding whose
+  id names no key is skipped, and the rest of the settings still load.
 - Some key combinations may not be available in all terminals (especially
-  inside tmux or GNU Screen).
+  inside tmux or GNU Screen). For example, Ctrl+Tab arrives as a plain Tab,
+  and under `TERM=screen-256color` Ctrl+PageUp/PageDown aren't decoded (they
+  type characters into the command line instead).
+
+**Settings file doesn't load:**
+- At startup, the error names the file and the reason (for example "Settings
+  file is empty" or the XML parser's message with a line number).
+- `.reload` parses the file first and only applies it if it loads: on an
+  error it shows the reason and keeps the settings you had.
 
 ### Logging
 
@@ -2003,8 +2037,9 @@ standard Lich script command prefix. For example, typing `.e echo hello` sends
   works normally (editing the XML makes it newer than the cache).
 - **Boot profiling:** Use `--profile` to log a timing breakdown of each
   startup phase to the log file. Useful for diagnosing slow launches.
-- The `buffer-size` attribute controls how many lines each text window retains.
-  Very large values (10000+) may increase memory usage.
+- The `buffer-size` attribute controls how many game lines each text window
+  retains. Very large values (10000+) may increase memory usage, and make a
+  terminal resize slower, since every stored line is re-wrapped.
 - ProfanityFE batches screen updates and delays rendering when more server data
   is available, reducing flicker during heavy output.
 - Curses rendering is synchronized via `CursesRenderer` (a reentrant `Monitor`)
