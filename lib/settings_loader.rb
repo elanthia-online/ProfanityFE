@@ -223,6 +223,7 @@ module SettingsLoader
   #
   # @param filename [String] path to the .profanity.xml file
   # @return [CachedElement] root element of the parsed settings
+  # @raise [REXML::ParseException] if the XML is malformed or the file is empty
   def load_cached_xml(filename)
     # Settings files are UTF-8 (the bundled templates contain em-dashes);
     # don't depend on the locale's default encoding, which is US-ASCII under C/POSIX.
@@ -234,6 +235,10 @@ module SettingsLoader
     return cached_root if cached_root
 
     xml_doc = REXML::Document.new(sanitize_xml_comments(xml_string))
+    # REXML reports "No root element" for a file of only whitespace or
+    # comments, but parses an empty one to a document with no root.
+    raise REXML::ParseException, "Settings file is empty: #{filename}" unless xml_doc.root
+
     cached_root = rexml_to_cached(xml_doc.root)
     write_cache(cache_file, digest, cached_root)
     cached_root

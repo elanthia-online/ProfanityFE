@@ -311,11 +311,22 @@ RSpec.describe SettingsLoader do
       expect(error).to be_a(REXML::ParseException)
     end
 
-    it 'keeps every setting when the reloaded file is empty' do
+    # BUG FOUND (fixed here): an empty file failed with "undefined method
+    # 'attributes' for nil" instead of saying what was wrong.
+    it 'keeps every setting and says the file is empty when the reloaded file is empty' do
       error = reload('')
 
       expect_good_settings_in_effect
-      expect(error).to be_a(StandardError)
+      expect(error.message).to eq "Settings file is empty: #{File.join(@dir, 'settings.xml')}"
+    end
+
+    it 'keeps every setting and reports no root element for a whitespace- or comment-only file' do
+      ["  \n\t\n", "<?xml version='1.0'?>\n<!-- nothing here -->\n"].each do |xml|
+        error = reload(xml)
+
+        expect_good_settings_in_effect
+        expect(error.message).to start_with 'Malformed XML: No root element'
+      end
     end
 
     it 'reports the failure and logs the backtrace' do
@@ -422,6 +433,19 @@ RSpec.describe SettingsLoader do
       error = load_settings(path)
 
       expect(error).to be_a(REXML::ParseException)
+      expect(LAYOUT).to be_empty
+    end
+
+    it 'logs that an empty file is empty, naming it' do
+      allow(ProfanityLog).to receive(:write)
+      path = File.join(@dir, 'settings.xml')
+      File.write(path, '')
+
+      error = load_settings(path)
+
+      expect(error.message).to eq "Settings file is empty: #{path}"
+      expect(ProfanityLog).to have_received(:write)
+        .with('settings', "Settings file is empty: #{path}", backtrace: an_instance_of(Array))
       expect(LAYOUT).to be_empty
     end
   end

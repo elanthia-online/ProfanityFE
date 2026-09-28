@@ -778,6 +778,19 @@ RSpec.describe Application do
         .with(msg, [{ start: 0, end: msg.length, fg: FEEDBACK_COLOR, bg: nil, ul: nil }])
     end
 
+    # BUG FOUND (fixed here): an empty file was reported as
+    # "undefined method 'attributes' for nil".
+    it 'keeps the settings and says the file is empty when it is empty' do
+      File.write(settings_path, '')
+      allow(main).to receive(:add_string).and_call_original
+
+      app.execute_command('.reload')
+
+      expect(HIGHLIGHT).to eq(/goblin/ => ['ff0000', nil, nil])
+      expect(main).to have_received(:add_string)
+        .with("* Reload failed, settings unchanged: Settings file is empty: #{settings_path}", anything)
+    end
+
     it 'applies a good file without printing anything' do
       File.write(settings_path, settings.sub('goblin', 'kobold'))
 
