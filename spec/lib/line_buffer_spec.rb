@@ -1,30 +1,47 @@
 # frozen_string_literal: true
 
 # Tests LineBuffer, the line storage behind text and tabbed windows:
-# newest-first storage with a cap, stable line IDs, scroll clamping and
-# the row-to-line mapping of a text area.
+# logical lines wrapped into newest-first rows, a cap counted in logical
+# lines, stable row IDs, scroll clamping and the row-to-line mapping of a
+# text area.
 
 require_relative '../../lib/line_buffer'
 
 RSpec.describe LineBuffer do
-  subject(:buffer) { described_class.new(cap: 5) }
+  subject(:buffer) { described_class.new(cap: 5, width: 10) }
 
-  # Push plain lines, oldest first.
+  # Push plain lines that fit the width, oldest first.
   def push_lines(*texts)
-    texts.each { |text| buffer.push(text, [], false) }
+    texts.each { |text| buffer.push(text, [], indent: true) }
   end
 
-  # Texts of the lines shown in a text area, top row first.
+  # Texts of the rows shown in a text area, top row first.
   def shown(height)
     (0...height).filter_map { |row| buffer.line_at_row(row, height)&.last&.first }
   end
 
   describe '#push' do
-    it 'stores lines newest first with their colors and continuation flag' do
-      buffer.push('one', [{ start: 0, end: 3, fg: 'ff0000' }], false)
-      buffer.push('  two', [], true)
+    it 'stores a line that fits the width as one row with its colors' do
+      buffer.push('one', [{ start: 0, end: 3, fg: 'ff0000' }], indent: true)
 
-      expect(buffer.lines).to eq [['  two', [], true], ['one', [{ start: 0, end: 3, fg: 'ff0000' }], false]]
+      expect(buffer.lines).to eq [['one', [{ start: 0, end: 3, fg: 'ff0000' }], false]]
+    end
+
+    it 'wraps a long line to the width, newest row first, flagging the continuation rows' do
+      buffer.push('one two three four', [], indent: true)
+
+      expect(buffer.lines).to eq [['  four', [], true], ['  three ', [], true], ['one two ', [], false]]
+    end
+
+    it 'splits the color runs across the rows and indents only when asked' do
+      buffer.push('one two three', [{ start: 4, end: 13, fg: 'ff0000' }], indent: false)
+
+      expect(buffer.lines).to eq [['three', [{ start: 0, end: 5, fg: 'ff0000' }], true],
+                                  ['one two ', [{ start: 4, end: 8, fg: 'ff0000' }], false]]
+    end
+
+    it 'returns the number of rows the line was wrapped to' do
+      expect(buffer.push('one two three four', [], indent: true)).to eq 3
     end
 
     it 'evicts the oldest line once the buffer is over its cap' do
@@ -33,15 +50,31 @@ RSpec.describe LineBuffer do
       expect(buffer.lines.map(&:first)).to eq %w[l6 l5 l4 l3 l2]
     end
 
-    it 'keeps counting appended lines after eviction, so IDs stay stable' do
-      push_lines('l1', 'l2', 'l3', 'l4', 'l5', 'l6')
+    it 'counts the cap in lines, not rows' do
+      capped = described_class.new(cap: 2, width: 10)
+      capped.push('one two three four', [], indent: true)
+      capped.push('l2', [], indent: true)
 
-      expect(buffer.lines_appended).to eq 6
+      expect(capped.lines.map(&:first)).to eq ['l2', '  four', '  three ', 'one two ']
+    end
+
+    it 'evicts every row of the oldest line together' do
+      capped = described_class.new(cap: 2, width: 10)
+      ['one two three four', 'l2', 'l3'].each { |text| capped.push(text, [], indent: true) }
+
+      expect(capped.lines.map(&:first)).to eq %w[l3 l2]
+    end
+
+    it 'keeps counting appended rows after eviction, so IDs stay stable' do
+      capped = described_class.new(cap: 2, width: 10)
+      ['one two three four', 'l2', 'l3'].each { |text| capped.push(text, [], indent: true) }
+
+      expect(capped.lines_appended).to eq 5
     end
 
     it 'keeps nothing with a cap of zero' do
-      zero = described_class.new(cap: 0)
-      zero.push('l1', [], false)
+      zero = described_class.new(cap: 0, width: 10)
+      zero.push('l1', [], indent: true)
 
       expect(zero.lines).to be_empty
     end
@@ -53,6 +86,17 @@ RSpec.describe LineBuffer do
       push_lines('l5')
 
       expect(buffer.pos).to eq 1
+    end
+  end
+
+  describe '#width=' do
+    it 'wraps lines added afterwards to the new width and leaves stored rows alone' do
+      buffer.push('one two three', [], indent: false)
+
+      buffer.width = 20
+      buffer.push('one two three', [], indent: false)
+
+      expect(buffer.lines.map(&:first)).to eq ['one two three', 'three', 'one two ']
     end
   end
 
@@ -189,8 +233,7 @@ RSpec.describe LineBuffer do
 
   describe '#extract' do
     it 'rejoins a wrapped line without its continuation indent' do
-      buffer.push('one two ', [], false)
-      buffer.push('  three', [], true)
+      buffer.push('one two three', [], indent: true)
 
       expect(buffer.extract(1, 0, 2, 7)).to eq 'one two three'
     end

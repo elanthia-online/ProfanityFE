@@ -21,7 +21,7 @@ class TabbedTextWindow < BaseWindow
   # @return [String, nil] name of the currently displayed tab
   attr_reader :active_tab
 
-  # @return [Integer] maximum number of lines retained per tab buffer
+  # @return [Integer] maximum number of logical lines retained per tab buffer
   attr_reader :max_buffer_size
 
   # Create a new tabbed text window with an empty tab set.
@@ -38,7 +38,7 @@ class TabbedTextWindow < BaseWindow
     setscrreg(TAB_BAR_HEIGHT, maxy - 1)
   end
 
-  # Set the maximum number of lines retained per tab buffer.
+  # Set the maximum number of logical lines retained per tab buffer.
   #
   # @param val [Integer, #to_i] new buffer size limit
   # @return [void]
@@ -47,9 +47,9 @@ class TabbedTextWindow < BaseWindow
     @tab_buffers.each_value { |tab_buffer| tab_buffer.cap = @max_buffer_size }
   end
 
-  # Each tab's stored lines.
+  # Each tab's display rows.
   #
-  # @return [Hash{String => Array}] tab name to line buffer (newest first)
+  # @return [Hash{String => Array}] tab name to rows (newest first)
   #   mapping, in tab order
   def tabs
     @tab_buffers.transform_values(&:lines)
@@ -61,7 +61,7 @@ class TabbedTextWindow < BaseWindow
   # @param name [String] unique tab name (e.g. "main", "combat")
   # @return [void]
   def add_tab(name)
-    @tab_buffers[name] = LineBuffer.new(cap: @max_buffer_size)
+    @tab_buffers[name] = LineBuffer.new(cap: @max_buffer_size, width: wrap_width)
     @tab_activity[name] = false
     @active_tab ||= name
     draw_tab_bar

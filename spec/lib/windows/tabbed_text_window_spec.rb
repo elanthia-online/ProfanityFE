@@ -189,6 +189,31 @@ RSpec.describe TabbedTextWindow do
     end
   end
 
+  context 'when evictions in a scrolled-back background tab drop the rows it showed' do
+    # Two tabs keeping 3 lines each; text wraps at 19 columns.
+    let(:window) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='tabbed' top='0' left='0' height='4' width='21' tabs='main,combat' buffer-size='3'/></layout>
+      XML
+      window_manager = WindowManager.new
+      window_manager.load_layout('test')
+      window_manager.stream['main']
+    end
+
+    it 'shows the lines left when the tab is shown again' do
+      ['one two three four five six seven eight', 'nine ten eleven twelve thirteen fourteen', 'l1'].each do |line|
+        window.add_string(line)
+      end
+      window.scroll(-window.content_height)
+      window.switch_tab('combat')
+
+      %w[l2 l3].each { |line| window.add_string_to_tab('main', line) }
+      window.switch_tab('main')
+
+      expect(text_rows).to eq %w[l1 l2 l3]
+    end
+  end
+
   context 'when the buffer is full and the user has scrolled back to its oldest lines' do
     # Same window, but keeping only 6 lines per tab.
     let(:window) do

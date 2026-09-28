@@ -17,17 +17,17 @@ class TextWindow < BaseWindow
   #
   # @param args [Array] arguments forwarded to {BaseWindow#initialize}
   def initialize(*args)
-    @line_buffer = LineBuffer.new(cap: DEFAULT_BUFFER_SIZE)
     @indent_word_wrap = true
     super
+    @line_buffer = LineBuffer.new(cap: DEFAULT_BUFFER_SIZE, width: wrap_width)
   end
 
-  # @return [Integer] maximum number of lines retained in the buffer
+  # @return [Integer] maximum number of logical lines retained in the buffer
   def max_buffer_size
     @line_buffer.cap
   end
 
-  # Set the maximum number of lines retained in the buffer.
+  # Set the maximum number of logical lines retained in the buffer.
   #
   # @param val [Integer, #to_i] new buffer size limit
   # @return [void]
