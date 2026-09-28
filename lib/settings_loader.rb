@@ -320,7 +320,8 @@ module SettingsLoader
   # Returns a proc that processes a +<key>+ XML element and populates the
   # given binding hash. Handles single keys, numeric key codes, multi-key
   # sequences (arrays from KEY_NAME), macro attributes, action attributes,
-  # and nested +<key>+ children via self-referencing recursion.
+  # and nested +<key>+ children via self-referencing recursion. A +<key>+
+  # whose id names no key is skipped (with any keys nested in it) and logged.
   #
   # A key maps either to a Proc (an action or macro) or to a Hash of the keys
   # that may follow it (a combo prefix), never both. When a definition
@@ -364,6 +365,8 @@ module SettingsLoader
               setup_key.call(e, combo)
             end
           end
+        else
+          ProfanityLog.write('settings', "Unknown key id '#{id}', binding ignored")
         end
       end
     }

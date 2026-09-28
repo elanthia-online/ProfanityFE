@@ -104,8 +104,7 @@
   <key id='alt+1'          action='switch_tab_1'/>
   <key id='alt+2'          action='switch_tab_2'/>
   <key id='alt+3'          action='switch_tab_3'/>
-  <key id='ctrl+tab'       action='switch_tab'/>
-  <key id='ctrl+shift+tab' action='switch_tab_reverse'/>
+  <key id='shift+tab'      action='switch_tab_reverse'/>
 
   <!-- ================================================================
        HIGHLIGHTS — Regex patterns that colorize matching game text

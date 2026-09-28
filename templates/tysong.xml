@@ -283,15 +283,10 @@
     <key id='s' macro="\xstance "/>
   </key>
 
-  <!-- Ctrl+Z: begin typing a whisper -->
-  <key id='ctrl+z' macro='\xwhisper '/>
-
   <!-- Ctrl+N: put an item into your straps (stow gear) -->
   <key id='ctrl+n' macro='\xput \? in my straps'/>
   <!-- Ctrl+U: take an item from your straps (retrieve gear) -->
   <key id='ctrl+u' macro='\xtake \? from my straps'/>
-  <!-- Numpad +: quick LOOK command -->
-  <key id='plus' macro='\xlook\r'/>
   <!-- Numpad 7: switch to defensive stance -->
   <key id='7' macro='stance def\r'/>
 

@@ -302,7 +302,6 @@
   <key id='shift+home' action='cursor_home'/>
   <key id='shift+end' action='cursor_end'/>
   <key id='backspace' action='cursor_backspace'/>
-  <key id='ctrl_backspace' action='cursor_backspace_word'/>
   <key id='win_backspace' action='cursor_backspace_word'/>
   <key id='ctrl+?' action='cursor_backspace'/>
   <key id='delete' action='cursor_delete'/>

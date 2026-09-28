@@ -145,5 +145,23 @@ RSpec.describe 'KEY_NAME' do
 
       expect(fired).to eq %i[word_left tab_up]
     end
+
+    # Shift+Tab arrives as KEY_BTAB (353) under real ncurses on macOS and
+    # Linux (xterm-256color, screen-256color, tmux-256color); it is a
+    # standard code, so it is the same on every build.
+    it 'fires shift+tab on KEY_BTAB (353)' do
+      key_name_with(macos_keyname)
+      fired = []
+      binding = {}
+      Dir.mktmpdir do |dir|
+        path = File.join(dir, 'settings.xml')
+        File.write(path, "<settings><key id='shift+tab' action='tab_back'/></settings>")
+        SettingsLoader.load(path, binding, { 'tab_back' => proc { fired << :tab_back } }, proc {})
+      end
+
+      binding[353]&.call
+
+      expect(fired).to eq %i[tab_back]
+    end
   end
 end
