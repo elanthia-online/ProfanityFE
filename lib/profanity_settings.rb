@@ -13,8 +13,8 @@ Manages the ~/.profanity/ directory structure for config, logs, and state.
 
 # Manages the ProfanityFE application directory at +~/.profanity/+.
 #
-# Provides file path resolution, thread-safe read/write, and automatic
-# directory creation. Used for templates, logs, and persistent state
+# Provides file path resolution, thread-safe read/write, and directory
+# creation ({ensure_app_dir}). Used for templates, logs, and persistent state
 # (e.g., mouse scroll wheel calibration).
 #
 # @example
@@ -24,11 +24,22 @@ Manages the ~/.profanity/ directory structure for config, logs, and state.
 module ProfanitySettings
   @lock = Mutex.new
 
+  # Raised by {resolve_template} when no settings file can be found. The
+  # message is what profanity.rb prints to stderr before it exits 1.
+  class NotFoundError < StandardError; end
+
   # @return [String] the application data directory
   APP_DIR = File.join(Dir.home, '.profanity')
 
-  # Create the app directory if it doesn't exist
-  FileUtils.mkdir_p(APP_DIR)
+  # Create {APP_DIR} if it doesn't exist. profanity.rb calls this at
+  # startup, before anything is written there (log, settings cache,
+  # settings.json, selection.txt); requiring this file doesn't create it.
+  #
+  # @return [void]
+  # @raise [SystemCallError] if the directory can't be created
+  def self.ensure_app_dir
+    FileUtils.mkdir_p(APP_DIR)
+  end
 
   # Resolve a file path within the app directory.
   #
@@ -82,9 +93,8 @@ module ProfanitySettings
   #   2. <app_dir>/templates/name.xml (bundled template)
   #   3. <app_dir>/templates/default.xml (fallback)
   #
-  # Without --char, only step 3 applies. If nothing is found, prints
-  # "No settings file found" to stderr and exits 1; ~/.profanity.xml is
-  # never consulted.
+  # Without --char, only step 3 applies. ~/.profanity.xml is never
+  # consulted.
   #
   # @param char [String, nil] character name from --char flag
   # @param template [String, nil] explicit template filename from --template flag,
@@ -92,14 +102,15 @@ module ProfanitySettings
   # @param settings_file [String, nil] explicit path from --settings-file flag
   # @param app_dir [String] the ProfanityFE installation directory
   # @return [String] resolved full path to the settings XML
+  # @raise [NotFoundError] if --settings-file or --template names a file
+  #   that doesn't exist, or no settings file is found at all
   def self.resolve_template(char: nil, template: nil, settings_file: nil, app_dir: '.')
     # Explicit --settings-file takes absolute precedence
     if settings_file
       path = File.expand_path(settings_file)
       return path if File.exist?(path)
 
-      $stderr.puts "Settings file not found: #{path}"
-      exit 1
+      raise NotFoundError, "Settings file not found: #{path}"
     end
 
     # Explicit --template=filename.xml, as typed; then lowercased, which is
@@ -112,8 +123,7 @@ module ProfanitySettings
       lowercase = File.join(app_dir, 'templates', template.downcase)
       return lowercase if File.exist?(lowercase)
 
-      $stderr.puts "Template not found: #{path}"
-      exit 1
+      raise NotFoundError, "Template not found: #{path}"
     end
 
     # --char=Name: search user dir, then bundled templates
@@ -132,9 +142,8 @@ module ProfanitySettings
     default = File.join(app_dir, 'templates', 'default.xml')
     return default if File.exist?(default)
 
-    $stderr.puts 'No settings file found. Use --char=<name>, --template=<file>, or --settings-file=<path>'
-    $stderr.puts "Or create #{default}"
-    exit 1
+    raise NotFoundError, "No settings file found. Use --char=<name>, --template=<file>, or --settings-file=<path>\n" \
+                         "Or create #{default}"
   end
 
   # Resolve the log file path.

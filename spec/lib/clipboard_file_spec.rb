@@ -10,6 +10,10 @@ require_relative '../../lib/profanity_settings'
 # victim overwrite their own files. It now lives in the per-user
 # ~/.profanity/ (HOME is sandboxed by spec_helper).
 RSpec.describe 'SelectionManager.copy_to_clipboard file fallback' do
+  # profanity.rb creates ~/.profanity at startup, before anything is
+  # written there; requiring lib/profanity_settings.rb doesn't.
+  before { ProfanitySettings.ensure_app_dir }
+
   let(:tty) { StringIO.new }
   let(:selection_file) { ProfanitySettings.file('selection.txt') }
   let(:shared_tmp_file) { '/tmp/profanity_selection.txt' }

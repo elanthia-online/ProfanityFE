@@ -8,6 +8,10 @@ require_relative '../../lib/profanity_settings'
 # must not abort the copy: OSC 52 and the file fallback still have to run.
 # PATH points at an empty directory, so the real IO.popen fails to spawn.
 RSpec.describe 'SelectionManager.copy_to_clipboard with no clipboard tool installed' do
+  # profanity.rb creates ~/.profanity at startup, before anything is
+  # written there; requiring lib/profanity_settings.rb doesn't.
+  before { ProfanitySettings.ensure_app_dir }
+
   let(:tty) { StringIO.new }
   let(:empty_bin) { Dir.mktmpdir('no-clipboard-tools') }
   let(:selection_file) { ProfanitySettings.file('selection.txt') }

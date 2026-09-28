@@ -10,6 +10,10 @@ require_relative '../../lib/profanity_settings'
 require_relative '../../lib/mouse_scroll'
 
 RSpec.describe ProfanitySettings do
+  # profanity.rb creates ~/.profanity at startup, before anything is
+  # written there; requiring lib/profanity_settings.rb doesn't.
+  before { ProfanitySettings.ensure_app_dir }
+
   let(:path) { described_class.file('settings.json') }
 
   before do

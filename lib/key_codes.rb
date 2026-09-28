@@ -194,5 +194,5 @@ KeyCodes::FALLBACK = {
 }.freeze
 
 # Key name => curses key code (or key sequence) for <key> bindings. Built
-# when this file is loaded, so load it after curses_setup has started curses.
+# when this file is loaded, so load it after CursesSetup.start has started curses.
 KEY_NAME = KeyCodes.key_names.freeze

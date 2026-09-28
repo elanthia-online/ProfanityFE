@@ -31,14 +31,17 @@ RSpec.describe ProfanitySettings do
       expect(File.identical?(path, default)).to be(true)
     end
 
-    it 'reports the name as typed and exits 1 when no such template exists' do
-      status = nil
-      expect do
-        described_class.resolve_template(template: 'NoSuch.xml', app_dir: app_dir)
-      rescue SystemExit => e
-        status = e.status
-      end.to output("Template not found: #{File.join(templates, 'NoSuch.xml')}\n").to_stderr
-      expect(status).to eq(1)
+    it 'raises NotFoundError naming the template as typed when no such template exists' do
+      expect { described_class.resolve_template(template: 'NoSuch.xml', app_dir: app_dir) }
+        .to raise_error(described_class::NotFoundError, "Template not found: #{File.join(templates, 'NoSuch.xml')}")
+        .and output('').to_stderr
+    end
+
+    it 'raises for a missing --template even when a default template exists' do
+      File.write(File.join(templates, 'default.xml'), '<settings/>')
+
+      expect { described_class.resolve_template(template: 'NoSuch.xml', app_dir: app_dir) }
+        .to raise_error(described_class::NotFoundError, /\ATemplate not found: /)
     end
   end
 

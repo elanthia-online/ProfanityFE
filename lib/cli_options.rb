@@ -10,6 +10,10 @@ require_relative 'version'
 
 # Command-line options for profanity.rb.
 module CliOptions
+  # Raised by {parse_command_line} for a bad command line. The message is
+  # what profanity.rb prints to stderr (with +warn+) before it exits 1.
+  class UsageError < StandardError; end
+
   # Option values used when an option is not given on the command line.
   DEFAULTS = {
     port: 8000,
@@ -49,19 +53,21 @@ module CliOptions
     options
   end
 
-  # Parse the command line, or print the error with a usage hint and exit.
+  # Parse the command line; on a bad option, raise {UsageError} carrying
+  # the error and a usage hint.
   #
   # @param argv [Array<String>] command-line arguments; parsed options are
   #   removed from it
   # @param program [String] program name shown in the error and hint
   # @return [Hash{Symbol => Object}] the options from {parse}
-  # @raise [SystemExit] with status 1 on a bad option (--help exits 0)
-  def self.parse_or_exit(argv, program: File.basename($PROGRAM_NAME))
+  # @raise [UsageError] on an unknown, ambiguous or invalid option
+  # @raise [SystemExit] with status 0 after printing --help (OptionParser's
+  #   built-in --help does that)
+  def self.parse_command_line(argv, program: File.basename($PROGRAM_NAME))
     parse(argv)
   rescue OptionParser::ParseError => e
-    warn "#{program}: #{e.message}"
-    warn "Try '#{program} --help' for the list of options."
-    exit 1
+    raise UsageError, "#{program}: #{e.message}\n" \
+                      "Try '#{program} --help' for the list of options."
   end
 
   # Build the OptionParser that fills in +options+.
