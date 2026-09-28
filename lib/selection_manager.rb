@@ -251,9 +251,13 @@ module SelectionManager
       if clipboard_cmd
         begin
           IO.popen(clipboard_cmd, 'w') { |io| io.write(text) }
+          status = Process.last_status
+          raise IOError, status.to_s unless status.success?
+
           ProfanityLog.write('Clipboard', "Copied #{text.length} chars via #{clipboard_cmd}")
         rescue SystemCallError, IOError => e
-          # Tool not installed (ENOENT) or exited early (EPIPE): fall through.
+          # Tool not installed (ENOENT), exited early (EPIPE) or exited
+          # non-zero (e.g. xclip with no X server): fall through.
           ProfanityLog.write('Clipboard', "#{clipboard_cmd} failed (#{e.message}); using OSC 52 + file")
         end
       else

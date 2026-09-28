@@ -49,10 +49,39 @@ RSpec.describe 'SelectionManager.copy_to_clipboard with no clipboard tool instal
     ENV['PATH'] = "#{empty_bin}:/bin:/usr/bin"
     stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
     ENV['WAYLAND_DISPLAY'] = 'wayland-0'
+    allow(ProfanityLog).to receive(:write)
 
     SelectionManager.copy_to_clipboard('hello')
 
     expect(File.read(received)).to eq('hello')
     expect(tty.string).to eq("\e]52;c;#{['hello'].pack('m0')}\a")
+    expect(ProfanityLog).to have_received(:write).with('Clipboard', 'Copied 5 chars via wl-copy')
+  end
+
+  context 'when the tool runs but exits non-zero (e.g. xclip with no reachable X server)' do
+    let(:clipboard_log) { [] }
+
+    before do
+      tool = File.join(empty_bin, 'wl-copy')
+      File.open(tool, 'w', 0o755) { |f| f.write("#!/bin/sh\ncat > /dev/null\nexit 1\n") }
+      ENV['PATH'] = "#{empty_bin}:/bin:/usr/bin"
+      stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
+      ENV['WAYLAND_DISPLAY'] = 'wayland-0'
+      allow(ProfanityLog).to receive(:write) { |context, message, **| clipboard_log << message if context == 'Clipboard' }
+    end
+
+    it 'does not report the copy as done by the tool' do
+      SelectionManager.copy_to_clipboard('hello')
+
+      expect(clipboard_log).not_to include(a_string_starting_with('Copied'))
+      expect(clipboard_log).to include(a_string_matching(/\Awl-copy failed \(.*exit.*1\); using OSC 52 \+ file\z/))
+    end
+
+    it 'still sends OSC 52 and writes the fallback file' do
+      SelectionManager.copy_to_clipboard('hello')
+
+      expect(tty.string).to eq("\e]52;c;#{['hello'].pack('m0')}\a")
+      expect(File).to have_received(:write).with(anything, 'hello', any_args)
+    end
   end
 end
