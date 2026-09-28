@@ -288,6 +288,29 @@ RSpec.describe 'Dot-commands typed on the command line' do
       expect(tabbed.active_tab).to eq 'logons'
     end
 
+    # A settings macro with a newline (&#10;) sends input that spans lines,
+    # and Lich reads each line as its own command. Only the start of the
+    # input is a dot-command; a later line is not run by Profanity. (Whether
+    # its leading '.' becomes ';' on the way to the game is left open here.)
+    commands.each do |name, args|
+      input = args == :required ? "#{name} goblin" : name
+      it "does not run .#{input} from the second line of the input, and sends both lines to the game" do
+        allow(ColorManager).to receive(:reinitialize_colors)
+        press_key(nil)
+
+        expect { run_harmless("look\n.#{input}") }.not_to raise_error
+
+        expect(app.shared_state.skip_server_time_offset).to be true
+        expect(server.string).to match(/\Alook\n[.;]#{Regexp.escape(input)}\n\z/)
+      end
+    end
+
+    it 'does not add a highlight from the second line of the input' do
+      app.execute_command("look\n.highlight goblin")
+      expect(HIGHLIGHT).to be_empty
+      expect(shown).to be_empty
+    end
+
     it 'ignores what follows a command that takes no argument' do
       app.execute_command('.resync please')
       expect(app.shared_state.skip_server_time_offset).to be false
