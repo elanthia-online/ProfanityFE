@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'dot_command'
+
 # Default BOOT_PROFILE to false when loaded outside profanity.rb (e.g. specs)
 BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
 
@@ -23,26 +25,68 @@ class Application
   attr_reader :key_binding, :key_action, :cmd_buffer, :window_mgr,
               :shared_state, :mouse_scroll
 
-  # Help lines for the dot-commands, shown by .help.
-  DOT_COMMAND_HELP = [
-    '.quit              Exit Profanity immediately',
-    '.key               Show raw keycode of next key press',
-    '.fixcolor          Reinitialize custom Curses colors',
-    '.resync            Reset server time offset for timers',
-    '.reload            Hot-reload settings XML file',
-    '.layout <name>     Switch to a named window layout',
-    '.resize            Recalculate window sizes for terminal',
-    '.tab               List tabs (active marked with *)',
-    '.tab <N|name>      Switch tab by number or name',
-    '.arrow             Cycle arrow keys: history/page/line',
-    '.links             Toggle in-game link highlighting',
-    '.select            Toggle drag-to-select without links',
-    '.draghl            Toggle live highlight while dragging',
-    '.scrollcfg         Configure mouse scroll wheel',
-    '.highlight <text>   Add cyan highlight for text (session only)',
-    '.unhighlight <text> Remove an inline highlight',
-    '.highlight          List active inline highlights',
-    '.help              Show this help'
+  # The dot-commands, in the order {#execute_command} tries them (the first
+  # match wins) and +.help+ lists them. Each handler runs with
+  # +instance_exec+ on the Application.
+  DOT_COMMANDS = [
+    DotCommand.new(name: 'quit',
+                   help: ['.quit              Exit Profanity immediately'],
+                   handler: proc { exit }),
+    DotCommand.new(name: 'key',
+                   help: ['.key               Show raw keycode of next key press'],
+                   handler: proc { handle_dot_key }),
+    DotCommand.new(name: 'fixcolor',
+                   help: ['.fixcolor          Reinitialize custom Curses colors'],
+                   handler: proc { ColorManager.reinitialize_colors }),
+    DotCommand.new(name: 'resync',
+                   help: ['.resync            Reset server time offset for timers'],
+                   handler: proc { @shared_state.skip_server_time_offset = false }),
+    DotCommand.new(name: 'reload',
+                   help: ['.reload            Hot-reload settings XML file'],
+                   handler: proc { handle_dot_reload }),
+    DotCommand.new(name: 'layout',
+                   args: :required,
+                   help: ['.layout <name>     Switch to a named window layout'],
+                   handler: proc { |layout|
+                     @window_mgr.load_layout(layout)
+                     @cmd_buffer.window = @window_mgr.command_window
+                     @key_action['resize'].call
+                   }),
+    DotCommand.new(name: 'resize',
+                   help: ['.resize            Recalculate window sizes for terminal'],
+                   handler: proc { @key_action['resize'].call }),
+    DotCommand.new(name: 'tab',
+                   args: :optional,
+                   help: ['.tab               List tabs (active marked with *)',
+                          '.tab <N|name>      Switch tab by number or name'],
+                   handler: proc { |arg| handle_dot_tab(arg) }),
+    DotCommand.new(name: 'arrow',
+                   help: ['.arrow             Cycle arrow keys: history/page/line'],
+                   handler: proc { handle_dot_arrow }),
+    DotCommand.new(name: 'links',
+                   help: ['.links             Toggle in-game link highlighting'],
+                   handler: proc { handle_dot_links }),
+    DotCommand.new(name: 'select',
+                   help: ['.select            Toggle drag-to-select without links'],
+                   handler: proc { handle_dot_select }),
+    DotCommand.new(name: 'draghl',
+                   help: ['.draghl            Toggle live highlight while dragging'],
+                   handler: proc { handle_dot_draghl }),
+    DotCommand.new(name: 'scrollcfg',
+                   help: ['.scrollcfg         Configure mouse scroll wheel'],
+                   handler: proc { @mouse_scroll.start_configuration }),
+    DotCommand.new(name: 'unhighlight',
+                   args: :required,
+                   help: ['.unhighlight <text> Remove an inline highlight'],
+                   handler: proc { |pattern| handle_dot_unhighlight(pattern) }),
+    DotCommand.new(name: 'highlight',
+                   args: :optional,
+                   help: ['.highlight <text>   Add cyan highlight for text (session only)',
+                          '.highlight          List active inline highlights'],
+                   handler: proc { |pattern| handle_dot_highlight(pattern) }),
+    DotCommand.new(name: 'help',
+                   help: ['.help              Show this help'],
+                   handler: proc { handle_dot_help })
   ].freeze
 
   # How long .key waits for a key press before giving up, in milliseconds.
@@ -119,52 +163,22 @@ class Application
 
   # Execute a dot-command or forward to the game server.
   #
-  # Dot-commands (e.g. .quit, .key, .reload) are handled locally;
-  # everything else is forwarded to the server with '.' replaced by ';'.
-  # A dot-command matches case-insensitively and only as a whole word
-  # (its name followed by whitespace or end of input), so Lich scripts
-  # such as .arrows or .tabulate still reach the server.
+  # The first of {DOT_COMMANDS} that matches (see {DotCommand#match}) is
+  # handled locally; everything else is forwarded to the server with a
+  # leading '.' replaced by ';'. A dot-command matches case-insensitively
+  # and only as a whole word (its name followed by whitespace or end of
+  # input), so Lich scripts such as .arrows or .tabulate still reach the
+  # server.
   #
   # @param cmd [String] the command text to execute
   # @return [void]
   def execute_command(cmd)
-    if cmd =~ /^\.quit(?=\s|\z)/i
-      exit
-    elsif cmd =~ /^\.key(?=\s|\z)/i
-      handle_dot_key
-    elsif cmd =~ /^\.fixcolor(?=\s|\z)/i
-      ColorManager.reinitialize_colors
-    elsif cmd =~ /^\.resync(?=\s|\z)/i
-      @shared_state.skip_server_time_offset = false
-    elsif cmd =~ /^\.reload(?=\s|\z)/i
-      handle_dot_reload
-    elsif (match = cmd.match(/^\.layout\s+(?<layout>.+)/i))
-      @window_mgr.load_layout(match[:layout])
-      @cmd_buffer.window = @window_mgr.command_window
-      @key_action['resize'].call
-    elsif cmd =~ /^\.resize(?=\s|\z)/i
-      @key_action['resize'].call
-    elsif (match = cmd.match(/^\.tab(?=\s|\z)(?:\s+(?<arg>.+))?/i))
-      handle_dot_tab(match[:arg]&.strip)
-    elsif cmd =~ /^\.arrow(?=\s|\z)/i
-      handle_dot_arrow
-    elsif cmd =~ /^\.links(?=\s|\z)/i
-      handle_dot_links
-    elsif cmd =~ /^\.select(?=\s|\z)/i
-      handle_dot_select
-    elsif cmd =~ /^\.draghl(?=\s|\z)/i
-      handle_dot_draghl
-    elsif cmd =~ /^\.scrollcfg(?=\s|\z)/i
-      @mouse_scroll.start_configuration
-    elsif (match = cmd.match(/^\.unhighlight\s+(?<pattern>.+)/i))
-      handle_dot_unhighlight(match[:pattern])
-    elsif (match = cmd.match(/^\.highlight(?=\s|\z)(?:\s+(?<pattern>.+))?/i))
-      handle_dot_highlight(match[:pattern]&.strip)
-    elsif cmd =~ /^\.help(?=\s|\z)/i
-      handle_dot_help
-    else
-      send_to_server(cmd.sub(/^\./, ';'))
+    DOT_COMMANDS.each do |command|
+      next unless (args = command.match(cmd))
+
+      return instance_exec(*args, &command.handler)
     end
+    send_to_server(cmd.sub(/^\./, ';'))
   end
 
   # Interpret and execute a macro string.
@@ -494,7 +508,7 @@ class Application
   def handle_dot_help
     if (window = @window_mgr.stream[MAIN_STREAM])
       window.add_string('* ', feedback_colors('* '))
-      DOT_COMMAND_HELP.each { |line| msg = "*   #{line}"; window.add_string(msg, feedback_colors(msg)) }
+      DOT_COMMANDS.flat_map(&:help).each { |line| msg = "*   #{line}"; window.add_string(msg, feedback_colors(msg)) }
       window.add_string('* ', feedback_colors('* '))
       CursesRenderer.doupdate
     end
