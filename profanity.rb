@@ -27,8 +27,34 @@
 require 'socket'
 require 'rexml/document'
 
-# True when started with --profile: boot timings are recorded and logged.
-BOOT_PROFILE = ARGV.include?('--profile')
+# ========== CLI CONFIGURATION ==========
+# Parsed and resolved before curses starts: curses owns the terminal from
+# then on, so an error or --help printed later would not be seen.
+
+require_relative 'lib/version'
+require_relative 'lib/cli_options'
+require_relative 'lib/profanity_settings'
+
+cli_options = CliOptions.parse_or_exit(ARGV)
+
+# Path of the settings XML chosen by {ProfanitySettings.resolve_template}.
+SETTINGS_FILENAME = ProfanitySettings.resolve_template(
+  char: cli_options[:config] || cli_options[:char],
+  template: cli_options[:template],
+  settings_file: cli_options[:settings_file],
+  app_dir: File.dirname(__FILE__)
+)
+
+# Log file path chosen by {ProfanitySettings.resolve_log}.
+LOG_FILE = ProfanitySettings.resolve_log(
+  char: cli_options[:char],
+  log_file: cli_options[:log_file],
+  log_dir: cli_options[:log_dir]
+)
+
+# True when started with --profile (or an abbreviation such as --prof):
+# boot timings are recorded and logged.
+BOOT_PROFILE = cli_options[:profile]
 
 if BOOT_PROFILE
   # Monotonic clock reading at startup; {#boot_mark} measures from here.
@@ -48,8 +74,7 @@ if BOOT_PROFILE
   boot_mark('stdlib loaded')
 end
 
-# Load version and initialize curses
-require_relative 'lib/version'
+# Initialize curses
 require_relative 'lib/curses_setup'
 boot_mark('curses init') if BOOT_PROFILE
 
@@ -92,7 +117,6 @@ require_relative 'lib/games/gemstone'
 require_relative 'lib/room_data_processor'
 require_relative 'lib/familiar_notifier'
 require_relative 'lib/game_text_processor'
-require_relative 'lib/profanity_settings'
 require_relative 'lib/autocomplete'
 require_relative 'lib/mouse_scroll'
 require_relative 'lib/application'
@@ -108,57 +132,6 @@ rescue StandardError
   nil
 end
 
-# ========== CLI CONFIGURATION ==========
-
-require 'optparse'
-
-cli_options = {
-  port: 8000,
-  host: '127.0.0.1',
-  default_color_id: 7,
-  default_background_color_id: 0,
-  use_default_colors: false,
-  custom_colors: nil,
-  settings_file: nil,
-  log_dir: nil,
-  log_file: nil,
-  char: nil,
-  config: nil,
-  template: nil,
-  no_status: false,
-  links: false,
-  speech_ts: false,
-  room_window_only: false,
-  remote_url: false,
-  log_gags: false,
-}
-
-OptionParser.new do |opts|
-  opts.banner = "\nProfanity FrontEnd v#{VERSION}\n\n"
-
-  opts.on('--char=NAME', 'Character name (for log file & process title)') { |v| cli_options[:char] = v }
-  opts.on('--config=NAME', 'Config name to load (default: same as --char)') { |v| cli_options[:config] = v }
-  opts.on('--template=FILE', 'Template file name (from templates/)') { |v| cli_options[:template] = v }
-  opts.on('--port=PORT', Integer, 'Game server port (default: 8000)') { |v| cli_options[:port] = v }
-  opts.on('--host=HOST', 'Game server host (default: 127.0.0.1)') { |v| cli_options[:host] = v }
-  opts.on('--default-color-id=ID', Integer, 'Default foreground color (default: 7)') { |v| cli_options[:default_color_id] = v }
-  opts.on('--default-background-color-id=ID', Integer, 'Default background color (default: 0)') { |v| cli_options[:default_background_color_id] = v }
-  opts.on('--custom-colors=MODE', %w[on off yes no], 'Force custom color mode (on/off/yes/no)') do |v|
-    cli_options[:custom_colors] = %w[on yes].include?(v)
-  end
-  opts.on('--use-default-colors', 'Use terminal default colors') { cli_options[:use_default_colors] = true }
-  opts.on('--no-status', 'Disable process title updates') { cli_options[:no_status] = true }
-  opts.on('--links', 'Enable in-game link highlighting') { cli_options[:links] = true }
-  opts.on('--speech-ts', 'Add timestamps to speech, familiar, and thought windows') { cli_options[:speech_ts] = true }
-  opts.on('--room-window-only', 'Do not echo room data to the story window') { cli_options[:room_window_only] = true }
-  opts.on('--remote-url', 'Display LaunchURLs on screen instead of opening browser') { cli_options[:remote_url] = true }
-  opts.on('--log-gags', 'Log every gagged line in full (diagnostics)') { cli_options[:log_gags] = true }
-  opts.on('--log-file=PATH', 'Log file path (default: profanity.log)') { |v| cli_options[:log_file] = v }
-  opts.on('--log-dir=DIR', 'Log directory (default: current directory)') { |v| cli_options[:log_dir] = v }
-  opts.on('--settings-file=FILE', 'Settings XML file path (overrides --char/--config lookup)') { |v| cli_options[:settings_file] = v }
-  opts.on('--profile', 'Log boot timing to log file') {} # handled early via BOOT_PROFILE
-end.parse!
-
 # ========== GLOBAL CONSTANTS ==========
 
 # Game server (Lich) port, from --port (default 8000).
@@ -167,21 +140,6 @@ PORT = cli_options[:port]
 HOST = cli_options[:host]
 # Character name from --char, or nil.
 CHAR_NAME = cli_options[:char]
-
-# Path of the settings XML chosen by {ProfanitySettings.resolve_template}.
-SETTINGS_FILENAME = ProfanitySettings.resolve_template(
-  char: cli_options[:config] || cli_options[:char],
-  template: cli_options[:template],
-  settings_file: cli_options[:settings_file],
-  app_dir: File.dirname(__FILE__)
-)
-
-# Log file path chosen by {ProfanitySettings.resolve_log}.
-LOG_FILE = ProfanitySettings.resolve_log(
-  char: cli_options[:char],
-  log_file: cli_options[:log_file],
-  log_dir: cli_options[:log_dir]
-)
 
 # Default foreground curses color id, from --default-color-id (default 7).
 DEFAULT_COLOR_ID = cli_options[:default_color_id]
