@@ -287,7 +287,8 @@
   <key id='ctrl+n' macro='\xput \? in my straps'/>
   <!-- Ctrl+U: take an item from your straps (retrieve gear) -->
   <key id='ctrl+u' macro='\xtake \? from my straps'/>
-  <!-- Numpad 7: switch to defensive stance -->
+  <!-- Ctrl+G: switch to defensive stance. An all-digit id is a raw key
+       code, so id='7' is code 7 (Ctrl+G), not the 7 key or numpad 7. -->
   <key id='7' macro='stance def\r'/>
 
   <!-- ================================================================
