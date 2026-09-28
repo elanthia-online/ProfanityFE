@@ -173,6 +173,47 @@ RSpec.describe Curses::Window do
     end
   end
 
+  describe 'resizing with a scrolling region' do
+    # Number each row, then scroll once: the rows that moved show the region.
+    def scroll_once(win)
+      (0...win.maxy).each do |y|
+        win.setpos(y, 0)
+        win.addstr(y.to_s)
+      end
+      win.setpos(0, 0)
+      win.scrl(1)
+      win.rows
+    end
+
+    it 'moves a region that ends on the bottom row to the new bottom row' do
+      win = window(4, 5)
+      win.setscrreg(1, 3)
+      win.resize(6, 5)
+      expect(scroll_once(win)).to eq ['0', '2', '3', '4', '5', '']
+    end
+
+    it 'keeps a region that ends above the bottom row' do
+      win = window(5, 5)
+      win.setscrreg(1, 2)
+      win.resize(7, 5)
+      expect(scroll_once(win)).to eq ['0', '2', '', '3', '4', '5', '6']
+    end
+
+    it 'trims the region to a shorter window, down to one row' do
+      win = window(5, 5)
+      win.setscrreg(1, 4)
+      win.resize(2, 5)
+      expect(scroll_once(win)).to eq ['0', '']
+    end
+
+    it 'grows the whole-window region with the window' do
+      win = window(2, 5)
+      win.setscrreg(1, 1)
+      win.resize(4, 5)
+      expect(scroll_once(win)).to eq ['1', '2', '3', '']
+    end
+  end
+
   describe 'attributes' do
     it 'applies attron to text written inside its block only' do
       win = window(1, 6)
