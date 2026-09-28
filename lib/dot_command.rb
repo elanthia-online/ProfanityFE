@@ -16,9 +16,10 @@
 #   ignored.
 # - +:optional+: the handler gets the rest of the input with surrounding
 #   whitespace stripped, or nil when nothing follows the name.
-# - +:required+: the handler gets the rest of the input after the
-#   whitespace, as typed. Without it the command does not match, so the
-#   input goes to the game like any other unknown dot-command.
+# - +:required+: the handler gets the rest of the input with surrounding
+#   whitespace stripped. Without it (nothing or only whitespace after the
+#   name) the command does not match, so the input goes to the game like
+#   any other unknown dot-command.
 #
 # @!attribute [r] name
 #   @return [String] the command's name, without the dot (e.g. +"tab"+)
@@ -57,7 +58,7 @@ DotCommand = Data.define(:name, :args, :help, :handler) do
     when :optional
       (m = cmd.match(/\A\.#{name}(?=\s|\z)(?:\s+(?<arg>.+))?/i)) && [m[:arg]&.strip]
     when :required
-      (m = cmd.match(/\A\.#{name}\s+(?<arg>.+)/i)) && [m[:arg]]
+      (m = cmd.match(/\A\.#{name}\s+(?<arg>\S.*)/i)) && [m[:arg].strip]
     end
   end
 end

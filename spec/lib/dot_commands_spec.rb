@@ -330,6 +330,11 @@ RSpec.describe 'Dot-commands typed on the command line' do
         expect(server.string).to eq ";#{name} \n"
       end
 
+      it ".#{name} followed by only whitespace goes to the game unchanged" do
+        app.execute_command(".#{name}  \t ")
+        expect(server.string).to eq ";#{name}  \t \n"
+      end
+
       it ".#{name.upcase} without an argument goes to the game as typed" do
         app.execute_command(".#{name.upcase}")
         expect(server.string).to eq ";#{name.upcase}\n"
@@ -345,6 +350,19 @@ RSpec.describe 'Dot-commands typed on the command line' do
       XML
 
       app.execute_command(".layout \t second")
+
+      expect(app.window_mgr.stream.keys).to contain_exactly('main', 'extra')
+    end
+
+    it '.layout strips the name it is given' do
+      LAYOUT['second'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='0' height='10' width='100' value='main'/>
+          <window class='text' top='11' left='0' height='5' width='100' value='extra'/>
+        </layout>
+      XML
+
+      app.execute_command(".layout second \t ")
 
       expect(app.window_mgr.stream.keys).to contain_exactly('main', 'extra')
     end
@@ -377,9 +395,32 @@ RSpec.describe 'Dot-commands typed on the command line' do
     end
 
     it '.unhighlight removes a highlight whose text was typed with trailing spaces' do
-      pending '.unhighlight does not strip its argument, unlike .highlight (found while building the dot-command registry)'
       app.execute_command('.highlight goblin')
       app.execute_command('.unhighlight goblin  ')
+      expect(HIGHLIGHT).to be_empty
+      expect(shown.last).to eq '* Highlight removed: goblin'
+    end
+
+    it '.unhighlight "some string" removes the highlight .highlight "some string" added' do
+      app.execute_command('.highlight "some string"')
+      app.execute_command('.unhighlight "some string"')
+      expect(HIGHLIGHT).to be_empty
+      expect(shown.last).to eq '* Highlight removed: some string'
+    end
+
+    it '.unhighlight "some string" with spaces after the closing quote still removes it' do
+      app.execute_command('.highlight "some string"')
+      app.execute_command('.unhighlight "some string"  ')
+      expect(HIGHLIGHT).to be_empty
+    end
+
+    it '.unhighlight keeps the spaces inside the quotes' do
+      app.execute_command('.highlight " goblin "')
+
+      app.execute_command('.unhighlight goblin')
+      expect(HIGHLIGHT.keys.map(&:source)).to eq [Regexp.escape(' goblin ')]
+
+      app.execute_command('.unhighlight " goblin " ')
       expect(HIGHLIGHT).to be_empty
     end
   end
