@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'xml_tokenizer'
+
 # Shared link tag parsing for <d> (DR) and <a> (GS) clickable elements.
 #
 # Extracts link commands from XML attributes and builds color regions
@@ -22,12 +24,13 @@ module LinkExtractor
   # @param xml [String] the full opening tag (e.g. "<d cmd='go door'>")
   # @return [String, nil] the command string, or nil if no cmd/exist attribute
   def extract_cmd(xml)
-    # Most DR links quote cmd with single quotes; some (e.g. FLAG output) use double quotes.
-    if (cmd_match = xml.match(/cmd=(?:'(?<cmd>[^']+)'|"(?<cmd>[^"]+)")/))
-      cmd_match[:cmd]
-    elsif (exist_match = xml.match(/exist="(?<id>[^"]+)"/))
-      noun = xml.match(/noun="(?<n>[^"]+)"/)&.[](:n)
-      noun ? "look ##{exist_match[:id]}" : "_drag ##{exist_match[:id]}"
+    # Most DR links quote cmd with single quotes; some (e.g. FLAG output) use
+    # double quotes. An empty attribute counts as absent.
+    attrs = XmlTokenizer.attrs(xml).reject { |_, value| value.empty? }
+    if (cmd = attrs['cmd'])
+      cmd
+    elsif (exist = attrs['exist'])
+      attrs['noun'] ? "look ##{exist}" : "_drag ##{exist}"
     end
   end
 

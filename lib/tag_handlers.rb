@@ -395,17 +395,17 @@ module TagHandlers
   # +<component id='…'/>+) only switches the current stream: nothing a pop
   # could later restore.
   def handle_stream_open(xml, text_buffer)
-    return unless (m = xml.match(%r{id=(?<q>"|')(?<id>.*?)\k<q>}))
+    attrs = XmlTokenizer.attrs(xml)
+    return unless (new_stream = attrs['id'])
 
     flush_text_buffer(text_buffer)
-    new_stream = m[:id]
     if (exp_match = new_stream.match(/^exp (?<skill>.+)/))
       @current_stream = 'exp'
       @event_bus.emit(:exp_set_current, skill: exp_match[:skill])
     else
       @current_stream = new_stream
-      if new_stream == 'room' && (sub_match = xml.match(/subtitle=(?<q>"|')(?<sub>.*?)\k<q>/))
-        title = parse_room_subtitle(sub_match[:sub])
+      if new_stream == 'room' && (subtitle = attrs['subtitle'])
+        title = parse_room_subtitle(subtitle)
         unless title.empty?
           @state.room_title = title
           @event_bus.emit(:room_title, text: title)
@@ -441,7 +441,7 @@ module TagHandlers
       flush_text_buffer(text_buffer)
     end
     @event_bus.emit(:exp_delete_skill) if @current_stream == 'exp'
-    pop_open_stream(xml[/\bid=(["'])(.*?)\1/, 2]) if xml.start_with?('<popStream')
+    pop_open_stream(XmlTokenizer.attrs(xml)['id']) if xml.start_with?('<popStream')
     @current_stream = @stream_stack.last
   end
 
@@ -495,7 +495,7 @@ module TagHandlers
 
   # Handle <clearStream id="percWindow"/> tag.
   def handle_clear_stream(xml, _text_buffer)
-    @event_bus.emit(:clear_spells) if xml.match?(/id=["']percWindow["']/)
+    @event_bus.emit(:clear_spells) if XmlTokenizer.attrs(xml)['id'] == 'percWindow'
   end
 
   # Handle <a ...> or <d ...> link opening tag.
@@ -584,9 +584,10 @@ module TagHandlers
 
   # Handle <streamWindow id='room' subtitle='...'/> tag.
   def handle_stream_window(xml, _text_buffer)
-    return unless (m = xml.match(/^<streamWindow id='room'.*?subtitle=(?<q>"|')(?<sub>.*?)\k<q>/))
+    id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
+    return unless id == 'room' && subtitle
 
-    room = parse_room_subtitle(m[:sub])
+    room = parse_room_subtitle(subtitle)
     return if room.empty?
 
     @state.room_title = room

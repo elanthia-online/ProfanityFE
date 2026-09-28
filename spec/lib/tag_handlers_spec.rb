@@ -1145,33 +1145,33 @@ RSpec.describe TagHandlers do
       ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_preset.last } }
     end
 
-    it 'reads a stream id wherever id= appears, even inside another name or value' do
+    it 'reads a stream id only from an attribute named id' do
       expect_each(
         "<pushStream id='combat'/>"                    => 'combat',
         '<pushStream id="combat"/>'                    => 'combat',
         "<pushStream x='1' id='combat'/>"              => 'combat',
-        "<pushStream pid='combat'/>"                   => 'combat',
-        "<component x-id='room objs' id='room desc'/>" => 'room objs',
-        %(<compDef title="id='exp'" id='room'/>)       => 'exp',
-        "<pushStream junk id='combat'/>"               => 'combat'
+        "<pushStream pid='combat'/>"                   => nil,
+        "<component x-id='room objs' id='room desc'/>" => 'room desc',
+        %(<compDef title="id='exp'" id='room'/>)       => 'room',
+        "<pushStream junk id='combat'/>"               => nil
       ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.current_stream } }
     end
 
-    it 'reads a room subtitle wherever subtitle= appears' do
+    it 'reads a room subtitle only from an attribute named subtitle' do
       expect_each(
         "<component id='room' subtitle=' - [Hall]'/>"  => 'Hall',
         "<component subtitle=' - [Hall]' id='room'/>"  => 'Hall',
-        "<component id='room' xsubtitle=' - [Hall]'/>" => 'Hall'
+        "<component id='room' xsubtitle=' - [Hall]'/>" => ''
       ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.state.room_title } }
     end
 
-    it 'reads a popStream id after any non-word character' do
+    it 'closes a named stream only for an attribute named id' do
       expect_each(
         "<popStream id='combat'/>"          => 'percWindow',
         %(<popStream id="combat"/>)         => 'percWindow',
-        "<popStream x-id='combat'/>"        => 'percWindow',
+        "<popStream x-id='combat'/>"        => 'combat',
         "<popStream pid='combat'/>"         => 'combat',
-        %(<popStream title="id='combat'"/>) => 'percWindow'
+        %(<popStream title="id='combat'"/>) => 'combat'
       ) do |h, tag|
         %w[percWindow combat familiar].each { |id| h.dispatch_tag("<pushStream id='#{id}'/>", String.new) }
         h.dispatch_tag(tag, String.new)
@@ -1179,24 +1179,24 @@ RSpec.describe TagHandlers do
       end
     end
 
-    it 'clears the spell window for id=percWindow in any quotes, even mismatched' do
+    it 'clears the spell window only for an id of exactly percWindow' do
       expect_each(
         '<clearStream id="percWindow"/>'  => 1,
         "<clearStream id='percWindow'/>"  => 1,
-        %(<clearStream id="percWindow'/>) => 1,
-        "<clearStream xid='percWindow'/>" => 1,
+        %(<clearStream id="percWindow'/>) => 0,
+        "<clearStream xid='percWindow'/>" => 0,
         "<clearStream id='percWindowX'/>" => 0
       ) { |h, tag| events_of(h, tag, :clear_spells).size }
     end
 
-    it 'reads a room streamWindow only with id first and single-quoted' do
+    it 'reads a room streamWindow in either quotes and any order' do
       expect_each(
         %(<streamWindow id='room' subtitle=" - [Hall]"/>)              => 'Hall',
         %(<streamWindow id='room' title='Room' subtitle=' - [Hall]'/>) => 'Hall',
-        %(<streamWindow id="room" subtitle=" - [Hall]"/>)              => '',
-        %(<streamWindow subtitle=" - [Hall]" id='room'/>)              => '',
-        %(<streamWindow id='room' xsubtitle=" - [Hall]"/>)             => 'Hall',
-        %(<streamWindow id='room' title="subtitle=' - [Hall]'"/>)      => 'Hall'
+        %(<streamWindow id="room" subtitle=" - [Hall]"/>)              => 'Hall',
+        %(<streamWindow subtitle=" - [Hall]" id='room'/>)              => 'Hall',
+        %(<streamWindow id='room' xsubtitle=" - [Hall]"/>)             => '',
+        %(<streamWindow id='room' title="subtitle=' - [Hall]'"/>)      => ''
       ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.state.room_title } }
     end
   end

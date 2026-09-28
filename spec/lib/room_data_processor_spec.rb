@@ -101,22 +101,22 @@ RSpec.describe RoomDataProcessor do
     subject(:host) { RoomTitleHost.new }
 
     # Which spellings of the roomDesc markers are found in a raw line.
-    it 'finds roomDesc style and preset markers only as the tag\'s only attribute' do
+    it 'finds roomDesc style and preset markers in either quotes, among other attributes' do
       {
         %(<style id="roomDesc"/>A <d>door</d>.<style id=""/> Obvious) => 'A <d>door</d>.',
         %(<style id='roomDesc'/>A room.<style id='' /> x)             => 'A room.',
         %(<style id='roomDesc' >A room.)                              => 'A room.',
-        %(<style id="roomDesc'/>A room.)                              => 'A room.',
-        %(<style id='roomDesc' x='1'/>A room.)                        => nil,
-        %(<style x='1' id='roomDesc'/>A room.)                        => nil,
+        %(<style id="roomDesc'/>A room.)                              => nil,
+        %(<style id='roomDesc' x='1'/>A room.)                        => 'A room.',
+        %(<style x='1' id='roomDesc'/>A room.)                        => 'A room.',
         %(<style id='roomDesc'/>)                                     => nil,
-        %(<style id='roomDesc'/><style id=''/>A room.)                => %(<style id=''/>A room.),
-        %(<style id='roomDesc'/>A room.<style id='' x='1'/> x)        => %(A room.<style id='' x='1'/> x),
+        %(<style id='roomDesc'/><style id=''/>A room.)                => nil,
+        %(<style id='roomDesc'/>A room.<style id='' x='1'/> x)        => 'A room.',
         %(<preset id='roomDesc'>A room.</preset> x)                   => 'A room.',
-        %(<preset id="roomDesc'>A room.</preset>)                     => 'A room.',
+        %(<preset id="roomDesc'>A room.</preset>)                     => nil,
         %(<preset id='roomDesc'>A room.)                              => nil,
         %(<preset id='roomDesc'/>A room.</preset>)                    => nil,
-        %(<preset id='roomDesc' x='1'>A room.</preset>)               => nil,
+        %(<preset id='roomDesc' x='1'>A room.</preset>)               => 'A room.',
         'A room.'                                                     => nil
       }.each do |line, desc|
         expect(host.send(:extract_styled_desc, line)).to eq(desc), line
