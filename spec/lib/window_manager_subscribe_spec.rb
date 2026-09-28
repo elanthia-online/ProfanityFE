@@ -164,40 +164,40 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
   # ---- :indicator_update ----
 
   describe ':indicator_update' do
-    let(:indicator) { SpyIndicatorWindow.new }
+    # A real indicator on the virtual screen; when it redraws is covered in
+    # spec/lib/windows/indicator_window_spec.rb.
+    let(:indicator) { IndicatorWindow.new(1, 12, 0, 0) }
 
     before { wm.instance_variable_set(:@indicator, { 'spell' => indicator }) }
 
-    it 'sets label and updates value' do
+    it 'sets label and value and shows the label' do
       event_bus.emit(:indicator_update, id: 'spell', label: 'Fire Ball', value: 1)
-      expect(indicator.label).to eq 'Fire Ball'
-      expect(indicator.value).to eq 1
-      expect(indicator.calls).to include(a_hash_including(method: :redraw))
+      expect([indicator.label, indicator.value]).to eq ['Fire Ball', 1]
+      expect(indicator.rows).to eq ['Fire Ball']
     end
 
-    it 'redraws when only label changes (no value provided)' do
+    it 'sets only the label when no value is given' do
       event_bus.emit(:indicator_update, id: 'spell', label: 'None')
-      expect(indicator.label).to eq 'None'
-      expect(indicator.calls.select { |c| c[:method] == :update }).to be_empty
-      expect(indicator.calls).to include(a_hash_including(method: :redraw))
+      expect([indicator.label, indicator.value]).to eq ['None', nil]
+      expect(indicator.rows).to eq ['None']
     end
 
-    it 'sets only value when no label provided' do
+    it 'sets only the value when no label is given' do
       event_bus.emit(:indicator_update, id: 'spell', value: 0)
-      expect(indicator.label).to be_nil
-      expect(indicator.value).to eq 0
-      expect(indicator.calls).to include(a_hash_including(method: :redraw))
+      expect([indicator.label, indicator.value]).to eq ['*', 0]
+      expect(indicator.rows).to eq ['*']
     end
 
-    it 'sets label_colors and redraws' do
-      colors = [{ start: 0, end: 5, fg: 'ff0000' }]
+    it 'sets label_colors' do
+      colors = [{ start: 0, end: 4, fg: 'ff0000' }]
       event_bus.emit(:indicator_update, id: 'spell', label: 'test', label_colors: colors)
       expect(indicator.label_colors).to eq colors
-      expect(indicator.calls).to include(a_hash_including(method: :redraw))
+      expect(indicator.rows).to eq ['test']
     end
 
     it 'ignores events for nonexistent indicators' do
       expect { event_bus.emit(:indicator_update, id: 'nonexistent', value: 1) }.not_to raise_error
+      expect(indicator.value).to be_nil
     end
   end
 

@@ -74,4 +74,13 @@ RSpec.describe IndicatorWindow do
       expect(window.rows).to eq ['Aus']
     end
   end
+
+  describe '#apply_changes' do
+    it 'says whether it redrew' do
+      expect(window.apply_changes(label: 'None')).to be false
+      expect(window.apply_changes(label: 'Shadows', value: 1)).to be true
+      expect(window.apply_changes({})).to be false
+      expect(draws).to eq 1
+    end
+  end
 end

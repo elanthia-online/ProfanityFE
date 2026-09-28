@@ -147,22 +147,9 @@ class WindowManager
       window = @indicator[data[:id]]
       next unless window
 
-      # Set all attributes before redrawing so redraw sees consistent state.
-      # Previously label= triggered an immediate redraw with stale label_colors.
-      changed = false
-      if data.key?(:label) && window.label != data[:label]
-        window.instance_variable_set(:@label, data[:label])
-        changed = true
-      end
-      if data.key?(:label_colors)
-        window.label_colors = data[:label_colors]
-        changed = true
-      end
-      if data.key?(:value) && data[:value] != window.value
-        window.instance_variable_set(:@value, data[:value])
-        changed = true
-      end
-      window.redraw if changed
+      # One redraw after all attributes are set (label= would redraw with
+      # stale label_colors).
+      window.apply_changes(data.slice(:label, :label_colors, :value))
     end
 
     event_bus.on(:compass_update) do |data|
