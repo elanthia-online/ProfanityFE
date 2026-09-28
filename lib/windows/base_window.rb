@@ -503,6 +503,22 @@ class BaseWindow < Curses::Window
     end
   end
 
+  # Attribute values that turn a layout flag off (compared case-insensitively,
+  # ignoring surrounding whitespace).
+  FALSE_FLAG_VALUES = %w[false no 0 off].freeze
+
+  # Parse an on/off attribute from an XML layout element. An absent attribute
+  # is off, and so are 'false', 'no', '0' and 'off' in any case. Any other
+  # value is on, as every value was before the attribute was parsed.
+  #
+  # @param element [REXML::Element] XML element containing the attribute
+  # @param attr_name [String] attribute name to parse (e.g. 'timestamp')
+  # @return [Boolean]
+  def self.parse_flag_attr(element, attr_name)
+    value = element.attributes[attr_name]
+    !value.nil? && !FALSE_FLAG_VALUES.include?(value.strip.downcase)
+  end
+
   # --- Window class registry ---
 
   # All registered window subclasses.
