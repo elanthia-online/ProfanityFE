@@ -267,10 +267,13 @@ module SelectionManager
         File.open('/dev/tty', 'w') do |tty|
           if ENV['STY']
             # GNU Screen: DCS passthrough with chunking for length limit.
-            # Screen's DCS limit is ~768 bytes; chunk base64 at 512 to be safe.
-            chunks = encoded.scan(/.{1,512}/)
-            chunks.each do |chunk|
-              tty.write("\eP\e]52;c;#{chunk}\a\e\\")
+            # Screen's DCS limit is ~768 bytes; chunk at 512 to be safe.
+            # Split the one OSC 52 sequence across DCS strings: screen
+            # forwards each body verbatim, so the terminal reassembles a
+            # single sequence (a full OSC 52 per chunk would each replace
+            # the clipboard, leaving only the last chunk).
+            "\e]52;c;#{encoded}\a".scan(/.{1,512}/m).each do |chunk|
+              tty.write("\eP#{chunk}\e\\")
             end
           elsif ENV['TMUX']
             # tmux DCS passthrough
