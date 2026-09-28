@@ -13,8 +13,8 @@ Manages the ~/.profanity/ directory structure for config, logs, and state.
 
 # Manages the ProfanityFE application directory at +~/.profanity/+.
 #
-# Provides file path resolution, thread-safe read/write, and automatic
-# directory creation. Used for templates, logs, and persistent state
+# Provides file path resolution, thread-safe read/write, and directory
+# creation ({ensure_app_dir}). Used for templates, logs, and persistent state
 # (e.g., mouse scroll wheel calibration).
 #
 # @example
@@ -27,8 +27,15 @@ module ProfanitySettings
   # @return [String] the application data directory
   APP_DIR = File.join(Dir.home, '.profanity')
 
-  # Create the app directory if it doesn't exist
-  FileUtils.mkdir_p(APP_DIR)
+  # Create {APP_DIR} if it doesn't exist. profanity.rb calls this at
+  # startup, before anything is written there (log, settings cache,
+  # settings.json, selection.txt); requiring this file doesn't create it.
+  #
+  # @return [void]
+  # @raise [SystemCallError] if the directory can't be created
+  def self.ensure_app_dir
+    FileUtils.mkdir_p(APP_DIR)
+  end
 
   # Resolve a file path within the app directory.
   #

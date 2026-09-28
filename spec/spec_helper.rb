@@ -36,8 +36,9 @@ require 'rspec'
 require 'tmpdir'
 require 'fileutils'
 
-# Keep the suite out of the real home directory: ProfanitySettings creates
-# ~/.profanity when it is required, and SettingsLoader caches settings there.
+# Keep the suite out of the real home directory: specs create ~/.profanity
+# (ProfanitySettings.ensure_app_dir) and write settings, the settings cache
+# and the selection file there.
 SPEC_HOME = Dir.mktmpdir('profanity-spec-home')
 ENV['HOME'] = SPEC_HOME
 at_exit { FileUtils.remove_entry(SPEC_HOME) }

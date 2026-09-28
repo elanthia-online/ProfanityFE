@@ -19,6 +19,10 @@ load File.expand_path('../../lib/gag_patterns.rb', __dir__)
 $VERBOSE = original_verbose
 
 RSpec.describe SettingsLoader do
+  # profanity.rb creates ~/.profanity at startup, before anything is
+  # written there; requiring lib/profanity_settings.rb doesn't.
+  before { ProfanitySettings.ensure_app_dir }
+
   def write_settings(dir, body)
     path = File.join(dir, 'settings.xml')
     File.write(path, "<settings>#{body}</settings>")

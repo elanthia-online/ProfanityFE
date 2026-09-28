@@ -35,6 +35,10 @@ require_relative 'lib/version'
 require_relative 'lib/cli_options'
 require_relative 'lib/profanity_settings'
 
+# ~/.profanity holds the settings cache, settings.json, selection.txt and,
+# with --char, the log. Created first thing, even for --help or a bad option.
+ProfanitySettings.ensure_app_dir
+
 cli_options = CliOptions.parse_or_exit(ARGV)
 
 # Path of the settings XML chosen by {ProfanitySettings.resolve_template}.
