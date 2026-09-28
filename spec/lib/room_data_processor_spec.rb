@@ -97,6 +97,33 @@ RSpec.describe RoomDataProcessor do
     end
   end
 
+  describe '#extract_styled_desc' do
+    subject(:host) { RoomTitleHost.new }
+
+    # Which spellings of the roomDesc markers are found in a raw line.
+    it 'finds roomDesc style and preset markers in either quotes, among other attributes' do
+      {
+        %(<style id="roomDesc"/>A <d>door</d>.<style id=""/> Obvious) => 'A <d>door</d>.',
+        %(<style id='roomDesc'/>A room.<style id='' /> x)             => 'A room.',
+        %(<style id='roomDesc' >A room.)                              => 'A room.',
+        %(<style id="roomDesc'/>A room.)                              => nil,
+        %(<style id='roomDesc' x='1'/>A room.)                        => 'A room.',
+        %(<style x='1' id='roomDesc'/>A room.)                        => 'A room.',
+        %(<style id='roomDesc'/>)                                     => nil,
+        %(<style id='roomDesc'/><style id=''/>A room.)                => nil,
+        %(<style id='roomDesc'/>A room.<style id='' x='1'/> x)        => 'A room.',
+        %(<preset id='roomDesc'>A room.</preset> x)                   => 'A room.',
+        %(<preset id="roomDesc'>A room.</preset>)                     => nil,
+        %(<preset id='roomDesc'>A room.)                              => nil,
+        %(<preset id='roomDesc'/>A room.</preset>)                    => nil,
+        %(<preset id='roomDesc' x='1'>A room.</preset>)               => 'A room.',
+        'A room.'                                                     => nil
+      }.each do |line, desc|
+        expect(host.send(:extract_styled_desc, line)).to eq(desc), line
+      end
+    end
+  end
+
   describe '#parse_player_names' do
     subject(:host) { RoomTitleHost.new }
 

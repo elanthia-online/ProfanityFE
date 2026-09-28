@@ -23,6 +23,12 @@ module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
 
+  # progressBar ids of the DragonRealms vitals, whose text is a percentage.
+  DR_VITALS = %w[health mana spirit stamina concentration].freeze
+
+  # Body parts (and +nsys+) an <image> tag can report on.
+  IMAGE_IDS = %w[back leftHand rightHand head rightArm abdomen leftEye leftArm chest rightLeg neck leftLeg nsys rightEye].freeze
+
   # Most pushStreams tracked as open at once. The deepest real nesting is
   # two (the empath familiar double push); the cap only stops unmatched
   # pushes from piling up between prompts.
@@ -148,10 +154,12 @@ module TagHandlers
   # prompt is not taken for the game's copy of it and dropped.
   def handle_prompt_tag(xml, _text_buffer)
     @last_stream_text = nil
-    return unless (m = xml.match(%r{^<prompt time=(?<q>'|")(?<time>[0-9]+)\k<q>.*?>(?<text>.*?)&gt;</prompt>$}))
+    # The text starts after the first >.
+    return unless (time = XmlTokenizer.attrs(xml)['time'])&.match?(/\A[0-9]+\z/)
+    return unless (m = xml.match(%r{\A.*?>(?<text>.*?)&gt;</prompt>$}))
 
     unless @state.skip_server_time_offset
-      @state.server_time_offset = Time.now.to_f - m[:time].to_f
+      @state.server_time_offset = Time.now.to_f - time.to_f
       @state.skip_server_time_offset = true
     end
 
@@ -199,9 +207,9 @@ module TagHandlers
   # The countdown display is polled by Application#tick_countdowns
   # on every input loop iteration (~100ms).
   def handle_roundtime_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<roundTime value=(?<q>'|")(?<value>[0-9]+)\k<q>/))
+    return unless (value = countdown_value(xml))
 
-    @event_bus.emit(:countdown_update, id: 'roundtime', end_time: m[:value].to_i)
+    @event_bus.emit(:countdown_update, id: 'roundtime', end_time: value)
     @need_update = true
   end
 
@@ -209,15 +217,28 @@ module TagHandlers
   # The countdown display is polled by Application#tick_countdowns
   # on every input loop iteration (~100ms).
   def handle_casttime_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<castTime value=(?<q>'|")(?<value>[0-9]+)\k<q>/))
+    return unless (value = countdown_value(xml))
 
-    @event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: m[:value].to_i)
+    @event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: value)
     @need_update = true
+  end
+
+  # The end time a <roundTime> or <castTime> tag carries.
+  #
+  # @param xml [String] the tag
+  # @return [Integer, nil] the value, or nil unless it is all digits
+  def countdown_value(xml)
+    value = XmlTokenizer.attrs(xml)['value']
+    value.to_i if value&.match?(/\A[0-9]+\z/)
   end
 
   # Handle <compass>...<dir value="n"/>...</compass> paired tag.
   def handle_compass_tag(xml, _text_buffer)
-    current_dirs = xml.scan(/<dir value="(.*?)"/).flatten
+    # attrs reads only the start tag it is given, so each <dir> is read from
+    # where it starts.
+    current_dirs = xml.to_enum(:scan, /<dir\b/).filter_map do
+      XmlTokenizer.attrs(xml[Regexp.last_match.begin(0)..])['value']
+    end
     @event_bus.emit(:compass_update, dirs: current_dirs)
     @need_update = true
   end
@@ -225,37 +246,42 @@ module TagHandlers
   # Handle <progressBar .../> tags for vitals, stance, encumbrance, mind.
   # Dispatches to game-specific sub-patterns based on id and text format.
   def handle_progress_bar_tag(xml, _text_buffer)
-    if (m = xml.match(/^<progressBar id='encumlevel' value='(?<value>[0-9]+)' text='(?<text>.*?)'/))
-      value = m[:text] == 'Overloaded' ? 110 : m[:value].to_i
+    id, value, text = XmlTokenizer.attrs(xml).values_at('id', 'value', 'text')
+    return unless id && value
+
+    number = value.match?(/\A[0-9]+\z/)
+    if id == 'encumlevel' && number && text
+      value = text == 'Overloaded' ? 110 : value.to_i
       @event_bus.emit(:progress_update, id: 'encumbrance', value: value, max: 110)
       @need_update = true
-    elsif (m = xml.match(/^<progressBar id='pbarStance' value='(?<value>[0-9]+)'/))
-      @event_bus.emit(:progress_update, id: 'stance', value: m[:value].to_i, max: 100)
+    elsif id == 'pbarStance' && number
+      @event_bus.emit(:progress_update, id: 'stance', value: value.to_i, max: 100)
       @need_update = true
-    elsif (m = xml.match(/^<progressBar id='mindState' value='(?<value>.*?)' text='(?<text>.*?)'/))
-      value = m[:text] == 'saturated' ? 110 : m[:value].to_i
+    elsif id == 'mindState' && text
+      value = text == 'saturated' ? 110 : value.to_i
       @event_bus.emit(:progress_update, id: 'mind', value: value, max: 110)
       @need_update = true
-    elsif (m = xml.match(/^<progressBar id='(?<id>.*?)' value='[0-9]+' text='.*?\s+(?<cur>-?[0-9]+)\/(?<max>[0-9]+)'/))
+    elsif number && (m = text&.match(%r{\s(?<cur>-?[0-9]+)/(?<max>[0-9]+)\z}))
       # GemStone vitals: text contains current/max (e.g., "health 456/456")
-      @event_bus.emit(:progress_update, id: m[:id], value: m[:cur].to_i, max: m[:max].to_i)
+      @event_bus.emit(:progress_update, id: id, value: m[:cur].to_i, max: m[:max].to_i)
       @need_update = true
-    elsif (m = xml.match(/^<progressBar id='(?<id>health|mana|spirit|stamina|concentration)' value='(?<value>[0-9]+)' text='(?:health|mana|spirit|fatigue|concentration|inner fire) [0-9]+\%'/))
+    elsif number && DR_VITALS.include?(id) && text&.match?(/\A(?:health|mana|spirit|fatigue|concentration|inner fire) [0-9]+%\z/)
       # DragonRealms vitals: text contains percentage (e.g., "health 75%")
-      @event_bus.emit(:progress_update, id: m[:id], value: m[:value].to_i, max: 100)
+      @event_bus.emit(:progress_update, id: id, value: value.to_i, max: 100)
       @need_update = true
     end
   end
 
   # Handle <arbProgress id='...' max='...' current='...'/> user-defined progress bars.
   def handle_arb_progress_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<arbProgress id='(?<id>[a-zA-Z0-9]+)' max='(?<max>\d+)' current='(?<cur>\d+)'(?:\s+label='(?<label>.+?)')?(?:\s+colors='(?<colors>\S+?)')?/))
+    id, max, cur, label, colors = XmlTokenizer.attrs(xml).values_at('id', 'max', 'current', 'label', 'colors')
+    return unless id&.match?(/\A[a-zA-Z0-9]+\z/) && max&.match?(/\A\d+\z/) && cur&.match?(/\A\d+\z/)
 
-    current = [m[:cur].to_i, m[:max].to_i].min
-    data = { id: m[:id], value: current, max: m[:max].to_i }
-    data[:label] = m[:label] if m[:label]
-    if m[:colors]
-      bg, fg = m[:colors].split(',')
+    current = [cur.to_i, max.to_i].min
+    data = { id: id, value: current, max: max.to_i }
+    data[:label] = label unless label.nil? || label.empty?
+    if colors&.match?(/\A\S+\z/)
+      bg, fg = colors.split(',')
       data[:bg] = [bg] if bg
       data[:fg] = [fg] if fg
     end
@@ -283,9 +309,9 @@ module TagHandlers
 
   # Handle <preset id='...'> opening tag.
   def handle_open_preset(xml, text_buffer)
-    return unless (m = xml.match(/^<preset id=(?<q>'|")(?<id>.*?)\k<q>>$/))
+    return if xml.end_with?('/>') # an empty preset has nothing to color
+    return unless (preset_id = XmlTokenizer.attrs(xml)['id'])
 
-    preset_id = m[:id]
     if preset_id == 'roomDesc' && @wm.room['room']
       flush_text_buffer(text_buffer)
       @room_capture_mode = :desc
@@ -335,9 +361,8 @@ module TagHandlers
   # Handle <style id='...'> tag (both opening and "closing" via empty id).
   # The game protocol uses <style id=""> as a close marker rather than </style>.
   def handle_style_tag(xml, text_buffer)
-    return unless (m = xml.match(/^<style id=(?<q>'|")(?<id>.*?)\k<q>/))
+    return unless (style_id = XmlTokenizer.attrs(xml)['id'])
 
-    style_id = m[:id]
     if style_id.empty?
       # Empty id = closing style
       if @room_capture_mode == :title || @room_capture_mode == :desc
@@ -370,17 +395,17 @@ module TagHandlers
   # +<component id='…'/>+) only switches the current stream: nothing a pop
   # could later restore.
   def handle_stream_open(xml, text_buffer)
-    return unless (m = xml.match(%r{id=(?<q>"|')(?<id>.*?)\k<q>}))
+    attrs = XmlTokenizer.attrs(xml)
+    return unless (new_stream = attrs['id'])
 
     flush_text_buffer(text_buffer)
-    new_stream = m[:id]
     if (exp_match = new_stream.match(/^exp (?<skill>.+)/))
       @current_stream = 'exp'
       @event_bus.emit(:exp_set_current, skill: exp_match[:skill])
     else
       @current_stream = new_stream
-      if new_stream == 'room' && (sub_match = xml.match(/subtitle=(?<q>"|')(?<sub>.*?)\k<q>/))
-        title = parse_room_subtitle(sub_match[:sub])
+      if new_stream == 'room' && (subtitle = attrs['subtitle'])
+        title = parse_room_subtitle(subtitle)
         unless title.empty?
           @state.room_title = title
           @event_bus.emit(:room_title, text: title)
@@ -416,7 +441,7 @@ module TagHandlers
       flush_text_buffer(text_buffer)
     end
     @event_bus.emit(:exp_delete_skill) if @current_stream == 'exp'
-    pop_open_stream(xml[/\bid=(["'])(.*?)\1/, 2]) if xml.start_with?('<popStream')
+    pop_open_stream(XmlTokenizer.attrs(xml)['id']) if xml.start_with?('<popStream')
     @current_stream = @stream_stack.last
   end
 
@@ -470,7 +495,7 @@ module TagHandlers
 
   # Handle <clearStream id="percWindow"/> tag.
   def handle_clear_stream(xml, _text_buffer)
-    @event_bus.emit(:clear_spells) if xml.match?(/id=["']percWindow["']/)
+    @event_bus.emit(:clear_spells) if XmlTokenizer.attrs(xml)['id'] == 'percWindow'
   end
 
   # Handle <a ...> or <d ...> link opening tag.
@@ -500,10 +525,11 @@ module TagHandlers
 
   # Handle <indicator id='IconXXX' visible='y|n'/> tag.
   def handle_indicator_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<indicator id=(?<q1>'|")Icon(?<icon>[A-Z]+)\k<q1> visible=(?<q2>'|")(?<vis>[yn])\k<q2>/))
+    id, visible = XmlTokenizer.attrs(xml).values_at('id', 'visible')
+    return unless (m = id&.match(/\AIcon(?<icon>[A-Z]+)\z/)) && visible&.match?(/\A[yn]\z/)
 
     icon = m[:icon].downcase
-    active = m[:vis] == 'y'
+    active = visible == 'y'
     @event_bus.emit(:countdown_active, id: icon, active: active)
     @event_bus.emit(:indicator_update, id: icon, value: active)
     @need_update = true
@@ -511,14 +537,15 @@ module TagHandlers
 
   # Handle <image id='...' name='...'/> body part/injury tag.
   def handle_image_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<image id=(?<q1>'|")(?<id>back|leftHand|rightHand|head|rightArm|abdomen|leftEye|leftArm|chest|rightLeg|neck|leftLeg|nsys|rightEye)\k<q1> name=(?<q2>'|")(?<name>.*?)\k<q2>/))
+    id, name = XmlTokenizer.attrs(xml).values_at('id', 'name')
+    return unless IMAGE_IDS.include?(id) && name
 
-    if m[:id] == 'nsys'
-      rank = m[:name].slice(/[0-9]/)
+    if id == 'nsys'
+      rank = name.slice(/[0-9]/)
       @event_bus.emit(:indicator_update, id: 'nsys', value: rank ? rank.to_i : 0)
     else
       fix_value = { 'Injury1' => 1, 'Injury2' => 2, 'Injury3' => 3, 'Scar1' => 4, 'Scar2' => 5, 'Scar3' => 6 }
-      @event_bus.emit(:indicator_update, id: m[:id], value: fix_value[m[:name]] || 0)
+      @event_bus.emit(:indicator_update, id: id, value: fix_value[name] || 0)
     end
     @need_update = true
   end
@@ -530,11 +557,12 @@ module TagHandlers
   # +https://www.play.net/+ (e.g. +@evil.example/+, which becomes userinfo,
   # or +.evil.example/+, which extends the host) is logged and ignored.
   def handle_launch_url(xml, _text_buffer)
-    return unless (m = xml.match(/^<LaunchURL src="(?<src>[^"]+)"/))
+    src = XmlTokenizer.attrs(xml)['src']
+    return if src.nil? || src.empty?
 
-    url = "#{LAUNCH_URL_BASE}#{m[:src]}"
+    url = "#{LAUNCH_URL_BASE}#{src}"
     unless play_net_url?(url)
-      ProfanityLog.write('launch_url', "ignored LaunchURL outside play.net: #{m[:src].inspect}")
+      ProfanityLog.write('launch_url', "ignored LaunchURL outside play.net: #{src.inspect}")
       return
     end
 
@@ -556,9 +584,10 @@ module TagHandlers
 
   # Handle <streamWindow id='room' subtitle='...'/> tag.
   def handle_stream_window(xml, _text_buffer)
-    return unless (m = xml.match(/^<streamWindow id='room'.*?subtitle=(?<q>"|')(?<sub>.*?)\k<q>/))
+    id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
+    return unless id == 'room' && subtitle
 
-    room = parse_room_subtitle(m[:sub])
+    room = parse_room_subtitle(subtitle)
     return if room.empty?
 
     @state.room_title = room

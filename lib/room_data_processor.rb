@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'xml_tokenizer'
+
 =begin
 Room data capture and assembly for RoomWindow.
 Extracts room title, description, objects, players, exits, and room number
@@ -278,17 +280,45 @@ module RoomDataProcessor
   # @param raw_line [String] the full raw server line
   # @return [String, nil] raw description content, or nil if not found
   def extract_styled_desc(raw_line)
-    # DR: <style id="roomDesc"/>...content...<style id=""/>
-    if (m = raw_line.match(%r{<style id=["']roomDesc["']\s*/?>(.+?)(?:<style id=["']["']\s*/?>|$)}))
-      return m[1]
-    end
+    segments = XmlTokenizer.tokenize(raw_line)
+    # DR: <style id="roomDesc"/>...content...<style id=""/> (or the line's end)
+    desc = text_between(segments, ->(tag) { id_tag?(tag, 'style', 'roomDesc') }, ->(tag) { id_tag?(tag, 'style', '') })
+    return desc if desc
 
     # GS/alt: <preset id='roomDesc'>...content...</preset>
-    if (m = raw_line.match(%r{<preset id=["']roomDesc["']>(.+?)</preset>}))
-      return m[1]
-    end
+    text_between(segments, ->(tag) { id_tag?(tag, 'preset', 'roomDesc') && !tag.end_with?('/>') },
+                 ->(tag) { tag == '</preset>' }, close_required: true)
+  end
 
-    nil
+  # Whether a tag is an opening or self-closing +name+ tag whose id is +id+.
+  #
+  # @param tag [String] a tag segment from {XmlTokenizer.tokenize}
+  # @param name [String] the element name
+  # @param id [String] the id attribute's value
+  # @return [Boolean]
+  def id_tag?(tag, name, id)
+    !tag.start_with?('</') && XmlTokenizer.tag_name(tag) == name && XmlTokenizer.attrs(tag)['id'] == id
+  end
+
+  # The raw text, tags kept, from just after the first opening tag up to the
+  # closing tag that follows it.
+  #
+  # @param segments [Array<Array(Symbol, String)>] a line, from {XmlTokenizer.tokenize}
+  # @param opening [Proc] whether a tag is the opening tag
+  # @param closing [Proc] whether a tag is the closing tag
+  # @param close_required [Boolean] when false, the line's end also closes
+  # @return [String, nil] the text, or nil if there is no opening tag, no
+  #   closing tag where one is required, or no text between them
+  def text_between(segments, opening, closing, close_required: false)
+    start = segments.index { |type, s| type == :tag && opening.call(s) }
+    return unless start
+
+    rest = segments.drop(start + 1)
+    stop = rest.index { |type, s| type == :tag && closing.call(s) }
+    return if stop.nil? && close_required
+
+    text = rest.take(stop || rest.length).map(&:last).join
+    text unless text.empty?
   end
 
   # Convert raw XML text to structured data: clean text + link regions.

@@ -282,4 +282,106 @@ RSpec.describe XmlTokenizer do
       expect(described_class.tag_name('</>')).to be_nil
     end
   end
+
+  describe 'PAIRED_TAGS' do
+    it 'keeps each paired element whole with its content, and nothing else' do
+      described_class::PAIRED_TAGS.each do |name|
+        line = %(<#{name} id='x'>a <b>b</b> c</#{name}>tail)
+        expect(described_class.tokenize(line)).to eq([[:tag, line.delete_suffix('tail')], [:text, 'tail']]), name
+      end
+      expect(described_class.tokenize('<preset id="x">text</preset>').size).to eq 3
+    end
+  end
+
+  describe '.attrs' do
+    def attrs(tag) = described_class.attrs(tag)
+
+    it 'reads values in double and in single quotes' do
+      expect(attrs(%(<d cmd='go door' noun="door">))).to eq('cmd' => 'go door', 'noun' => 'door')
+    end
+
+    it 'keeps > and the other quote inside a quoted value' do
+      expect(attrs(%(<d cmd='say "hi" >there' x="Bob's >">))).to eq('cmd' => 'say "hi" >there', 'x' => "Bob's >")
+    end
+
+    it 'ends a value at its own quote, so the rest of the tag is not an attribute' do
+      expect(attrs("<d cmd='look Bob's sword'>")).to eq('cmd' => 'look Bob')
+    end
+
+    it 'has no key for a missing attribute' do
+      expect(attrs("<roundTime value='5'/>")).not_to have_key('id')
+    end
+
+    it 'keeps the first of two attributes with the same name' do
+      expect(attrs(%(<pushStream id="combat" id='familiar'/>))).to eq('id' => 'combat')
+    end
+
+    it 'reads an empty value as an empty string' do
+      expect(attrs(%(<style id=""/>))).to eq('id' => '')
+      expect(attrs("<style id=''/>")).to eq('id' => '')
+    end
+
+    it 'reads self-closing tags, with or without a space before />' do
+      expect(attrs(%(<popStream id="combat"/>))).to eq('id' => 'combat')
+      expect(attrs(%(<popStream id="combat" />))).to eq('id' => 'combat')
+    end
+
+    it 'matches names exactly, not as a prefix or suffix of another name' do
+      expect(attrs(%(<pushStream pid="a" idx='b' x-id="c" data.id='d'/>)).keys).to eq %w[pid idx x-id data.id]
+      expect(attrs(%(<pushStream pid="a" id='b'/>))['id']).to eq 'b'
+    end
+
+    it 'does not read attribute-like text inside another value' do
+      expect(attrs(%(<pushStream subtitle="x id='combat'" id="room"/>))).to eq('subtitle' => "x id='combat'", 'id' => 'room')
+      expect(attrs(%(<pushStream subtitle="x id='combat'"/>))).not_to have_key('id')
+    end
+
+    it 'reads only the start tag of a paired segment, not its content' do
+      expect(attrs(%(<compass><dir value="n"/></compass>))).to eq({})
+      expect(attrs(%(<prompt time="1727">x="y"&gt;</prompt>))).to eq('time' => '1727')
+    end
+
+    it 'accepts any run of spaces or tabs between attributes' do
+      expect(attrs(%(<indicator  id='IconSTUNNED'\tvisible='y'/>))).to eq('id' => 'IconSTUNNED', 'visible' => 'y')
+    end
+
+    it 'does not decode entities' do
+      expect(attrs(%(<d cmd='say &lt;hi&gt; &amp; &quot;bye&quot;'>))).to eq('cmd' => 'say &lt;hi&gt; &amp; &quot;bye&quot;')
+    end
+
+    it 'returns attributes in tag order' do
+      expect(attrs(%(<progressBar text='health 75%' value='75' id='health'/>)).keys).to eq %w[text value id]
+    end
+
+    it 'returns nothing for a closing tag, plain text, an empty string or an empty tag' do
+      ['</preset>', 'plain text', '', '<>', '< id="x">'].each { |tag| expect(attrs(tag)).to eq({}), tag }
+    end
+
+    it 'needs whitespace between the element name and the first attribute' do
+      expect(attrs(%(<dcmd='go'>))).to eq({})
+    end
+
+    context 'with a malformed tag, stops reading at the first thing that is not an attribute' do
+      {
+        'an unquoted value'                  => %(<pushStream x=1 id="combat"/>),
+        'a bare word'                        => %(<pushStream junk id="combat"/>),
+        'a value with no closing quote'      => %(<pushStream id="combat/>),
+        'mismatched quotes'                  => %(<pushStream id="combat'/>),
+        'whitespace around ='                => %(<pushStream id = "combat"/>),
+        'no whitespace before the attribute' => %(<pushStream x="1"id="combat"/>),
+      }.each do |what, tag|
+        it "(#{what})" do
+          expect(attrs(tag)).not_to have_key('id')
+        end
+      end
+
+      it 'keeps the attributes read before it' do
+        expect(attrs(%(<pushStream id="combat" junk subtitle="x"/>))).to eq('id' => 'combat')
+      end
+    end
+
+    it 'accepts the name characters XML uses: letters, digits, _ - . :' do
+      expect(attrs(%(<x a_1="1" b-2="2" c.3="3" xml:lang="en"/>)).keys).to eq %w[a_1 b-2 c.3 xml:lang]
+    end
+  end
 end
