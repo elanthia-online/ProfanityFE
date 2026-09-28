@@ -101,7 +101,8 @@ class WindowManager
 
   # Display a prompt in a stream window, with optional command text.
   # Deduplicates consecutive identical prompts via the window's
-  # +duplicate_prompt?+ method if available.
+  # +duplicate_prompt?+ method ({BaseWindow#duplicate_prompt?}) if it has
+  # one; a {SinkWindow} doesn't, and discards the prompt.
   #
   # @param window [BaseWindow] the target stream window
   # @param prompt_text [String] the prompt string (e.g., "H>")

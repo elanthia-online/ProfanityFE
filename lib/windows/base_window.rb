@@ -259,17 +259,27 @@ class BaseWindow < Curses::Window
     add_string(text, colors, indent: indent)
   end
 
-  # Check if the most recent non-empty line matches the given prompt text.
-  # Used to suppress duplicate bare prompts.
+  # Check if the most recent non-empty line of the window's prompt buffer
+  # (see {#prompt_buffer}) matches the given prompt text. Used to suppress
+  # duplicate bare prompts.
   #
   # @param prompt_text [String] the prompt string to check against
-  # @return [Boolean] true if the last non-empty buffer line equals prompt_text
+  # @return [Boolean, nil] false for a window without a prompt buffer or
+  #   with an empty one, else as {LineBuffer#newest_text?}
   def duplicate_prompt?(prompt_text)
-    buf = respond_to?(:buffer) ? buffer : []
-    return false if buf.empty?
+    line_buffer = prompt_buffer
+    return false unless line_buffer
 
-    recent_line = buf.find { |entry| entry[0] && !entry[0].empty? }
-    recent_line && recent_line[0] == prompt_text
+    line_buffer.newest_text?(prompt_text)
+  end
+
+  # The buffer prompts routed to this window land in, which
+  # {#duplicate_prompt?} checks. Default: none, so no prompt is a
+  # duplicate.
+  #
+  # @return [LineBuffer, nil]
+  private def prompt_buffer
+    nil
   end
 
   # --- Phase 3 selection support ---

@@ -231,16 +231,11 @@ class TabbedTextWindow < BaseWindow
     add_string_to_tab(target_tab, text, colors, indent: indent)
   end
 
-  # Check if the most recent non-empty line in the "main" tab matches the
-  # given prompt text. Used to suppress duplicate bare prompts.
+  # Prompts land in the "main" tab, whichever tab is shown.
   #
-  # @param prompt_text [String] the prompt string to check against
-  # @return [Boolean] true if the last non-empty line in "main" equals prompt_text
-  def duplicate_prompt?(prompt_text)
-    main_buffer = @tab_buffers[MAIN_STREAM]
-    return false unless main_buffer
-
-    main_buffer.newest_text?(prompt_text)
+  # @return [LineBuffer, nil] nil when the window has no "main" tab
+  private def prompt_buffer
+    @tab_buffers[MAIN_STREAM]
   end
 
   # Append a string to a specific tab's buffer.

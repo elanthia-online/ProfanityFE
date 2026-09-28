@@ -76,13 +76,11 @@ class TextWindow < BaseWindow
     append_string(@line_buffer, string, string_colors, indent: indent, shown: true)
   end
 
-  # Check if the most recent non-empty line matches the given prompt text.
-  # Used to suppress duplicate bare prompts.
+  # Prompts land in the window's one buffer.
   #
-  # @param prompt_text [String] the prompt string to check against
-  # @return [Boolean] true if the last non-empty buffer line equals prompt_text
-  def duplicate_prompt?(prompt_text)
-    @line_buffer.newest_text?(prompt_text)
+  # @return [LineBuffer]
+  private def prompt_buffer
+    @line_buffer
   end
 
   # Show the window again after {#move_to_layout} moved it: move its
