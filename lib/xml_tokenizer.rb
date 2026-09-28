@@ -15,9 +15,14 @@ module XmlTokenizer
   # Matches either a paired tag (with content) for specific self-contained
   # elements, or any single XML tag.
   #
+  # A single tag ends at the first > outside a quoted attribute value, so
+  # <d cmd="look >here"> is one tag. A quoted value can't hold a raw <
+  # (XML forbids it), which keeps a stray quote from running into the next
+  # tag. A tag with an unbalanced quote falls back to ending at the first >.
+  #
   # Paired: <prompt time='123'>H&gt;</prompt>, <spell>Fire Ball</spell>
   # Single: <pushBold/>, <preset id='x'>, </color>, <progressBar .../>
-  TAG_REGEX = /(?:<(prompt|spell|right|left|inv|compass)\b.*?<\/\1>|<[^>]*>)/
+  TAG_REGEX = %r{(?:<(prompt|spell|right|left|inv|compass)\b.*?</\1>|<(?:[^<>"']|"[^"<]*"|'[^'<]*')*>|<[^>]*>)}
 
   # Tokenize a line into ordered [:text, str] and [:tag, str] segments.
   #

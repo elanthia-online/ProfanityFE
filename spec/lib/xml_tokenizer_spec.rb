@@ -184,10 +184,42 @@ RSpec.describe XmlTokenizer do
     end
 
     it 'keeps a > inside a quoted attribute value within the tag' do
-      pending 'TAG_REGEX <[^>]*> ends the tag at the first >, even inside quotes (audit §4)'
       line = %q{<d cmd="look >here">text</d>}
       expect(described_class.tokenize(line))
         .to eq [[:tag, '<d cmd="look >here">'], [:text, 'text'], [:tag, '</d>']]
+    end
+
+    it 'keeps a > inside a single-quoted attribute value within the tag' do
+      line = %q{<d cmd='look >here'>text</d>}
+      expect(described_class.tokenize(line))
+        .to eq [[:tag, %q{<d cmd='look >here'>}], [:text, 'text'], [:tag, '</d>']]
+    end
+
+    it 'keeps later attributes after a quoted value holding a >' do
+      line = %q{<d cmd="a > b" id='x' noun="y">text</d>}
+      expect(described_class.tokenize(line))
+        .to eq [[:tag, %q{<d cmd="a > b" id='x' noun="y">}], [:text, 'text'], [:tag, '</d>']]
+    end
+
+    it 'still ends the tag at an unquoted >' do
+      line = %q{<d cmd=look>here">text</d>}
+      expect(described_class.tokenize(line))
+        .to eq [[:tag, '<d cmd=look>'], [:text, 'here">text'], [:tag, '</d>']]
+    end
+
+    it 'splits a line of several tags with quoted > values' do
+      line = %q{<pushBold/><d cmd="go >gate">the gate</d> and <a exist="1" noun='x>y'>a box</a><popBold/>}
+      expect(described_class.tokenize(line)).to eq [
+        [:tag, '<pushBold/>'], [:tag, '<d cmd="go >gate">'], [:text, 'the gate'], [:tag, '</d>'],
+        [:text, ' and '], [:tag, %q{<a exist="1" noun='x>y'>}], [:text, 'a box'], [:tag, '</a>'],
+        [:tag, '<popBold/>']
+      ]
+    end
+
+    it 'ends a tag with an unbalanced quote at its first >, not in the next tag' do
+      line = %q{<d cmd='Bob's hat'>Bob's hat</d>}
+      expect(described_class.tokenize(line))
+        .to eq [[:tag, %q{<d cmd='Bob's hat'>}], [:text, "Bob's hat"], [:tag, '</d>']]
     end
 
     it 'handles self-closing tags with extra spaces' do
