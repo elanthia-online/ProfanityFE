@@ -19,7 +19,7 @@ from game server XML component streams and inline text patterns.
 # Expects the including class to provide:
 # - @wm           [WindowManager]
 # - @event_bus    [EventBus]
-# - @room_capture_mode, @room_pending_title, @room_pending_title_colors,
+# - @room_capture_mode, @room_pending_title,
 #   @room_pending_desc, @room_pending_desc_colors, @room_pending_objects,
 #   @room_pending_objects_colors, @room_pending_players, @room_pending_exits,
 #   @room_pending_number, @current_raw_line, @current_stream
@@ -37,14 +37,13 @@ module RoomDataProcessor
   # pending room data is committed to the RoomWindow atomically.
   #
   # @param text [String] the current line of game text (XML-unescaped)
-  # @param line_colors [Array<Hash>] color regions for this line
   # @return [Boolean] true if this line was consumed by the RoomWindow
   #   (caller should not route it to the main window).  Returns false
   #   when title/desc text is captured for the terminal title but the
   #   template has no RoomWindow — the text must still flow to the
   #   main text window for display.
   # @api private
-  def process_room_data(text, line_colors)
+  def process_room_data(text)
     return false if text.empty?
 
     room_data_captured = false
@@ -66,7 +65,6 @@ module RoomDataProcessor
         # bracket is trailing). Handle the trailing case too - dropping only the "] (" form
         # left the trailing "]" behind, which render then doubled into "[Room - 2071]]".
         @room_pending_title = text.sub(/^\[/, '').sub(/\]\s*\(/, ' (').sub(/\]\s*\z/, '').strip
-        @room_pending_title_colors = line_colors.dup
         room_data_captured = true
       end
       @room_capture_mode = nil
@@ -251,7 +249,6 @@ module RoomDataProcessor
   # @return [void]
   def clear_pending_room_data
     @room_pending_title = nil
-    @room_pending_title_colors = nil
     @room_pending_desc = nil
     @room_pending_objects = nil
     @room_pending_players = nil
@@ -319,14 +316,6 @@ module RoomDataProcessor
             .map { |c| c.gsub(%r{<[^>]+>}, '').strip }
             .reject(&:empty?)
             .uniq
-  end
-
-  # Strip all XML tags from text, keeping only the text content.
-  #
-  # @param text [String] text potentially containing XML tags
-  # @return [String] text with all XML tags removed
-  def strip_xml_tags(text)
-    text.gsub(%r{<[^>]+>}, '')
   end
 
   # Commit all pending room data to the RoomWindow and clear the staging area.

@@ -138,8 +138,6 @@ end
 PORT = cli_options[:port]
 # Game server (Lich) host, from --host (default 127.0.0.1).
 HOST = cli_options[:host]
-# Character name from --char, or nil.
-CHAR_NAME = cli_options[:char]
 
 # Default foreground curses color id, from --default-color-id (default 7).
 DEFAULT_COLOR_ID = cli_options[:default_color_id]
@@ -149,8 +147,6 @@ Curses.use_default_colors if cli_options[:use_default_colors]
 # Whether to redefine terminal colors: --custom-colors, else Curses.can_change_color?.
 CUSTOM_COLORS = cli_options[:custom_colors].nil? ? Curses.can_change_color? : cli_options[:custom_colors]
 
-# True when started with --no-status (no process title updates).
-NO_STATUS = cli_options[:no_status]
 # True when started with --speech-ts (timestamp speech, familiar and thoughts lines).
 SPEECH_TS = cli_options[:speech_ts]
 

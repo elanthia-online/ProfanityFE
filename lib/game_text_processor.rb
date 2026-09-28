@@ -11,7 +11,6 @@ require_relative 'xml_tokenizer'
 require_relative 'tag_handlers'
 require_relative 'styled_text'
 require_relative 'event_bus'
-require_relative 'safe_arithmetic'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -132,7 +131,6 @@ class GameTextProcessor
     # Room data tracking for RoomWindow
     @room_capture_mode = nil # :title, :desc, or nil
     @room_pending_title = nil
-    @room_pending_title_colors = nil
     @room_pending_desc = nil
     @room_pending_objects = nil
     @room_pending_players = nil
@@ -342,17 +340,6 @@ class GameTextProcessor
     text.sub(/^\[(.+?)\]/, '\1').strip
   end
 
-  # Evaluate a layout dimension string to an integer, substituting
-  # Curses terminal dimensions for the tokens "lines" and "cols".
-  #
-  # @param str [String] dimension expression (e.g. "lines-2", "cols/3")
-  # @return [Integer] computed dimension value
-  # @api private
-  def fix_layout_number(str)
-    str = str.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s)
-    SafeArithmetic.evaluate(str)
-  end
-
   # Append a speech timestamp to text (e.g., "Hello (3:45:12)").
   #
   # @param text [String] the text to append to
@@ -493,7 +480,7 @@ class GameTextProcessor
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
-    room_captured = process_room_data(text, @line_colors)
+    room_captured = process_room_data(text)
     return if room_captured && @state.room_window_only
 
     check_familiar_notification(text)
@@ -611,11 +598,7 @@ class GameTextProcessor
             text = append_speech_timestamp(text)
           end
 
-          if @current_stream == 'exp'
-            @wm.stream['exp']
-          elsif @current_stream == 'percWindow'
-            @wm.stream['percWindow']
-
+          if @current_stream == 'percWindow'
             # Shorten the line. The color runs already on it (tag colors and
             # the highlights applied above, on the text as sent) move with
             # the text they color, so a highlight on a full spell name

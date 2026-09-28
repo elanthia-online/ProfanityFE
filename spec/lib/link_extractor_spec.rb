@@ -107,12 +107,6 @@ RSpec.describe LinkExtractor do
         expect(colors[1][:cmd]).to eq 'go south'
       end
 
-      it 'sets priority to 2 on link color regions' do
-        text = "<d cmd='go'>door</d>"
-        _, colors = described_class.extract_links(text, links_enabled: true)
-        expect(colors.first[:priority]).to eq 2
-      end
-
       it 'uses DEFAULT_LINK_COLOR when no preset defined' do
         PRESET.delete('links')
         text = "<d cmd='go'>door</d>"

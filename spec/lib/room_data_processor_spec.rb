@@ -19,7 +19,7 @@ require_relative '../../lib/room_data_processor'
 class RoomTitleHost
   include RoomDataProcessor
 
-  attr_accessor :room_capture_mode, :room_pending_title, :room_pending_title_colors,
+  attr_accessor :room_capture_mode, :room_pending_title,
                 :current_stream, :current_raw_line, :line_colors
   attr_reader :wm, :state
 
@@ -31,7 +31,6 @@ class RoomTitleHost
     @state = Struct.new(:room_title).new(nil)
     @room_capture_mode = :title
     @room_pending_title = nil
-    @room_pending_title_colors = nil
     @current_stream = nil
     @current_raw_line = nil
     @line_colors = []
@@ -55,7 +54,7 @@ RSpec.describe RoomDataProcessor do
     # @return [String, nil] the captured @room_pending_title
     def capture(text)
       host.room_capture_mode = :title
-      host.process_room_data(text, [])
+      host.process_room_data(text)
       host.room_pending_title
     end
 
@@ -93,7 +92,7 @@ RSpec.describe RoomDataProcessor do
     it 'does not capture a pending title when the layout has no RoomWindow' do
       windowless = RoomTitleHost.new(has_room_window: false)
       windowless.room_capture_mode = :title
-      windowless.process_room_data('[Town Square]', [])
+      windowless.process_room_data('[Town Square]')
       expect(windowless.room_pending_title).to be_nil
     end
   end

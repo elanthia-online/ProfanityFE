@@ -25,10 +25,6 @@ RSpec.describe Config do
       expect(config.scroll_window).to eq([])
     end
 
-    it 'starts with empty room_objects array' do
-      expect(config.room_objects).to eq([])
-    end
-
     it 'starts with empty perc_transforms array' do
       expect(config.perc_transforms).to eq([])
     end
@@ -50,7 +46,6 @@ RSpec.describe Config do
       config.preset['monsterbold'] = ['ff0000', nil]
       config.layout['default'] = 'xml'
       config.scroll_window << 'window1'
-      config.room_objects << 'goblin'
       config.perc_transforms << [/test/, '']
     end
 
@@ -60,7 +55,6 @@ RSpec.describe Config do
       expect(config.preset).to be_empty
       expect(config.layout).to be_empty
       expect(config.scroll_window).to be_empty
-      expect(config.room_objects).to be_empty
       expect(config.perc_transforms).to be_empty
     end
 
@@ -84,10 +78,7 @@ RSpec.describe Config do
       expect(config.notification_stream).to eq 'familiar'
     end
 
-    it 'is restored by reset! and reset_dynamic!' do
-      config.notification_stream = 'ooc'
-      config.reset_dynamic!
-      expect(config.notification_stream).to eq 'familiar'
+    it 'is restored by reset!' do
       config.notification_stream = 'ooc'
       config.reset!
       expect(config.notification_stream).to eq 'familiar'
@@ -99,38 +90,10 @@ RSpec.describe Config do
       expect(config.history_size).to eq 1000
     end
 
-    it 'is restored by reset! and reset_dynamic!' do
-      config.history_size = 5
-      config.reset_dynamic!
-      expect(config.history_size).to eq 1000
+    it 'is restored by reset!' do
       config.history_size = 5
       config.reset!
       expect(config.history_size).to eq 1000
-    end
-  end
-
-  describe '#reset_dynamic!' do
-    before do
-      config.highlight[/test/] = ['ff0000', nil, nil]
-      config.preset['speech'] = ['00ff00', nil]
-      config.layout['default'] = 'xml'
-      config.perc_transforms << [/test/, '']
-      config.scroll_window << 'window1'
-      config.room_objects << 'goblin'
-    end
-
-    it 'clears highlight and perc_transforms' do
-      config.reset_dynamic!
-      expect(config.highlight).to be_empty
-      expect(config.perc_transforms).to be_empty
-    end
-
-    it 'preserves preset, layout, scroll_window, room_objects' do
-      config.reset_dynamic!
-      expect(config.preset).not_to be_empty
-      expect(config.layout).not_to be_empty
-      expect(config.scroll_window).not_to be_empty
-      expect(config.room_objects).not_to be_empty
     end
   end
 
@@ -173,12 +136,6 @@ RSpec.describe Config do
       config.reset!
       config.scroll_window << 'b'
       expect(config.scroll_window).to eq ['b']
-    end
-
-    it 'room_objects.replace works after reset' do
-      config.reset!
-      config.room_objects.replace(['goblin', 'troll'])
-      expect(config.room_objects).to eq ['goblin', 'troll']
     end
 
     it 'perc_transforms accepts [Regexp, String] pairs' do

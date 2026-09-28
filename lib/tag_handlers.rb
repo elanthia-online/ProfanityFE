@@ -18,8 +18,7 @@ require_relative 'link_extractor'
 # - @current_stream, @combat_next_line, @need_update, @need_room_render
 # - @stream_stack (an empty Array: the open pushStreams, innermost last)
 # - @room_capture_mode
-# - handle_game_text, new_stun, fix_layout_number, parse_room_subtitle,
-#   add_prompt
+# - handle_game_text, new_stun, parse_room_subtitle, add_prompt
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
@@ -483,7 +482,7 @@ module TagHandlers
     return unless @state.blue_links || @current_stream&.start_with?('room')
 
     preset = PRESET['links'] || LinkExtractor::DEFAULT_LINK_COLOR
-    link = { start: text_buffer.length, fg: preset[0], bg: preset[1], priority: 2 }
+    link = { start: text_buffer.length, fg: preset[0], bg: preset[1] }
     link[:cmd] = LinkExtractor.extract_cmd(xml)
     @open_link.push(link)
   end

@@ -73,11 +73,10 @@ RSpec.describe StyledText do
       expect(st.runs.first).to include(start: 0, end: 5, fg: 'ff0000')
     end
 
-    it 'preserves cmd and priority attributes' do
+    it 'preserves the cmd attribute' do
       st = described_class.new('link')
-      st.add_run(start: 0, end: 4, fg: '0000ff', cmd: 'go north', priority: 2)
+      st.add_run(start: 0, end: 4, fg: '0000ff', cmd: 'go north')
       expect(st.runs.first[:cmd]).to eq 'go north'
-      expect(st.runs.first[:priority]).to eq 2
     end
 
     it 'returns self for chaining' do

@@ -84,13 +84,5 @@ module Games
       'returns home from a hard day of adventuring.' => '777700',
       'has disconnected.'                            => 'aa7733',
     }.freeze
-
-    # Abbreviate a GS spell name (stub — returns original name).
-    #
-    # @param spell_name [String] full spell name
-    # @return [String] the original name (no GS abbreviation table yet)
-    def abbreviate_spell(spell_name)
-      spell_name
-    end
   end
 end

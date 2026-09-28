@@ -59,7 +59,6 @@ class WindowManager
     @room = {}
     @command_window = nil
     @command_window_layout = nil
-    @handler_mutex = Mutex.new
     @previous_indicator = {}
     @previous_stream = {}
     @previous_progress = {}
@@ -312,8 +311,9 @@ class WindowManager
 
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
   #
-  # Synchronized with +@handler_mutex+ to prevent races with the server
-  # read thread that constantly reads the handler hashes. Text, indicator,
+  # The server read thread reads the handler hashes, so call this before
+  # that thread starts or inside {CursesRenderer.synchronize}, which the
+  # server thread holds while it processes a line. Text, indicator,
   # progress, and countdown windows whose keys appear in the new layout are
   # reused rather than recreated, preserving their content buffers. Every
   # other window from the previous layout, of any window class, is closed
@@ -328,52 +328,50 @@ class WindowManager
       return
     end
 
-    @handler_mutex.synchronize do
-      @old_windows = BaseWindow.all_windows
+    @old_windows = BaseWindow.all_windows
 
-      @previous_indicator = @indicator
-      @indicator = {}
+    @previous_indicator = @indicator
+    @indicator = {}
 
-      @previous_stream = @stream
-      @stream = {}
+    @previous_stream = @stream
+    @stream = {}
 
-      @previous_progress = @progress
-      @progress = {}
+    @previous_progress = @progress
+    @progress = {}
 
-      @previous_countdown = @countdown
-      @countdown = {}
-      @room = {}
+    @previous_countdown = @countdown
+    @countdown = {}
+    @room = {}
 
-      xml.elements.each do |e|
-        next unless e.name == 'window'
+    xml.elements.each do |e|
+      next unless e.name == 'window'
 
-        if e.attributes['class'] == 'sink'
-          sink = SinkWindow.new
-          e.attributes['value']&.split(',')&.each do |str|
-            @stream[str.strip] = sink
-          end
-          next
+      if e.attributes['class'] == 'sink'
+        sink = SinkWindow.new
+        e.attributes['value']&.split(',')&.each do |str|
+          @stream[str.strip] = sink
         end
-
-        height = fix_layout_number(e.attributes['height'])
-        width = fix_layout_number(e.attributes['width'])
-        top = fix_layout_number(e.attributes['top'])
-        left = fix_layout_number(e.attributes['left'])
-
-        next unless (height > 0) && (width > 0) && (top >= 0) && (left >= 0) &&
-                    (top < Curses.lines) && (left < Curses.cols)
-
-        builder = BaseWindow.type_registry[e.attributes['class']]
-        builder&.call(height, width, top, left, e, self)
+        next
       end
 
-      @old_windows.each { |window| close_window(window) }
-      forget_previous_layout
+      height = fix_layout_number(e.attributes['height'])
+      width = fix_layout_number(e.attributes['width'])
+      top = fix_layout_number(e.attributes['top'])
+      left = fix_layout_number(e.attributes['left'])
 
-      SCROLL_WINDOW[0]&.set_active(true)
+      next unless (height > 0) && (width > 0) && (top >= 0) && (left >= 0) &&
+                  (top < Curses.lines) && (left < Curses.cols)
 
-      CursesRenderer.doupdate
+      builder = BaseWindow.type_registry[e.attributes['class']]
+      builder&.call(height, width, top, left, e, self)
     end
+
+    @old_windows.each { |window| close_window(window) }
+    forget_previous_layout
+
+    SCROLL_WINDOW[0]&.set_active(true)
+
+    CursesRenderer.doupdate
   end
 
   # Resize all windows to match the current terminal dimensions.
@@ -574,15 +572,6 @@ class WindowManager
   def safe_reposition(win, right_margin: 0)
     safe_resize_move(win, fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]) - right_margin,
                      fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
-  end
-
-  # Resize and reposition a window according to its stored layout.
-  #
-  # @param win [BaseWindow] the window to reposition
-  # @return [void]
-  def reposition(win)
-    win.resize(fix_layout_number(win.layout[0]), fix_layout_number(win.layout[1]))
-    win.move(fix_layout_number(win.layout[2]), fix_layout_number(win.layout[3]))
   end
 end
 

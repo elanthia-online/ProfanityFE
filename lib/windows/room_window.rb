@@ -79,7 +79,6 @@ class RoomWindow < BaseWindow
     @objects = text.strip
     @objects_links = links
     @extracted_creatures = creatures
-    ROOM_OBJECTS.replace(creatures)
   end
 
   # Update the room players with pre-computed link data.
@@ -364,8 +363,7 @@ class RoomWindow < BaseWindow
         end: link[:end],
         fg: preset[0],
         bg: preset[1],
-        cmd: link[:cmd],
-        priority: 2
+        cmd: link[:cmd]
       }
     end
   end

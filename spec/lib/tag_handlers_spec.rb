@@ -54,10 +54,6 @@ class TagHandlerHost
   end
 
   # Stubs for methods defined in GameTextProcessor
-  def fix_layout_number(str)
-    SafeArithmetic.evaluate(str.gsub('lines', '24').gsub('cols', '80'))
-  end
-
   def parse_room_subtitle(subtitle)
     text = subtitle.sub(/^\s*-\s*/, '')
     text.sub(/^\[(.+?)\]/, '\1').strip

@@ -8,9 +8,9 @@
 # the run positions automatically so callers never do manual arithmetic.
 #
 # Runs are hashes with :start, :end (character positions in the text),
-# and optional :fg, :bg, :ul, :cmd, :priority keys. They are stored in
-# insertion order but may overlap — the renderer resolves priority by
-# smallest range first (most specific wins).
+# and optional :fg, :bg, :ul, :cmd keys. They are stored in insertion
+# order but may overlap — the renderer resolves priority by smallest
+# range first (most specific wins).
 #
 # @example Build styled text
 #   st = StyledText.new('Hello world')
@@ -66,7 +66,7 @@ class StyledText
   # Add a style run at the given positions.
   #
   # @param attrs [Hash] must include :start and :end, may include
-  #   :fg, :bg, :ul, :cmd, :priority
+  #   :fg, :bg, :ul, :cmd
   # @return [self]
   def add_run(**attrs)
     @runs << attrs
@@ -82,8 +82,6 @@ class StyledText
   # @return [StyledText] a new instance with adjusted positions
   def slice(range)
     start_pos = range.begin || 0
-    end_pos = range.end || @text.length
-    @text.length if end_pos > @text.length
     sliced_text = @text[range] || ''
     sliced_len = sliced_text.length
 
