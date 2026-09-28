@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'dot_command'
+
 # Default BOOT_PROFILE to false when loaded outside profanity.rb (e.g. specs)
 BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
 
@@ -43,6 +45,51 @@ class Application
     '.unhighlight <text> Remove an inline highlight',
     '.highlight          List active inline highlights',
     '.help              Show this help'
+  ].freeze
+
+  # The dot-commands, in the order {#execute_command} tries them; the first
+  # match wins. Each handler runs with +instance_exec+ on the Application.
+  DOT_COMMANDS = [
+    DotCommand.new(name: 'quit',
+                   handler: proc { exit }),
+    DotCommand.new(name: 'key',
+                   handler: proc { handle_dot_key }),
+    DotCommand.new(name: 'fixcolor',
+                   handler: proc { ColorManager.reinitialize_colors }),
+    DotCommand.new(name: 'resync',
+                   handler: proc { @shared_state.skip_server_time_offset = false }),
+    DotCommand.new(name: 'reload',
+                   handler: proc { handle_dot_reload }),
+    DotCommand.new(name: 'layout',
+                   args: :required,
+                   handler: proc { |layout|
+                     @window_mgr.load_layout(layout)
+                     @cmd_buffer.window = @window_mgr.command_window
+                     @key_action['resize'].call
+                   }),
+    DotCommand.new(name: 'resize',
+                   handler: proc { @key_action['resize'].call }),
+    DotCommand.new(name: 'tab',
+                   args: :optional,
+                   handler: proc { |arg| handle_dot_tab(arg) }),
+    DotCommand.new(name: 'arrow',
+                   handler: proc { handle_dot_arrow }),
+    DotCommand.new(name: 'links',
+                   handler: proc { handle_dot_links }),
+    DotCommand.new(name: 'select',
+                   handler: proc { handle_dot_select }),
+    DotCommand.new(name: 'draghl',
+                   handler: proc { handle_dot_draghl }),
+    DotCommand.new(name: 'scrollcfg',
+                   handler: proc { @mouse_scroll.start_configuration }),
+    DotCommand.new(name: 'unhighlight',
+                   args: :required,
+                   handler: proc { |pattern| handle_dot_unhighlight(pattern) }),
+    DotCommand.new(name: 'highlight',
+                   args: :optional,
+                   handler: proc { |pattern| handle_dot_highlight(pattern) }),
+    DotCommand.new(name: 'help',
+                   handler: proc { handle_dot_help })
   ].freeze
 
   # How long .key waits for a key press before giving up, in milliseconds.
@@ -119,52 +166,22 @@ class Application
 
   # Execute a dot-command or forward to the game server.
   #
-  # Dot-commands (e.g. .quit, .key, .reload) are handled locally;
-  # everything else is forwarded to the server with '.' replaced by ';'.
-  # A dot-command matches case-insensitively and only as a whole word
-  # (its name followed by whitespace or end of input), so Lich scripts
-  # such as .arrows or .tabulate still reach the server.
+  # The first of {DOT_COMMANDS} that matches (see {DotCommand#match}) is
+  # handled locally; everything else is forwarded to the server with a
+  # leading '.' replaced by ';'. A dot-command matches case-insensitively
+  # and only as a whole word (its name followed by whitespace or end of
+  # input), so Lich scripts such as .arrows or .tabulate still reach the
+  # server.
   #
   # @param cmd [String] the command text to execute
   # @return [void]
   def execute_command(cmd)
-    if cmd =~ /^\.quit(?=\s|\z)/i
-      exit
-    elsif cmd =~ /^\.key(?=\s|\z)/i
-      handle_dot_key
-    elsif cmd =~ /^\.fixcolor(?=\s|\z)/i
-      ColorManager.reinitialize_colors
-    elsif cmd =~ /^\.resync(?=\s|\z)/i
-      @shared_state.skip_server_time_offset = false
-    elsif cmd =~ /^\.reload(?=\s|\z)/i
-      handle_dot_reload
-    elsif (match = cmd.match(/^\.layout\s+(?<layout>.+)/i))
-      @window_mgr.load_layout(match[:layout])
-      @cmd_buffer.window = @window_mgr.command_window
-      @key_action['resize'].call
-    elsif cmd =~ /^\.resize(?=\s|\z)/i
-      @key_action['resize'].call
-    elsif (match = cmd.match(/^\.tab(?=\s|\z)(?:\s+(?<arg>.+))?/i))
-      handle_dot_tab(match[:arg]&.strip)
-    elsif cmd =~ /^\.arrow(?=\s|\z)/i
-      handle_dot_arrow
-    elsif cmd =~ /^\.links(?=\s|\z)/i
-      handle_dot_links
-    elsif cmd =~ /^\.select(?=\s|\z)/i
-      handle_dot_select
-    elsif cmd =~ /^\.draghl(?=\s|\z)/i
-      handle_dot_draghl
-    elsif cmd =~ /^\.scrollcfg(?=\s|\z)/i
-      @mouse_scroll.start_configuration
-    elsif (match = cmd.match(/^\.unhighlight\s+(?<pattern>.+)/i))
-      handle_dot_unhighlight(match[:pattern])
-    elsif (match = cmd.match(/^\.highlight(?=\s|\z)(?:\s+(?<pattern>.+))?/i))
-      handle_dot_highlight(match[:pattern]&.strip)
-    elsif cmd =~ /^\.help(?=\s|\z)/i
-      handle_dot_help
-    else
-      send_to_server(cmd.sub(/^\./, ';'))
+    DOT_COMMANDS.each do |command|
+      next unless (args = command.match(cmd))
+
+      return instance_exec(*args, &command.handler)
     end
+    send_to_server(cmd.sub(/^\./, ';'))
   end
 
   # Interpret and execute a macro string.
