@@ -19,6 +19,21 @@ require_relative '../streams'
 # received so far; {#redraw} (used on terminal resize) repaints the same
 # batch at the current width.
 class PercWindow < BaseWindow
+  # The layout's last column is left blank, both when the window is built
+  # and when it is resized, so the window doesn't widen on resize.
+  #
+  # @return [Integer]
+  def self.right_margin
+    1
+  end
+
+  # Resized after the exp window (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    40
+  end
+
   # Sort weight for entries without a parenthesised duration.
   NO_DURATION_WEIGHT = 1000
 
@@ -86,6 +101,16 @@ class PercWindow < BaseWindow
     ProfanityLog.write('perc_window', "Error drawing spells: #{e}", backtrace: e.backtrace)
   end
 
+  # Show the window again after {#move_to_layout} moved it: redraw its
+  # contents at the new size.
+  #
+  # @return [void]
+  # @api private
+  def redraw_after_resize
+    redraw
+    noutrefresh
+  end
+
   # Start a new batch of spells and redraw the (now empty) window.
   # Called for +<clearStream id="percWindow"/>+; the spell lines that
   # follow are added with {#add_string}.
@@ -137,9 +162,8 @@ class PercWindow < BaseWindow
   end
 end
 
-BaseWindow.register_type('percWindow') do |height, width, top, left, element, wm|
-  window = PercWindow.new(height, width - 1, top, left)
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
+BaseWindow.register_type('percWindow') do |height, width, top, left, _element, wm|
+  window = PercWindow.new(height, width - PercWindow.right_margin, top, left)
   wm.stream[Streams::PERC] = window
   window
 end

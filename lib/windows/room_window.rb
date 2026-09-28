@@ -19,6 +19,13 @@ require_relative '../presets'
 # creature names. The room window only applies its own presets/colors
 # during rendering — no XML parsing or regex tag stripping occurs here.
 class RoomWindow < BaseWindow
+  # Resized after the spell window (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    50
+  end
+
   # @return [String, nil] preset name applied to the room title color
   attr_accessor :title_preset
 
@@ -147,6 +154,16 @@ class RoomWindow < BaseWindow
   # @return [void]
   def redraw
     render
+  end
+
+  # Show the window again after {#move_to_layout} moved it: redraw its
+  # contents at the new size.
+  #
+  # @return [void]
+  # @api private
+  def redraw_after_resize
+    redraw
+    noutrefresh
   end
 
   # Render the complete room display.
@@ -384,7 +401,6 @@ end
 
 BaseWindow.register_type('room') do |height, width, top, left, element, wm|
   window = RoomWindow.new(height, width, top, left)
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   window.scrollok(false)
   window.title_preset = element.attributes['title-preset'] || Presets::ROOM_NAME
   window.desc_preset = element.attributes['desc-preset']

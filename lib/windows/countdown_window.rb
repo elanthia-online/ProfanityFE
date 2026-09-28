@@ -8,6 +8,13 @@
 # time offset. Renders a color-coded bar with primary and secondary
 # countdown regions, updating only when the displayed value changes.
 class CountdownWindow < BaseWindow
+  # Resized after progress bars (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    80
+  end
+
   # Default background colors: [inactive, primary countdown, secondary countdown]
   DEFAULT_BG = [nil, 'ff0000', '0000ff'].freeze
 
@@ -117,7 +124,6 @@ BaseWindow.register_type('countdown') do |height, width, top, left, element, wm|
   else
     window = CountdownWindow.new(height, width, top, left)
   end
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   window.scrollok(false)
   window.label = element.attributes['label'] if element.attributes['label']
   window.fg = BaseWindow.parse_color_attrs(element, 'fg') if element.attributes['fg']

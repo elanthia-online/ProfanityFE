@@ -18,6 +18,21 @@ class TabbedTextWindow < BaseWindow
   # Height in rows reserved for the tab bar at the top of the window.
   TAB_BAR_HEIGHT = 1
 
+  # The layout's last column holds the scrollbar.
+  #
+  # @return [Integer]
+  def self.right_margin
+    1
+  end
+
+  # Tabbed windows are resized after text windows (see
+  # {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    20
+  end
+
   # @return [String, nil] name of the currently displayed tab
   attr_reader :active_tab
 
@@ -175,6 +190,20 @@ class TabbedTextWindow < BaseWindow
     setscrreg(TAB_BAR_HEIGHT, maxy - 1)
   end
 
+  # Show the window again after {#move_to_layout} moved it: move its
+  # scrollbar, if it has one, beside it, re-wrap every tab's lines to the
+  # new width, clear the scrollbar and redraw the tab bar and text.
+  #
+  # @return [void]
+  # @api private
+  def redraw_after_resize
+    fit_scrollbar if scrollbar
+    rewrap
+    clear_scrollbar
+    redraw
+    noutrefresh
+  end
+
   # Scroll the text rows. ncurses refuses a scroll region of one row, so
   # with a single text row the region is the whole window and scrolling
   # it would move the tab bar too: blank that row instead, which is all
@@ -202,16 +231,11 @@ class TabbedTextWindow < BaseWindow
     add_string_to_tab(target_tab, text, colors, indent: indent)
   end
 
-  # Check if the most recent non-empty line in the "main" tab matches the
-  # given prompt text. Used to suppress duplicate bare prompts.
+  # Prompts land in the "main" tab, whichever tab is shown.
   #
-  # @param prompt_text [String] the prompt string to check against
-  # @return [Boolean] true if the last non-empty line in "main" equals prompt_text
-  def duplicate_prompt?(prompt_text)
-    main_buffer = @tab_buffers[MAIN_STREAM]
-    return false unless main_buffer
-
-    main_buffer.newest_text?(prompt_text)
+  # @return [LineBuffer, nil] nil when the window has no "main" tab
+  private def prompt_buffer
+    @tab_buffers[MAIN_STREAM]
   end
 
   # Append a string to a specific tab's buffer.
@@ -315,9 +339,8 @@ end
 BaseWindow.register_type('tabbed') do |height, width, top, left, element, wm|
   next nil unless width > 1
 
-  window = TabbedTextWindow.new(height, width - 1, top, left)
-  window.scrollbar = Curses::Window.new(window.maxy, 1, window.begy, window.begx + window.maxx)
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
+  window = TabbedTextWindow.new(height, width - TabbedTextWindow.right_margin, top, left)
+  window.add_scrollbar
   window.scrollok(true)
   window.setscrreg(1, window.maxy - 1)
   window.max_buffer_size = element.attributes['buffer-size'] || 1000

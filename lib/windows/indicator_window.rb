@@ -8,6 +8,13 @@
 # value. Supports optional highlight overlays via +label_colors+.
 # Common uses: kneeling, hidden, stunned, bleeding status indicators.
 class IndicatorWindow < BaseWindow
+  # Resized after the room window, before progress bars and countdowns (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    60
+  end
+
   # Default foreground colors: [off state, on state]
   DEFAULT_FG = %w[444444 ffff00].freeze
 
@@ -60,6 +67,32 @@ class IndicatorWindow < BaseWindow
     end
   end
 
+  # Apply an indicator update: set whichever of the label, label colors
+  # and value it gives, then redraw once if anything changed, so the
+  # redraw sees all of them together. A label or value equal to the
+  # current one is no change; label colors, when given, always are.
+  #
+  # @param changes [Hash] any of +:label+ (String), +:label_colors+
+  #   (Array<Hash>, nil) and +:value+ (Boolean, Integer, nil)
+  # @return [Boolean] true if the indicator was redrawn
+  def apply_changes(changes)
+    changed = false
+    if changes.key?(:label) && @label != changes[:label]
+      @label = changes[:label]
+      changed = true
+    end
+    if changes.key?(:label_colors)
+      @label_colors = changes[:label_colors]
+      changed = true
+    end
+    if changes.key?(:value) && changes[:value] != @value
+      @value = changes[:value]
+      changed = true
+    end
+    redraw if changed
+    changed
+  end
+
   # Redraw the indicator label with the appropriate color for the current value.
   #
   # @return [Boolean] always true (the indicator was rendered)
@@ -101,7 +134,6 @@ BaseWindow.register_type('indicator') do |height, width, top, left, element, wm|
   else
     window = IndicatorWindow.new(height, width, top, left)
   end
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   window.scrollok(false)
   window.label = element.attributes['label'] if element.attributes['label']
   window.fg = BaseWindow.parse_color_attrs(element, 'fg') if element.attributes['fg']

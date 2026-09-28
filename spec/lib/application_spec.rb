@@ -1244,7 +1244,7 @@ RSpec.describe Application do
     # :prompt_changed handler shrinks the 20-column command window to 10.
     let(:prompt_window) do
       obj = Object.new
-      def obj.layout = %w[1 1 23 0]
+      def obj.layout = WindowLayout.new(height: '1', width: '1', top: '23', left: '0')
       def obj.resize(*) = nil
       def obj.label=(_text); end
       obj
@@ -1255,8 +1255,7 @@ RSpec.describe Application do
       stub_const('GameTextProcessor', Class.new { def initialize(**) = nil })
       allow(Thread).to receive(:new)
       app.window_mgr.instance_variable_set(:@indicator, { 'prompt' => prompt_window })
-      app.window_mgr.instance_variable_set(:@command_window, screen)
-      app.window_mgr.instance_variable_set(:@command_window_layout, %w[1 20 23 1])
+      app.window_mgr.install_command_window(WindowLayout.new(height: '1', width: '20', top: '23', left: '1')) { screen }
       app.cmd_buffer.window = screen
       'abcdefghijklmnopqr'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
       app.send(:start_server_thread)

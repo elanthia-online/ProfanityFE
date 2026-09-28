@@ -11,6 +11,21 @@ require_relative '../streams'
 # maintains a sorted skill map. Redraws the full skill list on every
 # update, applying highlights via {HighlightProcessor}.
 class ExpWindow < BaseWindow
+  # The layout's last column is left blank, both when the window is built
+  # and when it is resized, so the window doesn't widen on resize.
+  #
+  # @return [Integer]
+  def self.right_margin
+    1
+  end
+
+  # Resized after text and tabbed windows (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    30
+  end
+
   # Create a new experience window.
   #
   # @param args [Array] arguments forwarded to {BaseWindow#initialize}
@@ -88,6 +103,16 @@ class ExpWindow < BaseWindow
     noutrefresh
   end
 
+  # Show the window again after {#move_to_layout} moved it: redraw its
+  # contents at the new size.
+  #
+  # @return [void]
+  # @api private
+  def redraw_after_resize
+    redraw
+    noutrefresh
+  end
+
   private
 
   # @param text [String] the skill text
@@ -101,9 +126,8 @@ class ExpWindow < BaseWindow
   end
 end
 
-BaseWindow.register_type('exp') do |height, width, top, left, element, wm|
-  window = ExpWindow.new(height, width - 1, top, left)
-  window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
+BaseWindow.register_type('exp') do |height, width, top, left, _element, wm|
+  window = ExpWindow.new(height, width - ExpWindow.right_margin, top, left)
   wm.stream[Streams::EXP] = window
   window
 end

@@ -46,12 +46,4 @@ class SinkWindow
   # No-op: stands in for {PercWindow#clear_spells} when a sink replaces the spell window.
   # @return [void]
   def clear_spells; end
-
-  # Always false — sinks have no buffer content.
-  #
-  # @param _prompt_text [String] ignored
-  # @return [Boolean] always false
-  def duplicate_prompt?(_prompt_text)
-    false
-  end
 end

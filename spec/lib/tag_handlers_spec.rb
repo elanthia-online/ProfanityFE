@@ -95,7 +95,7 @@ class SpyIndicator
 
   def value = 0
   def secondary_value = 0
-  def layout = %w[1 10 0 0]
+  def layout = WindowLayout.new(height: '1', width: '10', top: '0', left: '0')
   def resize(*) = nil
   def move(*) = nil
 end
