@@ -102,6 +102,7 @@ class MouseScroll
     @bstate_counts = {}
     @config_state = :up
     Curses.mousemask(Curses::ALL_MOUSE_EVENTS | Curses::REPORT_MOUSE_POSITION)
+    @listener_enabled = true
     @display_fn.call('[PROFANITY] Scroll up with your mouse wheel or trackpad')
   end
 
@@ -233,12 +234,14 @@ class MouseScroll
     apply_mouse_mask
   end
 
-  # Cancel calibration and reset state to idle.
+  # Cancel calibration, reset state to idle and replace the
+  # every-event calibration mask with the steady-state mask.
   #
   # @return [void]
   def reset_configuration
     @config_state = :idle
     @bstate_counts = {}
+    apply_mouse_mask
   end
 
   # Process a mouse event during calibration to detect scroll-up/down masks.
