@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../streams'
+
 # Experience/skills display window with sorted skill list and highlight support.
 
 # Experience and skills display window.
@@ -102,6 +104,6 @@ end
 BaseWindow.register_type('exp') do |height, width, top, left, element, wm|
   window = ExpWindow.new(height, width - 1, top, left)
   window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
-  wm.stream['exp'] = window
+  wm.stream[Streams::EXP] = window
   window
 end

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'config'
+require_relative 'streams'
 
 # constants.rb: Global constants for ProfanityFE.
 #
@@ -12,8 +13,9 @@ require_relative 'config'
 
 # ---- Immutable constants ----
 
-# @return [String] default stream name for the primary game output window
-MAIN_STREAM = 'main'
+# @return [String] default stream name for the primary game output window.
+#   Alias of {Streams::MAIN}, kept for its many existing callers.
+MAIN_STREAM = Streams::MAIN
 
 # @return [Integer] default maximum number of lines retained per text window buffer
 DEFAULT_BUFFER_SIZE = 250

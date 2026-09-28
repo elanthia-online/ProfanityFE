@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../link_extractor'
+require_relative '../streams'
 
 # Dedicated room display with atomic updates and creature highlighting.
 
@@ -402,6 +403,6 @@ BaseWindow.register_type('room') do |height, width, top, left, element, wm|
   window.title_preset = element.attributes['title-preset'] || 'roomName'
   window.desc_preset = element.attributes['desc-preset']
   window.creatures_preset = element.attributes['creatures-preset'] || 'monsterbold'
-  wm.room['room'] = window
+  wm.room[Streams::ROOM] = window
   window
 end

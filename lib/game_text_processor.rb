@@ -11,6 +11,7 @@ require_relative 'xml_tokenizer'
 require_relative 'tag_handlers'
 require_relative 'styled_text'
 require_relative 'event_bus'
+require_relative 'streams'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -537,22 +538,22 @@ class GameTextProcessor
     end
 
     # Apply highlight patterns to all routable streams
-    if @current_stream.nil? || @wm.stream[@current_stream] || @current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics)$/
+    if @current_stream.nil? || @wm.stream[@current_stream] || Streams::FALLBACK_TO_MAIN.include?(@current_stream)
       HighlightProcessor.apply_highlights(text, @line_colors)
     end
 
     unless text.strip.empty?
       if @current_stream
 
-        if @current_stream == 'combat' && text.match(GagPatterns.combat_regexp)
+        if @current_stream == Streams::COMBAT && text.match(GagPatterns.combat_regexp)
           return
         end
 
         # LNet chat arrives on the thoughts stream. Move it to the lnet window
         # only when the layout has one; otherwise it stays on thoughts, which
         # falls back to main when there is no thoughts window either.
-        if @current_stream == 'thoughts' && @wm.stream['lnet'] && (text =~ /^\[.+?\]-[A-Za-z]+:[A-Z][a-z]+: "|^\[server\]: /)
-          @current_stream = 'lnet'
+        if @current_stream == Streams::THOUGHTS && @wm.stream[Streams::LNET] && (text =~ /^\[.+?\]-[A-Za-z]+:[A-Z][a-z]+: "|^\[server\]: /)
+          @current_stream = Streams::LNET
         end
 
         # Handle room components for dedicated RoomWindow
@@ -566,7 +567,7 @@ class GameTextProcessor
         end
 
         if (@wm.stream[@current_stream])
-          if @current_stream == 'death'
+          if @current_stream == Streams::DEATH
             if (death_match = text.match(Games::DragonRealms::DEATH_PATTERN))
               # DR death: "Name" or "Name MF" (moonfire phoenix)
               name = death_match[:name]
@@ -592,7 +593,7 @@ class GameTextProcessor
               # GS vaporized/incinerated — suppress
               text = ''
             end
-          elsif @current_stream == 'logons'
+          elsif @current_stream == Streams::LOGONS
             if (logon_match = text.match(LOGON_REGEXP))
               name = logon_match[:name]
               logon_type = logon_match[:type]
@@ -605,11 +606,11 @@ class GameTextProcessor
                 fg: ALL_LOGON_PATTERNS[logon_type]
               })
             end
-          elsif @current_stream =~ /^(?:speech|thoughts|familiar)$/ && SPEECH_TS
+          elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && SPEECH_TS
             text = append_speech_timestamp(text)
           end
 
-          if @current_stream == 'percWindow'
+          if @current_stream == Streams::PERC
             # Shorten the line. The color runs already on it (tag colors and
             # the highlights applied above, on the text as sent) move with
             # the text they color, so a highlight on a full spell name
@@ -650,9 +651,10 @@ class GameTextProcessor
             # Remembered so the game's main copy of it, if next, is dropped
             @last_stream_text = text.strip
           end
-        elsif @current_stream =~ /^(?:death|logons|thoughts|voln|familiar|assess|ooc|shopWindow|combat|moonWindow|atmospherics)$/
-          # Append timestamp to speech/thoughts/familiar when --speech-ts is active
-          if @current_stream =~ /^(?:thoughts|familiar)$/ && SPEECH_TS
+        elsif Streams::FALLBACK_TO_MAIN.include?(@current_stream)
+          # Timestamp thoughts/familiar when --speech-ts is active (not speech:
+          # see Streams::TIMESTAMPED_IN_MAIN)
+          if Streams::TIMESTAMPED_IN_MAIN.include?(@current_stream) && SPEECH_TS
             text = append_speech_timestamp(text)
           end
           if PRESET[@current_stream]

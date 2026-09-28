@@ -131,7 +131,7 @@ end
 
 require_relative '../lib/config'
 
-MAIN_STREAM = 'main'
+MAIN_STREAM = Streams::MAIN
 DEFAULT_BUFFER_SIZE = 250
 DEFAULT_TERMINAL_WIDTH = 80
 COUNTDOWN_OFFSET = 0.2

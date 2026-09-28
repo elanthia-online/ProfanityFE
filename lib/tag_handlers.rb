@@ -3,6 +3,7 @@
 require 'uri'
 require_relative 'xml_tokenizer'
 require_relative 'link_extractor'
+require_relative 'streams'
 
 # Tag dispatch and handler methods for game server XML processing.
 #
@@ -106,7 +107,7 @@ module TagHandlers
       # Unrecognized tag while combat-next-line is active:
       # flush accumulated text and switch to combat stream.
       flush_text_buffer(text_buffer)
-      @current_stream = 'combat'
+      @current_stream = Streams::COMBAT
     end
   end
 
@@ -312,7 +313,7 @@ module TagHandlers
     return if xml.end_with?('/>') # an empty preset has nothing to color
     return unless (preset_id = XmlTokenizer.attrs(xml)['id'])
 
-    if preset_id == 'roomDesc' && @wm.room['room']
+    if preset_id == 'roomDesc' && @wm.room[Streams::ROOM]
       flush_text_buffer(text_buffer)
       @room_capture_mode = :desc
     end
@@ -383,7 +384,7 @@ module TagHandlers
         @open_style[:bg] = PRESET[style_id][1]
       end
       @room_capture_mode = :title if style_id == 'roomName'
-      @room_capture_mode = :desc if style_id == 'roomDesc' && @wm.room['room']
+      @room_capture_mode = :desc if style_id == 'roomDesc' && @wm.room[Streams::ROOM]
     end
   end
 
@@ -400,11 +401,11 @@ module TagHandlers
 
     flush_text_buffer(text_buffer)
     if (exp_match = new_stream.match(/^exp (?<skill>.+)/))
-      @current_stream = 'exp'
+      @current_stream = Streams::EXP
       @event_bus.emit(:exp_set_current, skill: exp_match[:skill])
     else
       @current_stream = new_stream
-      if new_stream == 'room' && (subtitle = attrs['subtitle'])
+      if new_stream == Streams::ROOM && (subtitle = attrs['subtitle'])
         title = parse_room_subtitle(subtitle)
         unless title.empty?
           @state.room_title = title
@@ -414,7 +415,7 @@ module TagHandlers
     end
     push_open_stream(@current_stream) if xml.start_with?('<pushStream')
 
-    @combat_next_line = true if @current_stream == 'combat'
+    @combat_next_line = true if @current_stream == Streams::COMBAT
   end
 
   # Handle <popStream.../>, </component>, or </compDef> stream-closing tag.
@@ -426,21 +427,21 @@ module TagHandlers
   # alone. So after a nested push/pop the outer stream's remaining text
   # keeps going to the outer stream instead of spilling into main.
   def handle_stream_close(xml, text_buffer)
-    if text_buffer.empty? && @current_stream&.start_with?('room')
+    if text_buffer.empty? && @current_stream&.start_with?(Streams::ROOM)
       # Empty room components (e.g., <component id='room players'></component>)
       # are meaningful — they clear the displayed data. Since flush_text_buffer
       # skips empty text, handle this directly.
-      if @wm.room['room']
+      if @wm.room[Streams::ROOM]
         result = process_room_stream('')
         update_room_players_indicator(nil) if result == :continue
-      elsif @current_stream == 'room players'
+      elsif @current_stream == Streams::ROOM_PLAYERS
         # No RoomWindow -- still clear the indicator
         update_room_players_indicator(nil)
       end
     else
       flush_text_buffer(text_buffer)
     end
-    @event_bus.emit(:exp_delete_skill) if @current_stream == 'exp'
+    @event_bus.emit(:exp_delete_skill) if @current_stream == Streams::EXP
     pop_open_stream(XmlTokenizer.attrs(xml)['id']) if xml.start_with?('<popStream')
     @current_stream = @stream_stack.last
   end
@@ -495,7 +496,7 @@ module TagHandlers
 
   # Handle <clearStream id="percWindow"/> tag.
   def handle_clear_stream(xml, _text_buffer)
-    @event_bus.emit(:clear_spells) if XmlTokenizer.attrs(xml)['id'] == 'percWindow'
+    @event_bus.emit(:clear_spells) if XmlTokenizer.attrs(xml)['id'] == Streams::PERC
   end
 
   # Handle <a ...> or <d ...> link opening tag.
@@ -504,7 +505,7 @@ module TagHandlers
     # pre-computed link positions even when .links is off, so they're ready
     # when toggled on. Room stream text is consumed (never reaches main
     # window), so these extra color regions don't affect other windows.
-    return unless @state.blue_links || @current_stream&.start_with?('room')
+    return unless @state.blue_links || @current_stream&.start_with?(Streams::ROOM)
 
     preset = PRESET['links'] || LinkExtractor::DEFAULT_LINK_COLOR
     link = { start: text_buffer.length, fg: preset[0], bg: preset[1] }
@@ -585,7 +586,7 @@ module TagHandlers
   # Handle <streamWindow id='room' subtitle='...'/> tag.
   def handle_stream_window(xml, _text_buffer)
     id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
-    return unless id == 'room' && subtitle
+    return unless id == Streams::ROOM && subtitle
 
     room = parse_room_subtitle(subtitle)
     return if room.empty?

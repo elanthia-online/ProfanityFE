@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'streams'
+
 # Centralized mutable configuration for ProfanityFE.
 #
 # Owns all runtime-mutable state that was previously spread across 5
@@ -16,7 +18,7 @@
 class Config
   # Stream that notifier notes (script STATUS, almanac, empath, etc.) go to
   # unless <notification-stream> overrides it.
-  DEFAULT_NOTIFICATION_STREAM = 'familiar'
+  DEFAULT_NOTIFICATION_STREAM = Streams::FAMILIAR
 
   # Number of commands kept in the command history unless <history-size>
   # overrides it.

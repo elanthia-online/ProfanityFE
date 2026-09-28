@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'xml_tokenizer'
+require_relative 'streams'
 
 =begin
 Room data capture and assembly for RoomWindow.
@@ -15,7 +16,7 @@ from game server XML component streams and inline text patterns.
 # RoomWindow atomically when all components have arrived.
 #
 # UI updates are emitted via @event_bus rather than calling window methods
-# directly. The @wm.room['room'] reference is retained only as a read-only
+# directly. The @wm.room[Streams::ROOM] reference is retained only as a read-only
 # check for whether a RoomWindow is configured in the current layout.
 #
 # Expects the including class to provide:
@@ -60,7 +61,7 @@ module RoomDataProcessor
     when :title
       room_title = parse_room_subtitle(text)
       @state.room_title = room_title unless room_title.empty?
-      if @wm.room['room']
+      if @wm.room[Streams::ROOM]
         # Strip the title's brackets so RoomWindow#render can re-add them exactly once.
         # The closing bracket takes two forms: "[Room] (230008)" (RealID appended, the
         # bracket precedes the "(") and "[Room - 2071]" or plain "[Room]" (no RealID, the
@@ -71,7 +72,7 @@ module RoomDataProcessor
       end
       @room_capture_mode = nil
     when :desc
-      if @wm.room['room']
+      if @wm.room[Streams::ROOM]
         # Don't overwrite if already set by component stream (preserves raw XML for links)
         unless @room_pending_desc
           # Extract from raw line to preserve <d>/<a> link tags for room window.
@@ -85,7 +86,7 @@ module RoomDataProcessor
 
     # Without a RoomWindow, only update the room players indicator from
     # inline text patterns (objects, exits, etc. are not applicable).
-    unless @wm.room['room']
+    unless @wm.room[Streams::ROOM]
       if text =~ /^Also here:\s*(.+)$/
         update_room_players_indicator(text.strip)
       end
@@ -97,7 +98,7 @@ module RoomDataProcessor
     # handled by process_room_stream instead. Without this guard,
     # process_room_data would consume the text and prevent
     # process_room_stream from running.
-    return room_data_captured if @current_stream&.start_with?('room')
+    return room_data_captured if @current_stream&.start_with?(Streams::ROOM)
 
     # Detect "You also see" for objects (may have leading whitespace)
     if text =~ /^\s*You also see\b/
@@ -166,11 +167,11 @@ module RoomDataProcessor
   #   also needs indicator handling), or nil if not a room stream
   # @api private
   def process_room_stream(text)
-    return nil unless @current_stream&.start_with?('room')
+    return nil unless @current_stream&.start_with?(Streams::ROOM)
 
     # Without a RoomWindow, only handle room players for the indicator
-    unless @wm.room['room']
-      return @current_stream == 'room players' ? :continue : nil
+    unless @wm.room[Streams::ROOM]
+      return @current_stream == Streams::ROOM_PLAYERS ? :continue : nil
     end
 
     # Extract pre-computed link regions from SAX-parsed @line_colors.
@@ -185,20 +186,20 @@ module RoomDataProcessor
     clean = text.strip
 
     case @current_stream
-    when 'room', 'room title'
+    when Streams::ROOM, Streams::ROOM_TITLE
       @room_pending_title = clean
       @event_bus.emit(:room_title, text: clean)
-    when 'room desc', 'roomDesc'
+    when Streams::ROOM_DESC, Streams::ROOM_DESC_ALT
       @room_pending_desc = clean
       @event_bus.emit(:room_desc, text: clean, links: links)
-    when 'room objs'
+    when Streams::ROOM_OBJS
       creatures = extract_sax_creatures(text, left_offset)
       @room_pending_objects = clean
       @event_bus.emit(:room_objects, text: clean, links: links, creatures: creatures)
-    when 'room players'
+    when Streams::ROOM_PLAYERS
       @room_pending_players = clean
       @event_bus.emit(:room_players, text: clean, links: links)
-    when 'room exits'
+    when Streams::ROOM_EXITS
       @room_pending_exits = clean
       @event_bus.emit(:room_exits, text: clean, links: links)
       clear_pending_room_data
@@ -206,11 +207,11 @@ module RoomDataProcessor
 
     # Defer room window render to the IO.select flush point to reduce
     # curses operation frequency (update_exits already renders internally)
-    @need_room_render = true unless @current_stream == 'room exits'
+    @need_room_render = true unless @current_stream == Streams::ROOM_EXITS
 
     @need_update = true
     # Don't skip for room players - let the indicator handler also process it
-    @current_stream == 'room players' ? :continue : :consumed
+    @current_stream == Streams::ROOM_PLAYERS ? :continue : :consumed
   end
 
   private
@@ -356,7 +357,7 @@ module RoomDataProcessor
   #
   # @return [void]
   def commit_room_data_batch
-    return unless @wm.room['room']
+    return unless @wm.room[Streams::ROOM]
 
     # Save exits before clearing — clear_pending_room_data wipes all
     # pending fields, but exits are emitted separately after the batch.

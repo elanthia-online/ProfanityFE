@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'safe_arithmetic'
+require_relative 'streams'
 
 # Manages Curses window creation, layout loading, and handler hash access
 # for the profanity terminal UI.
@@ -219,57 +220,57 @@ class WindowManager
     # ---- Room events ----
 
     event_bus.on(:room_title) do |data|
-      @room['room']&.update_title(data[:text])
+      @room[Streams::ROOM]&.update_title(data[:text])
     end
 
     event_bus.on(:room_desc) do |data|
-      @room['room']&.update_desc(data[:text], links: data[:links] || [])
+      @room[Streams::ROOM]&.update_desc(data[:text], links: data[:links] || [])
     end
 
     event_bus.on(:room_objects) do |data|
-      @room['room']&.update_objects(data[:text], links: data[:links] || [], creatures: data[:creatures] || [])
+      @room[Streams::ROOM]&.update_objects(data[:text], links: data[:links] || [], creatures: data[:creatures] || [])
     end
 
     event_bus.on(:room_players) do |data|
-      @room['room']&.update_players(data[:text], links: data[:links] || [])
+      @room[Streams::ROOM]&.update_players(data[:text], links: data[:links] || [])
     end
 
     event_bus.on(:room_exits) do |data|
-      @room['room']&.update_exits(data[:text], links: data[:links] || [])
+      @room[Streams::ROOM]&.update_exits(data[:text], links: data[:links] || [])
     end
 
     event_bus.on(:room_lich_exits) do |data|
-      @room['room']&.update_lich_exits(data[:text])
+      @room[Streams::ROOM]&.update_lich_exits(data[:text])
     end
 
     event_bus.on(:room_number) do |data|
-      @room['room']&.update_room_number(data[:text])
+      @room[Streams::ROOM]&.update_room_number(data[:text])
     end
 
     event_bus.on(:room_stringprocs) do |data|
-      @room['room']&.update_stringprocs(data[:text])
+      @room[Streams::ROOM]&.update_stringprocs(data[:text])
     end
 
     event_bus.on(:room_supplemental_clear) do |_data|
-      @room['room']&.clear_supplemental
+      @room[Streams::ROOM]&.clear_supplemental
     end
 
     event_bus.on(:room_render) do |_data|
-      @room['room']&.render
+      @room[Streams::ROOM]&.render
     end
 
     # ---- Stream management events ----
 
     event_bus.on(:exp_set_current) do |data|
-      @stream['exp']&.set_current(data[:skill])
+      @stream[Streams::EXP]&.set_current(data[:skill])
     end
 
     event_bus.on(:exp_delete_skill) do |_data|
-      @stream['exp']&.delete_skill
+      @stream[Streams::EXP]&.delete_skill
     end
 
     event_bus.on(:clear_spells) do |_data|
-      @stream['percWindow']&.clear_spells
+      @stream[Streams::PERC]&.clear_spells
     end
 
     # ---- Special events ----
