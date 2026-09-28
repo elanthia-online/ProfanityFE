@@ -8,6 +8,7 @@
 require_relative '../../lib/event_bus'
 require_relative '../../lib/xml_tokenizer'
 require_relative '../../lib/tag_handlers'
+require_relative '../../lib/shared_state'
 require_relative '../../lib/safe_arithmetic'
 
 # Minimal host class that includes TagHandlers, providing the instance
@@ -113,12 +114,7 @@ RSpec.describe TagHandlers do
                  { 'main' => main_window }, {}, {}, {}, {}, nil, nil
                )
   end
-  let(:state) do
-    Struct.new(:need_prompt, :prompt_text, :skip_server_time_offset,
-               :room_title, :blue_links, :remote_url, :room_window_only, :server_time_offset) do
-      def update_terminal_title = nil
-    end.new(false, '>', true, '', false, false, false, 0.0)
-  end
+  let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
   let(:host) { TagHandlerHost.new(wm: wm, state: state, event_bus: event_bus) }
 
   # Helper to collect events of a given type
@@ -196,6 +192,15 @@ RSpec.describe TagHandlers do
   # ---- Prompt handler ----
 
   describe '#handle_prompt_tag' do
+    # SharedState#server_time_offset= also sets the $server_time_offset
+    # global that countdown windows read; restore it for later examples.
+    around do |example|
+      saved_offset = $server_time_offset
+      example.run
+    ensure
+      $server_time_offset = saved_offset
+    end
+
     it 'updates shared state prompt_text' do
       state.skip_server_time_offset = false
       state.prompt_text = '>'
@@ -226,6 +231,23 @@ RSpec.describe TagHandlers do
 
       changed_event = events.find { |e| e[:type] == :prompt_changed }
       expect(changed_event).to include(text: 'H>')
+    end
+
+    it 'emits nothing and leaves the prompt pending on a repeated prompt' do
+      state.prompt_text = 'H>'
+      events = collect_events(:add_prompt, :prompt_changed)
+      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
+      expect(events).to be_empty
+      expect(state.consume_prompt!).to be true
+    end
+
+    it 'puts a new prompt in the terminal title' do
+      allow(Process).to receive(:setproctitle)
+      allow($stdout).to receive(:write)
+      state.char_name = 'Mahtra'
+      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
+      state.update_terminal_title
+      expect(Process).to have_received(:setproctitle).with('Mahtra [H]')
     end
   end
 

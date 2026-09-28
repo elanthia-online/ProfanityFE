@@ -257,12 +257,12 @@ class GameTextProcessor
 
           # Blank lines from the game are not displayed; a blank line is
           # where a pending prompt is shown, except after movement (use
-          # flag OR buffer check), where the prompt is skipped too.
+          # flag OR buffer check), where the prompt is skipped too. The
+          # pending flag is consumed either way.
+          pending = @state.consume_prompt!
           if @last_was_movement || last_line_was_movement
-            @state.need_prompt = false
             @last_was_movement = false
-          elsif @state.need_prompt
-            @state.need_prompt = false
+          elsif pending
             @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
             @need_update = true
           end
@@ -435,9 +435,8 @@ class GameTextProcessor
   # @return [void]
   # @api private
   def emit_prompt_if_needed
-    return unless @state.need_prompt
+    return unless @state.consume_prompt!
 
-    @state.need_prompt = false
     @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text) unless @last_was_movement
   end
 

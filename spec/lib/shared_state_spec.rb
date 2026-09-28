@@ -222,6 +222,19 @@ RSpec.describe SharedState do
       expect(Process).to have_received(:setproctitle).twice
     end
 
+    it 'follows a prompt recorded by update_prompt' do
+      state.update_prompt('H>')
+      expect(tty_bytes).to eq "\e]0;Mahtra [H]\a"
+    end
+
+    it 'is not rewritten when update_prompt sees the same prompt again' do
+      state.update_prompt('H>')
+      state.update_terminal_title
+      state.update_prompt('H>')
+      state.update_terminal_title
+      expect(Process).to have_received(:setproctitle).once
+    end
+
     # Adversarial
     it 'handles empty room_title' do
       state.prompt_text = 'H>'

@@ -8,6 +8,7 @@
 require_relative '../spec_helper'
 require 'rexml/document'
 require_relative '../../lib/game_text_processor'
+require_relative '../../lib/shared_state'
 require_relative '../../lib/window_manager'
 
 RSpec.describe 'GameTextProcessor event emissions' do
@@ -27,12 +28,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
                  { 'main' => main_window }, {}, {}, {}, {}, nil, nil
                )
   end
-  let(:state) do
-    Struct.new(:need_prompt, :prompt_text, :skip_server_time_offset,
-               :room_title, :blue_links, :room_window_only, :server_time_offset, :log_gags) do
-      def update_terminal_title = nil
-    end.new(false, '>', true, '', false, false, 0.0, false)
-  end
+  let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
   let(:cmd_buffer) { Struct.new(:window).new(nil) }
   let(:xml_escapes) { { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' } }
   let(:processor) do

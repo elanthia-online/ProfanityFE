@@ -8,6 +8,7 @@
 require 'rexml/document'
 require_relative '../../../lib/event_bus'
 require_relative '../../../lib/game_text_processor'
+require_relative '../../../lib/shared_state'
 require_relative '../../../lib/window_manager'
 
 RSpec.describe ExpWindow do
@@ -21,13 +22,7 @@ RSpec.describe ExpWindow do
   end
   let(:window) { window_manager.stream['exp'] }
   let(:event_bus) { EventBus.new.tap { |bus| window_manager.subscribe_to_events(bus) } }
-  let(:state) do
-    Struct.new(:need_prompt, :prompt_text, :skip_server_time_offset,
-               :room_title, :blue_links, :room_window_only, :server_time_offset,
-               :remote_url, :log_gags) do
-      def update_terminal_title = nil
-    end.new(false, '>', true, '', false, false, 0.0, false, false)
-  end
+  let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
   let(:processor) do
     GameTextProcessor.new(
       window_mgr: window_manager,

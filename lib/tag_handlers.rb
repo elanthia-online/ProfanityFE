@@ -171,14 +171,10 @@ module TagHandlers
     end
 
     new_prompt_text = "#{m[:text]}>"
-    if @state.prompt_text != new_prompt_text
-      @state.need_prompt = false
-      @state.prompt_text = new_prompt_text
+    if @state.update_prompt(new_prompt_text)
       @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: new_prompt_text)
       @event_bus.emit(:prompt_changed, text: new_prompt_text)
       @need_update = true
-    else
-      @state.need_prompt = true
     end
   end
 
