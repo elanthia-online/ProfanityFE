@@ -110,6 +110,7 @@ module CursesRenderer
   def self.synchronize = yield
   def self.render = (yield; nil)
   def self.doupdate = nil
+  def self.outside_lock = yield
 end
 
 # ---------------------------------------------------------------------------
