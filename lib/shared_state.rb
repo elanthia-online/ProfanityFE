@@ -15,6 +15,10 @@
 #   state.need_prompt = true
 #   state.consume_prompt!  # => true (was needed), now false
 class SharedState
+  # C0 and C1 control characters, DEL, and backslash: anything that could
+  # end a terminal title sequence (BEL, ESC \, 8-bit ST) or begin another.
+  TITLE_UNSAFE = /[\x00-\x1f\x7f\u0080-\u009f\\]/
+
   # @return [String, nil] character name for terminal title (nil disables title updates)
   attr_accessor :char_name
 
@@ -169,11 +173,13 @@ class SharedState
   # stripping the trailing ">" from the prompt. No-op when the title hasn't
   # changed since the last call (dedup, matching EO behavior).
   #
-  # Sets the terminal tab/window title via an OSC 0 escape sequence
-  # written by a forked +printf+ subprocess (matching EO's approach).
-  # This avoids interleaving with curses' stdout buffer.  The
-  # screen/tmux +\\ek+ escape is only emitted when +$TERM+ indicates
-  # a screen/tmux session.
+  # Sets the terminal tab/window title with an OSC 0 escape sequence and,
+  # when +$TERM+ indicates a screen/tmux session, the window name with the
+  # +ESC k name ESC \+ sequence. Both are written straight to +$stdout+
+  # in one flushed write; callers invoke this after curses has flushed its
+  # own output (see GameTextProcessor). Control characters and backslashes
+  # are removed from the text first so it can't end the sequence early or
+  # start another one.
   #
   # @return [void]
   def update_terminal_title
@@ -187,21 +193,24 @@ class SharedState
 
     return if title == @last_title
 
-    Process.setproctitle(title)
-    # Set the terminal tab/window title via OSC 0 escape sequence.
-    # Uses system() to fork a subprocess (matching EO's approach) so the
-    # escape bytes are written independently from curses' stdout buffer —
-    # no interleaving possible.  Array form of system() avoids shell
-    # injection and bypasses the shell entirely.
-    # Clear dirty/dedup state AFTER the system() calls so that a fork
-    # failure leaves @title_dirty true for retry on the next prompt.
-    system('printf', '\033]0;%s\007', title)
-    if ENV['TERM']&.match?(/^screen|^tmux/)
-      system('printf', '\ek%s\e\\', @char_name)
-    end
+    Process.setproctitle(title_text(title))
+    sequence = +"\e]0;#{title_text(title)}\a"
+    sequence << "\ek#{title_text(@char_name)}\e\\" if ENV['TERM']&.match?(/^screen|^tmux/)
+    $stdout.write(sequence)
+    $stdout.flush
+    # Clear dirty/dedup state only after the write succeeds, so a failed
+    # write is retried on the next prompt.
     @title_dirty = false
     @last_title = title
   rescue StandardError
     # ignore title update failures (e.g. no controlling terminal)
+  end
+
+  private
+
+  # @param text [String] character name or title text from the game
+  # @return [String] +text+ as valid UTF-8 without {TITLE_UNSAFE} characters
+  def title_text(text)
+    text.to_s.dup.force_encoding(Encoding::UTF_8).scrub('').gsub(TITLE_UNSAFE, '')
   end
 end
