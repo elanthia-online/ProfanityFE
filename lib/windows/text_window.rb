@@ -2,46 +2,53 @@
 
 # Main scrollable text buffer window with word wrap, timestamps, and selection.
 
+require_relative '../line_buffer'
+
 # Scrollable text buffer window.
 #
 # Displays a reverse-ordered buffer of word-wrapped lines with optional
 # timestamps. Supports keyboard scrolling, scrollbar rendering, and
 # mouse-based text selection with copy support.
 class TextWindow < BaseWindow
-  # @return [Array<Array(String, Array<Hash>)>] the line buffer (newest first)
-  attr_reader :buffer
-
-  # @return [Integer] maximum number of lines retained in the buffer
-  attr_reader :max_buffer_size
-
   # @return [Boolean] whether continuation lines are indented during word wrap
   attr_accessor :indent_word_wrap
 
   # @return [Boolean] whether a timestamp is appended to each non-empty line
   attr_accessor :time_stamp
 
-  # @return [Integer] monotonic count of lines ever appended to the buffer.
-  #   Gives each buffer line a stable ID for selection anchoring
-  #   (see {AnchoredSelection}).
-  attr_reader :lines_appended
-
   # Create a new scrollable text window.
   #
   # @param args [Array] arguments forwarded to {BaseWindow#initialize}
   def initialize(*args)
-    @buffer = []
-    @buffer_pos = 0
-    @lines_appended = 0
-    @max_buffer_size = DEFAULT_BUFFER_SIZE
+    @line_buffer = LineBuffer.new(cap: DEFAULT_BUFFER_SIZE)
     @indent_word_wrap = true
     super
+  end
+
+  # The stored lines.
+  #
+  # @return [Array<Array(String, Array<Hash>)>] the line buffer (newest first)
+  def buffer
+    @line_buffer.lines
   end
 
   # Return the line buffer for selection support.
   #
   # @return [Array<Array(String, Array<Hash>)>] the line buffer (newest first)
   def buffer_content
-    @buffer
+    @line_buffer.lines
+  end
+
+  # @return [Integer] monotonic count of lines ever appended to the buffer.
+  #   Gives each buffer line a stable ID for selection anchoring
+  #   (see {AnchoredSelection}).
+  def lines_appended
+    @line_buffer.lines_appended
+  end
+
+  # @return [Integer] maximum number of lines retained in the buffer
+  def max_buffer_size
+    @line_buffer.cap
   end
 
   # Set the maximum number of lines retained in the buffer.
@@ -49,7 +56,7 @@ class TextWindow < BaseWindow
   # @param val [Integer, #to_i] new buffer size limit
   # @return [void]
   def max_buffer_size=(val)
-    @max_buffer_size = val.to_i
+    @line_buffer.cap = val
   end
 
   # Append a string to the buffer, word-wrapping to the window width.
@@ -63,18 +70,16 @@ class TextWindow < BaseWindow
     string = buffer_text(string, @time_stamp)
     effective_indent = indent.nil? ? @indent_word_wrap : indent
     wrap_text(string, maxx - 1, string_colors, indent: effective_indent) do |line, line_colors, continuation|
-      @buffer.unshift([line, line_colors, continuation])
-      @lines_appended += 1
-      @buffer.pop if @buffer.length > @max_buffer_size
-      if @buffer_pos == 0
-        draw_newest_line(line, line_colors, @buffer.length, 0, maxy)
+      @line_buffer.push(line, line_colors, continuation)
+      if @line_buffer.live?
+        draw_newest_line(line, line_colors, @line_buffer.length, 0, maxy)
       else
-        @buffer_pos += 1
-        scroll(1) if @buffer_pos > (@max_buffer_size - maxy)
+        @line_buffer.pos += 1
+        scroll(1) if @line_buffer.pos > (@line_buffer.cap - maxy)
         update_scrollbar
       end
     end
-    return unless @buffer_pos == 0
+    return unless @line_buffer.live?
 
     # Re-apply selection highlight if active (new text overwrites it)
     if has_highlight?
@@ -92,22 +97,20 @@ class TextWindow < BaseWindow
   # @return [void]
   def scroll(scroll_num)
     if scroll_num < 0
-      scroll_num = 0 - (@buffer.length - @buffer_pos - maxy) if (@buffer_pos + maxy + scroll_num.abs) >= @buffer.length
-      if scroll_num < 0
-        @buffer_pos += scroll_num.abs
-        scrl(scroll_num)
+      moved = @line_buffer.scroll_back(scroll_num.abs, maxy)
+      if moved.positive?
+        scrl(-moved)
         setpos(0, 0)
-        draw_buffer_lines(@buffer, @buffer_pos + maxy - 1, scroll_num.abs)
+        draw_buffer_lines(@line_buffer.lines, @line_buffer.pos + maxy - 1, moved)
         noutrefresh
       end
       update_scrollbar
     elsif scroll_num > 0
-      if @buffer_pos > 0
-        scroll_num = @buffer_pos if (@buffer_pos - scroll_num) < 0
-        @buffer_pos -= scroll_num
-        scrl(scroll_num)
-        setpos(maxy - scroll_num, 0)
-        draw_buffer_lines(@buffer, @buffer_pos + scroll_num - 1, scroll_num)
+      moved = @line_buffer.scroll_forward(scroll_num)
+      if moved.positive?
+        scrl(moved)
+        setpos(maxy - moved, 0)
+        draw_buffer_lines(@line_buffer.lines, @line_buffer.pos + moved - 1, moved)
         noutrefresh
       end
     end
@@ -121,7 +124,7 @@ class TextWindow < BaseWindow
   #
   # @return [void]
   def update_scrollbar
-    render_scrollbar(@buffer.length, @buffer_pos, maxy)
+    render_scrollbar(@line_buffer.length, @line_buffer.pos, maxy)
   end
 
   # Clear (hide) the scrollbar.
@@ -137,10 +140,7 @@ class TextWindow < BaseWindow
   # @param prompt_text [String] the prompt string to check against
   # @return [Boolean] true if the last non-empty buffer line equals prompt_text
   def duplicate_prompt?(prompt_text)
-    return false if @buffer.empty?
-
-    recent_line = @buffer.find { |entry| entry[0] && !entry[0].empty? }
-    recent_line && recent_line[0] == prompt_text
+    @line_buffer.newest_text?(prompt_text)
   end
 
   # Resolve window-relative coordinates to a stable [line_id, x] anchor.
@@ -150,10 +150,7 @@ class TextWindow < BaseWindow
   # @param rel_x [Integer] column relative to window left
   # @return [Array<Integer>, nil] [line_id, x] anchor, or nil if the buffer is empty
   def selection_anchor_at(rel_y, rel_x)
-    id = AnchoredSelection.id_at_row(rel_y, lines_appended: @lines_appended,
-                                            buffer_pos: @buffer_pos,
-                                            buffer_length: @buffer.length,
-                                            height: maxy)
+    id = @line_buffer.id_at_row(rel_y, maxy)
     id ? [id, [rel_x, 0].max] : nil
   end
 
@@ -166,7 +163,7 @@ class TextWindow < BaseWindow
   # @param end_x [Integer] ending column
   # @return [String] the selected text, lines joined by newlines
   def extract_selection(start_id, start_x, end_id, end_x)
-    AnchoredSelection.extract(@buffer, @lines_appended, start_id, start_x, end_id, end_x)
+    @line_buffer.extract(start_id, start_x, end_id, end_x)
   end
 
   # Scroll one line when a drag pointer sits at the window's top or
@@ -175,13 +172,13 @@ class TextWindow < BaseWindow
   # @param rel_y [Integer] drag row relative to window top
   # @return [Boolean] true if the view actually scrolled
   def drag_auto_scroll(rel_y)
-    before = @buffer_pos
+    before = @line_buffer.pos
     if rel_y <= 0
       scroll(-1)
     elsif rel_y >= maxy - 1
       scroll(1)
     end
-    @buffer_pos != before
+    @line_buffer.pos != before
   end
 
   # Redraw all visible lines, applying reverse-video to the selected region.
@@ -201,16 +198,14 @@ class TextWindow < BaseWindow
   # @return [void]
   def repaint
     start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end) if has_highlight?
-    visible_lines = [@buffer.length - @buffer_pos, maxy].min
 
     (0...maxy).each do |y|
-      buffer_idx = @buffer_pos + (visible_lines - 1 - y)
+      id, entry = @line_buffer.line_at_row(y, maxy)
       setpos(y, 0)
       clrtoeol
-      next if buffer_idx >= @buffer.length || buffer_idx < 0
+      next unless entry
 
-      line_text, line_colors = @buffer[buffer_idx]
-      id = @lines_appended - buffer_idx
+      line_text, line_colors = entry
 
       if start_id && id >= start_id && id <= end_id
         draw_line_with_selection(id, line_text, line_colors, start_id, start_x, end_id, end_x)
@@ -229,13 +224,12 @@ class TextWindow < BaseWindow
   # @param rel_x [Integer] column relative to window left
   # @return [String, nil] the link command string, or nil if no link at that position
   def link_cmd_at(rel_y, rel_x)
-    visible_lines = [@buffer.length - @buffer_pos, maxy].min
-    return nil if rel_y >= visible_lines
+    return nil if rel_y >= @line_buffer.visible_count(maxy)
 
-    buffer_idx = @buffer_pos + (visible_lines - 1 - rel_y)
-    return nil if buffer_idx < 0 || buffer_idx >= @buffer.length
+    _id, entry = @line_buffer.line_at_row(rel_y, maxy)
+    return nil unless entry
 
-    _text, colors = @buffer[buffer_idx]
+    _text, colors = entry
     return nil unless colors
 
     colors.each do |h|

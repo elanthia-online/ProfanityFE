@@ -2,6 +2,8 @@
 
 # Multi-tab text window sharing one display area with tab bar and keyboard switching.
 
+require_relative '../line_buffer'
+
 # Multi-tab text window.
 #
 # Manages multiple named text buffers that share a single display area.
@@ -12,9 +14,6 @@
 class TabbedTextWindow < BaseWindow
   # Height in rows reserved for the tab bar at the top of the window.
   TAB_BAR_HEIGHT = 1
-
-  # @return [Hash{String => Array}] tab name to line buffer mapping
-  attr_reader :tabs
 
   # @return [String, nil] name of the currently displayed tab
   attr_reader :active_tab
@@ -32,10 +31,8 @@ class TabbedTextWindow < BaseWindow
   #
   # @param args [Array] arguments forwarded to {BaseWindow#initialize}
   def initialize(*args)
-    @tabs = {}              # { "main" => [[line, colors], ...], ... }
-    @buffer_positions = {}  # Per-tab scroll positions
+    @tab_buffers = {}       # { "main" => LineBuffer, ... }: lines and scroll position per tab
     @tab_activity = {}      # Track unread content in background tabs
-    @lines_appended = {}    # Per-tab monotonic append counters (stable line IDs)
     @active_tab = nil
     @max_buffer_size = DEFAULT_BUFFER_SIZE
     @indent_word_wrap = true
@@ -50,6 +47,15 @@ class TabbedTextWindow < BaseWindow
   # @return [void]
   def max_buffer_size=(val)
     @max_buffer_size = val.to_i
+    @tab_buffers.each_value { |tab_buffer| tab_buffer.cap = @max_buffer_size }
+  end
+
+  # Each tab's stored lines.
+  #
+  # @return [Hash{String => Array}] tab name to line buffer (newest first)
+  #   mapping, in tab order
+  def tabs
+    @tab_buffers.transform_values(&:lines)
   end
 
   # Add a new named tab to this window.
@@ -58,10 +64,8 @@ class TabbedTextWindow < BaseWindow
   # @param name [String] unique tab name (e.g. "main", "combat")
   # @return [void]
   def add_tab(name)
-    @tabs[name] = []
-    @buffer_positions[name] = 0
+    @tab_buffers[name] = LineBuffer.new(cap: @max_buffer_size)
     @tab_activity[name] = false
-    @lines_appended[name] = 0
     @active_tab ||= name
     draw_tab_bar
   end
@@ -72,21 +76,21 @@ class TabbedTextWindow < BaseWindow
   #
   # @return [Integer]
   def lines_appended
-    @lines_appended[@active_tab] || 0
+    @tab_buffers[@active_tab]&.lines_appended || 0
   end
 
   # Return the active tab's line buffer for TextWindow-compatible access.
   #
   # @return [Array<Array(String, Array<Hash>)>] line buffer of the active tab
   def buffer
-    @tabs[@active_tab] || []
+    @tab_buffers[@active_tab]&.lines || []
   end
 
   # Return the active tab's scroll offset.
   #
   # @return [Integer] number of lines scrolled from the bottom
   def buffer_pos
-    @buffer_positions[@active_tab] || 0
+    @tab_buffers[@active_tab]&.pos || 0
   end
 
   # Switch to a specific tab by name.
@@ -95,7 +99,7 @@ class TabbedTextWindow < BaseWindow
   # @param name [String] the tab name to switch to
   # @return [void]
   def switch_tab(name)
-    return unless @tabs.key?(name)
+    return unless @tab_buffers.key?(name)
     return if name == @active_tab
 
     # Selection line IDs are per-tab; a stale selection would map onto
@@ -112,9 +116,9 @@ class TabbedTextWindow < BaseWindow
   #
   # @return [void]
   def next_tab
-    return if @tabs.empty?
+    return if @tab_buffers.empty?
 
-    tab_names = @tabs.keys
+    tab_names = @tab_buffers.keys
     current_idx = tab_names.index(@active_tab) || 0
     next_idx = (current_idx + 1) % tab_names.length
     switch_tab(tab_names[next_idx])
@@ -124,9 +128,9 @@ class TabbedTextWindow < BaseWindow
   #
   # @return [void]
   def prev_tab
-    return if @tabs.empty?
+    return if @tab_buffers.empty?
 
-    tab_names = @tabs.keys
+    tab_names = @tab_buffers.keys
     current_idx = tab_names.index(@active_tab) || 0
     prev_idx = (current_idx - 1) % tab_names.length
     switch_tab(tab_names[prev_idx])
@@ -137,7 +141,7 @@ class TabbedTextWindow < BaseWindow
   # @param index [Integer] 1-based tab position
   # @return [void]
   def switch_tab_by_index(index)
-    tab_names = @tabs.keys
+    tab_names = @tab_buffers.keys
     return if index < 1 || index > tab_names.length
 
     switch_tab(tab_names[index - 1])
@@ -152,7 +156,7 @@ class TabbedTextWindow < BaseWindow
     setpos(0, 0)
     clrtoeol
 
-    tab_names = @tabs.keys
+    tab_names = @tab_buffers.keys
     x_pos = 0
 
     tab_names.each_with_index do |name, idx|
@@ -191,7 +195,7 @@ class TabbedTextWindow < BaseWindow
   # @param stream [String, nil] stream name used for tab routing
   # @return [void]
   def route_string(text, colors, stream = nil, indent: nil)
-    target_tab = stream && @tabs.key?(stream) ? stream : (@active_tab || MAIN_STREAM)
+    target_tab = stream && @tab_buffers.key?(stream) ? stream : (@active_tab || MAIN_STREAM)
     add_string_to_tab(target_tab, text, colors, indent: indent)
   end
 
@@ -201,11 +205,10 @@ class TabbedTextWindow < BaseWindow
   # @param prompt_text [String] the prompt string to check against
   # @return [Boolean] true if the last non-empty line in "main" equals prompt_text
   def duplicate_prompt?(prompt_text)
-    main_buffer = @tabs[MAIN_STREAM] || []
-    return false if main_buffer.empty?
+    main_buffer = @tab_buffers[MAIN_STREAM]
+    return false unless main_buffer
 
-    recent_line = main_buffer.find { |entry| entry[0] && !entry[0].empty? }
-    recent_line && recent_line[0] == prompt_text
+    main_buffer.newest_text?(prompt_text)
   end
 
   # Append a string to a specific tab's buffer.
@@ -217,27 +220,25 @@ class TabbedTextWindow < BaseWindow
   # @param string_colors [Array<Hash>] color region descriptors
   # @return [void]
   def add_string_to_tab(tab_name, string, string_colors = [], indent: nil)
-    return unless @tabs.key?(tab_name)
+    return unless @tab_buffers.key?(tab_name)
 
     string = buffer_text(string, @time_stamp)
 
     content_width = maxx - 1
-    tab_buffer = @tabs[tab_name]
+    tab_buffer = @tab_buffers[tab_name]
 
     effective_indent = indent.nil? ? @indent_word_wrap : indent
     wrap_text(string, content_width, string_colors, indent: effective_indent) do |line, line_colors, continuation|
-      tab_buffer.unshift([line, line_colors, continuation])
-      @lines_appended[tab_name] += 1
-      tab_buffer.pop if tab_buffer.length > @max_buffer_size
+      tab_buffer.push(line, line_colors, continuation)
 
       if tab_name == @active_tab
-        if @buffer_positions[tab_name] == 0
+        if tab_buffer.live?
           draw_newest_line(line, line_colors, tab_buffer.length, TAB_BAR_HEIGHT, content_height)
         else
-          @buffer_positions[tab_name] += 1
+          tab_buffer.pos += 1
           # Scrolled back to the oldest line of a full buffer: that line
           # was just evicted, so move the view down onto the next one
-          scroll(1) if @buffer_positions[tab_name] > (@max_buffer_size - content_height)
+          scroll(1) if tab_buffer.pos > (tab_buffer.cap - content_height)
           update_scrollbar
         end
       else
@@ -248,7 +249,7 @@ class TabbedTextWindow < BaseWindow
       end
     end
 
-    return unless tab_name == @active_tab && @buffer_positions[tab_name] == 0
+    return unless tab_name == @active_tab && tab_buffer.live?
 
     # Re-apply selection highlight if active (new text overwrites it)
     if has_highlight?
@@ -278,31 +279,26 @@ class TabbedTextWindow < BaseWindow
   def scroll(scroll_num)
     return unless @active_tab
 
-    tab_buffer = @tabs[@active_tab]
-    tab_buffer_pos = @buffer_positions[@active_tab]
+    tab_buffer = @tab_buffers[@active_tab]
     ch = content_height
 
     if scroll_num < 0
-      if (tab_buffer_pos + ch + scroll_num.abs) >= tab_buffer.length
-        scroll_num = 0 - (tab_buffer.length - tab_buffer_pos - ch)
-      end
-      if scroll_num < 0
-        @buffer_positions[@active_tab] += scroll_num.abs
+      moved = tab_buffer.scroll_back(scroll_num.abs, ch)
+      if moved.positive?
         setpos(TAB_BAR_HEIGHT, 0)
-        scrl(scroll_num)
+        scrl(-moved)
         setpos(TAB_BAR_HEIGHT, 0)
-        draw_buffer_lines(tab_buffer, @buffer_positions[@active_tab] + ch - 1, scroll_num.abs)
+        draw_buffer_lines(tab_buffer.lines, tab_buffer.pos + ch - 1, moved)
         noutrefresh
       end
       update_scrollbar
     elsif scroll_num > 0
-      if tab_buffer_pos > 0
-        scroll_num = tab_buffer_pos if (tab_buffer_pos - scroll_num) < 0
-        @buffer_positions[@active_tab] -= scroll_num
+      moved = tab_buffer.scroll_forward(scroll_num)
+      if moved.positive?
         setpos(TAB_BAR_HEIGHT, 0)
-        scrl(scroll_num)
-        setpos(TAB_BAR_HEIGHT + ch - scroll_num, 0)
-        draw_buffer_lines(tab_buffer, @buffer_positions[@active_tab] + scroll_num - 1, scroll_num)
+        scrl(moved)
+        setpos(TAB_BAR_HEIGHT + ch - moved, 0)
+        draw_buffer_lines(tab_buffer.lines, tab_buffer.pos + moved - 1, moved)
         noutrefresh
       end
     end
@@ -319,8 +315,7 @@ class TabbedTextWindow < BaseWindow
     draw_tab_bar
     return unless @active_tab
 
-    tab_buffer = @tabs[@active_tab]
-    tab_buffer_pos = @buffer_positions[@active_tab]
+    tab_buffer = @tab_buffers[@active_tab]
     ch = content_height
 
     (TAB_BAR_HEIGHT...maxy).each do |y|
@@ -330,16 +325,15 @@ class TabbedTextWindow < BaseWindow
 
     return if tab_buffer.empty?
 
-    visible_lines = [tab_buffer.length - tab_buffer_pos, ch].min
+    visible_lines = tab_buffer.visible_count(ch)
     return if visible_lines <= 0
 
     visible_lines.times do |i|
-      buf_idx = tab_buffer_pos + (visible_lines - 1 - i)
-      next if buf_idx >= tab_buffer.length || buf_idx < 0
+      _id, line_data = tab_buffer.line_at_row(i, ch)
+      next unless line_data
 
       setpos(TAB_BAR_HEIGHT + i, 0)
-      line_data = tab_buffer[buf_idx]
-      add_line(line_data[0], line_data[1]) if line_data
+      add_line(line_data[0], line_data[1])
     end
 
     update_scrollbar
@@ -359,7 +353,7 @@ class TabbedTextWindow < BaseWindow
   def update_scrollbar
     return unless @active_tab
 
-    render_scrollbar(@tabs[@active_tab].length, @buffer_positions[@active_tab], content_height)
+    render_scrollbar(@tab_buffers[@active_tab].length, @tab_buffers[@active_tab].pos, content_height)
   end
 
   # Clear (hide) the scrollbar.
@@ -373,7 +367,7 @@ class TabbedTextWindow < BaseWindow
   #
   # @return [Array<Array(String, Array<Hash>)>] line buffer of the active tab
   def buffer_content
-    @tabs[@active_tab] || []
+    @tab_buffers[@active_tab]&.lines || []
   end
 
   # Resolve window-relative coordinates to a stable [line_id, x] anchor
@@ -383,12 +377,10 @@ class TabbedTextWindow < BaseWindow
   # @param rel_x [Integer] column relative to window left
   # @return [Array<Integer>, nil] [line_id, x] anchor, or nil if the tab is empty
   def selection_anchor_at(rel_y, rel_x)
-    tab_buffer = @tabs[@active_tab] || []
-    id = AnchoredSelection.id_at_row(rel_y - TAB_BAR_HEIGHT,
-                                     lines_appended: lines_appended,
-                                     buffer_pos: buffer_pos,
-                                     buffer_length: tab_buffer.length,
-                                     height: content_height)
+    tab_buffer = @tab_buffers[@active_tab]
+    return nil unless tab_buffer
+
+    id = tab_buffer.id_at_row(rel_y - TAB_BAR_HEIGHT, content_height)
     id ? [id, [rel_x, 0].max] : nil
   end
 
@@ -401,8 +393,10 @@ class TabbedTextWindow < BaseWindow
   # @param end_x [Integer] ending column
   # @return [String] the selected text, lines joined by newlines
   def extract_selection(start_id, start_x, end_id, end_x)
-    tab_buffer = @tabs[@active_tab] || []
-    AnchoredSelection.extract(tab_buffer, lines_appended, start_id, start_x, end_id, end_x)
+    tab_buffer = @tab_buffers[@active_tab]
+    return '' unless tab_buffer
+
+    tab_buffer.extract(start_id, start_x, end_id, end_x)
   end
 
   # Scroll one line when a drag pointer sits at the content area's top or
@@ -431,20 +425,17 @@ class TabbedTextWindow < BaseWindow
 
     start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end)
 
-    tab_buffer = @tabs[@active_tab] || []
-    tab_buffer_pos = @buffer_positions[@active_tab] || 0
-    visible_lines = [tab_buffer.length - tab_buffer_pos, content_height].min
+    tab_buffer = @tab_buffers[@active_tab]
 
     (0...content_height).each do |i|
       y = TAB_BAR_HEIGHT + i
       setpos(y, 0)
       clrtoeol
 
-      buffer_idx = tab_buffer_pos + (visible_lines - 1 - i)
-      next if buffer_idx >= tab_buffer.length || buffer_idx < 0
+      id, entry = tab_buffer.line_at_row(i, content_height)
+      next unless entry
 
-      line_text, line_colors = tab_buffer[buffer_idx]
-      id = lines_appended - buffer_idx
+      line_text, line_colors = entry
 
       if id >= start_id && id <= end_id
         draw_line_with_selection(id, line_text, line_colors || [], start_id, start_x, end_id, end_x)
@@ -466,15 +457,14 @@ class TabbedTextWindow < BaseWindow
     content_y = rel_y - TAB_BAR_HEIGHT
     return nil if content_y < 0
 
-    tab_buffer = @tabs[@active_tab] || []
-    tab_buffer_pos = @buffer_positions[@active_tab] || 0
-    visible_lines = [tab_buffer.length - tab_buffer_pos, content_height].min
-    return nil if content_y >= visible_lines
+    tab_buffer = @tab_buffers[@active_tab]
+    return nil unless tab_buffer
+    return nil if content_y >= tab_buffer.visible_count(content_height)
 
-    buffer_idx = tab_buffer_pos + (visible_lines - 1 - content_y)
-    return nil if buffer_idx < 0 || buffer_idx >= tab_buffer.length
+    _id, entry = tab_buffer.line_at_row(content_y, content_height)
+    return nil unless entry
 
-    _text, colors = tab_buffer[buffer_idx]
+    _text, colors = entry
     return nil unless colors
 
     colors.each do |h|
