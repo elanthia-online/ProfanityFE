@@ -2,6 +2,7 @@
 
 require 'stringio'
 require_relative '../../lib/selection_manager'
+require_relative '../../lib/profanity_settings'
 
 # A missing platform clipboard tool (pbcopy / wl-copy / xclip not on PATH)
 # must not abort the copy: OSC 52 and the file fallback still have to run.
@@ -9,6 +10,7 @@ require_relative '../../lib/selection_manager'
 RSpec.describe 'SelectionManager.copy_to_clipboard with no clipboard tool installed' do
   let(:tty) { StringIO.new }
   let(:empty_bin) { Dir.mktmpdir('no-clipboard-tools') }
+  let(:selection_file) { ProfanitySettings.file('selection.txt') }
 
   around do |example|
     saved_env = ENV.to_h
@@ -16,6 +18,7 @@ RSpec.describe 'SelectionManager.copy_to_clipboard with no clipboard tool instal
   ensure
     ENV.replace(saved_env)
     FileUtils.remove_entry(empty_bin)
+    FileUtils.rm_f(selection_file)
   end
 
   before do
@@ -23,7 +26,6 @@ RSpec.describe 'SelectionManager.copy_to_clipboard with no clipboard tool instal
     %w[STY TMUX WAYLAND_DISPLAY DISPLAY].each { |key| ENV.delete(key) }
     allow(File).to receive(:open).and_call_original
     allow(File).to receive(:open).with('/dev/tty', 'w').and_yield(tty)
-    allow(File).to receive(:write)
   end
 
   {
@@ -38,7 +40,7 @@ RSpec.describe 'SelectionManager.copy_to_clipboard with no clipboard tool instal
       SelectionManager.copy_to_clipboard('hello')
 
       expect(tty.string).to eq("\e]52;c;#{['hello'].pack('m0')}\a")
-      expect(File).to have_received(:write).with(anything, 'hello', any_args)
+      expect(File.read(selection_file)).to eq('hello')
     end
   end
 
@@ -81,7 +83,7 @@ RSpec.describe 'SelectionManager.copy_to_clipboard with no clipboard tool instal
       SelectionManager.copy_to_clipboard('hello')
 
       expect(tty.string).to eq("\e]52;c;#{['hello'].pack('m0')}\a")
-      expect(File).to have_received(:write).with(anything, 'hello', any_args)
+      expect(File.read(selection_file)).to eq('hello')
     end
   end
 end

@@ -297,8 +297,14 @@ module SelectionManager
 
       # Always write to file as fallback: per-user, owner-only, and never
       # through a symlink (a shared /tmp file exposed the text to other
-      # users and let them redirect the write).
-      File.write(ProfanitySettings.file('selection.txt'), text, perm: 0o600, flags: File::NOFOLLOW)
+      # users and let them redirect the write). The mode only applies on
+      # create, so tighten an existing file through the open descriptor
+      # (fchmod, no path lookup) before the text goes in.
+      File.open(ProfanitySettings.file('selection.txt'),
+                File::WRONLY | File::CREAT | File::TRUNC | File::NOFOLLOW, 0o600) do |file|
+        file.chmod(0o600)
+        file.write(text)
+      end
     rescue StandardError => e
       ProfanityLog.write('Clipboard', "Error: #{e.message}")
     end
