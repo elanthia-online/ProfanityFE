@@ -214,6 +214,31 @@ RSpec.describe TabbedTextWindow do
     end
   end
 
+  context 'when a resize leaves the window one row high' do
+    # 4 rows at the specs' 24-row terminal; 1 row (all tab bar, no text
+    # rows for the scrollbar to cover) at 21.
+    let(:window_manager) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='tabbed' top='0' left='0' height='lines-20' width='12' tabs='main'/></layout>
+      XML
+      WindowManager.new.tap { |manager| manager.load_layout('test') }
+    end
+    let(:window) { window_manager.stream['main'] }
+
+    it 'draws no scrollbar beside the tab bar as lines arrive while scrolled back' do
+      %w[l1 l2 l3 l4 l5 l6].each { |line| window.add_string(line) }
+      window.scroll(-2)
+      allow(Curses).to receive(:lines).and_return(21)
+      window_manager.resize(nil)
+      window.set_active(true)
+
+      %w[l7 l8 l9].each { |line| window.add_string(line) }
+
+      expect(window.scrollbar.rows).to eq ['']
+      expect(window.scrollbar.attrs_at(0, 0)).to eq 0
+    end
+  end
+
   context 'when the buffer is full and the user has scrolled back to its oldest lines' do
     # Same window, but keeping only 6 lines per tab.
     let(:window) do

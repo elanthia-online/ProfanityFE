@@ -106,6 +106,31 @@ RSpec.describe LineBuffered do
       expect(text_rows).to eq %w[l6 l7 l8]
     end
 
+    # @return [Array<String>] each scrollbar cell: its character, or
+    #   'thumb' for the reverse-video position marker
+    def scrollbar_cells
+      scrollbar = window.scrollbar
+      (0...scrollbar.maxy).map do |y|
+        scrollbar.attrs_at(y, 0).anybits?(Curses::A_REVERSE) ? 'thumb' : scrollbar.row(y)
+      end
+    end
+
+    it 'draws the scrollbar beside the text rows, the thumb on the bottom one while live' do
+      window.set_active(true)
+
+      expect(scrollbar_cells).to eq Array.new(window.content_top, '') +
+                                    [BaseWindow::ACTIVE_INDICATOR, BaseWindow::ACTIVE_SCROLLBAR_CHAR, 'thumb']
+    end
+
+    it 'moves the scrollbar thumb to the top text row when scrolled back to the oldest line' do
+      window.set_active(true)
+
+      window.scroll(-2)
+
+      expect(scrollbar_cells).to eq Array.new(window.content_top, '') +
+                                    ['thumb', BaseWindow::ACTIVE_SCROLLBAR_CHAR, BaseWindow::ACTIVE_SCROLLBAR_CHAR]
+    end
+
     it 'keeps a highlight on its text when the view scrolls' do
       line_id, = window.selection_anchor_at(window_row(1), 0)
       window.highlight_selection(line_id, 0, line_id, 2)

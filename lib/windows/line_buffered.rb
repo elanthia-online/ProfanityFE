@@ -112,13 +112,14 @@ module LineBuffered
   end
 
   # Refresh the scrollbar to reflect the shown buffer and scroll state.
+  # It covers the text area's rows, beside them.
   #
   # @return [void]
   def update_scrollbar
     line_buffer = shown_buffer
     return unless line_buffer
 
-    render_scrollbar(line_buffer.length, line_buffer.pos, content_height)
+    render_scrollbar(line_buffer.length, line_buffer.pos, content_height, top: content_top)
   end
 
   # Clear (hide) the scrollbar.

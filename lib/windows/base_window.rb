@@ -184,13 +184,17 @@ class BaseWindow < Curses::Window
 
   # Render the scrollbar for a buffer with the given metrics.
   # Subclasses call this with their buffer length, scroll position, and visible height.
+  # The scrollbar covers the content area's rows only: +visible_height+
+  # cells from row +top+ of the scrollbar window. A content area with no
+  # rows gets no scrollbar.
   #
   # @param buffer_length [Integer] total number of lines in the buffer
   # @param buffer_pos [Integer] current scroll offset from the bottom
   # @param visible_height [Integer] number of visible rows in the content area
+  # @param top [Integer] window row where the content area starts
   # @return [void]
-  def render_scrollbar(buffer_length, buffer_pos, visible_height)
-    return unless @scrollbar
+  def render_scrollbar(buffer_length, buffer_pos, visible_height, top: 0)
+    return unless @scrollbar && visible_height.positive?
 
     scrollbar_char = @active ? ACTIVE_SCROLLBAR_CHAR : INACTIVE_SCROLLBAR_CHAR
     last_scrollbar_pos = @scrollbar_pos
@@ -199,9 +203,9 @@ class BaseWindow < Curses::Window
 
     if last_scrollbar_pos
       unless last_scrollbar_pos == @scrollbar_pos
-        @scrollbar.setpos(last_scrollbar_pos, 0)
+        @scrollbar.setpos(top + last_scrollbar_pos, 0)
         @scrollbar.addstr scrollbar_char
-        @scrollbar.setpos(@scrollbar_pos, 0)
+        @scrollbar.setpos(top + @scrollbar_pos, 0)
         @scrollbar.attron(Curses::A_REVERSE) do
           @scrollbar.addch ' '
         end
@@ -209,7 +213,7 @@ class BaseWindow < Curses::Window
       end
     else
       (0...visible_height).each do |num|
-        @scrollbar.setpos(num, 0)
+        @scrollbar.setpos(top + num, 0)
         if num == @scrollbar_pos
           @scrollbar.attron(Curses::A_REVERSE) do
             @scrollbar.addch ' '
