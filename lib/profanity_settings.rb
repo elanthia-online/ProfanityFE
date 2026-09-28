@@ -96,7 +96,8 @@ module ProfanitySettings
   # never consulted.
   #
   # @param char [String, nil] character name from --char flag
-  # @param template [String, nil] explicit template filename from --template flag
+  # @param template [String, nil] explicit template filename from --template flag,
+  #   looked up in <app_dir>/templates/ as typed, then lowercased
   # @param settings_file [String, nil] explicit path from --settings-file flag
   # @param app_dir [String] the ProfanityFE installation directory
   # @return [String] resolved full path to the settings XML
@@ -110,10 +111,15 @@ module ProfanitySettings
       exit 1
     end
 
-    # Explicit --template=filename.xml
+    # Explicit --template=filename.xml, as typed; then lowercased, which is
+    # how it was always looked up, so a capitalised name keeps finding the
+    # lowercase bundled templates on case-sensitive filesystems.
     if template
-      path = File.join(app_dir, 'templates', template.downcase)
+      path = File.join(app_dir, 'templates', template)
       return path if File.exist?(path)
+
+      lowercase = File.join(app_dir, 'templates', template.downcase)
+      return lowercase if File.exist?(lowercase)
 
       $stderr.puts "Template not found: #{path}"
       exit 1
@@ -142,19 +148,22 @@ module ProfanitySettings
 
   # Resolve the log file path.
   #
+  # --log-file wins. Otherwise the file is named +<char>.log+ (lowercased)
+  # with --char, or {DEFAULT_LOG_FILE} without, and is placed in --log-dir
+  # when given, else in ~/.profanity/ (with --char) or the current
+  # directory (without).
+  #
   # @param char [String, nil] character name
   # @param log_file [String, nil] explicit --log-file path
   # @param log_dir [String, nil] explicit --log-dir path
-  # @return [String] resolved full path to the log file
+  # @return [String] resolved absolute path to the log file
   def self.resolve_log(char: nil, log_file: nil, log_dir: nil)
     return File.expand_path(log_file) if log_file
-    return File.join(File.expand_path(log_dir), DEFAULT_LOG_FILE) if log_dir
 
-    if char
-      file("#{char.downcase}.log")
-    else
-      DEFAULT_LOG_FILE
-    end
+    name = char ? "#{char.downcase}.log" : DEFAULT_LOG_FILE
+    return File.join(File.expand_path(log_dir), name) if log_dir
+
+    char ? file(name) : File.expand_path(name)
   end
 
   # Load mouse scroll settings from settings.json.

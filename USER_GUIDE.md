@@ -1965,8 +1965,8 @@ location depends on how you launch:
   working directory
 
 The `--log-file=<path>` flag overrides the log path entirely. The
-`--log-dir=<dir>` flag sets the directory while keeping the default filename.
-Both flags take precedence over the `--char` default.
+`--log-dir=<dir>` flag sets the directory while keeping the default filename
+(`<charname>.log` with `--char`, else `profanity.log`).
 
 Check the log file if something goes wrong.
 

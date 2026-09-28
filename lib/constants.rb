@@ -18,7 +18,7 @@ MAIN_STREAM = 'main'
 # @return [Integer] default maximum number of lines retained per text window buffer
 DEFAULT_BUFFER_SIZE = 250
 
-# @return [String] default log file name, used when no --log-file or --log-dir CLI arg is given.
+# @return [String] default log file name, used when neither --log-file nor --char is given.
 #   The resolved path is stored in +LOG_FILE+ (defined in profanity.rb after CLI parsing).
 DEFAULT_LOG_FILE = 'profanity.log'
 
