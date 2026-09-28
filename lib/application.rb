@@ -822,6 +822,10 @@ class Application
   # Dispatch one key press: a mouse event, a step through a key combo, a
   # bound key action, or a character typed into the command line.
   #
+  # A terminal resize (KEY_RESIZE) runs the +resize+ action unless the
+  # settings file binds the resize key to something else, so the layout
+  # follows the terminal without a binding in the file.
+  #
   # An error raised by the action is logged and the key dropped, so one
   # broken key action or mouse handler cannot end the session. Connection
   # errors propagate to {#input_loop}, which ends it.
@@ -832,6 +836,13 @@ class Application
   def handle_key(ch, key_combo)
     if ch == Curses::KEY_MOUSE
       handle_mouse_event
+      return key_combo
+    end
+
+    # Checked before the combo so a pending combo (e.g. a lone Escape, which
+    # starts the alt+N combos) doesn't swallow the resize.
+    if ch == Curses::KEY_RESIZE && !@key_binding.key?(ch)
+      @key_action['resize'].call
       return key_combo
     end
 
