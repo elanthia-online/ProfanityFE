@@ -787,6 +787,19 @@ RSpec.describe Application do
       expect(main.rows).to eq ['', '', '', '']
     end
 
+    it 'applies a changed history size to the command history' do
+      File.write(settings_path, settings.sub('<settings>', '<settings><history-size>2</history-size>'))
+      app.execute_command('.reload')
+      %w[north south east].each { |c| app.cmd_buffer.add_to_history(c) }
+
+      shown = Array.new(3) do
+        app.key_action['previous_command'].call
+        app.cmd_buffer.window.rows.first.rstrip
+      end
+
+      expect(shown).to eq %w[east south south]
+    end
+
     # BUG FOUND (fixed here): .reload replaced the highlights with the
     # file's, so a .highlight added in the session stopped coloring text
     # while .highlight still listed it and .unhighlight claimed to remove it.

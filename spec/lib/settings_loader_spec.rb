@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
-# Tests that SettingsLoader applies <notification-stream> and restores the
-# default when the element is removed and settings are reloaded, that a
-# reload replaces every setting or, when the file fails to load, none, and
-# that the settings cache never serves stale or foreign settings.
+# Tests that SettingsLoader applies <notification-stream> and <history-size>
+# and restores their defaults when the element is removed and settings are
+# reloaded, that a reload replaces every setting or, when the file fails to
+# load, none, and that the settings cache never serves stale or foreign settings.
 
 require 'rexml/document'
 require 'tmpdir'
@@ -65,6 +65,57 @@ RSpec.describe SettingsLoader do
       File.write(path, '<settings></settings>')
       load_settings(path, reload: true)
       expect(CONFIG.notification_stream).to eq 'familiar'
+    end
+  end
+
+  describe '<history-size>' do
+    before { allow(ProfanityLog).to receive(:write) }
+
+    it 'defaults to 1000 when the element is absent' do
+      load_settings(write_settings(@dir, ''))
+      expect(CONFIG.history_size).to eq 1000
+    end
+
+    it 'sets the size from the element text' do
+      load_settings(write_settings(@dir, '<history-size> 50 </history-size>'))
+      expect(CONFIG.history_size).to eq 50
+    end
+
+    it 'accepts 0' do
+      load_settings(write_settings(@dir, '<history-size>0</history-size>'))
+      expect(CONFIG.history_size).to eq 0
+    end
+
+    ['', 'lots', '-5', '2.5'].each do |text|
+      it "keeps the default and logs a warning for #{text.inspect}" do
+        load_settings(write_settings(@dir, "<history-size>#{text}</history-size>"))
+        expect(CONFIG.history_size).to eq 1000
+        expect(ProfanityLog).to have_received(:write).with('settings', "Invalid history-size '#{text}' (expected a whole number), using 1000")
+      end
+    end
+
+    it 'updates the size on reload' do
+      path = write_settings(@dir, '<history-size>50</history-size>')
+      load_settings(path)
+      File.write(path, '<settings><history-size>20</history-size></settings>')
+      load_settings(path, reload: true)
+      expect(CONFIG.history_size).to eq 20
+    end
+
+    it 'restores the default when the element is removed and settings are reloaded' do
+      path = write_settings(@dir, '<history-size>50</history-size>')
+      load_settings(path)
+      File.write(path, '<settings></settings>')
+      load_settings(path, reload: true)
+      expect(CONFIG.history_size).to eq 1000
+    end
+
+    it 'is unchanged by a reload that fails' do
+      path = write_settings(@dir, '<history-size>50</history-size>')
+      load_settings(path)
+      File.write(path, '<settings><history-size>20</history-size><gag>x</gags></settings>')
+      load_settings(path, reload: true)
+      expect(CONFIG.history_size).to eq 50
     end
   end
 

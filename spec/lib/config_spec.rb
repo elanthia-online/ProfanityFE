@@ -94,6 +94,21 @@ RSpec.describe Config do
     end
   end
 
+  describe '#history_size' do
+    it 'defaults to 1000' do
+      expect(config.history_size).to eq 1000
+    end
+
+    it 'is restored by reset! and reset_dynamic!' do
+      config.history_size = 5
+      config.reset_dynamic!
+      expect(config.history_size).to eq 1000
+      config.history_size = 5
+      config.reset!
+      expect(config.history_size).to eq 1000
+    end
+  end
+
   describe '#reset_dynamic!' do
     before do
       config.highlight[/test/] = ['ff0000', nil, nil]
