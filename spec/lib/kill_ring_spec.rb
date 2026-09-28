@@ -1,13 +1,20 @@
 # frozen_string_literal: true
 
-# Tests KillRing's emacs-style kill/yank accumulation: consecutive kills
-# merge, non-kill operations reset accumulation, yank retrieves the
-# combined text.
+# Tests KillRing's readline-style accumulation: kills between #before and
+# #after share one buffer until #end_sequence, and a new sequence starts
+# a fresh buffer and captures the original text.
 
 require_relative '../../lib/kill_ring'
 
 RSpec.describe KillRing do
   subject(:ring) { described_class.new }
+
+  # One kill as CommandBuffer performs it: before, mutate, after.
+  def kill(text, &mutate)
+    ring.before(text)
+    mutate.call
+    ring.after
+  end
 
   describe '#initialize' do
     it 'starts with empty buffer' do
@@ -20,132 +27,66 @@ RSpec.describe KillRing do
   end
 
   describe '#before' do
-    it 'resets buffer when text changes' do
-      ring.buffer = 'old stuff'
-      ring.after('hello', 5)
-      ring.before('changed', 5)
+    it 'starts a new buffer on the first kill' do
+      ring.buffer = 'stale'
+      ring.before('hello')
       expect(ring.buffer).to eq ''
     end
 
-    it 'resets buffer when position changes' do
-      ring.buffer = 'old stuff'
-      ring.after('hello', 3)
-      ring.before('hello', 5)
-      expect(ring.buffer).to eq ''
+    it 'captures the text at the start of the sequence as original' do
+      ring.before('hello world')
+      expect(ring.original).to eq 'hello world'
     end
 
-    it 'preserves buffer when nothing changed' do
-      ring.buffer = 'kept'
-      ring.after('hello', 3)
-      ring.before('hello', 3)
-      expect(ring.buffer).to eq 'kept'
+    it 'keeps the buffer and original when the previous command was a kill' do
+      kill('hello world') { ring.buffer += ' world' }
+      ring.before('hello')
+      expect(ring.buffer).to eq ' world'
+      expect(ring.original).to eq 'hello world'
     end
 
-    it 'captures original text on reset' do
-      ring.after('old', 3)
-      ring.before('new text', 0)
-      expect(ring.original).to eq 'new text'
-    end
-
-    it 'does not update original when buffer is preserved' do
-      ring.before('first', 0)
-      ring.after('first', 0)
-      ring.before('first', 0) # same state — no reset
-      expect(ring.original).to eq 'first'
-    end
-
-    # ---- Adversarial ----
-
-    it 'handles empty string text' do
-      expect { ring.before('', 0) }.not_to raise_error
-    end
-
-    it 'handles very large position values' do
-      expect { ring.before('short', 999_999) }.not_to raise_error
-    end
-
-    it 'handles position 0 consistently' do
-      ring.after('text', 0)
-      ring.before('text', 0)
-      expect(ring.buffer).to eq '' # first call always resets since last_text starts empty
-    end
-
-    it 'handles nil-length strings' do
-      ring.after('', 0)
-      ring.before('', 0)
-      # Same empty text and position — should preserve buffer
-      ring.buffer = 'test'
-      ring.after('', 0)
-      ring.before('', 0)
-      expect(ring.buffer).to eq 'test'
+    it 'copies the original so later edits to the text do not change it' do
+      text = +'hello'
+      ring.before(text)
+      text << ' world'
+      expect(ring.original).to eq 'hello'
     end
   end
 
-  describe '#after' do
-    it 'snapshots text for next before comparison' do
-      ring.before('hello', 0)
-      ring.buffer = 'h'
-      ring.after('ello', 0)
-
-      # Now if we call before with the same state, buffer preserved
-      ring.before('ello', 0)
-      expect(ring.buffer).to eq 'h'
+  describe '#end_sequence' do
+    it 'makes the next kill start a new buffer' do
+      kill('hello world') { ring.buffer += ' world' }
+      ring.end_sequence
+      ring.before('hello')
+      expect(ring.buffer).to eq ''
+      expect(ring.original).to eq 'hello'
     end
 
-    it 'dups the text to avoid aliasing' do
-      text = +'mutable'
-      ring.after(text, 3)
-      text.replace('changed')
-      # The snapshot should still be 'mutable'
-      ring.before('mutable', 3)
-      expect(ring.buffer).to eq '' # still empty from init, but no reset
+    it 'keeps the buffer for yanking until the next kill' do
+      kill('hello world') { ring.buffer += ' world' }
+      ring.end_sequence
+      expect(ring.buffer).to eq ' world'
     end
   end
 
   describe 'multi-kill accumulation workflow' do
-    it 'accumulates forward kills' do
-      # "hello world" with cursor at 5, kill "world" then kill " "
-      ring.before('hello world', 5)
-      ring.buffer += ' world'
-      ring.after('hello', 5)
-
-      # Cursor hasn't moved, text changed — but after() snapshot matches
-      ring.before('hello', 5)
-      ring.buffer += '!' # hypothetical next kill
-      expect(ring.buffer).to eq ' world!'
+    it 'appends forward kills' do
+      kill('hello big world') { ring.buffer += ' big' }
+      kill('hello world') { ring.buffer += ' world' }
+      expect(ring.buffer).to eq ' big world'
     end
 
-    it 'accumulates backward kills by prepending' do
-      ring.before('hello world', 11)
-      ring.buffer = 'world'
-      ring.after('hello ', 6)
-
-      ring.before('hello ', 6)
-      ring.buffer = 'hello ' + ring.buffer
-      ring.after('', 0)
-
+    it 'prepends backward kills' do
+      kill('hello world') { ring.buffer = 'world' + ring.buffer }
+      kill('hello ') { ring.buffer = 'hello ' + ring.buffer }
       expect(ring.buffer).to eq 'hello world'
     end
 
-    it 'resets accumulation when user types between kills' do
-      ring.before('hello world', 5)
-      ring.buffer = ' world'
-      ring.after('hello', 5)
-
-      # User types 'x' — text and position change
-      ring.before('hellox', 6)
-      expect(ring.buffer).to eq ''
-      expect(ring.original).to eq 'hellox'
-    end
-
-    it 'resets accumulation when user moves cursor between kills' do
-      ring.before('hello world', 5)
-      ring.buffer = ' world'
-      ring.after('hello', 5)
-
-      # User moves cursor without changing text
-      ring.before('hello', 0)
-      expect(ring.buffer).to eq ''
+    it 'does not join kills separated by another command' do
+      kill('one two') { ring.buffer = 'two' + ring.buffer }
+      ring.end_sequence
+      kill('one ') { ring.buffer = 'one ' + ring.buffer }
+      expect(ring.buffer).to eq 'one '
     end
   end
 end
