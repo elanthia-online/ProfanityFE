@@ -13,7 +13,6 @@ Detects notable game events and sends summary notifications to the configured no
 #
 # Expects the including class to provide:
 # - @event_bus   [EventBus]
-# - @line_colors [Array<Hash>]
 # - @need_update [Boolean]
 #
 # @api private
@@ -42,10 +41,10 @@ module FamiliarNotifier
              else
                []
              end
+    # The notification gets its own color array; @line_colors belongs to
+    # the triggering game line and is left alone so that line keeps its
+    # tag colors (bold, presets, links) and highlights in main.
     @event_bus.emit(:stream_text, stream: CONFIG.notification_stream, text: note, colors: colors)
-    # Preserve existing behavior: clear line colors so the main text
-    # display doesn't inherit the notification styling
-    @line_colors = []
     @need_update = true
   end
 

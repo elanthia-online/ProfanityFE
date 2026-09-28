@@ -220,7 +220,6 @@ RSpec.describe FamiliarNotifier do
     end
 
     it 'leaves the colors of the game line that triggered the notification alone' do
-      pending "check_familiar_notification clears @line_colors, so the triggering line loses its own bold/preset colors in main (audit §1, familiar_notifier.rb)"
       host.line_colors = [{ start: 0, end: 3, fg: 'ff0000' }]
       host.check_familiar_notification('You sense nothing wrong with Mahtra')
       expect(host.line_colors).to eq [{ start: 0, end: 3, fg: 'ff0000' }]
