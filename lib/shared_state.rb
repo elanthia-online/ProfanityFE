@@ -136,9 +136,13 @@ class SharedState
     @mutex.synchronize { @remote_url = val }
   end
 
-  # Atomically check whether the prompt text changed and update state.
-  # If the text changed, sets need_prompt to false and updates prompt_text.
-  # If unchanged, sets need_prompt to true (a new prompt of the same text arrived).
+  # Record a +<prompt>+ from the game, in one locked step.
+  #
+  # If the text changed, clears need_prompt, stores the new text and marks
+  # the terminal title for update (as {#prompt_text=} does); the caller
+  # shows the new prompt itself. If unchanged, sets need_prompt to true: the
+  # same prompt arrived again and is shown before the next line of game
+  # text (see {#consume_prompt!}).
   #
   # @param new_prompt_text [String] the incoming prompt text to compare
   # @return [Boolean] true if prompt text changed, false if same
@@ -147,6 +151,7 @@ class SharedState
       if @prompt_text != new_prompt_text
         @need_prompt = false
         @prompt_text = new_prompt_text
+        @title_dirty = true
         true
       else
         @need_prompt = true
@@ -156,7 +161,8 @@ class SharedState
   end
 
   # Atomically consume the need_prompt flag.
-  # Returns the old value and sets need_prompt to false.
+  # Returns the old value and sets need_prompt to false, so a pending
+  # prompt is taken (and shown) at most once.
   #
   # @return [Boolean] whether a prompt was pending before this call
   def consume_prompt!

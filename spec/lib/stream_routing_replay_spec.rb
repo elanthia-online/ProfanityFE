@@ -15,17 +15,12 @@
 require_relative '../spec_helper'
 require 'rexml/document'
 require_relative '../../lib/game_text_processor'
+require_relative '../../lib/shared_state'
 require_relative '../../lib/window_manager'
 
 RSpec.describe 'Stream routing of a captured game stream' do
   let(:event_bus) { EventBus.new }
-  let(:state) do
-    Struct.new(:need_prompt, :prompt_text, :skip_server_time_offset,
-               :room_title, :blue_links, :room_window_only, :server_time_offset,
-               :remote_url, :log_gags) do
-      def update_terminal_title = nil
-    end.new(false, '>', true, '', false, false, 0.0, false, false)
-  end
+  let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
 
   let(:streams) { %w[main familiar percWindow atmospherics combat] }
   let(:fixture) { File.expand_path('../fixtures/stream_routing_session.xml', __dir__) }

@@ -7,6 +7,7 @@
 require_relative '../spec_helper'
 require 'rexml/document'
 require_relative '../../lib/game_text_processor'
+require_relative '../../lib/shared_state'
 require_relative '../../lib/window_manager'
 
 RSpec.describe 'GameTextProcessor blank lines from the game' do
@@ -15,13 +16,7 @@ RSpec.describe 'GameTextProcessor blank lines from the game' do
     Struct.new(:stream, :indicator, :progress, :countdown, :room,
                :command_window, :command_window_layout).new({ 'main' => Object.new }, {}, {}, {}, {}, nil, nil)
   end
-  let(:state) do
-    Struct.new(:need_prompt, :prompt_text, :skip_server_time_offset,
-               :room_title, :blue_links, :room_window_only, :server_time_offset,
-               :remote_url, :log_gags) do
-      def update_terminal_title = nil
-    end.new(false, '>', true, '', false, false, 0.0, false, false)
-  end
+  let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
   let(:processor) do
     GameTextProcessor.new(
       window_mgr: wm,
