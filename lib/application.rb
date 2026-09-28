@@ -16,7 +16,8 @@ BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
 # local variables.
 #
 # @example
-#   app = Application.new(cli_options)
+#   app = Application.new(cli_options, settings_file: '/home/user/.profanity/mahtra.xml',
+#                                      host: '127.0.0.1', port: 8000)
 #   app.run
 class Application
   attr_reader :key_binding, :key_action, :cmd_buffer, :window_mgr,
@@ -51,13 +52,21 @@ class Application
   # up, so an unreachable --host fails instead of hanging.
   CONNECT_TIMEOUT = 10
 
+  # Color of the highlights added with +.highlight+ (cyan).
+  INLINE_HIGHLIGHT_COLOR = '00ffff'
+
   # Create a new application instance with the given CLI options.
   #
   # @param cli_options [Hash] parsed CLI options from OptionParser
-  INLINE_HIGHLIGHT_COLOR = '00ffff'
-
-  def initialize(cli_options)
+  # @param settings_file [String] path of the settings XML, loaded at
+  #   startup and by +.reload+
+  # @param host [String] game server (Lich) host
+  # @param port [Integer] game server (Lich) port
+  def initialize(cli_options, settings_file:, host:, port:)
     @cli_options = cli_options
+    @settings_file = settings_file
+    @host = host
+    @port = port
     @server = nil
     # Receives the server thread's outcome (see #start_server_thread)
     @session_end = Queue.new
@@ -391,7 +400,7 @@ class Application
   #
   # @return [void]
   def handle_dot_reload
-    error = SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro),
+    error = SettingsLoader.load(@settings_file, @key_binding, @key_action, method(:do_macro),
                                 reload: true, keep_highlights: @inline_highlights || {})
     write_to_client("* Reload failed, settings unchanged: #{settings_error_reason(error)}") if error
   end
@@ -661,13 +670,13 @@ class Application
   #
   # @return [void]
   def load_settings_and_layout
-    error = SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro))
+    error = SettingsLoader.load(@settings_file, @key_binding, @key_action, method(:do_macro))
 
     if LAYOUT.empty?
       if error
-        fatal_error("ERROR: Could not load settings from #{SETTINGS_FILENAME}.", settings_error_reason(error))
+        fatal_error("ERROR: Could not load settings from #{@settings_file}.", settings_error_reason(error))
       else
-        fatal_error("ERROR: No layouts found in #{SETTINGS_FILENAME}.",
+        fatal_error("ERROR: No layouts found in #{@settings_file}.",
                     'The XML file may be malformed. Check for unclosed tags or encoding errors.')
       end
     end
@@ -684,7 +693,7 @@ class Application
   end
 
   def connect_server
-    @server = Socket.tcp(HOST, PORT, connect_timeout: CONNECT_TIMEOUT)
+    @server = Socket.tcp(@host, @port, connect_timeout: CONNECT_TIMEOUT)
     @server.puts "SET_FRONTEND_PID #{Process.pid}"
     @server.flush
 
@@ -699,7 +708,7 @@ class Application
   # address; SocketError covers name lookup. IO::TimeoutError is what
   # TCPSocket's connect_timeout raises, should the socket class change.
   rescue SystemCallError, SocketError, IO::TimeoutError => e
-    fatal_error("Failed to connect to game server at #{HOST}:#{PORT}: #{e.message}",
+    fatal_error("Failed to connect to game server at #{@host}:#{@port}: #{e.message}",
                 'Is the game server running?')
   end
 

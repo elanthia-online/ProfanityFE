@@ -59,7 +59,7 @@ RSpec.describe 'Writes to the game server' do
       obj
     end
     let(:cli_options) { { char: nil, no_status: true, links: true, remote_url: false, room_window_only: false } }
-    let(:app) { Application.new(cli_options) }
+    let(:app) { Application.new(cli_options, settings_file: File.join(SPEC_HOME, 'settings.xml'), host: '127.0.0.1', port: 8000) }
 
     # The main window records each echoed command line.
     let(:main_window) do
@@ -144,8 +144,6 @@ RSpec.describe 'Writes to the game server' do
     end
 
     it 'sends SET_FRONTEND_PID on connect without the render lock' do
-      stub_const('HOST', '127.0.0.1')
-      stub_const('PORT', 8000)
       allow(Socket).to receive(:tcp).and_return(server)
 
       app.send(:connect_server)

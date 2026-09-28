@@ -19,7 +19,7 @@ MAIN_STREAM = 'main'
 DEFAULT_BUFFER_SIZE = 250
 
 # @return [String] default log file name, used when neither --log-file nor --char is given.
-#   The resolved path is stored in +LOG_FILE+ (defined in profanity.rb after CLI parsing).
+#   profanity.rb hands the resolved path to {ProfanityLog.configure} after CLI parsing.
 DEFAULT_LOG_FILE = 'profanity.log'
 
 # @return [Integer] number of backtrace frames written to the log on errors
