@@ -46,7 +46,7 @@ class RoomWindow < BaseWindow
     @lich_exits = ''
     @room_number = ''
     @stringprocs = ''
-    @rendered_lines = [] # [{text:, colors:}, ...] for link_cmd_at
+    @rendered_lines = [] # {text:, colors:} per window row, for link_cmd_at
     @links_enabled = false
     super
   end
@@ -219,9 +219,9 @@ class RoomWindow < BaseWindow
   # @param rel_x [Integer] column relative to window left
   # @return [String, nil] the link command string, or nil if no link
   def link_cmd_at(rel_y, rel_x)
-    return nil if rel_y < 0 || rel_y >= @rendered_lines.length
+    return nil if rel_y < 0
 
-    colors = @rendered_lines[rel_y][:colors]
+    colors = @rendered_lines[rel_y]&.fetch(:colors)
     return nil unless colors
 
     colors.each do |h|
@@ -232,10 +232,11 @@ class RoomWindow < BaseWindow
 
   private
 
-  # Advance to the next line after a section. When the last rendered line
-  # exactly fills the window width, curses auto-wraps the cursor to column 0
-  # of the next line. An unconditional addstr("\n") would then produce a
-  # spurious blank line. This checks the cursor column first.
+  # Advance to the next line after a section or a wrapped row. When the
+  # last rendered line exactly fills the window width, curses auto-wraps
+  # the cursor to column 0 of the next line. An unconditional
+  # addstr("\n") would then produce a spurious blank line. This checks the
+  # cursor column first.
   #
   # @return [void]
   # @api private
@@ -366,48 +367,29 @@ class RoomWindow < BaseWindow
     end
   end
 
-  # Word-wrap and render text, recording each line's colors (including :cmd)
-  # for link_cmd_at lookup.
+  # Word-wrap text to the window width and draw one wrapped row per window
+  # row, recording each row's colors (including :cmd) under the window row
+  # it is drawn on, for {#link_cmd_at}.
+  #
+  # Rows are wrapped by {StyledText#wrap} at the full width, without
+  # indenting continuation rows (a space starting one is dropped). A row that fills the width leaves the
+  # cursor at the start of the next row, so rows are separated by
+  # {#section_break}, which only moves down when the cursor hasn't. Past
+  # the bottom row curses keeps the cursor there; only the first row drawn
+  # on a window row is recorded for it.
+  #
+  # @param text [String] clean section text
+  # @param line_colors [Array<Hash>] color regions for +text+
+  # @return [void]
+  # @api private
   def add_line_wrapped_with_links(text, line_colors)
-    width = [maxx, 1].max
-    pos = 0
+    return if text.empty?
 
-    while pos < text.length
-      remaining = text[pos..]
-      if remaining.length <= width
-        line = remaining
-      else
-        line = remaining[0, width]
-        break_pos = line.rindex(/\s/)
-        line = remaining[0, break_pos + 1] if break_pos && break_pos > 0
-      end
-
-      # Build colors for this line segment, preserving :cmd for links
-      current_colors = []
-      line_colors.each do |c|
-        region_start = c[:start] - pos
-        region_end = c[:end] - pos
-
-        next unless region_end > 0 && region_start < line.length
-
-        h = {
-          start: [region_start, 0].max,
-          end: [region_end, line.length].min,
-          fg: c[:fg],
-          bg: c[:bg],
-          ul: c[:ul]
-        }
-        h[:cmd] = c[:cmd] if c[:cmd]
-        current_colors.push(h)
-      end
-
-      # Record for link_cmd_at lookup
-      @rendered_lines << { text: line.rstrip, colors: current_colors }
-
-      add_line(line.rstrip, current_colors)
-      pos += line.length
-
-      addstr("\n") if pos < text.length
+    StyledText.new(text, line_colors).wrap(maxx, indent: false).each_with_index do |row, index|
+      section_break if index.positive?
+      line = row.text.rstrip
+      @rendered_lines[cury] ||= { text: line, colors: row.runs }
+      add_line(line, row.runs)
     end
   end
 end
