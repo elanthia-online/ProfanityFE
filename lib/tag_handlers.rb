@@ -23,6 +23,9 @@ module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
 
+  # Body parts (and +nsys+) an <image> tag can report on.
+  IMAGE_IDS = %w[back leftHand rightHand head rightArm abdomen leftEye leftArm chest rightLeg neck leftLeg nsys rightEye].freeze
+
   # Most pushStreams tracked as open at once. The deepest real nesting is
   # two (the empath familiar double push); the cap only stops unmatched
   # pushes from piling up between prompts.
@@ -148,8 +151,8 @@ module TagHandlers
   # prompt is not taken for the game's copy of it and dropped.
   def handle_prompt_tag(xml, _text_buffer)
     @last_stream_text = nil
-    # time must be the first attribute; the text starts after the first >.
-    return unless xml.start_with?('<prompt time=') && (time = XmlTokenizer.attrs(xml)['time'])&.match?(/\A[0-9]+\z/)
+    # The text starts after the first >.
+    return unless (time = XmlTokenizer.attrs(xml)['time'])&.match?(/\A[0-9]+\z/)
     return unless (m = xml.match(%r{\A.*?>(?<text>.*?)&gt;</prompt>$}))
 
     unless @state.skip_server_time_offset
@@ -201,7 +204,7 @@ module TagHandlers
   # The countdown display is polled by Application#tick_countdowns
   # on every input loop iteration (~100ms).
   def handle_roundtime_tag(xml, _text_buffer)
-    return unless (value = countdown_value(xml, '<roundTime value='))
+    return unless (value = countdown_value(xml))
 
     @event_bus.emit(:countdown_update, id: 'roundtime', end_time: value)
     @need_update = true
@@ -211,7 +214,7 @@ module TagHandlers
   # The countdown display is polled by Application#tick_countdowns
   # on every input loop iteration (~100ms).
   def handle_casttime_tag(xml, _text_buffer)
-    return unless (value = countdown_value(xml, '<castTime value='))
+    return unless (value = countdown_value(xml))
 
     @event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: value)
     @need_update = true
@@ -220,19 +223,19 @@ module TagHandlers
   # The end time a <roundTime> or <castTime> tag carries.
   #
   # @param xml [String] the tag
-  # @param prefix [String] how the tag must start: its value attribute first
-  # @return [Integer, nil] the value, or nil unless the tag starts with
-  #   +prefix+ and the value is all digits
-  def countdown_value(xml, prefix)
-    return unless xml.start_with?(prefix)
-
+  # @return [Integer, nil] the value, or nil unless it is all digits
+  def countdown_value(xml)
     value = XmlTokenizer.attrs(xml)['value']
     value.to_i if value&.match?(/\A[0-9]+\z/)
   end
 
   # Handle <compass>...<dir value="n"/>...</compass> paired tag.
   def handle_compass_tag(xml, _text_buffer)
-    current_dirs = xml.scan(/<dir value="(.*?)"/).flatten
+    # attrs reads only the start tag it is given, so each <dir> is read from
+    # where it starts.
+    current_dirs = xml.to_enum(:scan, /<dir\b/).filter_map do
+      XmlTokenizer.attrs(xml[Regexp.last_match.begin(0)..])['value']
+    end
     @event_bus.emit(:compass_update, dirs: current_dirs)
     @need_update = true
   end
@@ -350,8 +353,7 @@ module TagHandlers
   # Handle <style id='...'> tag (both opening and "closing" via empty id).
   # The game protocol uses <style id=""> as a close marker rather than </style>.
   def handle_style_tag(xml, text_buffer)
-    # id must be the first attribute.
-    return unless xml.start_with?('<style id=') && (style_id = XmlTokenizer.attrs(xml)['id'])
+    return unless (style_id = XmlTokenizer.attrs(xml)['id'])
 
     if style_id.empty?
       # Empty id = closing style
@@ -515,10 +517,11 @@ module TagHandlers
 
   # Handle <indicator id='IconXXX' visible='y|n'/> tag.
   def handle_indicator_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<indicator id=(?<q1>'|")Icon(?<icon>[A-Z]+)\k<q1> visible=(?<q2>'|")(?<vis>[yn])\k<q2>/))
+    id, visible = XmlTokenizer.attrs(xml).values_at('id', 'visible')
+    return unless (m = id&.match(/\AIcon(?<icon>[A-Z]+)\z/)) && visible&.match?(/\A[yn]\z/)
 
     icon = m[:icon].downcase
-    active = m[:vis] == 'y'
+    active = visible == 'y'
     @event_bus.emit(:countdown_active, id: icon, active: active)
     @event_bus.emit(:indicator_update, id: icon, value: active)
     @need_update = true
@@ -526,14 +529,15 @@ module TagHandlers
 
   # Handle <image id='...' name='...'/> body part/injury tag.
   def handle_image_tag(xml, _text_buffer)
-    return unless (m = xml.match(/^<image id=(?<q1>'|")(?<id>back|leftHand|rightHand|head|rightArm|abdomen|leftEye|leftArm|chest|rightLeg|neck|leftLeg|nsys|rightEye)\k<q1> name=(?<q2>'|")(?<name>.*?)\k<q2>/))
+    id, name = XmlTokenizer.attrs(xml).values_at('id', 'name')
+    return unless IMAGE_IDS.include?(id) && name
 
-    if m[:id] == 'nsys'
-      rank = m[:name].slice(/[0-9]/)
+    if id == 'nsys'
+      rank = name.slice(/[0-9]/)
       @event_bus.emit(:indicator_update, id: 'nsys', value: rank ? rank.to_i : 0)
     else
       fix_value = { 'Injury1' => 1, 'Injury2' => 2, 'Injury3' => 3, 'Scar1' => 4, 'Scar2' => 5, 'Scar3' => 6 }
-      @event_bus.emit(:indicator_update, id: m[:id], value: fix_value[m[:name]] || 0)
+      @event_bus.emit(:indicator_update, id: id, value: fix_value[name] || 0)
     end
     @need_update = true
   end
@@ -545,8 +549,8 @@ module TagHandlers
   # +https://www.play.net/+ (e.g. +@evil.example/+, which becomes userinfo,
   # or +.evil.example/+, which extends the host) is logged and ignored.
   def handle_launch_url(xml, _text_buffer)
-    # src must be the first attribute, in double quotes.
-    return unless xml.start_with?('<LaunchURL src="') && (src = XmlTokenizer.attrs(xml)['src']) && !src.empty?
+    src = XmlTokenizer.attrs(xml)['src']
+    return if src.nil? || src.empty?
 
     url = "#{LAUNCH_URL_BASE}#{src}"
     unless play_net_url?(url)

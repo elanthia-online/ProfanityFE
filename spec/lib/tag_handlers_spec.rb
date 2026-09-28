@@ -1017,26 +1017,26 @@ RSpec.describe TagHandlers do
       events
     end
 
-    it 'reads prompt time only as the first attribute, after one space' do
+    it 'reads prompt time in either quotes, anywhere among the attributes' do
       expect_each(
         '<prompt time="1">H&gt;</prompt>'       => 'H>',
         "<prompt time='1'>H&gt;</prompt>"       => 'H>',
         "<prompt time='1' x='y'>H&gt;</prompt>" => 'H>',
-        "<prompt x='y' time='1'>H&gt;</prompt>" => nil,
-        "<prompt  time='1'>H&gt;</prompt>"      => nil,
+        "<prompt x='y' time='1'>H&gt;</prompt>" => 'H>',
+        "<prompt  time='1'>H&gt;</prompt>"      => 'H>',
         "<prompt ptime='1'>H&gt;</prompt>"      => nil,
         "<prompt time='1a'>H&gt;</prompt>"      => nil,
         "<prompt time=''>H&gt;</prompt>"        => nil
       ) { |h, tag| events_of(h, tag, :prompt_changed).last&.fetch(:text) }
     end
 
-    it 'reads roundTime and castTime values only as the first attribute, after one space' do
+    it 'reads roundTime and castTime values in either quotes, anywhere among the attributes' do
       tags = {
         "<TAG value='5'/>"           => 5,
         '<TAG value="5"/>'           => 5,
         "<TAG value='5' value='6'/>" => 5,
-        "<TAG x='1' value='5'/>"     => nil,
-        "<TAG  value='5'/>"          => nil,
+        "<TAG x='1' value='5'/>"     => 5,
+        "<TAG  value='5'/>"          => 5,
         "<TAG pvalue='5'/>"          => nil,
         "<TAG value='-5'/>"          => nil,
         "<TAG value=''/>"            => nil
@@ -1045,56 +1045,57 @@ RSpec.describe TagHandlers do
       expect_each(tags.transform_keys { |t| t.gsub('TAG', 'castTime') }) { |h, tag| events_of(h, tag, :countdown_update).last&.fetch(:secondary_end_time) }
     end
 
-    it 'reads the style id only as the first attribute, after one space' do
+    it 'reads the style id in either quotes, anywhere among the attributes' do
       expect_each(
         "<style id='roomName'/>"       => :title,
         '<style id="roomName"/>'       => :title,
         "<style id='roomName' x='1'/>" => :title,
-        "<style x='1' id='roomName'/>" => nil,
-        "<style  id='roomName'/>"      => nil,
+        "<style x='1' id='roomName'/>" => :title,
+        "<style  id='roomName'/>"      => :title,
         "<style pid='roomName'/>"      => nil
       ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.room_capture_mode } }
     end
 
-    it 'reads LaunchURL src only double-quoted, as the first attribute, after one space' do
+    it 'reads LaunchURL src in either quotes, anywhere among the attributes' do
       expect_each(
-        '<LaunchURL src="/p"/>'        => 'https://www.play.net/p',
-        "<LaunchURL src='/p'/>"        => nil,
-        %(<LaunchURL x="1" src="/p"/>) => nil,
-        '<LaunchURL  src="/p"/>'       => nil,
-        '<LaunchURL src=""/>'          => nil
+        '<LaunchURL src="/p"/>'              => 'https://www.play.net/p',
+        "<LaunchURL src='/p'/>"              => 'https://www.play.net/p',
+        %(<LaunchURL x="1" src="/p"/>)       => 'https://www.play.net/p',
+        '<LaunchURL  src="/p"/>'             => 'https://www.play.net/p',
+        "<LaunchURL src='@evil.example/x'/>" => nil,
+        '<LaunchURL src=""/>'                => nil
       ) { |h, tag| events_of(h, tag, :launch_url).last&.fetch(:url) }
     end
 
-    it 'reads compass dir values only double-quoted, as the first attribute, after one space' do
+    it 'reads compass dir values in either quotes, anywhere among the attributes' do
       expect_each(
         %(<compass><dir value="n"/><dir value="s"/></compass>)  => %w[n s],
-        "<compass><dir value='n'/><dir value=\"s\"/></compass>" => %w[s],
-        %(<compass><dir x="1" value="n"/></compass>)            => [],
-        %(<compass><dir  value="n"/></compass>)                 => [],
+        "<compass><dir value='n'/><dir value=\"s\"/></compass>" => %w[n s],
+        %(<compass><dir x="1" value="n"/></compass>)            => %w[n],
+        %(<compass><dir  value="n"/></compass>)                 => %w[n],
         %(<compass><dir value=""/></compass>)                   => [''],
         %(<compass><dirx value="n"/></compass>)                 => []
       ) { |h, tag| events_of(h, tag, :compass_update).last[:dirs] }
     end
 
-    it 'reads indicator id and visible only in that order, one space apart' do
+    it 'reads indicator id and visible in either quotes and either order' do
       expect_each(
         "<indicator id='IconSTUNNED' visible='y'/>"       => ['stunned', true],
         %(<indicator id="IconSTUNNED" visible='n'/>)      => ['stunned', false],
-        "<indicator visible='y' id='IconSTUNNED'/>"       => nil,
-        "<indicator id='IconSTUNNED'  visible='y'/>"      => nil,
-        "<indicator x='1' id='IconSTUNNED' visible='y'/>" => nil,
+        "<indicator visible='y' id='IconSTUNNED'/>"       => ['stunned', true],
+        "<indicator id='IconSTUNNED'  visible='y'/>"      => ['stunned', true],
+        "<indicator x='1' id='IconSTUNNED' visible='y'/>" => ['stunned', true],
         "<indicator id='Iconstunned' visible='y'/>"       => nil,
         "<indicator id='IconSTUNNED' visible='yes'/>"     => nil
       ) { |h, tag| events_of(h, tag, :countdown_active).last&.values_at(:id, :active) }
     end
 
-    it 'reads image id and name only in that order, one space apart' do
+    it 'reads image id and name in either quotes and either order' do
       expect_each(
         "<image id='chest' name='Injury2'/>"  => ['chest', 2],
         %(<image id="chest" name='Injury2'/>) => ['chest', 2],
-        "<image name='Injury2' id='chest'/>"  => nil,
-        "<image id='chest'  name='Injury2'/>" => nil,
+        "<image name='Injury2' id='chest'/>"  => ['chest', 2],
+        "<image id='chest'  name='Injury2'/>" => ['chest', 2],
         "<image id='elbow' name='Injury2'/>"  => nil
       ) { |h, tag| events_of(h, tag, :indicator_update).last&.values_at(:id, :value) }
     end
