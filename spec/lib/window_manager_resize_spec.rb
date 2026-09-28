@@ -21,9 +21,8 @@ RSpec.describe WindowManager, '#resize' do
      IndicatorWindow, ProgressWindow, CountdownWindow].each do |klass|
       allow(klass).to receive(:list).and_return([])
     end
-    wm.instance_variable_set(:@command_window, screen)
     # Curses.cols is 80 in the spec stub, so the command window becomes 10 wide.
-    wm.instance_variable_set(:@command_window_layout, WindowLayout.new(height: '1', width: 'cols-70', top: '23', left: '0'))
+    wm.install_command_window(WindowLayout.new(height: '1', width: 'cols-70', top: '23', left: '0')) { screen }
     buf.window = screen
     'abcdefghijklmnopqrstuvwxy'.each_char { |ch| buf.put_ch(ch) }
   end

@@ -351,6 +351,21 @@ class WindowManager
     CursesRenderer.doupdate
   end
 
+  # Take the command window a layout asks for. The first layout creates
+  # it with the block; later layouts keep that window, which the command
+  # buffer draws into, and only replace its layout.
+  #
+  # @param layout [WindowLayout] where the layout puts the command line
+  # @yieldreturn [Curses::Window] a new command window, called only when
+  #   there isn't one yet
+  # @return [Curses::Window] the command window
+  # @api private
+  def install_command_window(layout)
+    @command_window ||= yield
+    @command_window_layout = layout
+    @command_window
+  end
+
   # Resize all windows to match the current terminal dimensions.
   #
   # Every registered window class ({BaseWindow.window_classes}), in
@@ -478,9 +493,10 @@ end
 # Register the command window type. This is a plain Curses::Window (not a
 # BaseWindow subclass), so it lives here rather than in a window file.
 BaseWindow.register_type('command') do |height, width, top, left, element, wm|
-  wm.instance_variable_set(:@command_window, Curses::Window.new(height, width, top, left)) unless wm.command_window
-  wm.instance_variable_set(:@command_window_layout, WindowLayout.from_element(element))
-  wm.command_window.scrollok(false)
-  wm.command_window.keypad(true)
-  wm.command_window
+  window = wm.install_command_window(WindowLayout.from_element(element)) do
+    Curses::Window.new(height, width, top, left)
+  end
+  window.scrollok(false)
+  window.keypad(true)
+  window
 end
