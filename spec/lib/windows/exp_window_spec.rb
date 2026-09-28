@@ -9,12 +9,11 @@ require 'rexml/document'
 require_relative '../../../lib/event_bus'
 require_relative '../../../lib/game_text_processor'
 require_relative '../../../lib/window_manager'
-require_relative '../../../lib/windows/skill' # profanity.rb loads it; spec_helper doesn't
 
 RSpec.describe ExpWindow do
   let(:window_manager) do
     LAYOUT['test'] = REXML::Document.new(<<~XML).root
-      <layout><window class='exp' top='0' left='0' height='8' width='40'/></layout>
+      <layout><window class='exp' top='0' left='0' height='8' width='50'/></layout>
     XML
     wm = WindowManager.new
     wm.load_layout('test')
@@ -55,8 +54,8 @@ RSpec.describe ExpWindow do
     window.rows.map(&:rstrip).reject(&:empty?)
   end
 
-  # One skill update as a component line. The text is in the
-  # "Name: ranks percent%  [mindstate/34]" form ExpWindow parses.
+  # One skill update as a component line, wrapped in the whisper preset as
+  # DragonRealms sends most of them.
   def skill_line(id, text)
     "<component id='exp #{id}'><preset id='whisper'>#{text}</preset></component>"
   end
@@ -77,6 +76,62 @@ RSpec.describe ExpWindow do
       receive_from_server(parry_ability, parry_aptitude, "<component id='exp Parry Ability'></component>")
 
       expect(visible_rows).to eq ['Parry Aptitude:  120 10% [ 5/34]']
+    end
+  end
+
+  # Lines as DragonRealms sends them (copied from Lich XML session logs):
+  # name padded to 16, ranks, percent, the mindstate word(s) padded to 13,
+  # the learning rate, then trailing spaces.
+  describe 'skill lines in the DragonRealms format' do
+    let(:bow) { skill_line('Bow', '             Bow: 1534 07% deliberative  0.27 ') }
+    let(:parry) { skill_line('Parry Ability', '   Parry Ability: 1709 59% mind lock     0.37    ') }
+    let(:scholarship) do
+      "<component id='exp Scholarship'><b>     Scholarship: 1750 00% nearly locked 0.22</b></component>"
+    end
+    let(:alchemy) { "<component id='exp Alchemy'>         Alchemy:  805 08% pondering     0.64    </component>" }
+
+    it 'shows each skill with its ranks, percent, mindstate and rate as sent' do
+      receive_from_server(bow, parry, scholarship, alchemy)
+
+      expect(visible_rows).to eq [' Alchemy:  805 08% pondering     0.64',
+                                  '     Bow: 1534 07% deliberative  0.27',
+                                  'Parry Ability: 1709 59% mind lock     0.37',
+                                  'Scholarship: 1750 00% nearly locked 0.22']
+    end
+
+    it 'replaces a skill when its next update arrives' do
+      receive_from_server(bow, skill_line('Bow', '             Bow: 1534 08% examining     0.28    '))
+
+      expect(visible_rows).to eq ['     Bow: 1534 08% examining     0.28']
+    end
+
+    it 'removes a skill whose component arrives empty' do
+      receive_from_server(bow, parry, "<component id='exp Bow'></component>")
+
+      expect(visible_rows).to eq ['Parry Ability: 1709 59% mind lock     0.37']
+    end
+
+    it 'shows the DragonRealms and [n/34] formats side by side' do
+      receive_from_server(bow, parry_aptitude)
+
+      expect(visible_rows).to eq ['     Bow: 1534 07% deliberative  0.27',
+                                  'Parry Aptitude:  120 10% [ 5/34]']
+    end
+
+    # The exp stream also carries components that are not skills.
+    it 'adds no row for the favor, TDP, rested-exp and sleep components' do
+      receive_from_server(
+        bow,
+        "<component id='exp favor'>          Favors:  73</component>",
+        "<component id='exp tdp'>            TDPs:  1705</component>",
+        "<component id='exp rexp'>Rested EXP Stored: 1 hour  Usable This Cycle: 1 hour  " \
+        'Cycle Refreshes: 12:18 hours</component>',
+        "<component id='exp sleep'><b>You are relaxed and your mind has entered a state of rest.  " \
+        'To wake up and start learning again, type: AWAKEN</b></component>',
+        "<component id='exp sleep'></component>"
+      )
+
+      expect(visible_rows).to eq ['     Bow: 1534 07% deliberative  0.27']
     end
   end
 end
