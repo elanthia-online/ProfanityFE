@@ -43,13 +43,33 @@ module ProfanitySettings
     @lock.synchronize { File.read(path) }
   end
 
-  # Thread-safe file write.
+  # Thread-safe, atomic file write: the data goes to a temporary file in the
+  # same directory, which is then renamed over +path+, so a reader or a crash
+  # never sees a partly written file. An existing file keeps its mode (a new
+  # one gets 0666 less the umask), and a symlink is written through, as
+  # File.write would.
   #
   # @param path [String] full path to write
   # @param data [String] content to write
   # @return [void]
+  # @raise [SystemCallError] if the file can't be written; +path+ is unchanged
   def self.write(path, data)
-    @lock.synchronize { File.write(path, data) }
+    @lock.synchronize do
+      target = File.exist?(path) ? File.realpath(path) : path
+      mode = File.exist?(target) ? File.stat(target).mode & 0o7777 : 0o666 & ~File.umask
+      tmp = "#{target}.#{Process.pid}.tmp"
+      begin
+        File.open(tmp, File::WRONLY | File::CREAT | File::TRUNC, 0o600) do |f|
+          f.write(data)
+          f.chmod(mode)
+          f.fsync
+        end
+        File.rename(tmp, target)
+      rescue StandardError
+        FileUtils.rm_f(tmp)
+        raise
+      end
+    end
   end
 
   # Parse an XML settings file. Thread-safe — reads and parses
@@ -139,12 +159,22 @@ module ProfanitySettings
 
   # Load mouse scroll settings from settings.json.
   #
-  # @return [Hash, nil] parsed settings or nil if file doesn't exist
+  # A file that isn't valid JSON, or whose top level isn't an object, is
+  # logged and treated as absent.
+  #
+  # @return [Hash, nil] parsed settings, or nil if the file doesn't exist or
+  #   doesn't hold a JSON object
   def self.load_mouse_settings
     path = file('settings.json')
     return nil unless File.exist?(path)
 
-    JSON.parse(read(path))
+    # UTF-8 whatever the locale: under LANG=C a non-ASCII character would
+    # otherwise raise Encoding::InvalidByteSequenceError.
+    settings = JSON.parse(read(path).force_encoding(Encoding::UTF_8))
+    return settings if settings.is_a?(Hash)
+
+    ProfanityLog.write('settings', "Ignoring settings.json: expected a JSON object, got #{JSON.generate(settings)[0, 40]}")
+    nil
   rescue JSON::ParserError => e
     ProfanityLog.write('settings', "Failed to parse settings.json: #{e.message}")
     nil
