@@ -1940,7 +1940,9 @@ support title updates or you find it distracting.
   positions beyond the terminal dimensions.
 
 **Terminal resize not detected:**
-- Bind the resize event: `<key id='resize' action='resize'/>`
+- Windows re-fit on the terminal's resize event without any binding. If your
+  settings file binds the `resize` key to something other than
+  `action='resize'`, that binding runs instead.
 - If automatic resize still does not work (common in GNU Screen or tmux),
   type `.resize` manually after resizing.
 

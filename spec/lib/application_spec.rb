@@ -910,6 +910,76 @@ RSpec.describe Application do
     end
   end
 
+  # BUG FOUND (fixed here): ncurses reports a terminal resize as KEY_RESIZE,
+  # but only a settings file binding the resize key re-fitted the layout.
+  # default.xml doesn't bind it, so the windows kept their old size until
+  # the user typed .resize.
+  describe 'terminal resize' do
+    let(:settings_path) { File.join(@dir, 'settings.xml') }
+    let(:settings) { File.read(File.expand_path('../../templates/default.xml', __dir__)) }
+    let(:main) { TabbedTextWindow.list.first }
+    let(:terminal) { { lines: 60, cols: 200 } }
+
+    around do |example|
+      Dir.mktmpdir { |dir| @dir = dir; example.run }
+    end
+
+    before do
+      allow(ProfanityLog).to receive(:write)
+      allow(Curses).to receive(:lines) { terminal[:lines] }
+      allow(Curses).to receive(:cols) { terminal[:cols] }
+      stub_const('SETTINGS_FILENAME', settings_path)
+      File.write(settings_path, settings)
+      app.send(:load_settings_and_layout)
+    end
+
+    # Shrink the terminal and deliver the key ncurses sends for it.
+    def resize_terminal
+      terminal.merge!(lines: 40, cols: 150)
+      app.send(:handle_key, Curses::KEY_RESIZE, nil)
+    end
+
+    it 'fits the layout to the new size when the settings file does not bind the resize key' do
+      expect([main.maxy, main.maxx]).to eq [58, 131]
+
+      resize_terminal
+
+      expect([main.maxy, main.maxx]).to eq [38, 99]
+    end
+
+    it 'still fits the layout after a .reload' do
+      app.execute_command('.reload')
+
+      resize_terminal
+
+      expect([main.maxy, main.maxx]).to eq [38, 99]
+    end
+
+    it 'fits the layout while a key combo is pending, and keeps the combo' do
+      # A lone Escape starts the alt+N combos and stays pending until the next key.
+      escape_combo = app.send(:handle_key, 27, nil)
+      expect(escape_combo).to be_a(Hash)
+      terminal.merge!(lines: 40, cols: 150)
+
+      expect(app.send(:handle_key, Curses::KEY_RESIZE, escape_combo)).to be(escape_combo)
+      expect([main.maxy, main.maxx]).to eq [38, 99]
+    end
+
+    context 'when the settings file binds the resize key' do
+      let(:settings) { super().sub('</settings>', "<key id='resize' macro='look\\r'/></settings>") }
+      let(:server) { StringIO.new }
+
+      before { app.instance_variable_set(:@server, server) }
+
+      it 'runs that binding instead' do
+        resize_terminal
+
+        expect(server.string).to eq "look\n"
+        expect([main.maxy, main.maxx]).to eq [58, 131]
+      end
+    end
+  end
+
   # .scrollcfg learns each wheel direction from the first mouse event seen
   # 20 times. Pointer motion and left clicks arrive in the same stream while
   # the user reaches for the wheel, and they are never the wheel.

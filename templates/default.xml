@@ -458,7 +458,7 @@
        'lines' (terminal height) and 'cols' (terminal width).
 
        Switch layouts at runtime: .layout <name>
-       Trigger resize after terminal change: .resize
+       Windows re-fit when the terminal is resized; .resize does it by hand
 
        This layout is designed for a wide terminal (160+ columns):
 
