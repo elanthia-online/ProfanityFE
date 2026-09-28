@@ -1872,11 +1872,13 @@ Bind it to a key (typically Tab) in your settings file:
 ```
 
 When you press the bound key, ProfanityFE searches your command history for
-entries matching the current input:
+entries that start with the whole command line (wherever the cursor is):
 
 - **Single match:** the command line is auto-filled with the matched command.
 - **Multiple matches:** a numbered list of candidates is displayed in the main
   window, and the common prefix is filled in automatically.
+
+Whenever text is filled in, the cursor moves to the end of the command line.
 
 ---
 
