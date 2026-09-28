@@ -912,6 +912,7 @@ The following key names can be used in the `id` attribute:
 |------|-----|
 | `ctrl+a` through `ctrl+z` | Control + letter (except `ctrl+c`, `ctrl+q`, `ctrl+s`, `ctrl+z`) |
 | `tab` or `ctrl+i` | Tab key |
+| `shift+tab` | Shift + Tab (back tab) |
 | `enter` or `ctrl+j` | Enter key (line feed) |
 | `return` or `ctrl+m` | Return key (carriage return) |
 

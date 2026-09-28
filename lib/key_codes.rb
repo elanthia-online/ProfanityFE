@@ -150,6 +150,7 @@ KeyCodes::FALLBACK = {
   'insert'        => 331,
   'page_down'     => 338,
   'page_up'       => 339,
+  'shift+tab'     => 353, # KEY_BTAB (back tab)
   'win_end'       => 358,
   'end'           => 360,
   'resize'        => 410,

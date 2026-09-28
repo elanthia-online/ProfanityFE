@@ -209,6 +209,44 @@ RSpec.describe SettingsLoader do
     end
   end
 
+  describe 'unknown key ids' do
+    let(:action) { proc {} }
+    let(:key_binding) { {} }
+
+    def load_keys(body)
+      path = write_settings(@dir, "#{body}<highlight fg='ff0000'>goblin</highlight>")
+      described_class.load(path, key_binding, { 'act' => action }, proc {})
+    end
+
+    before do
+      allow(ProfanityLog).to receive(:write)
+      HIGHLIGHT.clear
+    end
+
+    it 'logs a key id that names no key, binds nothing for it and keeps loading' do
+      load_keys("<key id='ctrl+tab' action='act'/><key id='ctrl+x' action='act'/>")
+
+      expect(key_binding).to eq(24 => action)
+      expect(HIGHLIGHT.keys).to eq [/goblin/]
+      expect(ProfanityLog).to have_received(:write).with('settings', "Unknown key id 'ctrl+tab', binding ignored")
+    end
+
+    it 'logs an unknown combo prefix once and skips the keys nested in it' do
+      load_keys("<key id='ctrl_x'><key id='a' action='act'/><key id='b' action='act'/></key>")
+
+      expect(key_binding).to be_empty
+      expect(ProfanityLog).to have_received(:write).once
+      expect(ProfanityLog).to have_received(:write).with('settings', "Unknown key id 'ctrl_x', binding ignored")
+    end
+
+    it 'logs an unknown key id nested in a known combo prefix' do
+      load_keys("<key id='ctrl+x'><key id='a' action='act'/><key id='plus' action='act'/></key>")
+
+      expect(key_binding).to eq(24 => { 'a' => action })
+      expect(ProfanityLog).to have_received(:write).with('settings', "Unknown key id 'plus', binding ignored")
+    end
+  end
+
   describe 'key bindings on reload' do
     let(:first_action) { proc {} }
     let(:second_action) { proc {} }
