@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'feedback'
+
 =begin
 Tab-completion from command history for the command buffer.
 =end
@@ -106,9 +108,6 @@ module Autocomplete
   # @return [void]
   # @api private
   def self.show_message(window, text)
-    return unless window
-
-    window.add_string(text, [{ fg: HIGHLIGHT_COLOR, start: 0, end: text.length }])
-    CursesRenderer.doupdate
+    CursesRenderer.doupdate if Feedback.write(window, text, fg: HIGHLIGHT_COLOR)
   end
 end

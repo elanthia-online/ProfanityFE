@@ -583,20 +583,6 @@ RSpec.describe Application do
     end
   end
 
-  # ---- Feedback colors ----
-
-  describe 'feedback_colors' do
-    it 'returns a color region spanning the full text' do
-      colors = app.send(:feedback_colors, 'hello')
-      expect(colors).to eq [{ start: 0, end: 5, fg: FEEDBACK_COLOR, bg: nil, ul: nil }]
-    end
-
-    it 'handles empty string' do
-      colors = app.send(:feedback_colors, '')
-      expect(colors.first[:end]).to eq 0
-    end
-  end
-
   # ---- Adversarial: initialization edge cases ----
 
   describe 'adversarial initialization' do
