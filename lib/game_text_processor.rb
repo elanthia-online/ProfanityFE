@@ -499,6 +499,17 @@ class GameTextProcessor
       @event_bus.emit(:indicator_update, id: 'right', label: 'Empty')
       @event_bus.emit(:indicator_update, id: 'left', label: 'Empty')
       @need_update = true
+    elsif text =~ /^You glance down to see .+ in your right hand and nothing in your left hand\./
+      # DR sends a hand tag only when the hand's contents change, so a hand
+      # empty since login has never had one; the glance is the only word
+      # that it's empty. The held hand keeps the name from its tag.
+      @event_bus.emit(:indicator_update, id: 'left', label: 'Empty', value: 0)
+      @need_update = true
+    elsif text =~ /^You glance down to see (?!.* in your right hand ).+ in your left hand\./
+      # Only the left hand holds something: the glance doesn't mention the
+      # right hand at all ("You glance down to see <item> in your left hand.").
+      @event_bus.emit(:indicator_update, id: 'right', label: 'Empty', value: 0)
+      @need_update = true
     else
       if text =~ /^You have.*? very difficult time with muscle control/
         @event_bus.emit(:indicator_update, id: 'nsys', value: 3)
