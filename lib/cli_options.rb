@@ -11,7 +11,7 @@ require_relative 'version'
 # Command-line options for profanity.rb.
 module CliOptions
   # Raised by {parse_command_line} for a bad command line. The message is
-  # what profanity.rb prints to stderr (with +warn+) before it exits 1.
+  # what profanity.rb prints to stderr before it exits 1.
   class UsageError < StandardError; end
 
   # Option values used when an option is not given on the command line.

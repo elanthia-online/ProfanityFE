@@ -45,7 +45,7 @@ ProfanitySettings.ensure_app_dir
 cli_options = begin
   CliOptions.parse_command_line(ARGV)
 rescue CliOptions::UsageError => e
-  warn e.message
+  $stderr.puts e.message
   exit 1
 end
 
