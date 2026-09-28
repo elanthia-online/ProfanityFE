@@ -281,7 +281,7 @@ game output. Text windows have a 1-column scrollbar on the right edge.
 | `width` | yes | Width in columns (expression); 1 column is reserved for the scrollbar |
 | `value` | yes | Comma-separated list of stream names to display in this window |
 | `buffer-size` | no | Maximum lines retained in the scroll buffer (default: `1000`) |
-| `timestamp` | no | Set to `'true'` to append `[HH:MM]` timestamps to each line |
+| `timestamp` | no | Set to `'true'` to append `[HH:MM]` timestamps to each line; leave it out or set `'false'` for none |
 
 **Examples:**
 
@@ -325,7 +325,7 @@ tabs that have received new content since you last viewed them.
 | `width` | yes | Width in columns (expression); 1 column reserved for scrollbar |
 | `tabs` or `value` | yes | Comma-separated list of tab names (and stream names to route) |
 | `buffer-size` | no | Maximum lines per tab buffer (default: `1000`) |
-| `timestamp` | no | Set to `'true'` to append timestamps |
+| `timestamp` | no | Set to `'true'` to append timestamps; leave it out or set `'false'` for none |
 
 Each tab name listed in `tabs` (or `value`) becomes both a tab and a stream
 routing target. The first tab listed becomes the initially active tab.
