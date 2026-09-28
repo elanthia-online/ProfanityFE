@@ -251,9 +251,13 @@ module SelectionManager
       if clipboard_cmd
         begin
           IO.popen(clipboard_cmd, 'w') { |io| io.write(text) }
+          status = Process.last_status
+          raise IOError, status.to_s unless status.success?
+
           ProfanityLog.write('Clipboard', "Copied #{text.length} chars via #{clipboard_cmd}")
         rescue SystemCallError, IOError => e
-          # Tool not installed (ENOENT) or exited early (EPIPE): fall through.
+          # Tool not installed (ENOENT), exited early (EPIPE) or exited
+          # non-zero (e.g. xclip with no X server): fall through.
           ProfanityLog.write('Clipboard', "#{clipboard_cmd} failed (#{e.message}); using OSC 52 + file")
         end
       else
@@ -293,8 +297,14 @@ module SelectionManager
 
       # Always write to file as fallback: per-user, owner-only, and never
       # through a symlink (a shared /tmp file exposed the text to other
-      # users and let them redirect the write).
-      File.write(ProfanitySettings.file('selection.txt'), text, perm: 0o600, flags: File::NOFOLLOW)
+      # users and let them redirect the write). The mode only applies on
+      # create, so tighten an existing file through the open descriptor
+      # (fchmod, no path lookup) before the text goes in.
+      File.open(ProfanitySettings.file('selection.txt'),
+                File::WRONLY | File::CREAT | File::TRUNC | File::NOFOLLOW, 0o600) do |file|
+        file.chmod(0o600)
+        file.write(text)
+      end
     rescue StandardError => e
       ProfanityLog.write('Clipboard', "Error: #{e.message}")
     end
