@@ -654,12 +654,21 @@ class Application
 
   # ---- Initialization ----
 
+  # Load the settings file and build the default layout, exiting with an
+  # error (and the reason the file failed to load, if it did) when there is
+  # no layout or no command window.
+  #
+  # @return [void]
   def load_settings_and_layout
-    SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro))
+    error = SettingsLoader.load(SETTINGS_FILENAME, @key_binding, @key_action, method(:do_macro))
 
     if LAYOUT.empty?
-      fatal_error("ERROR: No layouts found in #{SETTINGS_FILENAME}.",
-                  'The XML file may be malformed. Check for unclosed tags or encoding errors.')
+      if error
+        fatal_error("ERROR: Could not load settings from #{SETTINGS_FILENAME}.", settings_error_reason(error))
+      else
+        fatal_error("ERROR: No layouts found in #{SETTINGS_FILENAME}.",
+                    'The XML file may be malformed. Check for unclosed tags or encoding errors.')
+      end
     end
 
     @window_mgr.load_layout('default')

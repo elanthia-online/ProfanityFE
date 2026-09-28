@@ -1269,6 +1269,60 @@ RSpec.describe Application do
     $stderr = original
   end
 
+  # BUG FOUND (fixed here): a settings file that failed to parse on startup
+  # showed only "No layouts found ... may be malformed"; why it failed (an
+  # empty file, or where the XML broke) was only in the log.
+  describe 'loading the settings file at startup' do
+    let(:settings_path) { File.join(@dir, 'settings.xml') }
+
+    around do |example|
+      Dir.mktmpdir { |dir| @dir = dir; example.run }
+    end
+
+    before do
+      allow(ProfanityLog).to receive(:write)
+      allow(Curses).to receive(:close_screen)
+      stub_const('SETTINGS_FILENAME', settings_path)
+    end
+
+    # Start up with the given settings file content.
+    #
+    # @return [Array(String, Integer)] what was printed, and the exit status
+    def start_with_settings(content)
+      File.write(settings_path, content)
+      status = nil
+      output = capture_stderr do
+        app.send(:load_settings_and_layout)
+      rescue SystemExit => e
+        status = e.status
+      end
+      [output, status]
+    end
+
+    it 'says the file is empty when it is' do
+      output, status = start_with_settings('')
+
+      expect(status).to eq 1
+      expect(output.lines.map(&:chomp)).to eq ["ERROR: Could not load settings from #{settings_path}.",
+                                               "Settings file is empty: #{settings_path}"]
+    end
+
+    it 'says where the XML broke when it is malformed' do
+      output, status = start_with_settings("<settings>\n  <layout id='default'>\n  </layuot>\n</settings>\n")
+
+      expect(status).to eq 1
+      expect(output.lines.map(&:chomp)).to eq ["ERROR: Could not load settings from #{settings_path}.",
+                                               "Missing end tag for 'layout' (got 'layuot') (line 3)"]
+    end
+
+    it 'still says no layouts were found when a well-formed file has none' do
+      output, status = start_with_settings("<settings><preset id='speech' fg='00ff00'/></settings>\n")
+
+      expect(status).to eq 1
+      expect(output).to start_with("ERROR: No layouts found in #{settings_path}.")
+    end
+  end
+
   describe 'connecting to the game server' do
     let(:stderr_at_close) { [] }
 
