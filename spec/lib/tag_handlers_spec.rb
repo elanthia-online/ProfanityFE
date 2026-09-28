@@ -9,7 +9,6 @@ require_relative '../../lib/event_bus'
 require_relative '../../lib/xml_tokenizer'
 require_relative '../../lib/tag_handlers'
 require_relative '../../lib/shared_state'
-require_relative '../../lib/safe_arithmetic'
 
 # Minimal host class that includes TagHandlers, providing the instance
 # variables and helper methods the module expects.
