@@ -1,8 +1,10 @@
 # frozen_string_literal: true
 
+require 'open3'
 require 'pty'
 require 'socket'
 require 'timeout'
+require 'tmpdir'
 require_relative '../../lib/cli_options'
 
 RSpec.describe CliOptions do
@@ -143,5 +145,58 @@ RSpec.describe 'profanity.rb command line' do
     accepted&.kill
     server&.close
     FileUtils.remove_entry(dir) if dir
+  end
+
+  # The log path is resolved before the rest of lib is loaded. Without
+  # --char or --log-file it falls back to DEFAULT_LOG_FILE, which crashed
+  # the client with a NameError before it could connect.
+  it 'starts and connects without --char or --log-file' do
+    server = TCPServer.new('127.0.0.1', 0)
+    accepted = Queue.new
+    acceptor = Thread.new { accepted << server.accept }
+    args = ["--port=#{server.addr[1]}", "--settings-file=#{File.join(repo, 'templates', 'default.xml')}"]
+
+    output = +''
+    connected = nil
+    PTY.spawn(env, RbConfig.ruby, File.join(repo, 'profanity.rb'), *args, chdir: Dir.home) do |reader, _writer, pid|
+      drain = Thread.new do
+        reader.each_char { |c| output << c }
+      rescue Errno::EIO
+        nil
+      end
+      connected = Timeout.timeout(20) { accepted.pop }
+    rescue Timeout::Error
+      nil
+    ensure
+      begin
+        Process.kill('KILL', pid)
+        Process.wait(pid)
+      rescue Errno::ESRCH, Errno::ECHILD
+        nil
+      end
+      drain&.kill
+    end
+
+    expect(connected).to be_a(TCPSocket), "client never connected; terminal showed:\n#{output}"
+    expect(output).not_to include('NameError')
+  ensure
+    connected&.close
+    acceptor&.kill
+    server&.close
+  end
+end
+
+# lib/profanity_settings.rb is loaded on its own, before the rest of lib,
+# so it must not depend on constants that only other files define.
+RSpec.describe 'ProfanitySettings loaded on its own' do
+  it 'resolves the default log file in the current directory' do
+    repo = File.expand_path('../..', __dir__)
+    script = "require #{File.join(repo, 'lib', 'profanity_settings').inspect}; puts ProfanitySettings.resolve_log"
+    Dir.mktmpdir('profanity-settings-alone') do |dir|
+      output, status = Open3.capture2e(RbConfig.ruby, '-e', script, chdir: dir)
+
+      expect(status).to be_success, output
+      expect(output.lines.last.chomp).to eq(File.join(File.realpath(dir), 'profanity.log'))
+    end
   end
 end
