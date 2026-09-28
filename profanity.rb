@@ -39,15 +39,27 @@ require_relative 'lib/profanity_settings'
 # with --char, the log. Created first thing, even for --help or a bad option.
 ProfanitySettings.ensure_app_dir
 
-cli_options = CliOptions.parse_or_exit(ARGV)
+# A bad option or a missing settings file: print the message and exit 1,
+# still on the normal terminal.
+cli_options = begin
+  CliOptions.parse_command_line(ARGV)
+rescue CliOptions::UsageError => e
+  warn e.message
+  exit 1
+end
 
 # Path of the settings XML chosen by {ProfanitySettings.resolve_template}.
-SETTINGS_FILENAME = ProfanitySettings.resolve_template(
-  char: cli_options[:config] || cli_options[:char],
-  template: cli_options[:template],
-  settings_file: cli_options[:settings_file],
-  app_dir: File.dirname(__FILE__)
-)
+SETTINGS_FILENAME = begin
+  ProfanitySettings.resolve_template(
+    char: cli_options[:config] || cli_options[:char],
+    template: cli_options[:template],
+    settings_file: cli_options[:settings_file],
+    app_dir: File.dirname(__FILE__)
+  )
+rescue ProfanitySettings::NotFoundError => e
+  $stderr.puts e.message
+  exit 1
+end
 
 # Log file path chosen by {ProfanitySettings.resolve_log}.
 LOG_FILE = ProfanitySettings.resolve_log(

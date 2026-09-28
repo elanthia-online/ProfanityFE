@@ -33,20 +33,35 @@ RSpec.describe CliOptions do
     end
   end
 
-  describe '.parse_or_exit' do
-    it 'prints a one-line error and a usage hint to stderr and exits 1 on a bad option' do
-      status = nil
-      expect do
-        described_class.parse_or_exit(['--bogus'], program: 'profanity.rb')
-      rescue SystemExit => e
-        status = e.status
-      end.to output("profanity.rb: invalid option: --bogus\n" \
-                    "Try 'profanity.rb --help' for the list of options.\n").to_stderr
-      expect(status).to eq(1)
+  describe '.parse_command_line' do
+    # profanity.rb prints the message and exits 1; the parser itself prints
+    # nothing and doesn't exit.
+    it 'raises UsageError with a one-line error and a usage hint on a bad option' do
+      expect { described_class.parse_command_line(['--bogus'], program: 'profanity.rb') }
+        .to raise_error(described_class::UsageError,
+                        "profanity.rb: invalid option: --bogus\n" \
+                        "Try 'profanity.rb --help' for the list of options.")
+        .and output('').to_stderr
+    end
+
+    it 'raises UsageError for an invalid value, a missing argument and an ambiguous abbreviation' do
+      {
+        ['--port=abc'] => 'profanity.rb: invalid argument: --port=abc',
+        ['--port']     => 'profanity.rb: missing argument: --port',
+        ['--p']        => 'profanity.rb: ambiguous option: --p',
+      }.each do |argv, first_line|
+        expect { described_class.parse_command_line(argv, program: 'profanity.rb') }
+          .to raise_error(described_class::UsageError, /\A#{Regexp.escape(first_line)}\n/)
+      end
+    end
+
+    it 'names the running program by default' do
+      expect { described_class.parse_command_line(['--bogus']) }
+        .to raise_error(described_class::UsageError, /\A#{Regexp.escape(File.basename($PROGRAM_NAME))}: invalid option/)
     end
 
     it 'returns the options when the command line is valid' do
-      expect(described_class.parse_or_exit(['--port=9000'])[:port]).to eq(9000)
+      expect(described_class.parse_command_line(['--port=9000'])[:port]).to eq(9000)
     end
   end
 end
@@ -107,6 +122,14 @@ RSpec.describe 'profanity.rb command line' do
 
     expect(status).to eq(1)
     expect(output).to include('Settings file not found: /nonexistent/profanity.xml')
+    expect(output).not_to include("\e")
+  end
+
+  it 'reports a missing template on the normal terminal and exits 1' do
+    output, status = run_client('--template=NoSuch.xml')
+
+    expect(status).to eq(1)
+    expect(output).to include("Template not found: #{File.join(repo, 'templates', 'NoSuch.xml')}")
     expect(output).not_to include("\e")
   end
 
