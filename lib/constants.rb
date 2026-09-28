@@ -56,7 +56,5 @@ PRESET         = CONFIG.preset
 LAYOUT         = CONFIG.layout
 # Alias of {Config#scroll_window} (the same object).
 SCROLL_WINDOW  = CONFIG.scroll_window
-# Alias of {Config#room_objects} (the same object).
-ROOM_OBJECTS   = CONFIG.room_objects
 # Alias of {Config#perc_transforms} (the same object).
 PERC_TRANSFORMS = CONFIG.perc_transforms

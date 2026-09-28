@@ -2,9 +2,9 @@
 
 # Centralized mutable configuration for ProfanityFE.
 #
-# Owns all runtime-mutable state that was previously spread across 6
+# Owns all runtime-mutable state that was previously spread across 5
 # global constants (HIGHLIGHT, PRESET, LAYOUT, SCROLL_WINDOW,
-# ROOM_OBJECTS, PERC_TRANSFORMS) and a global mutex (SETTINGS_LOCK).
+# PERC_TRANSFORMS) and a global mutex (SETTINGS_LOCK).
 #
 # The existing global constants are aliased to this object's internal
 # hashes/arrays in constants.rb, so all existing code continues to
@@ -13,9 +13,6 @@
 #
 # @example Reset all mutable state (e.g., between tests)
 #   CONFIG.reset!
-#
-# @example Reset only dynamic settings (e.g., during hot-reload)
-#   CONFIG.reset_dynamic!
 class Config
   # Stream that notifier notes (script STATUS, almanac, empath, etc.) go to
   # unless <notification-stream> overrides it.
@@ -37,9 +34,6 @@ class Config
   # @return [Array<BaseWindow>] ordered list of scrollable windows for Ctrl+W cycling
   attr_reader :scroll_window
 
-  # @return [Array<String>] current room creatures/objects for highlighting
-  attr_reader :room_objects
-
   # @return [Array<Array(Regexp, String)>] percWindow text transformations [pattern, replacement]
   attr_reader :perc_transforms
 
@@ -59,7 +53,6 @@ class Config
     @preset = {}
     @layout = {}
     @scroll_window = []
-    @room_objects = []
     @perc_transforms = []
     @notification_stream = DEFAULT_NOTIFICATION_STREAM
     @history_size = DEFAULT_HISTORY_SIZE
@@ -75,21 +68,6 @@ class Config
       @preset.clear
       @layout.clear
       @scroll_window.clear
-      @room_objects.clear
-      @perc_transforms.clear
-      @notification_stream = DEFAULT_NOTIFICATION_STREAM
-      @history_size = DEFAULT_HISTORY_SIZE
-    end
-  end
-
-  # Clear only settings that are refreshed during hot-reload
-  # (highlights, perc-transforms, notification-stream, history-size). Presets
-  # and layouts are preserved.
-  #
-  # @return [void]
-  def reset_dynamic!
-    @lock.synchronize do
-      @highlight.clear
       @perc_transforms.clear
       @notification_stream = DEFAULT_NOTIFICATION_STREAM
       @history_size = DEFAULT_HISTORY_SIZE

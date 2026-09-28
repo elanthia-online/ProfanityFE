@@ -270,13 +270,6 @@ class BaseWindow < Curses::Window
     []
   end
 
-  # Number of lines in the buffer.
-  #
-  # @return [Integer]
-  def buffer_line_count
-    buffer_content.length
-  end
-
   # @return [Array<Integer>, nil] [line_id, x] where the selection begins
   #   (line_id is a stable buffer line ID — see {AnchoredSelection})
   attr_accessor :selection_start
@@ -313,21 +306,6 @@ class BaseWindow < Curses::Window
   # @return [Boolean] true if the view actually scrolled
   def drag_auto_scroll(_rel_y)
     false
-  end
-
-  # Whether text is currently selected in this window.
-  #
-  # @return [Boolean]
-  def has_selection?
-    !@selection_start.nil? && !@selection_end.nil?
-  end
-
-  # Clear the current text selection.
-  #
-  # @return [void]
-  def clear_selection
-    @selection_start = nil
-    @selection_end = nil
   end
 
   # Set the selection range and trigger a highlight redraw if supported.

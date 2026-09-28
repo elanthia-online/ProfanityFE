@@ -72,18 +72,6 @@ module ProfanitySettings
     end
   end
 
-  # Parse an XML settings file. Thread-safe — reads and parses
-  # under the same lock to prevent concurrent mutation.
-  #
-  # @param path [String] full path to XML file
-  # @return [REXML::Element] the root element
-  def self.from_xml(path)
-    @lock.synchronize do
-      bin = File.read(path)
-      REXML::Document.new(bin).root
-    end
-  end
-
   # Resolve the template/settings file path using EO-compatible logic.
   #
   # Search order for --char=Name:

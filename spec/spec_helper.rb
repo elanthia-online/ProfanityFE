@@ -147,7 +147,6 @@ HIGHLIGHT       = CONFIG.highlight
 PRESET          = CONFIG.preset
 LAYOUT          = CONFIG.layout
 SCROLL_WINDOW   = CONFIG.scroll_window
-ROOM_OBJECTS    = CONFIG.room_objects
 PERC_TRANSFORMS = CONFIG.perc_transforms
 
 # ---------------------------------------------------------------------------

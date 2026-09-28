@@ -74,8 +74,7 @@ module LinkExtractor
           end: tag_start + link_text.length,
           fg: preset[0],
           bg: preset[1],
-          cmd: cmd,
-          priority: 2
+          cmd: cmd
         })
       end
     else
