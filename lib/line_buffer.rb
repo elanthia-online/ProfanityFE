@@ -18,7 +18,7 @@ require_relative 'anchored_selection'
 # the rows below a tab bar.
 #
 # Pure data: no curses calls, so it can be tested headless. Drawing is
-# the window's job.
+# the window's job (see {LineBuffered}).
 class LineBuffer
   # @return [Array<Array(String, Array<Hash>, Boolean)>] the stored lines,
   #   newest first
