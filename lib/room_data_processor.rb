@@ -2,6 +2,7 @@
 
 require_relative 'xml_tokenizer'
 require_relative 'streams'
+require_relative 'presets'
 
 =begin
 Room data capture and assembly for RoomWindow.
@@ -237,11 +238,11 @@ module RoomDataProcessor
   # @param offset [Integer] left strip offset applied to produce clean text
   # @return [Array<String>] creature names
   def extract_sax_creatures(text, offset = 0)
-    monsterbold = PRESET['monsterbold']
+    monsterbold = Presets.colors(Presets::MONSTERBOLD)
     return [] unless monsterbold
 
     stripped = text.strip
-    @line_colors.select { |c| c[:fg] == monsterbold[0] && c[:bg] == monsterbold[1] && !c[:cmd] }
+    @line_colors.select { |c| c[:fg] == monsterbold[:fg] && c[:bg] == monsterbold[:bg] && !c[:cmd] }
                 .filter_map { |c| stripped[(c[:start] - offset)...(c[:end] - offset)]&.strip }
                 .reject(&:empty?)
                 .uniq
@@ -283,11 +284,11 @@ module RoomDataProcessor
   def extract_styled_desc(raw_line)
     segments = XmlTokenizer.tokenize(raw_line)
     # DR: <style id="roomDesc"/>...content...<style id=""/> (or the line's end)
-    desc = text_between(segments, ->(tag) { id_tag?(tag, 'style', 'roomDesc') }, ->(tag) { id_tag?(tag, 'style', '') })
+    desc = text_between(segments, ->(tag) { id_tag?(tag, 'style', Presets::ROOM_DESC) }, ->(tag) { id_tag?(tag, 'style', '') })
     return desc if desc
 
     # GS/alt: <preset id='roomDesc'>...content...</preset>
-    text_between(segments, ->(tag) { id_tag?(tag, 'preset', 'roomDesc') && !tag.end_with?('/>') },
+    text_between(segments, ->(tag) { id_tag?(tag, 'preset', Presets::ROOM_DESC) && !tag.end_with?('/>') },
                  ->(tag) { tag == '</preset>' }, close_required: true)
   end
 
