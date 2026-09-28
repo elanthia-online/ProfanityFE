@@ -67,6 +67,8 @@ class BaseWindow < Curses::Window
   # scrolls up one row and the new line takes the bottom row. Every buffer
   # line, blank ones included, gets its own row, so rows keep matching the
   # row-to-line mapping of {AnchoredSelection} used for selection and links.
+  # A text area with no rows (a one-row tabbed window is all tab bar)
+  # draws nothing.
   #
   # @param line [String] the new line
   # @param line_colors [Array<Hash>] color regions for the line
@@ -75,6 +77,8 @@ class BaseWindow < Curses::Window
   # @param height [Integer] number of rows in the text area
   # @return [void]
   protected def draw_newest_line(line, line_colors, buffer_length, top, height)
+    return unless height.positive?
+
     scrl(1) if buffer_length > height
     setpos(top + [buffer_length, height].min - 1, 0)
     clrtoeol
