@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'xml_tokenizer'
+require_relative 'presets'
 
 # Shared link tag parsing for <d> (DR) and <a> (GS) clickable elements.
 #
@@ -62,7 +63,11 @@ module LinkExtractor
     clean_text.gsub!(%r{<(?!/?[ad][\s>])[^>]+>}, '')
 
     if links_enabled
-      preset = link_preset || PRESET['links'] || DEFAULT_LINK_COLOR
+      colors = if link_preset
+                 { fg: link_preset[0], bg: link_preset[1] }
+               else
+                 Presets.colors(Presets::LINKS, DEFAULT_LINK_COLOR)
+               end
       while (m = clean_text.match(%r{<([ad])\s?([^>]*)>(.*?)</\1>}))
         tag_start = m.begin(0)
         attrs = m[2]
@@ -75,8 +80,8 @@ module LinkExtractor
         line_colors.push({
           start: tag_start,
           end: tag_start + link_text.length,
-          fg: preset[0],
-          bg: preset[1],
+          fg: colors[:fg],
+          bg: colors[:bg],
           cmd: cmd
         })
       end

@@ -12,6 +12,7 @@ require_relative 'tag_handlers'
 require_relative 'styled_text'
 require_relative 'event_bus'
 require_relative 'streams'
+require_relative 'presets'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -640,9 +641,8 @@ class GameTextProcessor
               @line_colors.push(run) unless @line_colors.include?(run)
             end
 
-            if PRESET[@current_stream]
-              @line_colors.push(start: 0, fg: PRESET[@current_stream][0], bg: PRESET[@current_stream][1],
-                                end: text.length)
+            if (colors = Presets.colors(@current_stream))
+              @line_colors.push(start: 0, **colors, end: text.length)
             end
           end
           unless text =~ /^\[server\]: "(?:kill|connect)/
@@ -657,9 +657,8 @@ class GameTextProcessor
           if Streams::TIMESTAMPED_IN_MAIN.include?(@current_stream) && SPEECH_TS
             text = append_speech_timestamp(text)
           end
-          if PRESET[@current_stream]
-            @line_colors.push(start: 0, fg: PRESET[@current_stream][0], bg: PRESET[@current_stream][1],
-                              end: text.length)
+          if (colors = Presets.colors(@current_stream))
+            @line_colors.push(start: 0, **colors, end: text.length)
           end
           unless text.empty?
             # Detect movement in stream content too

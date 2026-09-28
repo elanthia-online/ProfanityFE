@@ -4,6 +4,7 @@ require 'uri'
 require_relative 'xml_tokenizer'
 require_relative 'link_extractor'
 require_relative 'streams'
+require_relative 'presets'
 
 # Tag dispatch and handler methods for game server XML processing.
 #
@@ -293,10 +294,8 @@ module TagHandlers
   # Handle <pushBold/> or <b> tag. Opens a monster bold color region.
   def handle_push_bold(_xml, text_buffer)
     h = { start: text_buffer.length }
-    if PRESET['monsterbold']
-      h[:fg] = PRESET['monsterbold'][0]
-      h[:bg] = PRESET['monsterbold'][1]
-    end
+    colors = Presets.colors(Presets::MONSTERBOLD)
+    h.merge!(colors) if colors
     @open_monsterbold.push(h)
   end
 
@@ -313,15 +312,13 @@ module TagHandlers
     return if xml.end_with?('/>') # an empty preset has nothing to color
     return unless (preset_id = XmlTokenizer.attrs(xml)['id'])
 
-    if preset_id == 'roomDesc' && @wm.room[Streams::ROOM]
+    if preset_id == Presets::ROOM_DESC && @wm.room[Streams::ROOM]
       flush_text_buffer(text_buffer)
       @room_capture_mode = :desc
     end
     h = { start: text_buffer.length }
-    if PRESET[preset_id]
-      h[:fg] = PRESET[preset_id][0]
-      h[:bg] = PRESET[preset_id][1]
-    end
+    colors = Presets.colors(preset_id)
+    h.merge!(colors) if colors
     @open_preset.push(h)
   end
 
@@ -379,12 +376,10 @@ module TagHandlers
     else
       # Non-empty id = opening style
       @open_style = { start: text_buffer.length }
-      if PRESET[style_id]
-        @open_style[:fg] = PRESET[style_id][0]
-        @open_style[:bg] = PRESET[style_id][1]
-      end
-      @room_capture_mode = :title if style_id == 'roomName'
-      @room_capture_mode = :desc if style_id == 'roomDesc' && @wm.room[Streams::ROOM]
+      colors = Presets.colors(style_id)
+      @open_style.merge!(colors) if colors
+      @room_capture_mode = :title if style_id == Presets::ROOM_NAME
+      @room_capture_mode = :desc if style_id == Presets::ROOM_DESC && @wm.room[Streams::ROOM]
     end
   end
 
@@ -507,8 +502,8 @@ module TagHandlers
     # window), so these extra color regions don't affect other windows.
     return unless @state.blue_links || @current_stream&.start_with?(Streams::ROOM)
 
-    preset = PRESET['links'] || LinkExtractor::DEFAULT_LINK_COLOR
-    link = { start: text_buffer.length, fg: preset[0], bg: preset[1] }
+    colors = Presets.colors(Presets::LINKS, LinkExtractor::DEFAULT_LINK_COLOR)
+    link = { start: text_buffer.length, fg: colors[:fg], bg: colors[:bg] }
     link[:cmd] = LinkExtractor.extract_cmd(xml)
     @open_link.push(link)
   end

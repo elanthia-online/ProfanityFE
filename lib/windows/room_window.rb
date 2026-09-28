@@ -2,6 +2,7 @@
 
 require_relative '../link_extractor'
 require_relative '../streams'
+require_relative '../presets'
 
 # Dedicated room display with atomic updates and creature highlighting.
 
@@ -254,13 +255,8 @@ class RoomWindow < BaseWindow
   def render_section(text, preset_name)
     line_colors = []
 
-    if preset_name && PRESET[preset_name]
-      line_colors.push({
-        start: 0,
-        end: text.length,
-        fg: PRESET[preset_name][0],
-        bg: PRESET[preset_name][1]
-      })
+    if preset_name && (colors = Presets.colors(preset_name))
+      line_colors.push({ start: 0, end: text.length, **colors })
     end
 
     HighlightProcessor.apply_highlights(text, line_colors)
@@ -277,13 +273,8 @@ class RoomWindow < BaseWindow
   def render_section_with_links(text, links, preset_name)
     line_colors = build_link_colors(links)
 
-    if preset_name && PRESET[preset_name]
-      line_colors.push({
-        start: 0,
-        end: text.length,
-        fg: PRESET[preset_name][0],
-        bg: PRESET[preset_name][1]
-      })
+    if preset_name && (colors = Presets.colors(preset_name))
+      line_colors.push({ start: 0, end: text.length, **colors })
     end
 
     HighlightProcessor.apply_highlights(text, line_colors)
@@ -298,20 +289,15 @@ class RoomWindow < BaseWindow
     line_colors = build_link_colors(@objects_links)
 
     # Highlight creatures with monsterbold preset
-    preset_name = @creatures_preset || 'monsterbold'
-    if PRESET[preset_name]
+    preset_name = @creatures_preset || Presets::MONSTERBOLD
+    if (colors = Presets.colors(preset_name))
       @extracted_creatures.each do |creature|
         # Whole words only ("rat" not inside "pirate"); apostrophes and
         # hyphens count as part of a word, as in "Adan'f" or "void-black".
         whole_word = /(?<![[:word:]'-])#{Regexp.escape(creature)}(?![[:word:]'-])/
         pos = 0
         while (idx = @objects.index(whole_word, pos))
-          line_colors.push({
-            start: idx,
-            end: idx + creature.length,
-            fg: PRESET[preset_name][0],
-            bg: PRESET[preset_name][1]
-          })
+          line_colors.push({ start: idx, end: idx + creature.length, **colors })
           pos = idx + creature.length
         end
       end
@@ -357,13 +343,13 @@ class RoomWindow < BaseWindow
   def build_link_colors(links)
     return [] unless @links_enabled && links&.any?
 
-    preset = PRESET['links'] || LinkExtractor::DEFAULT_LINK_COLOR
+    colors = Presets.colors(Presets::LINKS, LinkExtractor::DEFAULT_LINK_COLOR)
     links.map do |link|
       {
         start: link[:start],
         end: link[:end],
-        fg: preset[0],
-        bg: preset[1],
+        fg: colors[:fg],
+        bg: colors[:bg],
         cmd: link[:cmd]
       }
     end
@@ -400,9 +386,9 @@ BaseWindow.register_type('room') do |height, width, top, left, element, wm|
   window = RoomWindow.new(height, width, top, left)
   window.layout = [element.attributes['height'], element.attributes['width'], element.attributes['top'], element.attributes['left']]
   window.scrollok(false)
-  window.title_preset = element.attributes['title-preset'] || 'roomName'
+  window.title_preset = element.attributes['title-preset'] || Presets::ROOM_NAME
   window.desc_preset = element.attributes['desc-preset']
-  window.creatures_preset = element.attributes['creatures-preset'] || 'monsterbold'
+  window.creatures_preset = element.attributes['creatures-preset'] || Presets::MONSTERBOLD
   wm.room[Streams::ROOM] = window
   window
 end

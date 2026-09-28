@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'presets'
+
 =begin
 Familiar window notification extraction.
 Detects notable game events and sends summary notifications to the configured notification stream (familiar by default).
@@ -31,13 +33,8 @@ module FamiliarNotifier
     note = extract_notification(text)
     return unless note
 
-    colors = if PRESET['monsterbold']
-               [{
-                 start: 0,
-                 end: note.length,
-                 fg: PRESET['monsterbold'][0],
-                 bg: PRESET['monsterbold'][1]
-               }]
+    colors = if (monsterbold = Presets.colors(Presets::MONSTERBOLD))
+               [{ start: 0, end: note.length, **monsterbold }]
              else
                []
              end
