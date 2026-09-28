@@ -13,6 +13,35 @@ require_relative 'line_buffered'
 class TextWindow < BaseWindow
   include LineBuffered
 
+  # The layout's last column holds the scrollbar.
+  #
+  # @return [Integer]
+  def self.right_margin
+    1
+  end
+
+  # Text windows are resized first (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    10
+  end
+
+  # Fit every text window to the current terminal size. Resizing clears
+  # each window's scrollbar (and marks the window inactive); only the
+  # first text window moved gets its scrollbar drawn again.
+  #
+  # @return [void]
+  def self.resize_all
+    scrollbar_shown = false
+    list.to_a.each do |window|
+      next unless window.move_to_layout
+
+      window.redraw_after_resize(show_scrollbar: !scrollbar_shown)
+      scrollbar_shown = true
+    end
+  end
+
   # Create a new scrollable text window.
   #
   # @param args [Array] arguments forwarded to {BaseWindow#initialize}
@@ -56,6 +85,23 @@ class TextWindow < BaseWindow
     @line_buffer.newest_text?(prompt_text)
   end
 
+  # Show the window again after {#move_to_layout} moved it: move its
+  # scrollbar beside it, re-wrap every line to the new width, repaint the
+  # text and clear the scrollbar.
+  #
+  # @param show_scrollbar [Boolean] draw the scrollbar again after
+  #   clearing it
+  # @return [void]
+  # @api private
+  def redraw_after_resize(show_scrollbar: true)
+    fit_scrollbar
+    rewrap
+    repaint
+    clear_scrollbar
+    update_scrollbar if show_scrollbar
+    noutrefresh
+  end
+
   # The window's one buffer, always shown.
   #
   # @return [LineBuffer]
@@ -82,8 +128,8 @@ BaseWindow.register_type('text') do |height, width, top, left, element, wm|
     wm.previous_stream.delete_if { |_stream, old| old.equal?(window) }
     wm.old_windows.delete(window)
   else
-    window = TextWindow.new(height, width - 1, top, left)
-    window.scrollbar = Curses::Window.new(window.maxy, 1, window.begy, window.begx + window.maxx)
+    window = TextWindow.new(height, width - TextWindow.right_margin, top, left)
+    window.add_scrollbar
   end
   window.scrollok(true)
   window.max_buffer_size = element.attributes['buffer-size'] || 1000

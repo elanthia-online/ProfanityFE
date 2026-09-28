@@ -365,10 +365,13 @@ class WindowManager
 
   # Resize all windows to match the current terminal dimensions.
   #
-  # Iterates every managed window class (text, indicator, progress,
-  # countdown, command) and recalculates positions and sizes from the
-  # stored layout expressions. Triggers a full Curses screen update
-  # afterward.
+  # Every registered window class ({BaseWindow.window_classes}), in
+  # {BaseWindow.window_classes_in_resize_order}, resizes its own windows
+  # ({BaseWindow.resize_all}): each is placed from its stored layout
+  # expressions and redrawn as its class needs. Then the command window
+  # is placed from its layout. Triggers a full Curses screen update
+  # afterward. Nothing is resized while the terminal is under 3 lines or
+  # 10 columns.
   #
   # Text and tabbed windows re-wrap their stored lines, every tab's, to
   # the new width and repaint (see {LineBuffered#rewrap}).
@@ -391,49 +394,10 @@ class WindowManager
       # when the terminal is large enough.
       return if Curses.lines < 3 || Curses.cols < 10
 
-      first_text_window = true
-      TextWindow.list.to_a.each do |win|
-        next unless win.layout.place(win, right_margin: 1)
-        win.scrollbar.resize([win.maxy, 1].max, 1)
-        win.scrollbar.move(win.begy, win.begx + win.maxx)
-        win.rewrap
-        win.repaint
-        win.clear_scrollbar
-        if first_text_window
-          win.update_scrollbar
-          first_text_window = false
-        end
-        win.noutrefresh
-      end
-
-      TabbedTextWindow.list.to_a.each do |win|
-        next unless win.layout.place(win, right_margin: 1)
-        if win.scrollbar
-          win.scrollbar.resize([win.maxy, 1].max, 1)
-          win.scrollbar.move(win.begy, win.begx + win.maxx)
-        end
-        win.rewrap
-        win.clear_scrollbar
-        win.redraw
-        win.noutrefresh
-      end
-
-      # The exp and spell builders leave the layout's last column unused;
-      # keep that margin so these windows don't widen on resize.
-      { ExpWindow => 1, PercWindow => 1, RoomWindow => 0 }.each do |klass, right_margin|
-        klass.list.to_a.each do |win|
-          next unless win.layout.place(win, right_margin: right_margin)
-          win.redraw
-          win.noutrefresh
-        end
-      end
-
-      [IndicatorWindow, ProgressWindow, CountdownWindow].each do |klass|
-        klass.list.to_a.each do |win|
-          next unless win.layout.place(win)
-          win.noutrefresh
-        end
-      end
+      # Each window class moves and redraws its own windows (see
+      # BaseWindow.resize_all), in a fixed order: where windows overlap,
+      # the one resized last shows.
+      BaseWindow.window_classes_in_resize_order.each(&:resize_all)
 
       if @command_window && @command_window_layout && @command_window_layout.place(@command_window)
         @command_window.noutrefresh

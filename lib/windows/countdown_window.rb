@@ -8,6 +8,13 @@
 # time offset. Renders a color-coded bar with primary and secondary
 # countdown regions, updating only when the displayed value changes.
 class CountdownWindow < BaseWindow
+  # Resized after progress bars (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    80
+  end
+
   # Default background colors: [inactive, primary countdown, secondary countdown]
   DEFAULT_BG = [nil, 'ff0000', '0000ff'].freeze
 

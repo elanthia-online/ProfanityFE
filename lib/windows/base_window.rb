@@ -546,6 +546,64 @@ class BaseWindow < Curses::Window
     BaseWindow.register_window_class(subclass)
   end
 
+  # --- Resizing (driven by WindowManager#resize, per registered class) ---
+
+  # Columns of the layout's width the window leaves unused at its right
+  # edge, both when it is built and when it is resized. Default: none.
+  #
+  # @return [Integer]
+  def self.right_margin
+    0
+  end
+
+  # Where this class comes when {WindowManager#resize} goes through the
+  # window classes: lower comes first, and classes with the same value go
+  # in the order they were defined. Windows that overlap show the one
+  # resized last. The built-in classes keep the order resize has always
+  # used; a class that doesn't choose comes after them.
+  #
+  # @return [Integer]
+  def self.resize_order
+    100
+  end
+
+  # Every registered window class, in the order {WindowManager#resize}
+  # resizes them (see {.resize_order}).
+  #
+  # @return [Array<Class>]
+  def self.window_classes_in_resize_order
+    window_classes.each_with_index.sort_by { |klass, index| [klass.resize_order, index] }.map(&:first)
+  end
+
+  # Fit every live window of this class to the current terminal size:
+  # move each to its layout and, if it moved, redraw it.
+  #
+  # @return [void]
+  def self.resize_all
+    list.to_a.each do |window|
+      window.redraw_after_resize if window.move_to_layout
+    end
+  end
+
+  # Size and place the window where its layout puts it on the current
+  # terminal, leaving the class's {.right_margin} unused.
+  #
+  # @return [Boolean] true if the window was moved, false if its layout
+  #   puts it off the screen and it was left as it is
+  # @api private
+  def move_to_layout
+    layout.place(self, right_margin: self.class.right_margin)
+  end
+
+  # Show the window again after {#move_to_layout} moved it. Default:
+  # copy it to the screen as it is, without redrawing its contents.
+  #
+  # @return [void]
+  # @api private
+  def redraw_after_resize
+    noutrefresh
+  end
+
   # Find the window instance whose screen bounds contain the given coordinates.
   #
   # @param screen_y [Integer] absolute screen row

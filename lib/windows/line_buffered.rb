@@ -130,6 +130,23 @@ module LineBuffered
     reset_scrollbar
   end
 
+  # Give the window its scrollbar: a one-column window just right of it,
+  # as tall as it is.
+  #
+  # @return [void]
+  def add_scrollbar
+    self.scrollbar = Curses::Window.new(maxy, 1, begy, begx + maxx)
+  end
+
+  # Move and size the scrollbar to the window after the window was
+  # resized: just right of it, as tall as it is (at least one row).
+  #
+  # @return [void]
+  def fit_scrollbar
+    scrollbar.resize([maxy, 1].max, 1)
+    scrollbar.move(begy, begx + maxx)
+  end
+
   # Resolve window-relative coordinates to a stable [line_id, x] anchor
   # in the shown buffer. The anchor stays glued to the same text as the
   # buffer grows or scrolls.

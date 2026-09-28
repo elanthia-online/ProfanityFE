@@ -8,6 +8,13 @@
 # value. Supports optional highlight overlays via +label_colors+.
 # Common uses: kneeling, hidden, stunned, bleeding status indicators.
 class IndicatorWindow < BaseWindow
+  # Resized after the room window, before progress bars and countdowns (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    60
+  end
+
   # Default foreground colors: [off state, on state]
   DEFAULT_FG = %w[444444 ffff00].freeze
 

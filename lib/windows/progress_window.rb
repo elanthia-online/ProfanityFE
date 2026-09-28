@@ -9,6 +9,13 @@
 # middle transition, right background, and zero-value) via the +fg+
 # and +bg+ arrays.
 class ProgressWindow < BaseWindow
+  # Resized after indicators (see {BaseWindow.resize_order}).
+  #
+  # @return [Integer]
+  def self.resize_order
+    70
+  end
+
   # Default background colors: [fill, empty]
   DEFAULT_BG = %w[0000aa 000055].freeze
 

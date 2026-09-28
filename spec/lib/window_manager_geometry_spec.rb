@@ -368,4 +368,27 @@ RSpec.describe WindowManager, '#resize geometry' do
       expect(wm.indicator['prompt'].rows).to eq ['H>']
     end
   end
+
+  # Adding a window class takes a class and a builder; WindowManager#resize
+  # finds it through the class registry.
+  describe 'a window class defined outside the window manager' do
+    let(:gauge_class) { Class.new(BaseWindow) }
+
+    before do
+      gauge = gauge_class
+      BaseWindow.register_type('gauge') { |height, width, top, left, _element, _wm| gauge.new(height, width, top, left) }
+    end
+
+    after { BaseWindow.type_registry.delete('gauge') }
+
+    it 'is moved and sized with the terminal' do
+      load("<window class='gauge' top='lines-2' left='cols/2' height='1' width='cols/2'/>")
+      gauge = gauge_class.list.first
+      expect(geometry(gauge)).to eq [22, 40, 1, 40]
+
+      resize_to(30, 100)
+
+      expect(geometry(gauge)).to eq [28, 50, 1, 50]
+    end
+  end
 end
