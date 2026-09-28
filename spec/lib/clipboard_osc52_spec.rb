@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'stringio'
+require_relative '../../lib/profanity_settings'
 require_relative '../../lib/selection_manager'
 
 # What the outer terminal receives from copy_to_clipboard's OSC 52 escape
@@ -31,11 +32,14 @@ RSpec.describe 'SelectionManager.copy_to_clipboard OSC 52 through a multiplexer'
     terminal_bytes.scan(/\e\]52;c;([A-Za-z0-9+\/=]*)(?:\a|\e\\)/).flatten.map { |b64| b64.unpack1('m0') }
   end
 
+  # copy_to_clipboard also writes ~/.profanity/selection.txt (HOME is
+  # sandboxed by spec_helper). Remove it, so no later example finds it.
   around do |example|
     saved_env = ENV.to_h
     example.run
   ensure
     ENV.replace(saved_env)
+    FileUtils.rm_f(ProfanitySettings.file('selection.txt'))
   end
 
   before do
@@ -43,7 +47,6 @@ RSpec.describe 'SelectionManager.copy_to_clipboard OSC 52 through a multiplexer'
     stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
     allow(File).to receive(:open).and_call_original
     allow(File).to receive(:open).with('/dev/tty', 'w').and_yield(tty)
-    allow(File).to receive(:write)
   end
 
   context 'under GNU screen' do
