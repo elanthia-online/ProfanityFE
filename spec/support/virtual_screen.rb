@@ -206,6 +206,8 @@ module Curses
 
     # --- Geometry ---
 
+    # Like wresize, keeps the scrolling region: trimmed to fit, and one
+    # that ended on the bottom row ends on the new bottom row.
     def resize(height, width)
       log(:resize, height, width)
       @cells = (0...height).map do |y|
@@ -213,11 +215,15 @@ module Curses
         line = line.first(width)
         line + blank_row(width - line.length)
       end
+      if @region
+        top, bottom = @region
+        bottom = height - 1 if bottom > height - 1 || bottom == @maxy - 1
+        @region = [[top, height - 1].min, bottom]
+      end
       @maxy = height
       @maxx = width
       @cury = [@cury, height - 1].min
       @curx = [@curx, width - 1].min
-      @region = nil
       nil
     end
 

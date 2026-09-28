@@ -162,6 +162,33 @@ class TabbedTextWindow < BaseWindow
     maxy - TAB_BAR_HEIGHT
   end
 
+  # Resize the window and set its scroll region to the text rows again.
+  # ncurses keeps a region across a resize (a region it refused, in a
+  # window of one or two rows, stays the whole window), so without this
+  # a window that grew would scroll its tab bar away with the text.
+  #
+  # @param height [Integer] new height in rows
+  # @param width [Integer] new width in columns
+  # @return [void]
+  def resize(height, width)
+    super
+    setscrreg(TAB_BAR_HEIGHT, maxy - 1)
+  end
+
+  # Scroll the text rows. ncurses refuses a scroll region of one row, so
+  # with a single text row the region is the whole window and scrolling
+  # it would move the tab bar too: blank that row instead, which is all
+  # scrolling a one-row region does, and let the caller redraw it.
+  #
+  # @param lines [Integer] rows to scroll (negative = down)
+  # @return [void]
+  def scrl(lines)
+    return super unless content_height == 1
+
+    setpos(content_top, 0)
+    clrtoeol
+  end
+
   # Route text to the appropriate tab based on stream name.
   # Falls back to the active tab (or "main") when the stream has no
   # dedicated tab.
@@ -275,6 +302,13 @@ class TabbedTextWindow < BaseWindow
     shown = text[0, [room, 0].max]
     attron(attrs) { addstr(shown) } unless shown.empty?
     room - shown.length
+  end
+
+  # Every tab's buffer.
+  #
+  # @return [Array<LineBuffer>]
+  private def line_buffers
+    @tab_buffers.values
   end
 end
 

@@ -100,6 +100,42 @@ RSpec.describe TabbedTextWindow do
     expect(text_rows).to eq ['l1', '', 'l2']
   end
 
+  context 'when the window is two rows high' do
+    # One text row below the tab bar. ncurses refuses a scroll region of
+    # one row. The height follows the terminal (24 rows in specs), so a
+    # resize can make the window taller.
+    let(:window_manager) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='tabbed' top='0' left='0' height='lines-22' width='12' tabs='main'/></layout>
+      XML
+      WindowManager.new.tap { |manager| manager.load_layout('test') }
+    end
+    let(:window) { window_manager.stream['main'] }
+
+    before { %w[l1 l2 l3].each { |line| window.add_string(line) } }
+
+    it 'keeps the tab bar and shows the newest line as lines arrive' do
+      expect(window.rows).to eq [' 1:main', 'l3']
+    end
+
+    it 'keeps the tab bar when scrolled back and forward' do
+      window.scroll(-1)
+      expect(window.rows).to eq [' 1:main', 'l2']
+
+      window.scroll(1)
+      expect(window.rows).to eq [' 1:main', 'l3']
+    end
+
+    it 'keeps the tab bar as lines arrive once a resize makes the window taller' do
+      allow(Curses).to receive(:lines).and_return(26)
+      window_manager.resize(nil)
+
+      %w[l4 l5 l6].each { |line| window.add_string(line) }
+
+      expect(window.rows).to eq [' 1:main', 'l4', 'l5', 'l6']
+    end
+  end
+
   it 'removes the reverse-video highlight from the text when the selection is cleared' do
     %w[l1 l2 l3].each { |line| window.add_string(line) }
     line_id, = window.selection_anchor_at(2, 0)

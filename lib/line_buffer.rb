@@ -66,13 +66,25 @@ class LineBuffer
     @cap = val.to_i
   end
 
-  # Set the width lines added from now on are wrapped to. Lines already
-  # stored keep their rows.
+  # Re-wrap every stored line to a new width, rebuilding the rows. The
+  # logical line on the row at {#pos} (the bottom row of a full text
+  # area) stays there: {#pos} moves to its last row. The rebuilt rows get
+  # new IDs, so anchors to the old rows match nothing. Does nothing when
+  # the width is unchanged.
   #
   # @param val [Integer] new width in columns
   # @return [void]
   def width=(val)
+    return if val == @width
+
+    bottom = logical_index_at_row(@pos)
     @width = val
+    @lines = []
+    @logical.reverse_each do |entry|
+      entry[2] = add_rows(entry[0], entry[1])
+    end
+    @lines_appended += @lines.length
+    @pos = bottom ? @logical.first(bottom).sum { |entry| entry[2] } : 0
   end
 
   # Add a logical line at the newest end, wrapped to {#width}, and evict
@@ -86,12 +98,11 @@ class LineBuffer
   # @return [Integer] number of rows the line was wrapped to
   def push(text, colors, indent:)
     styled = StyledText.new(text, colors)
-    rows = styled.wrap(@width, indent: indent)
-    rows.each_with_index { |row, idx| @lines.unshift([row.text, row.runs, idx.positive?]) }
-    @lines_appended += rows.length
-    @logical.unshift([styled, indent, rows.length])
+    count = add_rows(styled, indent)
+    @lines_appended += count
+    @logical.unshift([styled, indent, count])
     @lines.pop(@logical.pop[2]) if @logical.length > @cap
-    rows.length
+    count
   end
 
   # @return [Integer] number of stored rows
@@ -192,5 +203,31 @@ class LineBuffer
 
     recent_line = @lines.find { |entry| entry[0] && !entry[0].empty? }
     recent_line && recent_line[0] == text
+  end
+
+  private
+
+  # Wrap a logical line to {#width} and add its rows at the newest end.
+  #
+  # @param styled [StyledText] the line
+  # @param indent [Boolean] whether continuation rows are indented
+  # @return [Integer] number of rows added
+  def add_rows(styled, indent)
+    rows = styled.wrap(@width, indent: indent)
+    rows.each_with_index { |row, idx| @lines.unshift([row.text, row.runs, idx.positive?]) }
+    rows.length
+  end
+
+  # Index (newest first) of the logical line a row belongs to.
+  #
+  # @param row_index [Integer] row index, newest first
+  # @return [Integer, nil] logical line index, or nil past the oldest row
+  def logical_index_at_row(row_index)
+    rows = 0
+    @logical.each_with_index do |entry, index|
+      rows += entry[2]
+      return index if row_index < rows
+    end
+    nil
   end
 end
