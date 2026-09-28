@@ -390,6 +390,64 @@ RSpec.describe Application do
       expect(server.string).to include('look')
     end
 
+    context 'with an unsent draft stashed by the up arrow' do
+      let(:server) { StringIO.new }
+      let(:screen) { ScreenLineWindow.new(20) }
+
+      before do
+        app.instance_variable_set(:@server, server)
+        app.cmd_buffer.window = screen
+      end
+
+      def type_and_send(str)
+        str.each_char { |ch| app.cmd_buffer.put_ch(ch) }
+        app.key_action['send_command'].call
+      end
+
+      # Type "draft", press up (the line shows "look"), press enter to
+      # resend "look", then send "exp1". The draft was never sent.
+      before do
+        type_and_send('look')
+        'draft'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
+        app.key_action['previous_command'].call
+        app.key_action['send_command'].call
+        type_and_send('exp1')
+        server.truncate(0)
+        server.rewind
+      end
+
+      it 'send_second_last_command sends the second-last sent line, not the draft' do
+        app.key_action['send_second_last_command'].call
+        expect(server.string).to eq "look\n"
+      end
+
+      it 'send_last_command sends the last sent line' do
+        app.key_action['send_last_command'].call
+        expect(server.string).to eq "exp1\n"
+      end
+
+      it 'the up arrow recalls only sent lines' do
+        recalled = Array.new(3) do
+          app.key_action['previous_command'].call
+          screen.visible
+        end
+        expect(recalled).to eq %w[exp1 look look]
+      end
+    end
+
+    it 'autocomplete does not complete from an unsent draft' do
+      screen = ScreenLineWindow.new(20)
+      app.cmd_buffer.window = screen
+      app.cmd_buffer.add_to_history('look')
+      'draft'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
+      app.key_action['previous_command'].call
+      app.key_action['next_command'].call
+      app.cmd_buffer.kill_line
+      'dr'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
+      app.key_action['autocomplete'].call
+      expect(screen.visible).to eq 'dr'
+    end
+
     it 'cursor actions delegate to cmd_buffer' do
       app.cmd_buffer.put_ch('a')
       app.cmd_buffer.put_ch('b')

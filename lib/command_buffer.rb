@@ -70,6 +70,7 @@ class CommandBuffer
     @window             = nil
     @history            = []
     @history_pos        = 0
+    @draft              = nil
     @min_history_length = min_history_length
     @kill               = KillRing.new
   end
@@ -310,14 +311,22 @@ class CommandBuffer
   # -------------------------------------------------------------------
 
   # Navigate to the previous (older) command in history.
-  # Saves the current buffer text at the current history position before
-  # moving. No-op when already at the oldest entry.
+  #
+  # Leaving the bottom of history (position 0) saves the unsent buffer
+  # text as the draft, outside the history list, so it can be restored
+  # by {#next_command} but is never sent or recalled as a history entry.
+  # Leaving a recalled entry saves any edits back into that entry.
+  # No-op when already at the oldest entry.
   #
   # @return [void]
   def previous_command
     return unless @window && @history_pos < (@history.length - 1)
 
-    @history[@history_pos] = @text.dup
+    if @history_pos == 0
+      @draft = @text.dup
+    else
+      @history[@history_pos] = @text.dup
+    end
     @history_pos += 1
     @text = @history[@history_pos].dup
     @pos = @text.length
@@ -326,8 +335,10 @@ class CommandBuffer
   end
 
   # Navigate to the next (newer) command in history.
-  # When already at position 0 and the buffer is non-empty, pushes the
-  # current text into history and clears the buffer.
+  # Returning to position 0 restores the draft saved by
+  # {#previous_command}. When already at position 0 and the buffer is
+  # non-empty, pushes the current text into history and clears the
+  # buffer.
   #
   # @return [void]
   def next_command
@@ -346,7 +357,7 @@ class CommandBuffer
     else
       @history[@history_pos] = @text.dup
       @history_pos -= 1
-      @text = @history[@history_pos].dup
+      @text = @history_pos == 0 ? take_draft : @history[@history_pos].dup
       @pos = @text.length
       render
       @window.noutrefresh
@@ -375,12 +386,14 @@ class CommandBuffer
   # Save a command string to the history list.
   # Commands shorter than +min_history_length+ are skipped unless they
   # consist entirely of digits. Duplicate consecutive entries are
-  # suppressed. Resets +history_pos+ to 0.
+  # suppressed. Resets +history_pos+ to 0 and discards any draft saved
+  # by {#previous_command}.
   #
   # @param cmd [String] the command to record
   # @return [void]
   def add_to_history(cmd)
     @history_pos = 0
+    @draft = nil
     return unless (cmd.length >= @min_history_length || cmd.match?(/^\d+$/)) && (cmd != @history[1])
 
     if @history[0].nil? || @history[0].empty?
@@ -412,6 +425,16 @@ class CommandBuffer
   end
 
   private
+
+  # Return the saved draft and forget it.
+  #
+  # @return [String] the draft, or an empty string when none was saved
+  # @api private
+  def take_draft
+    draft = @draft || String.new
+    @draft = nil
+    draft
+  end
 
   # Delete the character at the given position in the buffer.
   # Removes the character from +@text+ only; the caller repaints.

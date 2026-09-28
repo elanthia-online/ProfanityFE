@@ -574,6 +574,82 @@ RSpec.describe CommandBuffer do
     end
   end
 
+  # An unsent line stashed by the up arrow is a draft: coming back down
+  # restores it, but it is never recalled or resent as a history entry.
+  describe 'unsent draft stashed by the up arrow' do
+    let(:screen) { ScreenLineWindow.new(20) }
+
+    before do
+      buf.window = screen
+      buf.add_to_history('look')
+    end
+
+    def send_line
+      buf.add_to_history(buf.clear_and_get)
+    end
+
+    def up_arrow_lines(count)
+      Array.new(count) do
+        buf.previous_command
+        screen.visible
+      end
+    end
+
+    it 'comes back when navigating down to the bottom' do
+      type('draft')
+      buf.previous_command
+      expect(screen.visible).to eq 'look'
+      buf.next_command
+      expect(screen.visible).to eq 'draft'
+      expect(screen.curx).to eq 5
+    end
+
+    it 'comes back after going several entries up and all the way down' do
+      buf.add_to_history('exp1')
+      type('draft')
+      2.times { buf.previous_command }
+      expect(screen.visible).to eq 'look'
+      2.times { buf.next_command }
+      expect(screen.visible).to eq 'draft'
+    end
+
+    it 'is not recalled after the recalled entry is sent and another line follows' do
+      type('draft')
+      buf.previous_command
+      send_line # sends "look"
+      type('exp1')
+      send_line
+      expect(up_arrow_lines(3)).to eq %w[exp1 look look]
+    end
+
+    it 'is not recalled after it is cleared and another line is sent' do
+      type('draft')
+      buf.previous_command
+      buf.next_command
+      buf.kill_line
+      type('exp1')
+      send_line
+      expect(up_arrow_lines(3)).to eq %w[exp1 look look]
+    end
+
+    it 'is not recalled after an edited recalled entry is sent' do
+      type('draft')
+      buf.previous_command
+      type(' me')
+      send_line # sends "look me"
+      expect(up_arrow_lines(3)).to eq ['look me', 'look', 'look']
+    end
+
+    it 'is discarded when a line is sent, so coming back down shows an empty line' do
+      type('draft')
+      buf.previous_command
+      send_line
+      buf.previous_command
+      buf.next_command
+      expect(screen.visible).to eq ''
+    end
+  end
+
   # ==================================================================
   # Buffer operations
   # ==================================================================
