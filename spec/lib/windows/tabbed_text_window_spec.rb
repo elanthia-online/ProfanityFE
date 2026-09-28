@@ -64,6 +64,75 @@ RSpec.describe TabbedTextWindow do
     expect(window.rows).to eq [' 1:main', 'l4', 'l5', 'l6']
   end
 
+  context 'when lines arrive for a tab the user is not viewing' do
+    # A wider window (the tab bar fits on its row) with a second tab.
+    let(:window) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='tabbed' top='0' left='0' height='4' width='24' tabs='main,combat'/></layout>
+      XML
+      window_manager = WindowManager.new
+      window_manager.load_layout('test')
+      window_manager.stream['main']
+    end
+
+    before do
+      %w[m1 m2 m3].each { |line| window.add_string_to_tab('main', line) }
+      %w[c1 c2 c3 c4 c5].each { |line| window.add_string_to_tab('combat', line) }
+    end
+
+    it 'keeps a scrolled-back tab in place, so it shows the same lines on switching back' do
+      window.switch_tab('combat')
+      window.scroll(-1)
+      window.switch_tab('main')
+
+      %w[c6 c7].each { |line| window.add_string_to_tab('combat', line) }
+      window.switch_tab('combat')
+
+      expect(text_rows).to eq %w[c2 c3 c4]
+    end
+
+    it 'keeps a live tab live, so it shows the newest lines on switching back' do
+      %w[c6 c7].each { |line| window.add_string_to_tab('combat', line) }
+      window.switch_tab('combat')
+
+      expect(text_rows).to eq %w[c5 c6 c7]
+    end
+
+    it 'leaves the shown tab on screen while a scrolled-back tab takes new lines' do
+      window.switch_tab('combat')
+      window.scroll(-1)
+      window.switch_tab('main')
+
+      %w[c6 c7].each { |line| window.add_string_to_tab('combat', line) }
+
+      expect(window.rows).to eq [' 1:main | 2:combat*', 'm1', 'm2', 'm3']
+    end
+
+    context 'when that tab is full and scrolled back to its oldest lines' do
+      # Same window, keeping only 6 lines per tab.
+      let(:window) do
+        LAYOUT['test'] = REXML::Document.new(<<~XML).root
+          <layout><window class='tabbed' top='0' left='0' height='4' width='24' tabs='main,combat' buffer-size='6'/></layout>
+        XML
+        window_manager = WindowManager.new
+        window_manager.load_layout('test')
+        window_manager.stream['main']
+      end
+
+      it 'moves the view past each evicted oldest line, as a shown tab does' do
+        window.add_string_to_tab('combat', 'c6')
+        window.switch_tab('combat')
+        window.scroll(-window.content_height)
+        window.switch_tab('main')
+
+        %w[c7 c8].each { |line| window.add_string_to_tab('combat', line) }
+        window.switch_tab('combat')
+
+        expect(text_rows).to eq %w[c3 c4 c5]
+      end
+    end
+  end
+
   context 'when the buffer is full and the user has scrolled back to its oldest lines' do
     # Same window, but keeping only 6 lines per tab.
     let(:window) do
