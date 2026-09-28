@@ -24,6 +24,62 @@ RSpec.describe TabbedTextWindow do
     window.rows.drop(TabbedTextWindow::TAB_BAR_HEIGHT)
   end
 
+  # @return [Array<Integer>] the tab-bar columns drawn in reverse video
+  def reverse_columns
+    (0...window.maxx).select { |x| window.attrs_at(0, x).anybits?(Curses::A_REVERSE) }
+  end
+
+  context 'when the tab bar is wider than the window' do
+    # The full bar, ' 1:main | 2:combat | 3:thoughts ', needs 32 columns;
+    # the window has 11.
+    let(:window) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='tabbed' top='0' left='0' height='4' width='12' tabs='main,combat,thoughts'/></layout>
+      XML
+      window_manager = WindowManager.new
+      window_manager.load_layout('test')
+      window_manager.stream['main']
+    end
+
+    before { %w[l1 l2 l3].each { |line| window.add_string(line) } }
+
+    it 'cuts the bar off at the right edge when a background tab gets text' do
+      window.add_string_to_tab('combat', 'c1')
+
+      expect(window.rows).to eq [' 1:main | 2', 'l1', 'l2', 'l3']
+    end
+
+    it 'keeps the bar on its row when switching to a tab past the right edge and back' do
+      window.switch_tab('thoughts')
+      expect(window.rows).to eq [' 1:main | 2', '', '', '']
+      expect(reverse_columns).to be_empty
+
+      window.switch_tab('main')
+      expect(window.rows).to eq [' 1:main | 2', 'l1', 'l2', 'l3']
+      expect(reverse_columns).to eq (0..7).to_a
+    end
+  end
+
+  context 'when the window is one row high and the tab bar reaches its right edge' do
+    # ' 1:main ' fills all 8 columns. Writing a one-row window's last
+    # column scrolls it, so the bar leaves that column blank.
+    let(:window) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='tabbed' top='0' left='0' height='1' width='9' tabs='main'/></layout>
+      XML
+      window_manager = WindowManager.new
+      window_manager.load_layout('test')
+      window_manager.stream['main']
+    end
+
+    it 'shows the bar up to the last column' do
+      window.draw_tab_bar
+
+      expect(window.rows).to eq [' 1:main']
+      expect(reverse_columns).to eq (0..6).to_a
+    end
+  end
+
   it 'shows the newest lines below the tab bar once the tab is full' do
     %w[l1 l2 l3 l4 l5].each { |line| window.add_string(line) }
 
