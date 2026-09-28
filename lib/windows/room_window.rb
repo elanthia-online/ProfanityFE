@@ -300,8 +300,11 @@ class RoomWindow < BaseWindow
     preset_name = @creatures_preset || 'monsterbold'
     if PRESET[preset_name]
       @extracted_creatures.each do |creature|
+        # Whole words only ("rat" not inside "pirate"); apostrophes and
+        # hyphens count as part of a word, as in "Adan'f" or "void-black".
+        whole_word = /(?<![[:word:]'-])#{Regexp.escape(creature)}(?![[:word:]'-])/
         pos = 0
-        while (idx = @objects.index(creature, pos))
+        while (idx = @objects.index(whole_word, pos))
           line_colors.push({
             start: idx,
             end: idx + creature.length,
