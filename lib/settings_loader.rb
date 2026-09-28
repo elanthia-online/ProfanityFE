@@ -18,6 +18,9 @@ class CachedElement
     @children = children
   end
 
+  # Child elements, mirroring REXML::Element#elements.
+  #
+  # @return [Array<CachedElement>] the children
   def elements
     @children
   end

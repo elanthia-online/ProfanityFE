@@ -45,10 +45,18 @@ CONFIG = Config.new
 # Aliases to CONFIG internals. These are the SAME Hash/Array objects,
 # so mutating HIGHLIGHT is identical to mutating CONFIG.highlight.
 # This preserves backward compatibility across all 12+ consumer files.
+#
+# Alias of {Config#lock}.
 SETTINGS_LOCK  = CONFIG.lock
+# Alias of {Config#highlight} (the same object).
 HIGHLIGHT      = CONFIG.highlight
+# Alias of {Config#preset} (the same object).
 PRESET         = CONFIG.preset
+# Alias of {Config#layout} (the same object).
 LAYOUT         = CONFIG.layout
+# Alias of {Config#scroll_window} (the same object).
 SCROLL_WINDOW  = CONFIG.scroll_window
+# Alias of {Config#room_objects} (the same object).
 ROOM_OBJECTS   = CONFIG.room_objects
+# Alias of {Config#perc_transforms} (the same object).
 PERC_TRANSFORMS = CONFIG.perc_transforms
