@@ -379,6 +379,11 @@ RSpec.describe 'Dot-commands typed on the command line' do
       expect(forms.map { |form| form.sub(/<[^>]+>\z/, '<') }).to match_array(expected)
     end
 
+    it 'lists each command\'s lines together, in the order the commands are matched' do
+      named = help_lines.map { |line| line[/\A\.(\S+)/, 1] }
+      expect(named.chunk_while { |a, b| a == b }.map(&:first)).to eq Application::DOT_COMMANDS.map(&:name)
+    end
+
     it 'lists the commands in this order, with these descriptions' do
       expect(help_lines).to eq [
         '.quit              Exit Profanity immediately',
@@ -395,8 +400,8 @@ RSpec.describe 'Dot-commands typed on the command line' do
         '.select            Toggle drag-to-select without links',
         '.draghl            Toggle live highlight while dragging',
         '.scrollcfg         Configure mouse scroll wheel',
-        '.highlight <text>   Add cyan highlight for text (session only)',
         '.unhighlight <text> Remove an inline highlight',
+        '.highlight <text>   Add cyan highlight for text (session only)',
         '.highlight          List active inline highlights',
         '.help              Show this help'
       ]

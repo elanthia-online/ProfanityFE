@@ -3,7 +3,8 @@
 # A command typed with a leading dot, such as +.tab 2+, that Profanity
 # handles itself instead of sending it to the game.
 # {Application::DOT_COMMANDS} lists every one, and
-# {Application#execute_command} dispatches through that list.
+# {Application#execute_command} dispatches through that list, and +.help+
+# prints each command's help lines in that order.
 #
 # A command matches case-insensitively and only as a whole word: its name
 # followed by whitespace or the end of the input, so the Lich script
@@ -21,16 +22,20 @@
 #   @return [String] the command's name, without the dot (e.g. +"tab"+)
 # @!attribute [r] args
 #   @return [Symbol] the argument shape: +:none+, +:optional+ or +:required+
+# @!attribute [r] help
+#   @return [Array<String>] the lines +.help+ shows for the command, one
+#     per usage (e.g. +.tab+ and +.tab <N|name>+)
 # @!attribute [r] handler
 #   @return [Proc] the code to run, with the argument if the shape takes
 #     one; {Application#execute_command} runs it with +instance_exec+, so
 #     it sees the Application's instance variables and methods
-DotCommand = Data.define(:name, :args, :handler) do
+DotCommand = Data.define(:name, :args, :help, :handler) do
   # @param name [String] the command's name, without the dot
   # @param args [Symbol] +:none+, +:optional+ or +:required+
+  # @param help [Array<String>] the lines +.help+ shows for the command
   # @param handler [Proc] the code to run
   # @raise [ArgumentError] for an unknown argument shape
-  def initialize(name:, handler:, args: :none)
+  def initialize(name:, help:, handler:, args: :none)
     raise ArgumentError, "unknown argument shape #{args.inspect} for .#{name}" unless %i[none optional required].include?(args)
 
     super
