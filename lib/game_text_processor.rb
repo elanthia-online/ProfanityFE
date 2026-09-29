@@ -89,14 +89,18 @@ class GameTextProcessor
   # @param event_bus [EventBus] event bus for decoupled UI updates
   # @param boot_profiler [BootProfiler] logs when the first server data,
   #   prompt and screen render arrive (--profile)
+  # @param speech_timestamps [Boolean] timestamp the lines of the streams in
+  #   {Streams::TIMESTAMPED_IN_WINDOW} and {Streams::TIMESTAMPED_IN_MAIN}
+  #   (--speech-ts)
   def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:,
-                 boot_profiler: BootProfiler.new(enabled: false))
+                 boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false)
     @wm = window_mgr
     @state = shared_state
     @cmd_buffer = cmd_buffer
     @xml_escapes = xml_escapes
     @event_bus = event_bus
     @boot_profiler = boot_profiler
+    @speech_timestamps = speech_timestamps
 
     # Line color/style tracking
     @line_colors = []
@@ -608,7 +612,7 @@ class GameTextProcessor
                 fg: ALL_LOGON_PATTERNS[logon_type]
               })
             end
-          elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && SPEECH_TS
+          elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && @speech_timestamps
             text = append_speech_timestamp(text)
           end
 
@@ -655,7 +659,7 @@ class GameTextProcessor
         elsif Streams::FALLBACK_TO_MAIN.include?(@current_stream)
           # Timestamp thoughts/familiar when --speech-ts is active (not speech:
           # see Streams::TIMESTAMPED_IN_MAIN)
-          if Streams::TIMESTAMPED_IN_MAIN.include?(@current_stream) && SPEECH_TS
+          if Streams::TIMESTAMPED_IN_MAIN.include?(@current_stream) && @speech_timestamps
             text = append_speech_timestamp(text)
           end
           if (colors = Presets.colors(@current_stream))

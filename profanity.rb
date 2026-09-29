@@ -143,9 +143,6 @@ Curses.use_default_colors if cli_options[:use_default_colors]
 # Whether to redefine terminal colors: --custom-colors, else Curses.can_change_color?.
 CUSTOM_COLORS = cli_options[:custom_colors].nil? ? Curses.can_change_color? : cli_options[:custom_colors]
 
-# True when started with --speech-ts (timestamp speech, familiar and thoughts lines).
-SPEECH_TS = cli_options[:speech_ts]
-
 ColorManager.configure(
   default_color_id: DEFAULT_COLOR_ID,
   default_background_color_id: DEFAULT_BACKGROUND_COLOR_ID,

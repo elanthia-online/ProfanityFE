@@ -720,7 +720,8 @@ class Application
       cmd_buffer: @cmd_buffer,
       xml_escapes: @xml_escapes,
       event_bus: @event_bus,
-      boot_profiler: @boot_profiler
+      boot_profiler: @boot_profiler,
+      speech_timestamps: @cli_options[:speech_ts]
     )
     # The server thread only reports how the connection ended; the input
     # loop picks that up and ends the session on the main thread.
