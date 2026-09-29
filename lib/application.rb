@@ -554,11 +554,13 @@ class Application
   #
   # Until +close_screen+, curses owns the terminal's alternate screen, which
   # is discarded when the program exits, so an error printed earlier is
-  # never seen.
+  # never seen. The server thread is stopped first: a draw after
+  # +close_screen+ would switch back to the alternate screen.
   #
   # @param lines [Array<String>] lines to print to stderr
   # @return [void] never returns
   def fatal_error(*lines)
+    @connection.stop
     Curses.close_screen
     lines.each { |line| $stderr.puts line }
     exit 1
@@ -680,7 +682,10 @@ class Application
     # let the ensure block below restore the terminal.
     nil
   rescue StandardError => e
+    # Anything else (a key handler's own errors are rescued in handle_key)
+    # ends the session like a server thread crash.
     ProfanityLog.write('main', e.to_s, backtrace: e.backtrace)
+    fatal_error("ProfanityFE stopped: error in the input loop (#{e.class}: #{e.message}). See the log file for details.")
   ensure
     @connection.close
     Curses.close_screen
