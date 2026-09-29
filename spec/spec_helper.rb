@@ -33,6 +33,7 @@
 # comment ("Characterization: ... intentional because ...").
 
 require 'rspec'
+require 'stringio'
 require 'tmpdir'
 require 'fileutils'
 
@@ -42,6 +43,61 @@ require 'fileutils'
 SPEC_HOME = Dir.mktmpdir('profanity-spec-home')
 ENV['HOME'] = SPEC_HOME
 at_exit { FileUtils.remove_entry(SPEC_HOME) }
+
+# ---------------------------------------------------------------------------
+# Keep the suite off the desktop: clipboard, browser and terminal
+#
+# A spec that finishes a selection runs SelectionManager.copy_to_clipboard
+# for real. It pipes the text to pbcopy (macOS), wl-copy (Wayland) or xclip
+# (X11), then writes an OSC 52 escape to /dev/tty, and either one replaces
+# the developer's clipboard. A LaunchURL runs open / xdg-open. Two stand-ins
+# apply to every example, so no spec has to remember them:
+#
+# * SPEC_BIN comes first on PATH (set once here, so specs that save and
+#   restore ENV keep it, and child processes inherit it). It holds stand-ins
+#   for the clipboard commands (plus xsel, which lib doesn't run today) and
+#   the browser commands. A clipboard stand-in saves its
+#   arguments to SPEC_BIN/<tool>.args and its input to SPEC_BIN/<tool>.input;
+#   a browser stand-in saves only its arguments (it never reads stdin, which
+#   is the developer's terminal when a detached spawn inherits it).
+# * File.open('/dev/tty', 'w') yields spec_terminal, a StringIO holding what
+#   the example sent to the terminal (set in the before hook below).
+#
+# Specs that test these paths keep working without opting out: their own
+# setup replaces the stand-in for that example. Setting ENV['PATH'] to a
+# directory with a fake tool (clipboard_missing_tool_spec) hides SPEC_BIN,
+# and a spec's own File.open('/dev/tty', 'w') stub (clipboard_*_spec) wins
+# because RSpec uses the most recent matching stub. A spec that wants the
+# real desktop tools has to put them on PATH itself.
+# spec/support/desktop_sandbox_spec.rb fails if either stand-in is removed.
+# ---------------------------------------------------------------------------
+
+SPEC_BIN = Dir.mktmpdir('profanity-spec-bin')
+at_exit { FileUtils.remove_entry(SPEC_BIN) }
+
+clipboard_stand_in = <<~SH
+  #!/bin/sh
+  # Clipboard stand-in (spec/spec_helper.rb): keeps the text, copies nothing.
+  printf '%s' "$*" > "$0.args"
+  cat > "$0.input"
+SH
+browser_stand_in = <<~SH
+  #!/bin/sh
+  # Browser stand-in (spec/spec_helper.rb): keeps the arguments, opens nothing.
+  printf '%s' "$*" > "$0.args"
+SH
+%w[pbcopy wl-copy xclip xsel].each { |tool| File.write(File.join(SPEC_BIN, tool), clipboard_stand_in, perm: 0o755) }
+%w[open xdg-open].each { |tool| File.write(File.join(SPEC_BIN, tool), browser_stand_in, perm: 0o755) }
+ENV['PATH'] = [SPEC_BIN, ENV.fetch('PATH', '')].join(File::PATH_SEPARATOR)
+
+# What the current example sent to the terminal: File.open('/dev/tty', 'w')
+# yields this StringIO instead of the real terminal (see above).
+module SpecTerminal
+  # @return [StringIO] the example's stand-in for /dev/tty
+  def spec_terminal
+    @spec_terminal ||= StringIO.new
+  end
+end
 
 # ---------------------------------------------------------------------------
 # Curses stub
@@ -206,6 +262,7 @@ RSpec.configure do |config|
   config.warnings = true
   config.order = :random
   Kernel.srand config.seed
+  config.include SpecTerminal
 
   # Reset all mutable runtime state between tests
   config.before(:each) do
@@ -216,6 +273,9 @@ RSpec.configure do |config|
     # Windows register themselves in per-class instance lists; start empty.
     BaseWindow.window_classes.each { |klass| klass.list.clear }
     Curses::TerminalCursor.reset
+    # The real terminal is off limits (see "Keep the suite off the desktop").
+    allow(File).to receive(:open).and_call_original
+    allow(File).to receive(:open).with('/dev/tty', 'w').and_yield(spec_terminal)
     # A spec that finishes a selection copies it, and without a clipboard
     # tool (as on CI) the copy lands in ~/.profanity/selection.txt in the
     # shared SPEC_HOME. Left there, it breaks a later example that plants
