@@ -475,6 +475,32 @@ module LineBuffered
     end
   end
 
+  # Set every buffer's cap, evicting the oldest lines over it at once.
+  # Views react as to an eviction on append (see {#append_string}): a
+  # scrolled-back view keeps its place, moving onto the oldest row left
+  # if the eviction dropped the rows it reached, and a live view whose
+  # rows no longer fill the text area is redrawn from its top row.
+  #
+  # @param cap [Integer, #to_i] maximum number of logical lines per buffer
+  # @return [void]
+  private def cap_line_buffers(cap)
+    height = content_height
+    line_buffers.each do |line_buffer|
+      length_before = line_buffer.length
+      line_buffer.cap = cap
+      next if line_buffer.length == length_before
+
+      if !line_buffer.equal?(shown_buffer)
+        line_buffer.pos = line_buffer.pos.clamp(0, [line_buffer.length - height, 0].max)
+      elsif line_buffer.live?
+        paint_content if line_buffer.length < [length_before, height].min
+      else
+        keep_view_on_stored_rows(line_buffer, height)
+        update_scrollbar
+      end
+    end
+  end
+
   # After an eviction, move a scrolled-back view that reaches past the
   # oldest stored row down onto it: the rows shown above it are gone.
   #

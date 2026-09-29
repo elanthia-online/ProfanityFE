@@ -166,13 +166,40 @@ RSpec.describe LineBuffer do
       expect(buffer.cap).to eq 3
     end
 
-    it 'does not trim lines already over a lowered cap; each push evicts one' do
+    it 'evicts the oldest lines over a lowered cap at once' do
       push_lines('l1', 'l2', 'l3', 'l4', 'l5')
+
       buffer.cap = 2
 
-      push_lines('l6')
+      expect(buffer.lines.map(&:first)).to eq %w[l5 l4]
+    end
 
-      expect(buffer.lines.map(&:first)).to eq %w[l6 l5 l4 l3 l2]
+    it 'evicts whole lines, all their rows, and keeps the IDs of the rows left' do
+      buffer.push('one two three four', [], indent: true)
+      push_lines('l1', 'l2')
+      ids = [buffer.line_at_row(0, 2).first, buffer.line_at_row(1, 2).first]
+
+      buffer.cap = 2
+
+      expect(buffer.lines.map(&:first)).to eq %w[l2 l1]
+      expect([buffer.line_at_row(0, 2).first, buffer.line_at_row(1, 2).first]).to eq ids
+    end
+
+    it 'keeps nothing when lowered below zero' do
+      push_lines('l1', 'l2')
+
+      buffer.cap = -1
+
+      expect(buffer).to be_empty
+    end
+
+    it 'leaves the scroll position alone' do
+      push_lines('l1', 'l2', 'l3', 'l4', 'l5')
+      buffer.pos = 3
+
+      buffer.cap = 2
+
+      expect(buffer.pos).to eq 3
     end
   end
 

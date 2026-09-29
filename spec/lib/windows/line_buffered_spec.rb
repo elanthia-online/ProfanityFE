@@ -190,6 +190,43 @@ RSpec.describe LineBuffered do
       expect(window.attrs_at(window.content_top, 0) & Curses::A_REVERSE).to eq Curses::A_REVERSE
       expect(window.extract_selection(line_id, 0, line_id, 2)).to eq 'l2'
     end
+
+    context 'when the cap is lowered' do
+      before { ['one two three four', 'l1', 'l2', 'l3'].each { |line| window.add_string(line) } }
+
+      it 'moves a view showing only a dropped line onto the oldest line left' do
+        window.scroll_lines(-window.content_height)
+
+        window.max_buffer_size = 3
+
+        expect(text_rows).to eq %w[l1 l2 l3]
+        expect(window.buffer_pos).to eq 0
+      end
+
+      it 'redraws the lines left from the top row when they no longer fill the text area' do
+        window.scroll_lines(-2)
+
+        window.max_buffer_size = 2
+
+        expect(text_rows).to eq ['l2', 'l3', '']
+        expect(window.buffer_pos).to eq 0
+      end
+
+      it 'keeps the rows left of a selection that reached a dropped line highlighted and copies only them' do
+        window.scroll_lines(-1)
+        expect(text_rows).to eq ['  four', 'l1', 'l2']
+        start_id, = window.selection_anchor_at(window.content_top, 0)
+        end_id, = window.selection_anchor_at(window.content_top + 1, 2)
+        window.highlight_selection(start_id, 0, end_id, 2)
+
+        window.max_buffer_size = 3
+
+        expect(text_rows).to eq %w[l1 l2 l3]
+        expect(window.attrs_at(window.content_top, 0) & Curses::A_REVERSE).to eq Curses::A_REVERSE
+        expect(window.attrs_at(window.content_top + 1, 0) & Curses::A_REVERSE).to eq 0
+        expect(window.extract_selection(start_id, 0, end_id, 2)).to eq 'l1'
+      end
+    end
   end
 
   context 'with a text window' do
@@ -231,6 +268,18 @@ RSpec.describe LineBuffered do
       window.scroll_lines(window.max_buffer_size)
 
       expect(window.rows).to eq [' 1:main | 2:combat', 'l5', 'l6', 'l7']
+    end
+
+    it 'drops the oldest lines of a background tab when the cap is lowered' do
+      window.switch_tab('combat')
+      %w[c1 c2 c3 c4 c5 c6 c7].each { |line| window.add_string_to_tab('combat', line) }
+      window.scroll_lines(-window.max_buffer_size)
+      window.switch_tab('main')
+
+      window.max_buffer_size = 4
+      window.switch_tab('combat')
+
+      expect(window.rows).to eq [' 1:main | 2:combat', 'c4', 'c5', 'c6']
     end
 
     context 'when the tab bar leaves room on its row' do

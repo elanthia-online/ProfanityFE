@@ -185,6 +185,59 @@ RSpec.describe WindowManager, '#load_layout' do
 
       expect(window_manager.stream['main']).to be_an_instance_of TextWindow
     end
+
+    context 'when the new layout gives the window a smaller buffer' do
+      # A 3-row main window keeping 100 lines, then the same slot keeping 4.
+      def main_keeping(size)
+        load("<window class='text' top='0' left='0' height='3' width='20' value='main' buffer-size='#{size}'/>")
+        window_manager.stream['main']
+      end
+
+      # @return [Array<String>] each scrollbar cell: 'thumb' for the
+      #   reverse-video position marker, else its character
+      def scrollbar_cells(window)
+        (0...window.maxy).map do |y|
+          window.scrollbar.attrs_at(y, 0).anybits?(Curses::A_REVERSE) ? 'thumb' : window.scrollbar.row(y)
+        end
+      end
+
+      let(:main) do
+        window = main_keeping(100)
+        (1..10).each { |n| window.add_string("l#{n}") }
+        window
+      end
+
+      it 'drops the oldest lines at once, so scrolling back stops at the oldest line kept' do
+        main
+        expect(main_keeping(4)).to be main
+
+        main.scroll_lines(-100)
+
+        expect(main.buffer.length).to eq 4
+        expect(main.rows).to eq %w[l7 l8 l9]
+        expect(scrollbar_cells(main)).to eq ['thumb', LineBuffered::ACTIVE_SCROLLBAR_CHAR,
+                                             LineBuffered::ACTIVE_SCROLLBAR_CHAR]
+      end
+
+      it 'moves a view scrolled back past the lines dropped onto the oldest line kept' do
+        main.scroll_lines(-100)
+        expect(main.rows).to eq %w[l1 l2 l3]
+
+        main_keeping(4)
+
+        expect(main.rows).to eq %w[l7 l8 l9]
+        expect(main.buffer_pos).to eq 1
+        expect(scrollbar_cells(main).first).to eq 'thumb'
+      end
+
+      it 'redraws the lines kept from the top row when they no longer fill the window' do
+        main
+
+        main_keeping(2)
+
+        expect(main.rows).to eq ['l9', 'l10', '']
+      end
+    end
   end
 
   describe 'then #resize' do

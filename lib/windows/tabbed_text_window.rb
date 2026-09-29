@@ -55,13 +55,14 @@ class TabbedTextWindow < BaseWindow
     setscrreg(TAB_BAR_HEIGHT, maxy - 1)
   end
 
-  # Set the maximum number of logical lines retained per tab buffer.
+  # Set the maximum number of logical lines retained per tab buffer. The
+  # oldest lines over a lowered limit are dropped at once, from every tab.
   #
   # @param val [Integer, #to_i] new buffer size limit
   # @return [void]
   def max_buffer_size=(val)
     @max_buffer_size = val.to_i
-    @tab_buffers.each_value { |tab_buffer| tab_buffer.cap = @max_buffer_size }
+    cap_line_buffers(@max_buffer_size)
   end
 
   # Each tab's display rows.

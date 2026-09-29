@@ -58,12 +58,13 @@ class TextWindow < BaseWindow
     @line_buffer.cap
   end
 
-  # Set the maximum number of logical lines retained in the buffer.
+  # Set the maximum number of logical lines retained in the buffer. The
+  # oldest lines over a lowered limit are dropped at once.
   #
   # @param val [Integer, #to_i] new buffer size limit
   # @return [void]
   def max_buffer_size=(val)
-    @line_buffer.cap = val
+    cap_line_buffers(val)
   end
 
   # Append a string to the buffer, word-wrapping to the window width.
