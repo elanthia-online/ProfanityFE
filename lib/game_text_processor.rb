@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'spell_abbreviations'
-require_relative 'games/dragonrealms'
-require_relative 'games/gemstone'
+require_relative 'games'
 require_relative 'room_data_processor'
 require_relative 'familiar_notifier'
 require_relative 'xml_tokenizer'
@@ -46,7 +44,6 @@ require_relative 'clock'
 #   )
 #   processor.run(server)
 class GameTextProcessor
-  include Games::DragonRealms
   include RoomDataProcessor
   include FamiliarNotifier
   include TagHandlers
@@ -73,13 +70,6 @@ class GameTextProcessor
   # alternations; the prefix is enough to find the gag in the settings XML.
   GAG_LOG_PATTERN_LIMIT = 80
 
-  # Precomputed merged logon patterns (DR + GS) and matching regex.
-  # Built once at load time instead of on every logon line.
-  ALL_LOGON_PATTERNS = Games::DragonRealms::LOGON_PATTERNS.merge(Games::GemStone::LOGON_PATTERNS).freeze
-  # Matches a " * Name <message>" arrival/departure line whose message is a
-  # key of {ALL_LOGON_PATTERNS}; captures +name+ and the message as +type+.
-  LOGON_REGEXP = /^\s\*\s(?<name>[A-Z][a-z]+) (?<type>#{ALL_LOGON_PATTERNS.keys.map { |k| Regexp.escape(k) }.join('|')})/
-
   # Create a new processor wired to the given window manager and shared state.
   #
   # @param window_mgr [WindowManager] provides handler hashes for stream/indicator/progress/countdown/room windows
@@ -93,8 +83,12 @@ class GameTextProcessor
   #   {Streams::TIMESTAMPED_IN_WINDOW} and {Streams::TIMESTAMPED_IN_MAIN}
   #   (--speech-ts)
   # @param clock [Clock] read for timestamps and the server time offset (see TagHandlers#handle_prompt_tag)
+  # @param game_rules [Games::Rules] the game's death, logon, stun and
+  #   spell-name rules (--game, see Games.rules_for); both games' when the
+  #   game isn't known
   def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:,
-                 boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false, clock: Clock.new)
+                 boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false, clock: Clock.new,
+                 game_rules: Games::BOTH_GAMES)
     @wm = window_mgr
     @state = shared_state
     @cmd_buffer = cmd_buffer
@@ -103,6 +97,7 @@ class GameTextProcessor
     @boot_profiler = boot_profiler
     @speech_timestamps = speech_timestamps
     @clock = clock
+    @game_rules = game_rules
 
     # Line color/style tracking
     @line_colors = []
@@ -534,12 +529,9 @@ class GameTextProcessor
       @state.need_prompt = false
     elsif (match = text.match(/^\s*You are stunned for (?<rounds>[0-9]+) rounds?/))
       new_stun(match[:rounds].to_i * 5)
-    elsif text =~ Games::DragonRealms::RAISE_DEAD_PATTERN
-      # Raise Dead stun (cleric spell — all deity-specific messaging variants)
-      new_stun(30.6)
-    elsif text =~ Games::DragonRealms::SHADOW_VALLEY_PATTERN
-      # Shadow Valley exit stun
-      new_stun(16.2)
+    elsif (seconds = @game_rules.stun_seconds(text))
+      # A game's own stun messages (DR: Raise Dead, the Shadow Valley exit)
+      new_stun(seconds)
     elsif text =~ /^You glance down at your empty hands\./
       @event_bus.emit(:indicator_update, id: 'right', label: 'Empty')
       @event_bus.emit(:indicator_update, id: 'left', label: 'Empty')
@@ -612,31 +604,15 @@ class GameTextProcessor
 
         if (@wm.stream[@current_stream])
           if @current_stream == Streams::DEATH
-            if (death_match = text.match(Games::DragonRealms::DEATH_PATTERN))
-              # DR death: "Name" or "Name MF" (moonfire phoenix)
-              name = death_match[:name]
-              rest = if text.match?(/A fiery phoenix soars into the heavens as/)
-                       "#{name} MF"
-                     elsif text.match?(/was just sacrificed to/)
-                       "#{name} Sacrifice"
-                     else
-                       name
-                     end
-              text = time_prefixed(rest, 'ff0000')
-            elsif (gs_match = text.match(Games::GemStone::DEATH_PATTERN))
-              # GS death: "Name AREA HH:MM" with area code consolidation
-              name = gs_match[:name]
-              area = Games::GemStone.resolve_death_area(gs_match[:area])
-              text = time_prefixed("#{name} #{area}", 'ff0000')
-            elsif text.match?(Games::GemStone::DEATH_SUPPRESS_PATTERN)
-              # GS vaporized/incinerated — suppress
-              text = ''
+            # "HH:MM Name ..." (e.g. DR "Name MF", GS "Name AREA"); an
+            # empty entry hides the line (GS vaporized/incinerated)
+            if (entry = @game_rules.death_summary(text))
+              text = entry.empty? ? '' : time_prefixed(entry, 'ff0000')
             end
           elsif @current_stream == Streams::LOGONS
-            if (logon_match = text.match(LOGON_REGEXP))
-              name = logon_match[:name]
-              logon_type = logon_match[:type]
-              text = time_prefixed(name, ALL_LOGON_PATTERNS[logon_type])
+            if (logon = @game_rules.logon(text))
+              name, fg = logon
+              text = time_prefixed(name, fg)
             end
           elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && @speech_timestamps
             text = append_speech_timestamp(text)
@@ -659,7 +635,8 @@ class GameTextProcessor
             if paren_pos && paren_pos > 1
               spell_name = styled.text[0..paren_pos - 2]
               # Shorten spell names
-              styled = styled.sub(/^#{Regexp.escape(spell_name)}/, abbreviate_spell(spell_name)) if Games::DragonRealms::SPELL_ABBREVIATIONS.include?(spell_name.strip)
+              short_name = @game_rules.spell_abbreviation(spell_name)
+              styled = styled.sub(/^#{Regexp.escape(spell_name)}/, short_name) if short_name
             end
 
             styled = styled.gsub(/  /, ' ').strip

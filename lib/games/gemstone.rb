@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'rules'
+
 =begin
 GemStone IV-specific game text processing.
 Contains death message formatting with area consolidation, logon message
@@ -15,7 +17,11 @@ module Games
   # messages with per-type preset colors.
   #
   # Ported from elanthia-online/ProfanityFE death/logon stream handling.
+  # Answers the {Games::Rules} questions for GemStone; it has no stun or
+  # spell-name rules.
   module GemStone
+    extend Rules
+
     # GS death messages, mapped to the short area code shown in the death
     # window ("HH:MM Name AREA"). This table is the single source of truth:
     # DEATH_PATTERN below is built from its keys, so every message listed here
@@ -84,5 +90,31 @@ module Games
       'returns home from a hard day of adventuring.' => '777700',
       'has disconnected.'                            => 'aa7733',
     }.freeze
+
+    # Matches a " * Name <message>" arrival/departure line whose message is a
+    # key of {LOGON_PATTERNS}; captures +name+ and the message as +type+.
+    LOGON_REGEXP = Rules.logon_regexp(LOGON_PATTERNS.keys)
+
+    # A GS death line's entry: the name and the area code (see
+    # {resolve_death_area}), or an empty entry for a death shown nowhere
+    # ({DEATH_SUPPRESS_PATTERN}).
+    #
+    # @param text [String] the line, tags removed
+    # @return [String, nil] e.g. "Mahtra WL"; "" for a vaporized or
+    #   incinerated character; nil when it isn't a GS death line
+    def self.death_summary(text)
+      if (match = text.match(DEATH_PATTERN))
+        "#{match[:name]} #{resolve_death_area(match[:area])}"
+      elsif text.match?(DEATH_SUPPRESS_PATTERN)
+        ''
+      end
+    end
+
+    # (see Games::Rules#logon)
+    def self.logon(text)
+      match = text.match(LOGON_REGEXP) or return nil
+
+      [match[:name], LOGON_PATTERNS[match[:type]]]
+    end
   end
 end

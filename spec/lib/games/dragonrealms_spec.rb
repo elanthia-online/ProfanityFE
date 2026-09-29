@@ -4,32 +4,30 @@ require_relative '../../../lib/spell_abbreviations'
 require_relative '../../../lib/games/dragonrealms'
 
 RSpec.describe Games::DragonRealms do
-  let(:processor) { Class.new { include Games::DragonRealms }.new }
-
-  describe '#abbreviate_spell' do
+  describe '.spell_abbreviation' do
     it 'abbreviates known spells' do
-      expect(processor.abbreviate_spell('Aesandry Darlaeth')).to eq 'AD'
+      expect(described_class.spell_abbreviation('Aesandry Darlaeth')).to eq 'AD'
     end
 
-    it 'returns unknown spells unchanged' do
-      expect(processor.abbreviate_spell('Nonexistent Spell')).to eq 'Nonexistent Spell'
+    it 'has no abbreviation for unknown spells' do
+      expect(described_class.spell_abbreviation('Nonexistent Spell')).to be_nil
     end
 
     it 'strips whitespace before lookup' do
-      expect(processor.abbreviate_spell('  Aesandry Darlaeth  ')).to eq 'AD'
+      expect(described_class.spell_abbreviation('  Aesandry Darlaeth  ')).to eq 'AD'
     end
 
     # Adversarial
-    it 'returns empty string unchanged' do
-      expect(processor.abbreviate_spell('')).to eq ''
+    it 'has no abbreviation for an empty string' do
+      expect(described_class.spell_abbreviation('')).to be_nil
     end
 
-    it 'returns whitespace-only unchanged' do
-      expect(processor.abbreviate_spell('   ')).to eq '   '
+    it 'has no abbreviation for whitespace only' do
+      expect(described_class.spell_abbreviation('   ')).to be_nil
     end
 
     it 'is case-sensitive (spell names must match exactly)' do
-      expect(processor.abbreviate_spell('aesandry darlaeth')).to eq 'aesandry darlaeth'
+      expect(described_class.spell_abbreviation('aesandry darlaeth')).to be_nil
     end
   end
 

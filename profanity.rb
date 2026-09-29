@@ -113,8 +113,7 @@ require_relative 'lib/string_classification'
 require_relative 'lib/command_buffer'
 require_relative 'lib/window_manager'
 require_relative 'lib/settings_loader'
-require_relative 'lib/games/dragonrealms'
-require_relative 'lib/games/gemstone'
+require_relative 'lib/games'
 require_relative 'lib/room_data_processor'
 require_relative 'lib/familiar_notifier'
 require_relative 'lib/game_text_processor'
@@ -156,4 +155,5 @@ Application.new(cli_options,
                 settings_file: settings_filename,
                 host: cli_options[:host],
                 port: cli_options[:port],
-                boot_profiler: boot_profiler).run
+                boot_profiler: boot_profiler,
+                game_rules: Games.rules_for(cli_options[:game])).run

@@ -81,6 +81,7 @@ ProfanityFE connects to `127.0.0.1` on the specified port.
 | `--log-file=<path>` | see below | Full path for the log file (overrides --log-dir and --char) |
 | `--log-dir=<dir>` | see below | Directory for the log file |
 | `--profile` | off | Log boot timing breakdown to the log file (for startup performance debugging) |
+| `--game=<code>` | both games | Apply only this game's rules for death, logon, stun and spell-window lines: `DR` or `GS` (any case; Lich's codes such as `DRF` or `GS4` also work). Without it, both games' rules run, DragonRealms first |
 | `--help` / `-h` / `-?` | -- | Print usage and exit |
 
 > **Note:** `--settings-file=<path>` is still supported as a hidden override

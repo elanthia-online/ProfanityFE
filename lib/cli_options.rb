@@ -7,6 +7,7 @@
 
 require 'optparse'
 require_relative 'version'
+require_relative 'games'
 
 # Command-line options for profanity.rb.
 module CliOptions
@@ -35,6 +36,7 @@ module CliOptions
     remote_url: false,
     log_gags: false,
     profile: false,
+    game: nil,
   }.freeze
 
   # Parse the command line into an options hash.
@@ -99,6 +101,11 @@ module CliOptions
       opts.on('--log-dir=DIR', 'Log directory (default: current directory)') { |v| options[:log_dir] = v }
       opts.on('--settings-file=FILE', 'Settings XML file path (overrides --char/--config lookup)') { |v| options[:settings_file] = v }
       opts.on('--profile', 'Log boot timing to log file') { options[:profile] = true }
+      opts.on('--game=CODE', "Game's rules only: DR or GS (Lich codes like GS4 work; default: both)") do |v|
+        raise OptionParser::InvalidArgument, v unless Games.known_code?(v)
+
+        options[:game] = v.upcase
+      end
     end
   end
   private_class_method :parser
