@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
-# The wall clock Profanity reads for timestamps and countdowns, and the
-# formats its timestamps are written in.
+# The wall clock Profanity reads for timestamps and countdowns, the
+# formats its timestamps are written in, and how far the game server's
+# clock is behind it.
 #
 # One clock is made by {Application} and passed to the {WindowManager}
 # (which hands it to the windows it builds) and the {GameTextProcessor}.
@@ -19,6 +20,27 @@ class Clock
   #   +Time.now+, called at every reading
   def initialize(now: -> { Time.now })
     @now = now
+    @mutex = Mutex.new
+    @server_time_offset = 0.0
+  end
+
+  # How many seconds this clock runs ahead of the game server's clock,
+  # measured at a +<prompt time=...>+ (see TagHandlers#handle_prompt_tag).
+  # Countdown end times are server times; subtracting this offset from
+  # {#now} gives the server's time now.
+  #
+  # @return [Float]
+  def server_time_offset
+    @mutex.synchronize { @server_time_offset }
+  end
+
+  # Set by the server thread and read by the countdown windows on the
+  # input thread, so it is held under a mutex.
+  #
+  # @param val [Float] the new offset in seconds
+  # @return [void]
+  def server_time_offset=(val)
+    @mutex.synchronize { @server_time_offset = val }
   end
 
   # Read the clock.

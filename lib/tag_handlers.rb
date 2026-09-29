@@ -162,7 +162,7 @@ module TagHandlers
     return unless (m = xml.match(%r{\A.*?>(?<text>.*?)&gt;</prompt>$}))
 
     unless @state.skip_server_time_offset
-      @state.server_time_offset = @clock.now.to_f - time.to_f
+      @clock.server_time_offset = @clock.now.to_f - time.to_f
       @state.skip_server_time_offset = true
     end
 

@@ -1357,6 +1357,25 @@ RSpec.describe Application do
       expect(server.string).to start_with('SET_FRONTEND_PID ')
     end
 
+    it 'forgets the server time offset measured on the last connection' do
+      app.window_mgr.clock.server_time_offset = 12.5
+      allow(Socket).to receive(:tcp).and_return(StringIO.new)
+
+      app.send(:connect_server)
+
+      expect(app.window_mgr.clock.server_time_offset).to eq 0.0
+    end
+
+    it "gives the game text processor the window manager's clock" do
+      received = nil
+      stub_const('GameTextProcessor', Class.new { define_method(:initialize) { |**kwargs| received = kwargs } })
+      allow(Thread).to receive(:new)
+
+      app.send(:start_server_thread)
+
+      expect(received[:clock]).to equal app.window_mgr.clock
+    end
+
     [
       Errno::EHOSTUNREACH, Errno::ETIMEDOUT, Errno::ENETUNREACH, Errno::EADDRNOTAVAIL,
       Errno::ECONNREFUSED, SocketError.new('getaddrinfo: nodename nor servname provided')

@@ -167,15 +167,6 @@ RSpec.describe 'The time shown in windows' do
     # The game's clock (prompt time) runs 10.5 seconds behind this one.
     let(:server_now) { 1_790_000_000 }
 
-    # SharedState#server_time_offset= also sets the $server_time_offset
-    # global that countdown windows read; restore it for later examples.
-    around do |example|
-      saved_offset = $server_time_offset
-      example.run
-    ensure
-      $server_time_offset = saved_offset
-    end
-
     before do
       @now = Time.at(server_now + 10.5)
       state.skip_server_time_offset = false

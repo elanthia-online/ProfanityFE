@@ -205,7 +205,7 @@ class WindowManager
       window = @countdown['stunned']
       next unless window
 
-      window.end_time = @clock.now.to_f - $server_time_offset.to_f + data[:seconds].to_f
+      window.end_time = @clock.now.to_f - @clock.server_time_offset.to_f + data[:seconds].to_f
       window.tick
     end
 

@@ -193,15 +193,6 @@ RSpec.describe TagHandlers do
   # ---- Prompt handler ----
 
   describe '#handle_prompt_tag' do
-    # SharedState#server_time_offset= also sets the $server_time_offset
-    # global that countdown windows read; restore it for later examples.
-    around do |example|
-      saved_offset = $server_time_offset
-      example.run
-    ensure
-      $server_time_offset = saved_offset
-    end
-
     it 'updates shared state prompt_text' do
       state.skip_server_time_offset = false
       state.prompt_text = '>'
@@ -210,10 +201,22 @@ RSpec.describe TagHandlers do
     end
 
     it 'syncs server time offset on first prompt' do
+      clock = Clock.new(now: -> { Time.at(1_679_000_010.5) })
+      host = TagHandlerHost.new(wm: wm, state: state, event_bus: event_bus, clock: clock)
       state.skip_server_time_offset = false
       host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
       expect(state.skip_server_time_offset).to be true
-      expect(state.server_time_offset).to be_a(Float)
+      expect(clock.server_time_offset).to eq 10.5
+    end
+
+    it 'keeps the offset until a resync' do
+      readings = [Time.at(1_679_000_010.5), Time.at(1_679_000_099.0)]
+      clock = Clock.new(now: -> { readings.shift })
+      host = TagHandlerHost.new(wm: wm, state: state, event_bus: event_bus, clock: clock)
+      state.skip_server_time_offset = false
+      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
+      host.dispatch_tag('<prompt time="1679000001">H&gt;</prompt>', String.new)
+      expect(clock.server_time_offset).to eq 10.5
     end
 
     it 'sets need_prompt to true on repeated same prompt' do

@@ -58,8 +58,6 @@ RSpec.describe WindowManager, '#resize geometry' do
 
   before do
     terminal(24, 80)
-    # Read by CountdownWindow#update.
-    $server_time_offset = 0.0
   end
 
   def terminal(lines, cols)

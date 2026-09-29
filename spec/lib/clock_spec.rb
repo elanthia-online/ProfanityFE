@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-# Tests Clock: the time it reads and the two timestamp formats it writes.
+# Tests Clock: the time it reads, the server time offset it holds and the
+# two timestamp formats it writes.
 
 require_relative '../../lib/clock'
 
@@ -27,6 +28,26 @@ RSpec.describe Clock do
       now = described_class.new.now
 
       expect(now).to be_between(before, Time.now)
+    end
+  end
+
+  describe '#server_time_offset' do
+    it 'is zero until the game clock is known' do
+      expect(described_class.new.server_time_offset).to eq 0.0
+    end
+
+    it 'keeps the offset it was given' do
+      clock = described_class.new
+      clock.server_time_offset = -3.25
+
+      expect(clock.server_time_offset).to eq(-3.25)
+    end
+
+    it 'belongs to one clock only' do
+      clock = described_class.new
+      clock.server_time_offset = 7.0
+
+      expect(described_class.new.server_time_offset).to eq 0.0
     end
   end
 

@@ -89,8 +89,8 @@ class CountdownWindow < BaseWindow
   def tick
     old_value = @value
     old_secondary_value = @secondary_value
-    @value = [(@end_time.to_f - clock.now.to_f + $server_time_offset.to_f - COUNTDOWN_OFFSET).ceil, 0].max
-    @secondary_value = [(@secondary_end_time.to_f - clock.now.to_f + $server_time_offset.to_f - COUNTDOWN_OFFSET).ceil,
+    @value = [(@end_time.to_f - clock.now.to_f + clock.server_time_offset.to_f - COUNTDOWN_OFFSET).ceil, 0].max
+    @secondary_value = [(@secondary_end_time.to_f - clock.now.to_f + clock.server_time_offset.to_f - COUNTDOWN_OFFSET).ceil,
                         0].max
     if old_value != @value || old_secondary_value != @secondary_value || @old_active != @active
       str = "#{@label}#{[@value, @secondary_value].max.to_s.rjust(maxx - @label.length)}"
