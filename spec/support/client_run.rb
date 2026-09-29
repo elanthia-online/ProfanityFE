@@ -89,6 +89,18 @@ module ClientRun
     @game_server ||= GameServer.new
   end
 
+  # A keyboard step (see {#keyboard}) that holds the keys after it back:
+  # the reads return no key until the block returns true, for at most
+  # {DEADLINE} seconds. The input loop keeps polling meanwhile, so the
+  # server thread can draw.
+  WaitUntil = Struct.new(:condition, :deadline) do
+    # @return [Boolean] whether the keys after it may come
+    def over?
+      self.deadline ||= Time.now + DEADLINE
+      condition.call || Time.now > deadline
+    end
+  end
+
   # A command window (a virtual screen, one row of 80 columns) that is
   # also the keyboard: each read the input loop makes (+get_char+) takes
   # the next key.
@@ -98,6 +110,7 @@ module ClientRun
   # - An Integer is a function key's code (Curses::KEY_RESIZE, ...).
   # - A Proc runs at that read, and the read returns what it returns: a
   #   key, or nil for no key.
+  # - A {#wait_until} step returns no key until its condition holds.
   #
   # When the keys run out, the next read raises Interrupt (Ctrl+C), which
   # ends the input loop. With +idle: true+ the reads return no key
@@ -107,27 +120,32 @@ module ClientRun
   # each of +exit_keys+ in turn (a Proc is called for the key), then nil,
   # as a read that timed out does.
   #
-  # @param keys [Array<String, Integer, Proc>]
+  # @param keys [Array<String, Integer, Proc, WaitUntil>]
   # @param idle [Boolean] wait for the session to end once the keys run out
   # @param exit_keys [Array<String, Integer, Proc>] keys for the exit wait;
   #   keys not read are left in the Array
   # @return [Curses::Window]
   def keyboard(*keys, idle: false, exit_keys: [])
     reads = keys.flat_map { |key| key.is_a?(String) ? key.chars : [key] }
-    deadline = nil
+    idle_until = nil
     Curses::Window.new(1, 80, 0, 0).tap do |window|
       window.define_singleton_method(:get_char) do
         if reads.empty?
           raise Interrupt unless idle
 
-          deadline ||= Time.now + DEADLINE
-          raise Interrupt if Time.now > deadline
+          idle_until ||= Time.now + DEADLINE
+          raise Interrupt if Time.now > idle_until
 
-          sleep 0.001
           next nil
         end
 
-        key = reads.shift
+        key = reads.first
+        if key.is_a?(WaitUntil)
+          reads.shift if key.over?
+          next nil
+        end
+
+        reads.shift
         key.is_a?(Proc) ? key.call : key
       end
       window.define_singleton_method(:getch) do
@@ -137,16 +155,12 @@ module ClientRun
     end
   end
 
-  # A keyboard step (see {#keyboard}) that waits, for at most {DEADLINE}
-  # seconds, until the block returns true, and returns no key.
+  # A keyboard step that returns no key until the block returns true (see
+  # {WaitUntil}).
   #
-  # @return [Proc]
+  # @return [WaitUntil]
   def wait_until(&condition)
-    lambda do
-      deadline = Time.now + DEADLINE
-      sleep 0.001 until condition.call || Time.now > deadline
-      nil
-    end
+    WaitUntil.new(condition)
   end
 
   # Run the client (Application#run) with +command_window+ as its command
@@ -158,15 +172,22 @@ module ClientRun
   #   connects for real
   # @param connect_error [Exception, Class, nil] what +Socket.tcp+ raises
   #   instead, when given
-  # @return [Array(Integer, String)] the exit status (nil when the client
-  #   returned without exiting) and what it printed to stderr
+  # @return [Array(Integer, String)] the exit status (nil when the
+  #   client returned without exiting, :interrupt when Interrupt escaped
+  #   it) and what it printed to stderr
   def run_client(command_window, server: game_server, connect_error: nil)
     if connect_error
       allow(Socket).to receive(:tcp).and_raise(connect_error)
     elsif server
       allow(Socket).to receive(:tcp).and_return(server)
     end
-    allow(IO).to receive(:select).and_return(nil)
+    # The input loop's 0.1 s wait for a key becomes a short pause, taken
+    # outside the render lock as in the client; the server thread's check
+    # for more data finds none.
+    allow(IO).to receive(:select) do |readers, *|
+      sleep 0.0002 if readers == [$stdin]
+      nil
+    end
     # The layout keeps the command window it finds (it is created once)
     app.window_mgr.install_command_window(nil) { command_window }
     status = nil
@@ -174,6 +195,8 @@ module ClientRun
       app.run
     rescue SystemExit => e
       status = e.status
+    rescue Interrupt
+      status = :interrupt
     end
     [status, stderr]
   end
