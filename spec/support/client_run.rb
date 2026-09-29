@@ -189,14 +189,18 @@ module ClientRun
   # line and keyboard, connected to +server+, until it exits or the input
   # loop ends.
   #
+  # The threads the client started and left running (the time sync
+  # thread, which sleeps 15 seconds, and a server thread still reading)
+  # are stopped when it returns, so they don't pile up across examples.
+  #
   # @param command_window [Curses::Window] see {#keyboard}
   # @param server [GameServer, #gets, nil] what +Socket.tcp+ returns; nil
   #   connects for real
   # @param connect_error [Exception, Class, nil] what +Socket.tcp+ raises
   #   instead, when given
-  # @return [Array(Integer, String)] the exit status (nil when the
-  #   client returned without exiting, :interrupt when Interrupt escaped
-  #   it) and what it printed to stderr
+  # @return [Array(Integer, String), Array(nil, String), Array(Symbol, String)]
+  #   the exit status (nil when the client returned without exiting,
+  #   :interrupt when Interrupt escaped it) and what it printed to stderr
   def run_client(command_window, server: game_server, connect_error: nil)
     if connect_error
       allow(Socket).to receive(:tcp).and_raise(connect_error)
@@ -212,6 +216,7 @@ module ClientRun
     end
     # The layout keeps the command window it finds (it is created once)
     app.window_mgr.install_command_window(nil) { command_window }
+    threads_before = Thread.list
     status = nil
     stderr = capture_stderr do
       app.run
@@ -221,6 +226,8 @@ module ClientRun
       status = :interrupt
     end
     [status, stderr]
+  ensure
+    (Thread.list - threads_before).each { |thread| thread.kill.join } if threads_before
   end
 
   # Run a block with $stderr captured.
