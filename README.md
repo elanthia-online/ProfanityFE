@@ -44,6 +44,15 @@ See the **[User Guide](USER_GUIDE.md)** for full documentation including setting
 
 Install all dependencies with `bundle install`, or only the ones needed to run the client with `bundle config set --local without test && bundle install`.
 
+## Terminal
+
+Run with `TERM=xterm-256color`, or `tmux-256color` from a current ncurses terminfo (e.g. ncurses 6.x on Linux). Ctrl and Alt combinations with arrows, Delete or Page Up/Down need terminfo support: under `screen-256color`, or macOS's `tmux-256color`, Alt+PageUp/PageDown type characters into the command line instead.
+
+- GNU Screen: `term xterm-256color` in `.screenrc`
+- tmux: `set -g default-terminal "tmux-256color"` in `.tmux.conf`, with a terminfo that has the extended keys (`infocmp -x tmux-256color | grep kNXT3` prints a match)
+
+See [Modifier combinations](USER_GUIDE.md#available-key-names) in the User Guide.
+
 ## License
 
 Licensed under the GNU General Public License v2.0. See [profanity.rb](profanity.rb) header for details.

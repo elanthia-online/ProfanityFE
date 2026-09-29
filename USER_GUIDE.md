@@ -960,6 +960,15 @@ sends, so bindings to them don't fire.
 | `ctrl+?` | Ctrl + ? (keycode 127) |
 | `resize` | Terminal resize event (runs the `resize` action when not bound) |
 
+Ctrl and Alt with arrows, Delete or Page Up/Down need a `TERM` whose terminfo
+entry describes modified keys (extended capabilities such as `kNXT3`,
+Alt+PageDown). `xterm-256color` has them, and so does `tmux-256color` from a
+current ncurses (6.x on Linux). `screen-256color`, and `tmux-256color` on
+macOS, don't: the key isn't decoded and types characters such as `5;3~` into
+the command line, which are sent with your next command. Alt+PageUp/PageDown
+were tested this way; the other combinations rely on the same terminfo
+entries. `infocmp -x | grep kNXT3` shows whether your current `TERM` has them.
+
 **Single characters:** Any single character other than a digit can be used
 directly as a key name (e.g., `id='a'`).
 
@@ -1981,8 +1990,10 @@ support title updates or you find it distracting.
   id names no key is skipped, and the rest of the settings still load.
 - Some key combinations may not be available in all terminals (especially
   inside tmux or GNU Screen). For example, Ctrl+Tab arrives as a plain Tab,
-  and under `TERM=screen-256color` Ctrl+PageUp/PageDown aren't decoded (they
-  type characters into the command line instead).
+  and under `TERM=screen-256color` Ctrl+PageUp/PageDown and
+  Alt+PageUp/PageDown aren't decoded (they type characters into the command
+  line instead). Modified keys need terminfo support: see "Modifier
+  combinations" under Available Key Names.
 
 **Settings file doesn't load:**
 - At startup, the error names the file and the reason (for example "Settings
