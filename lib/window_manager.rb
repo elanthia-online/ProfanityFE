@@ -1,10 +1,8 @@
 # frozen_string_literal: true
 
-require_relative 'streams'
-require_relative 'feedback'
 require_relative 'window_layout'
 require_relative 'layout_loader'
-require_relative 'url_launcher'
+require_relative 'event_bridge'
 require_relative 'clock'
 
 # Manages Curses window creation, layout loading, and handler hash access
@@ -16,7 +14,8 @@ require_relative 'clock'
 # room) that map string keys to their corresponding window objects, plus
 # the command input window. Provides mutex-protected layout reloading so
 # the server read thread can safely read handler hashes while a layout
-# reload replaces them. {LayoutLoader} builds the windows of a layout.
+# reload replaces them. {LayoutLoader} builds the windows of a layout,
+# and {EventBridge} shows the parser's events in them.
 #
 # @example
 #   wm = WindowManager.new
@@ -96,171 +95,15 @@ class WindowManager
 
   # Subscribe to events from the parser's EventBus.
   #
-  # Bridges typed events to the appropriate window objects: routes text
-  # to stream windows, updates indicator/progress/countdown displays,
-  # dispatches room data to the RoomWindow, and handles prompt resize.
+  # Bridges typed events to the appropriate window objects through an
+  # {EventBridge}: routes text to stream windows, updates
+  # indicator/progress/countdown displays, dispatches room data to the
+  # RoomWindow, and handles prompt resize.
   #
   # @param event_bus [EventBus] the event bus to subscribe to
   # @return [void]
   def subscribe_to_events(event_bus)
-    # ---- Text display events ----
-
-    event_bus.on(:stream_text) do |data|
-      window = @stream[data[:stream]]
-      next unless window
-
-      window.route_string(data[:text], data[:colors], data[:stream], indent: data[:indent])
-    end
-
-    event_bus.on(:add_prompt) do |data|
-      window = @stream[data[:stream] || MAIN_STREAM]
-      next unless window
-      args = [window, data[:text]]
-      args << data[:command] if data[:command]
-      add_prompt(*args)
-    end
-
-    # ---- Indicator events ----
-
-    event_bus.on(:indicator_update) do |data|
-      window = @indicator[data[:id]]
-      next unless window
-
-      # One redraw after all attributes are set (label= would redraw with
-      # stale label_colors).
-      window.apply_changes(data.slice(:label, :label_colors, :value))
-    end
-
-    event_bus.on(:compass_update) do |data|
-      dirs = data[:dirs]
-      %w[up down out n ne e se s sw w nw].each do |dir|
-        window = @indicator["compass:#{dir}"]
-        window&.update(dirs.include?(dir))
-      end
-    end
-
-    # ---- Progress bar events ----
-
-    event_bus.on(:progress_update) do |data|
-      window = @progress[data[:id]]
-      next unless window
-
-      window.label = data[:label] if data.key?(:label)
-      window.fg = data[:fg] if data.key?(:fg)
-      window.bg = data[:bg] if data.key?(:bg)
-      window.update(data[:value], data[:max])
-    end
-
-    # ---- Countdown events ----
-
-    event_bus.on(:countdown_update) do |data|
-      window = @countdown[data[:id]]
-      next unless window
-
-      window.end_time = data[:end_time] if data.key?(:end_time)
-      window.secondary_end_time = data[:secondary_end_time] if data.key?(:secondary_end_time)
-      window.tick
-    end
-
-    event_bus.on(:countdown_active) do |data|
-      window = @countdown[data[:id]]
-      next unless window
-
-      window.active = data[:active]
-      window.tick
-    end
-
-    event_bus.on(:stun) do |data|
-      window = @countdown['stunned']
-      next unless window
-
-      window.end_time = @clock.now.to_f - @clock.server_time_offset.to_f + data[:seconds].to_f
-      window.tick
-    end
-
-    # ---- Prompt resize ----
-
-    event_bus.on(:prompt_changed) do |data|
-      @prompt_text = data[:text]
-      fit_prompt
-    end
-
-    # ---- Room events ----
-
-    event_bus.on(:room_title) do |data|
-      @room[Streams::ROOM]&.update_title(data[:text])
-    end
-
-    event_bus.on(:room_desc) do |data|
-      @room[Streams::ROOM]&.update_desc(data[:text], links: data[:links] || [])
-    end
-
-    event_bus.on(:room_objects) do |data|
-      @room[Streams::ROOM]&.update_objects(data[:text], links: data[:links] || [], creatures: data[:creatures] || [])
-    end
-
-    event_bus.on(:room_players) do |data|
-      @room[Streams::ROOM]&.update_players(data[:text], links: data[:links] || [])
-    end
-
-    event_bus.on(:room_exits) do |data|
-      @room[Streams::ROOM]&.update_exits(data[:text], links: data[:links] || [])
-    end
-
-    event_bus.on(:room_lich_exits) do |data|
-      @room[Streams::ROOM]&.update_lich_exits(data[:text])
-    end
-
-    event_bus.on(:room_number) do |data|
-      @room[Streams::ROOM]&.update_room_number(data[:text])
-    end
-
-    event_bus.on(:room_stringprocs) do |data|
-      @room[Streams::ROOM]&.update_stringprocs(data[:text])
-    end
-
-    event_bus.on(:room_supplemental_clear) do |_data|
-      @room[Streams::ROOM]&.clear_supplemental
-    end
-
-    event_bus.on(:room_render) do |_data|
-      @room[Streams::ROOM]&.render
-    end
-
-    # ---- Stream management events ----
-
-    event_bus.on(:exp_set_current) do |data|
-      @stream[Streams::EXP]&.set_current(data[:skill])
-    end
-
-    event_bus.on(:exp_delete_skill) do |_data|
-      @stream[Streams::EXP]&.delete_skill
-    end
-
-    event_bus.on(:clear_spells) do |_data|
-      @stream[Streams::PERC]&.clear_spells
-    end
-
-    # ---- Special events ----
-
-    event_bus.on(:launch_url) do |data|
-      window = @stream[MAIN_STREAM]
-      next unless window
-
-      if data[:remote]
-        # --remote-url: display URL on screen for copy/paste (SSH/remote sessions)
-        window.add_string(' *'.dup)
-        window.add_string(" * LaunchURL: #{data[:url]}")
-        window.add_string(' *'.dup)
-      else
-        # Default: open URL in system browser
-        UrlLauncher.open(data[:url])
-      end
-    end
-
-    event_bus.on(:disconnect) do |_data|
-      Feedback.write(@stream[MAIN_STREAM], '* Connection closed', '* Press any key to exit...', banner: true)
-    end
+    EventBridge.new(self).subscribe(event_bus)
   end
 
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
@@ -395,6 +238,17 @@ class WindowManager
 
       Curses.doupdate
     end # CursesRenderer.synchronize
+  end
+
+  # Remember the prompt the game sent last and fit the prompt indicator
+  # and command window to it (see +fit_prompt+). Called on every
+  # +:prompt_changed+ event.
+  #
+  # @param prompt_text [String] the prompt text (e.g. "H>")
+  # @return [void]
+  def fit_prompt_to(prompt_text)
+    @prompt_text = prompt_text
+    fit_prompt
   end
 
   private
