@@ -222,4 +222,15 @@ RSpec.describe Curses::Window do
       expect([win.attrs_at(0, 0), win.attrs_at(0, 1), win.attrs_at(0, 2)]).to eq [Curses::A_REVERSE, Curses::A_REVERSE, 0]
     end
   end
+
+  describe 'a closed window' do
+    %i[maxy cury addstr close].each do |meth|
+      it "raises on #{meth}, as the curses gem does" do
+        win = window(5, 20)
+        win.close
+        expect { meth == :addstr ? win.addstr('x') : win.public_send(meth) }
+          .to raise_error(RuntimeError, 'already closed window')
+      end
+    end
+  end
 end

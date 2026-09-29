@@ -349,14 +349,14 @@ RSpec.describe WindowManager, '#resize geometry' do
       expect(wm.command_window.row(0)).to eq 'look at the stones'
     end
 
+    # The dropped windows are closed, and any call on a closed window
+    # raises, so the resize itself proves it left them alone.
     it 'resizes only the windows the new layout kept' do
       dropped = windows.except(:main, :kneeling, :command, :prompt)
-      before_switch = dropped.transform_values { |window| geometry(window) }
       load(second_layout, id: 'second')
 
-      resize_to(30, 100)
-
-      expect(dropped.transform_values { |window| geometry(window) }).to eq before_switch
+      expect { resize_to(30, 100) }.not_to raise_error
+      expect(dropped.values.map { |window| window.call_log.last.first }).to all(eq :close)
     end
 
     it 'resizes the windows of the first layout again after switching back to it' do

@@ -173,6 +173,20 @@ module SelectionManager
       @multi_click_selected = false
     end
 
+    # Drop every reference to a window that is about to close: its
+    # selection (a drag in progress or the highlight kept after one) and
+    # the double-click memory of a press in it. Call it before the window
+    # closes, while its highlight can still be cleared: afterwards any
+    # call on it raises, so a selection left there would break the drag
+    # auto-scroll tick and the next press's {.clear_selection}.
+    #
+    # @param window [BaseWindow] the window being closed
+    # @return [void]
+    def forget_window(window)
+      clear_selection if @active_window.equal?(window)
+      @last_press_window = nil if @last_press_window.equal?(window)
+    end
+
     private
 
     # @return [Float] monotonic clock reading in seconds

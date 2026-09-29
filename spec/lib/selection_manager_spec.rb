@@ -209,6 +209,60 @@ RSpec.describe SelectionManager do
     end
   end
 
+  describe '.forget_window' do
+    let(:other) { FakeBufferWindow.new(height: 10) }
+
+    before do
+      fill(window, 10)
+      fill(other, 10)
+    end
+
+    it 'ends a drag in the closing window and clears its highlight first' do
+      described_class.start_selection(window, 3, 0)
+      described_class.drag_update(5, 2, now: 0.0)
+      allow(window).to receive(:clear_highlight)
+
+      described_class.forget_window(window)
+
+      expect(window).to have_received(:clear_highlight)
+      expect([described_class.active_window, described_class.selecting, described_class.last_drag_pos])
+        .to eq [nil, false, nil]
+      expect(described_class.end_selection).to be_nil
+    end
+
+    it 'drops the highlight kept after a copy in the closing window' do
+      described_class.start_selection(window, 3, 0)
+      described_class.update_selection(3, 6)
+      described_class.end_selection
+
+      described_class.forget_window(window)
+
+      expect(described_class.active_window).to be_nil
+    end
+
+    it "leaves another window's selection alone" do
+      described_class.start_selection(other, 3, 0)
+      allow(other).to receive(:clear_highlight)
+
+      described_class.forget_window(window)
+
+      expect(other).not_to have_received(:clear_highlight)
+      described_class.update_selection(3, 6)
+      described_class.end_selection
+      expect(copied).to eq(['line 3'])
+    end
+
+    it 'forgets a press in the closing window for double-click counting' do
+      described_class.start_selection(window, 0, 3, now: 0.0)
+      described_class.end_selection
+
+      described_class.forget_window(window)
+      described_class.start_selection(window, 0, 3, now: 0.1)
+
+      expect(described_class.click_count).to eq 1
+    end
+  end
+
   it 'copies wrapped display lines as one logical line' do
     window.add_line('The quick brown ')
     window.add_line('  fox jumps', continuation: true)
