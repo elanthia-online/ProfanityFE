@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../streams'
+require_relative 'stream_window'
 
 # Experience/skills display window with sorted skill list and highlight support.
 
@@ -11,6 +12,8 @@ require_relative '../streams'
 # maintains a sorted skill map. Redraws the full skill list on every
 # update, applying highlights via {HighlightProcessor}.
 class ExpWindow < BaseWindow
+  include StreamWindow
+
   # The layout's last column is left blank, both when the window is built
   # and when it is resized, so the window doesn't widen on resize.
   #

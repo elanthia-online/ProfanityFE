@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../streams'
+require_relative 'stream_window'
 
 # Active spells/effects display with duration-based sorting.
 
@@ -19,6 +20,8 @@ require_relative '../streams'
 # received so far; {#redraw} (used on terminal resize) repaints the same
 # batch at the current width.
 class PercWindow < BaseWindow
+  include StreamWindow
+
   # The layout's last column is left blank, both when the window is built
   # and when it is resized, so the window doesn't widen on resize.
   #

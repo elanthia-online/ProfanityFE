@@ -3,6 +3,7 @@
 # Multi-tab text window sharing one display area with tab bar and keyboard switching.
 
 require_relative 'line_buffered'
+require_relative 'stream_window'
 
 # Multi-tab text window.
 #
@@ -14,6 +15,7 @@ require_relative 'line_buffered'
 # bar shows the active tab's (see {LineBuffered}).
 class TabbedTextWindow < BaseWindow
   include LineBuffered
+  include StreamWindow
 
   # Height in rows reserved for the tab bar at the top of the window.
   TAB_BAR_HEIGHT = 1

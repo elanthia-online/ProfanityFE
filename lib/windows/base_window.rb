@@ -10,9 +10,9 @@ require_relative '../window_layout'
 # Base class for all ProfanityFE windows.
 #
 # Provides shared rendering ({#add_line}, {#wrap_text}), scrollbar management
-# ({#render_scrollbar}, {#reset_scrollbar}), polymorphic routing
-# ({#route_string}, {#duplicate_prompt?}), selection support, and a window
-# class registry used for hit-testing ({.find_window_at}).
+# ({#render_scrollbar}, {#reset_scrollbar}), selection support, and a window
+# class registry used for hit-testing ({.find_window_at}). Windows that
+# take routed stream text include {StreamWindow}.
 class BaseWindow < Curses::Window
   # Bold vertical line character used for the scrollbar when the window is active.
   ACTIVE_SCROLLBAR_CHAR = "\u2503" # bold vertical line
@@ -244,42 +244,6 @@ class BaseWindow < Curses::Window
 
     @scrollbar.erase
     @scrollbar.noutrefresh
-  end
-
-  # --- Polymorphic routing (DRY: eliminates is_a?(TabbedTextWindow) checks) ---
-
-  # Route text to this window. Default: delegates to add_string.
-  # TabbedTextWindow overrides to route to the appropriate tab.
-  #
-  # @param text [String] the text to display
-  # @param colors [Array<Hash>] color region descriptors
-  # @param _stream [String, nil] stream name (used by TabbedTextWindow override)
-  # @return [void]
-  def route_string(text, colors, _stream = nil, indent: nil)
-    add_string(text, colors, indent: indent)
-  end
-
-  # Check if the most recent non-empty line of the window's prompt buffer
-  # (see {#prompt_buffer}) matches the given prompt text. Used to suppress
-  # duplicate bare prompts.
-  #
-  # @param prompt_text [String] the prompt string to check against
-  # @return [Boolean, nil] false for a window without a prompt buffer or
-  #   with an empty one, else as {LineBuffer#newest_text?}
-  def duplicate_prompt?(prompt_text)
-    line_buffer = prompt_buffer
-    return false unless line_buffer
-
-    line_buffer.newest_text?(prompt_text)
-  end
-
-  # The buffer prompts routed to this window land in, which
-  # {#duplicate_prompt?} checks. Default: none, so no prompt is a
-  # duplicate.
-  #
-  # @return [LineBuffer, nil]
-  private def prompt_buffer
-    nil
   end
 
   # --- Phase 3 selection support ---
