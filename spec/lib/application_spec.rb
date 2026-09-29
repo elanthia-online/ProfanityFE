@@ -180,14 +180,14 @@ RSpec.describe Application do
 
     it 'forwards unknown dot-commands to server with . replaced by ;' do
       server = StringIO.new
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       app.execute_command('.script start')
       expect(server.string).to eq ";script start\n"
     end
 
     it 'forwards non-dot commands to server' do
       server = StringIO.new
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       app.execute_command('go north')
       # Non-dot commands don't match any dot-command, so they go to the
       # else branch which does server.puts cmd.sub(/^\./, ';')
@@ -198,7 +198,7 @@ RSpec.describe Application do
     # Adversarial
     it 'does not crash on empty command' do
       server = StringIO.new
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       expect { app.execute_command('') }.not_to raise_error
     end
 
@@ -222,7 +222,7 @@ RSpec.describe Application do
     describe 'whole-word matching' do
       let(:server) { StringIO.new }
 
-      before { app.instance_variable_set(:@server, server) }
+      before { app.connection.attach(server) }
 
       {
         '.quitter'         => ";quitter\n",
@@ -343,7 +343,7 @@ RSpec.describe Application do
 
     it 'handles \\r to send command' do
       server = StringIO.new
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       app.do_macro('go north\\r')
       # The command should have been sent
       expect(server.string).to include('go north')
@@ -358,7 +358,7 @@ RSpec.describe Application do
 
     it 'handles macro with only escape sequences' do
       server = StringIO.new
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       expect { app.do_macro('\\x\\r') }.not_to raise_error
     end
 
@@ -385,7 +385,7 @@ RSpec.describe Application do
 
     it 'send_command clears buffer, echoes prompt, and dispatches' do
       server = StringIO.new
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       app.cmd_buffer.put_ch('g')
       app.cmd_buffer.put_ch('o')
       app.key_action['send_command'].call
@@ -395,7 +395,7 @@ RSpec.describe Application do
 
     it 'send_last_command resends from history' do
       server = StringIO.new
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       app.cmd_buffer.add_to_history('look')
       app.key_action['send_last_command'].call
       expect(server.string).to include('look')
@@ -423,7 +423,7 @@ RSpec.describe Application do
       let(:screen) { ScreenLineWindow.new(20) }
 
       before do
-        app.instance_variable_set(:@server, server)
+        app.connection.attach(server)
         app.cmd_buffer.window = screen
       end
 
@@ -846,9 +846,9 @@ RSpec.describe Application do
         queue = lines.map { |line| "#{line}\r\n" }
         server = Object.new
         server.define_singleton_method(:gets) { queue.shift&.dup }
-        app.instance_variable_set(:@server, server)
+        app.connection.attach(server)
         app.send(:start_server_thread)
-        app.instance_variable_get(:@session_end).pop
+        app.connection.take_outcome
       end
 
       # The highlight color of +word+ on the newest main-window row showing
@@ -994,7 +994,7 @@ RSpec.describe Application do
       let(:settings) { super().sub('</settings>', "<key id='resize' macro='look\\r'/></settings>") }
       let(:server) { StringIO.new }
 
-      before { app.instance_variable_set(:@server, server) }
+      before { app.connection.attach(server) }
 
       it 'runs that binding instead' do
         resize_terminal
@@ -1186,7 +1186,7 @@ RSpec.describe Application do
 
     before do
       app.cmd_buffer.window = screen
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       app.key_binding[10] = app.key_action['send_command']
       app.key_binding[Curses::KEY_LEFT] = app.key_action['cursor_left']
       app.key_binding[backspace] = app.key_action['cursor_backspace']
@@ -1487,7 +1487,7 @@ RSpec.describe Application do
       let(:port) { listener.addr[1] }
 
       after do
-        app.instance_variable_get(:@server)&.close
+        app.connection.close
         listener.close
       end
 
@@ -1569,7 +1569,7 @@ RSpec.describe Application do
     # Returns the SystemExit raised, or nil if the loop ended without one.
     def run_session(server)
       app.cmd_buffer.window = keyboard_with_key('q', screen)
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       app.send(:start_server_thread)
       app.send(:input_loop)
       nil

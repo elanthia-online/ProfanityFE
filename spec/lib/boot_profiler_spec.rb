@@ -204,7 +204,7 @@ RSpec.describe BootProfiler do
     it 'passes its profiler to the GameTextProcessor' do
       profiler = described_class.new(enabled: false)
       app = application(boot_profiler: profiler)
-      app.instance_variable_set(:@server, StringIO.new)
+      app.connection.attach(StringIO.new)
       allow(GameTextProcessor).to receive(:new).and_call_original
 
       app.send(:start_server_thread).join

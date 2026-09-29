@@ -105,7 +105,7 @@ RSpec.describe 'Writes to the game server' do
       keyboard.define_singleton_method(:getch, &next_key)
       keyboard.define_singleton_method(:get_char, &next_key)
       app.cmd_buffer.window = keyboard
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
       app.send(:input_loop)
     end
 
@@ -136,7 +136,7 @@ RSpec.describe 'Writes to the game server' do
     end
 
     it 'still sends immediately when called outside the lock' do
-      app.instance_variable_set(:@server, server)
+      app.connection.attach(server)
 
       app.execute_command('get sword')
 

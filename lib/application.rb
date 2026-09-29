@@ -6,18 +6,21 @@ require_relative 'feedback'
 require_relative 'boot_profiler'
 require_relative 'clock'
 require_relative 'games'
+require_relative 'server_connection'
+require_relative 'key_action_registry'
+require_relative 'macro_interpreter'
+require_relative 'mouse_controller'
 
 # Core application class for ProfanityFE.
 #
 # Owns all runtime state that was previously captured by closures in
 # profanity.rb: the command buffer, window manager, shared state,
-# key bindings, mouse scroll handler, and game server connection.
+# key bindings, and the {ServerConnection}; mouse handling is in the
+# {MouseController} and macros run in the {MacroInterpreter}.
 #
-# Converts closure-captured local variables to instance variables and
-# the 30+ proc definitions to named methods. The key_action hash still
-# contains Proc objects (SettingsLoader requires this), but each proc
-# now delegates to an instance method rather than closing over 10+
-# local variables.
+# Converts closure-captured local variables to instance variables. The
+# key actions are Procs by name (SettingsLoader requires this), built by
+# {KeyActionRegistry}.
 #
 # @example
 #   app = Application.new(cli_options, settings_file: '/home/user/.profanity/mahtra.xml',
@@ -26,6 +29,9 @@ require_relative 'games'
 class Application
   attr_reader :key_binding, :key_action, :cmd_buffer, :window_mgr,
               :shared_state, :mouse_scroll
+
+  # @return [ServerConnection] the connection to the game server
+  attr_reader :connection
 
   # The dot-commands, in the order {#execute_command} tries them (the first
   # match wins) and +.help+ lists them. Each handler runs with
@@ -95,8 +101,8 @@ class Application
   DOT_KEY_TIMEOUT_MS = 5000
 
   # Seconds to wait for the TCP connection to the game server before giving
-  # up, so an unreachable --host fails instead of hanging.
-  CONNECT_TIMEOUT = 10
+  # up (see {ServerConnection::CONNECT_TIMEOUT}).
+  CONNECT_TIMEOUT = ServerConnection::CONNECT_TIMEOUT
 
   # Color of the highlights added with +.highlight+ (cyan).
   INLINE_HIGHLIGHT_COLOR = '00ffff'
@@ -116,13 +122,9 @@ class Application
                  game_rules: Games::BOTH_GAMES)
     @cli_options = cli_options
     @settings_file = settings_file
-    @host = host
-    @port = port
     @boot_profiler = boot_profiler
     @game_rules = game_rules
-    @server = nil
-    # Receives the server thread's outcome (see #start_server_thread)
-    @session_end = Queue.new
+    @connection = ServerConnection.new(host: host, port: port)
 
     @xml_escapes = {
       '&lt;'   => '<',
@@ -145,13 +147,20 @@ class Application
     @clock = Clock.new
     @window_mgr = WindowManager.new(clock: @clock)
     @key_binding = {}
-    @key_action = {}
     @selection_enabled = false
 
-    setup_key_actions
+    @key_action = KeyActionRegistry.new(cmd_buffer: @cmd_buffer, window_mgr: @window_mgr,
+                                        key_binding: @key_binding,
+                                        send_command: method(:send_command),
+                                        send_history_command: method(:send_history_command)).actions
+    @macro_interpreter = MacroInterpreter.new(cmd_buffer: @cmd_buffer, send_command: method(:send_command))
 
-    @mouse_scroll = MouseScroll.new(@key_action, method(:write_to_client))
-    @mouse_scroll.enable_click_events if cli_options[:links]
+    @mouse_controller = MouseController.new(key_action: @key_action, window_mgr: @window_mgr,
+                                            shared_state: @shared_state, cmd_buffer: @cmd_buffer,
+                                            write_to_client: method(:write_to_client),
+                                            send_to_server: @connection.method(:send_line),
+                                            links: cli_options[:links])
+    @mouse_scroll = @mouse_controller.mouse_scroll
     @boot_profiler.mark('Application.new')
   end
 
@@ -189,57 +198,21 @@ class Application
 
       return instance_exec(*args, &command.handler)
     end
-    send_to_server(cmd.sub(/^\./, ';'))
+    @connection.send_line(cmd.sub(/^\./, ';'))
   end
 
-  # Interpret and execute a macro string.
+  # Interpret and execute a macro string (see {MacroInterpreter}).
   #
   # Inserts characters into the command buffer while handling escape
   # sequences: \\ (literal backslash), \x (clear buffer), \r (send
   # command), \@ (literal @), \? (backfill cursor position). A bare @
-  # marks the final cursor position.
+  # marks the final cursor position. {SettingsLoader} binds macro keys to
+  # this method.
   #
   # @param macro [String] the macro string to execute
   # @return [void]
   def do_macro(macro)
-    backslash = false
-    at_pos = nil
-    backfill = nil
-    macro.split('').each_with_index do |ch, i|
-      if backslash
-        case ch
-        when '\\'
-          @cmd_buffer.put_ch('\\')
-        when 'x'
-          @cmd_buffer.text.clear
-          @cmd_buffer.clear_and_get
-        when 'r'
-          at_pos = nil
-          send_command
-        when '@'
-          @cmd_buffer.put_ch('@')
-        when '?'
-          backfill = i - 3
-        end
-        backslash = false
-      elsif ch == '\\'
-        backslash = true
-      elsif ch == '@'
-        at_pos = @cmd_buffer.pos
-      else
-        @cmd_buffer.put_ch(ch)
-      end
-    end
-    if at_pos
-      @cmd_buffer.cursor_left while at_pos < @cmd_buffer.pos
-      @cmd_buffer.cursor_right while at_pos > @cmd_buffer.pos
-    end
-    @cmd_buffer.refresh
-    if backfill
-      @cmd_buffer.window.setpos(0, backfill)
-      backfill = nil
-    end
-    CursesRenderer.doupdate
+    @macro_interpreter.call(macro)
   end
 
   private
@@ -490,6 +463,11 @@ class Application
 
   # ---- Command sending ----
 
+  # Send the command line: clear it, echo it after the prompt in the main
+  # window, add it to the history and run it (see {#execute_command}).
+  # Bound to the +send_command+ key action and run by a macro's +\r+.
+  #
+  # @return [void]
   def send_command
     cmd = @cmd_buffer.clear_and_get
     @shared_state.need_prompt = false
@@ -502,20 +480,12 @@ class Application
     execute_command(cmd)
   end
 
-  # Write one line to the game server, never while holding the render lock.
+  # Resend a command from the history, echoing it first when there is a
+  # main window. Bound to the +send_last_command+ (1) and
+  # +send_second_last_command+ (2) key actions.
   #
-  # Key handlers run inside {CursesRenderer.synchronize}. If the server
-  # stops reading and the socket's send buffer fills, the write blocks; with
-  # the lock held that would also stop the server thread from drawing. So
-  # the write waits until the lock is released (see
-  # {CursesRenderer.outside_lock}); lines keep the order they were sent in.
-  #
-  # @param line [String] the command to send
+  # @param index [Integer] history index, 1 = the last command sent
   # @return [void]
-  def send_to_server(line)
-    CursesRenderer.outside_lock { @server.puts line }
-  end
-
   def send_history_command(index)
     if (cmd = @cmd_buffer.history[index])
       if (window = @window_mgr.stream[MAIN_STREAM])
@@ -525,129 +495,6 @@ class Application
       end
       execute_command(cmd)
     end
-  end
-
-  # ---- Key action setup ----
-
-  # Register every named key action as a Proc in {#key_action}.
-  #
-  # Each cursor/edit action delegates to {CommandBuffer}, which only stages
-  # its changes to the curses virtual screen via +noutrefresh+. The physical
-  # terminal is not repainted until +doupdate+ is called, so *every* action
-  # that mutates the visible command line must end with
-  # {CursesRenderer.doupdate}. Omitting it leaves the edit invisible until
-  # the next keystroke happens to trigger a flush -- the class of bug that
-  # previously affected +cursor_backspace_word+, +cursor_delete_word+, and
-  # +cursor_yank+.
-  #
-  # @return [void]
-  # @see CommandBuffer#backspace_word
-  # @see CursesRenderer.doupdate
-  def setup_key_actions
-    @key_action['resize'] = proc {
-      @window_mgr.resize(@cmd_buffer)
-      CursesRenderer.doupdate
-    }
-
-    @key_action['cursor_left']           = proc { @cmd_buffer.cursor_left; CursesRenderer.doupdate }
-    @key_action['cursor_right']          = proc { @cmd_buffer.cursor_right; CursesRenderer.doupdate }
-    @key_action['cursor_word_left']      = proc { @cmd_buffer.cursor_word_left; CursesRenderer.doupdate }
-    @key_action['cursor_word_right']     = proc { @cmd_buffer.cursor_word_right; CursesRenderer.doupdate }
-    @key_action['cursor_home']           = proc { @cmd_buffer.cursor_home; CursesRenderer.doupdate }
-    @key_action['cursor_end']            = proc { @cmd_buffer.cursor_end; CursesRenderer.doupdate }
-    @key_action['cursor_backspace']      = proc { @cmd_buffer.backspace; CursesRenderer.doupdate }
-    @key_action['cursor_delete']         = proc { @cmd_buffer.delete_char; CursesRenderer.doupdate }
-    @key_action['cursor_backspace_word'] = proc { @cmd_buffer.backspace_word; CursesRenderer.doupdate }
-    @key_action['cursor_delete_word']    = proc { @cmd_buffer.delete_word; CursesRenderer.doupdate }
-    @key_action['cursor_kill_forward']   = proc { @cmd_buffer.kill_forward; CursesRenderer.doupdate }
-    @key_action['cursor_kill_line']      = proc { @cmd_buffer.kill_line; CursesRenderer.doupdate }
-    @key_action['cursor_yank']           = proc { @cmd_buffer.yank; CursesRenderer.doupdate }
-
-    @key_action['switch_current_window'] = proc {
-      SCROLL_WINDOW[0]&.set_active(false)
-      SCROLL_WINDOW.push(SCROLL_WINDOW.shift)
-      SCROLL_WINDOW[0]&.set_active(true)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['next_tab'] = proc {
-      TabbedTextWindow.list.each(&:next_tab)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-    @key_action['switch_tab'] = @key_action['next_tab']
-
-    @key_action['prev_tab'] = proc {
-      TabbedTextWindow.list.each(&:prev_tab)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-    @key_action['switch_tab_reverse'] = @key_action['prev_tab']
-
-    (1..5).each do |n|
-      @key_action["switch_tab_#{n}"] = proc {
-        TabbedTextWindow.list.each { |w| w.switch_tab_by_index(n) }
-        @cmd_buffer.refresh
-        CursesRenderer.doupdate
-      }
-    end
-
-    @key_action['scroll_current_window_up_one'] = proc {
-      SCROLL_WINDOW[0]&.scroll_lines(-1)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['scroll_current_window_down_one'] = proc {
-      SCROLL_WINDOW[0]&.scroll_lines(1)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['scroll_current_window_up_page'] = proc {
-      if (w = SCROLL_WINDOW[0])
-        w.scroll_lines(0 - w.maxy + 1)
-      end
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['scroll_current_window_down_page'] = proc {
-      if (w = SCROLL_WINDOW[0])
-        w.scroll_lines(w.maxy - 1)
-      end
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['scroll_current_window_bottom'] = proc {
-      # buffer_pos counts rows; the buffer size counts (wrapped) lines
-      SCROLL_WINDOW[0]&.scroll_lines(SCROLL_WINDOW[0]&.buffer_pos)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['previous_command'] = proc { @cmd_buffer.previous_command; CursesRenderer.doupdate }
-    @key_action['next_command']     = proc { @cmd_buffer.next_command; CursesRenderer.doupdate }
-
-    @key_action['switch_arrow_mode'] = proc {
-      if @key_binding[Curses::KEY_UP] == @key_action['previous_command']
-        @key_binding[Curses::KEY_UP] = @key_action['scroll_current_window_up_page']
-        @key_binding[Curses::KEY_DOWN] = @key_action['scroll_current_window_down_page']
-      elsif @key_binding[Curses::KEY_UP] == @key_action['scroll_current_window_up_page']
-        @key_binding[Curses::KEY_UP] = @key_action['scroll_current_window_up_one']
-        @key_binding[Curses::KEY_DOWN] = @key_action['scroll_current_window_down_one']
-      else
-        @key_binding[Curses::KEY_UP] = @key_action['previous_command']
-        @key_binding[Curses::KEY_DOWN] = @key_action['next_command']
-      end
-    }
-
-    @key_action['send_command']             = proc { send_command }
-    @key_action['send_last_command']        = proc { send_history_command(1) }
-    @key_action['send_second_last_command'] = proc { send_history_command(2) }
-    @key_action['autocomplete']             = proc { Autocomplete.complete(@cmd_buffer, @window_mgr.stream[MAIN_STREAM]) }
   end
 
   # ---- Initialization ----
@@ -680,10 +527,13 @@ class Application
     TextWindow.list.each { |w| w.maxy.times { w.add_string "\n".dup } }
   end
 
+  # Connect to the game server (see {ServerConnection#connect}), forget the
+  # server time offset of the last connection and start the time sync
+  # thread. Exits with an error if the connection fails.
+  #
+  # @return [void]
   def connect_server
-    @server = Socket.tcp(@host, @port, connect_timeout: CONNECT_TIMEOUT)
-    @server.puts "SET_FRONTEND_PID #{Process.pid}"
-    @server.flush
+    @connection.connect
 
     @clock.server_time_offset = 0.0
 
@@ -692,12 +542,8 @@ class Application
       sleep TIME_SYNC_DELAY
       @shared_state.skip_server_time_offset = false
     end
-  # SystemCallError covers refused, unreachable, timed out, and bad
-  # address; SocketError covers name lookup. IO::TimeoutError is what
-  # TCPSocket's connect_timeout raises, should the socket class change.
-  rescue SystemCallError, SocketError, IO::TimeoutError => e
-    fatal_error("Failed to connect to game server at #{@host}:#{@port}: #{e.message}",
-                'Is the game server running?')
+  rescue ServerConnection::ConnectError => e
+    fatal_error(e.message, 'Is the game server running?')
   end
 
   # Print an error and exit with status 1, closing the curses screen first.
@@ -714,6 +560,10 @@ class Application
     exit 1
   end
 
+  # Build the event bus and the {GameTextProcessor}, and start the server
+  # thread that feeds the processor from the connection.
+  #
+  # @return [Thread] the server thread
   def start_server_thread
     @event_bus = EventBus.new
     @window_mgr.subscribe_to_events(@event_bus)
@@ -734,12 +584,7 @@ class Application
     )
     # The server thread only reports how the connection ended; the input
     # loop picks that up and ends the session on the main thread.
-    Thread.new do
-      outcome = :crashed
-      outcome = @processor.run(@server)
-    ensure
-      @session_end << outcome
-    end
+    @connection.start_reader { |socket| @processor.run(socket) }
   end
 
   # End the session once the server thread reports that the connection is
@@ -797,13 +642,13 @@ class Application
 
     loop do
       IO.select([$stdin], nil, nil, 0.1)
-      end_session(@session_end.pop) unless @session_end.empty?
+      end_session(@connection.take_outcome) if @connection.ended?
 
       CursesRenderer.synchronize do
         # Tick countdowns on every iteration (~100ms), regardless of input
         countdown_updated = tick_countdowns
         # Drag held at a window edge keeps scrolling once per tick
-        drag_scrolled = tick_drag_auto_scroll
+        drag_scrolled = @mouse_controller.tick_drag_auto_scroll
 
         ch = read_key
         if ch.nil?
@@ -822,11 +667,7 @@ class Application
   rescue StandardError => e
     ProfanityLog.write('main', e.to_s, backtrace: e.backtrace)
   ensure
-    begin
-      @server&.close
-    rescue StandardError
-      # ignore
-    end
+    @connection.close
     Curses.close_screen
   end
 
@@ -846,7 +687,7 @@ class Application
   # @return [Hash, nil] the key-combo map to use for the next key
   def handle_key(ch, key_combo)
     if ch == Curses::KEY_MOUSE
-      handle_mouse_event
+      @mouse_controller.handle_event
       return key_combo
     end
 
@@ -880,136 +721,5 @@ class Application
   rescue StandardError => e
     ProfanityLog.write('main', "input handler failed: #{e.message}", backtrace: e.backtrace)
     nil
-  end
-
-  # ---- Mouse event handling ----
-
-  def handle_mouse_event
-    mouse = Curses.getmouse
-    return unless mouse
-
-    if @mouse_scroll.configuring?
-      @mouse_scroll.process(mouse)
-      return
-    end
-    @mouse_scroll.process(mouse)
-
-    screen_y = mouse.y
-    screen_x = mouse.x
-    bstate = mouse.bstate
-
-    if (bstate & Curses::BUTTON1_PRESSED) != 0
-      handle_mouse_press(screen_y, screen_x)
-    elsif (bstate & Curses::BUTTON1_RELEASED) != 0
-      handle_mouse_release(screen_y, screen_x)
-    elsif defined?(Curses::BUTTON1_CLICKED) && (bstate & Curses::BUTTON1_CLICKED) != 0
-      SelectionManager.clear_selection
-      window = BaseWindow.find_window_at(screen_y, screen_x)
-      if window
-        rel_y = screen_y - window.begy
-        rel_x = screen_x - window.begx
-        dispatch_link(window, rel_y, rel_x)
-      end
-    elsif MouseScroll::MOTION_EVENTS.nonzero? && (bstate & MouseScroll::MOTION_EVENTS) != 0
-      handle_mouse_drag(screen_y, screen_x)
-    end
-  end
-
-  def handle_mouse_press(screen_y, screen_x)
-    window = BaseWindow.find_window_at(screen_y, screen_x)
-    unless window
-      SelectionManager.clear_selection
-      return
-    end
-
-    rel_y = screen_y - window.begy
-    rel_x = screen_x - window.begx
-    multi_click = SelectionManager.start_selection(window, rel_y, rel_x)
-    # Motion reporting only while the button is held — a permanent
-    # motion stream corrupts the display
-    @mouse_scroll.begin_drag_capture
-    CursesRenderer.doupdate if multi_click
-  end
-
-  # Live highlight update from a motion report while button 1 is held.
-  # SelectionManager throttles redraws so a motion flood coalesces.
-  def handle_mouse_drag(screen_y, screen_x)
-    window = SelectionManager.active_window
-    return unless window && SelectionManager.selecting
-
-    rel_y = screen_y - window.begy
-    rel_x = screen_x - window.begx
-    CursesRenderer.doupdate if SelectionManager.drag_update(rel_y, rel_x)
-  end
-
-  def handle_mouse_release(screen_y, screen_x)
-    @mouse_scroll.end_drag_capture
-    return unless SelectionManager.selecting
-
-    window = SelectionManager.active_window
-    unless window
-      SelectionManager.clear_selection
-      return
-    end
-
-    rel_y = screen_y - window.begy
-    rel_x = screen_x - window.begx
-    start_pos = SelectionManager.start_pos
-
-    if start_pos && start_pos[0] == rel_y && (start_pos[1] - rel_x).abs <= 3
-      if SelectionManager.multi_click_selected?
-        # Double/triple click: copy the expanded word/line selection
-        finalize_selection
-      else
-        # Single click (no drag): check for link, skip selection
-        dispatch_link(window, rel_y, rel_x)
-        SelectionManager.clear_selection
-      end
-    else
-      # Actual drag: finalize selection and copy to clipboard
-      SelectionManager.update_selection(rel_y, rel_x)
-      finalize_selection
-    end
-  end
-
-  # Copy the finished selection and show brief feedback in the main window.
-  def finalize_selection
-    chars = SelectionManager.end_selection
-    # write_to_client flushes when it shows the notice
-    return if chars&.positive? && write_to_client("* [copied #{chars} chars]")
-
-    CursesRenderer.doupdate
-  end
-
-  # While a drag is held at a window's top or bottom edge, keep scrolling
-  # one line per input-loop tick (~100ms) and extend the selection.
-  # Motion events stop when the pointer stops moving, so the tick drives
-  # the repeat. Returns true if the screen needs a refresh.
-  def tick_drag_auto_scroll
-    return false unless SelectionManager.selecting
-
-    window = SelectionManager.active_window
-    pos = SelectionManager.last_drag_pos
-    return false unless window && pos
-
-    scrolled = window.drag_auto_scroll(pos[0])
-    SelectionManager.update_selection(pos[0], pos[1]) if scrolled
-    scrolled
-  end
-
-  def dispatch_link(window, rel_y, rel_x)
-    # Links may be toggled off while selection capture (.select) stays on;
-    # lines rendered earlier can still carry cmd runs that must not fire
-    return unless @shared_state.blue_links
-
-    if (link_cmd = window.link_cmd_at(rel_y, rel_x))
-      if (main = @window_mgr.stream[MAIN_STREAM])
-        @window_mgr.add_prompt(main, @shared_state.prompt_text, link_cmd)
-        CursesRenderer.doupdate
-      end
-      @cmd_buffer.add_to_history(link_cmd)
-      send_to_server(link_cmd)
-      true
-    end
   end
 end

@@ -72,7 +72,7 @@ RSpec.describe 'Feedback lines in the main window' do
     LAYOUT['feedback'] = REXML::Document.new(layout).root
     app.window_mgr.load_layout('feedback')
     app.cmd_buffer.window = app.window_mgr.command_window
-    app.instance_variable_set(:@server, server)
+    app.connection.attach(server)
     SelectionManager.clear_selection
     record_events
   end
@@ -306,7 +306,7 @@ RSpec.describe 'Feedback lines in the main window' do
       eof_server = Object.new
       eof_server.define_singleton_method(:gets) { queue.shift }
       eof_server.define_singleton_method(:close) { nil }
-      app.instance_variable_set(:@server, eof_server)
+      app.connection.attach(eof_server)
       app.send(:start_server_thread).join
       app.cmd_buffer.window.define_singleton_method(:getch) { 'q' }
       events.clear
