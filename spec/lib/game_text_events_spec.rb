@@ -41,6 +41,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
     )
   end
 
+  # The processor's stream router
+  def router = processor.send(:instance_variable_get, :@router)
+
   # The processor's prompt tracker
   def prompts = processor.send(:instance_variable_get, :@prompts)
 
@@ -131,7 +134,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
 
     it 'emits stream_text to the current stream when a dedicated window exists' do
       wm.stream['combat'] = main_window
-      processor.send(:instance_variable_set, :@current_stream, 'combat')
+      router.send(:instance_variable_set, :@current_stream, 'combat')
       events = []
       event_bus.on(:stream_text) { |data| events << data }
 
@@ -141,7 +144,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     end
 
     it 'falls back to main stream when no dedicated window exists for a known stream' do
-      processor.send(:instance_variable_set, :@current_stream, 'thoughts')
+      router.send(:instance_variable_set, :@current_stream, 'thoughts')
       events = []
       event_bus.on(:stream_text) { |data| events << data }
 
@@ -161,9 +164,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
 
     it 'skips duplicate text already sent to a stream window' do
       wm.stream['combat'] = main_window
-      processor.send(:instance_variable_set, :@current_stream, 'combat')
+      router.send(:instance_variable_set, :@current_stream, 'combat')
       process('A goblin attacks!')
-      processor.send(:instance_variable_set, :@current_stream, nil)
+      router.send(:instance_variable_set, :@current_stream, nil)
 
       events = []
       event_bus.on(:stream_text) { |data| events << data }
@@ -560,7 +563,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
   describe 'stream fallback applies preset colors' do
     it 'applies preset color when falling back to main for a known stream' do
       PRESET['thoughts'] = ['00ff00', '000000']
-      processor.send(:instance_variable_set, :@current_stream, 'thoughts')
+      router.send(:instance_variable_set, :@current_stream, 'thoughts')
       events = []
       event_bus.on(:stream_text) { |data| events << data }
 

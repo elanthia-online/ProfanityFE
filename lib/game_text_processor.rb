@@ -5,7 +5,6 @@ require_relative 'room_assembler'
 require_relative 'familiar_notifier'
 require_relative 'xml_tokenizer'
 require_relative 'tag_handlers'
-require_relative 'styled_text'
 require_relative 'event_bus'
 require_relative 'streams'
 require_relative 'presets'
@@ -15,25 +14,28 @@ require_relative 'pending_render'
 require_relative 'server_reader'
 require_relative 'line_filter'
 require_relative 'prompt_tracker'
+require_relative 'stream_router'
 
-# Processes game server output in a dedicated thread, handling XML tag parsing,
-# stream routing, room data assembly, spell abbreviation, and UI updates.
+# Processes game server output in a dedicated thread: parses each line's
+# markup and hands its text to the collaborators that route and assemble it.
 
-# Processes all game text received from the server read thread.
+# Parses the game text received from the server read thread and wires the
+# pieces of the pipeline together:
 #
-# {ServerReader} reads the socket and flushes the screen; this class is its
-# line handler, and covers the rest of the pipeline from raw server output
-# to UI events:
-# XML tag parsing, stream routing (combat, death, logons, etc.),
-# room data assembly (title, description, objects, players, exits),
-# spell name abbreviation for percWindow, indicator/progress/countdown
-# updates, stun detection, bold/color/preset tracking, highlight
-# application, and movement suppression.
-#
-# Tag processing uses a tokenize-and-dispatch architecture:
-# XmlTokenizer splits each line into text and tag segments,
-# TagHandlers dispatches each tag to a focused handler method
-# via a hash lookup table.
+# - {ServerReader} reads the socket, guards each line and flushes the
+#   screen when no more data is waiting; this class is its line handler.
+# - {LineFilter} drops gagged lines (keeping their stream tags) and runs
+#   of blank lines.
+# - The markup parse stays here: bold carry-over across lines, the
+#   tokenize-and-dispatch tag parser ({TagHandlers}: colors, bold, presets,
+#   links, indicators, progress bars, countdowns), and the game-text checks
+#   (familiar notifications, stun, the hands glance, nerve damage).
+# - {StreamRouter} owns the current stream and the pushStream stack, and
+#   routes each chunk of text to its window or to main.
+# - {RoomAssembler} assembles the room window's data from both room
+#   pipelines.
+# - {PromptTracker} decides when the prompt shows (movement suppression)
+#   and drops the game's main copy of stream text.
 #
 # UI updates are emitted via an EventBus rather than calling window
 # methods directly. This decouples parsing from rendering and enables
@@ -69,7 +71,8 @@ class GameTextProcessor
   # @param speech_timestamps [Boolean] timestamp the lines of the streams in
   #   {Streams::TIMESTAMPED_IN_WINDOW} and {Streams::TIMESTAMPED_IN_MAIN}
   #   (--speech-ts)
-  # @param clock [Clock] read for timestamps and the server time offset (see PromptTracker#prompt_tag)
+  # @param clock [Clock] read for timestamps (see StreamRouter) and the
+  #   server time offset (see PromptTracker#prompt_tag)
   # @param game_rules [Games::Rules] the game's death, logon, stun and
   #   spell-name rules (--game, see Games.rules_for); both games' when the
   #   game isn't known
@@ -80,8 +83,6 @@ class GameTextProcessor
     @state = shared_state
     @xml_escapes = xml_escapes
     @event_bus = event_bus
-    @speech_timestamps = speech_timestamps
-    @clock = clock
     @game_rules = game_rules
 
     # Screen updates asked for while parsing; the reader flushes them.
@@ -93,6 +94,9 @@ class GameTextProcessor
                                  window_mgr: window_mgr, clock: clock, boot_profiler: boot_profiler)
     @room = RoomAssembler.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
                               shared_state: shared_state)
+    @router = StreamRouter.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
+                               prompts: @prompts, room: @room, game_rules: game_rules, clock: clock,
+                               speech_timestamps: speech_timestamps)
 
     # Line color/style tracking
     @line_colors = []
@@ -102,13 +106,8 @@ class GameTextProcessor
     @open_color = []
     @open_link = []
 
-    # Stream and display state
-    @current_stream = nil
-    # Open pushStreams, innermost last; a pop returns to the one below
-    # (see TagHandlers#handle_stream_close). Cleared at every <prompt>.
-    @stream_stack = []
+    # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
-    @combat_next_line = nil
   end
 
   # Main processing loop: reads lines from the game server socket until
@@ -146,7 +145,7 @@ class GameTextProcessor
   # @return [void]
   def process_line(line)
     if line.empty?
-      @prompts.blank_line if @current_stream.nil?
+      @prompts.blank_line if @router.current_stream.nil?
     else
       @room.line_started(line.dup)
       process_line_tags(line)
@@ -189,30 +188,6 @@ class GameTextProcessor
   # @api private
   def start_tag_names(line)
     XmlTokenizer.tags(line).map { |tag| XmlTokenizer.start_tag_name(tag) }
-  end
-
-  # Append a speech timestamp to text (e.g., "Hello (3:45:12)").
-  #
-  # @param text [String] the text to append to
-  # @return [String] text with appended timestamp
-  # @api private
-  def append_speech_timestamp(text)
-    "#{text} (#{@clock.h_mm_ss})"
-  end
-
-  # A death or logon line: +rest+ after the current time (HH:MM), with the
-  # line's highlights and the time drawn in +fg+. Replaces @line_colors.
-  #
-  # @param rest [String] the text after the time, e.g. the character's name
-  # @param fg [String] hex foreground color of the time
-  # @return [String] the line, e.g. "14:35 Mahtra"
-  # @api private
-  def time_prefixed(rest, fg)
-    timestamp = @clock.hh_mm
-    text = "#{timestamp} #{rest}"
-    @line_colors = HighlightProcessor.apply_highlights(text, [])
-    @line_colors.push({ start: 0, end: timestamp.length, fg: fg })
-    text
   end
 
   # Set the stun countdown timer end time via the event bus.
@@ -268,7 +243,7 @@ class GameTextProcessor
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
-    room_captured = @room.process_room_data(text, @current_stream)
+    room_captured = @room.process_room_data(text, @router.current_stream)
     return if room_captured && @state.room_window_only
 
     check_familiar_notification(text)
@@ -321,133 +296,7 @@ class GameTextProcessor
       oc[:start] = 0
     end
 
-    # Apply highlight patterns to all routable streams
-    if @current_stream.nil? || @wm.stream[@current_stream] || Streams::FALLBACK_TO_MAIN.include?(@current_stream)
-      HighlightProcessor.apply_highlights(text, @line_colors)
-    end
-
-    unless text.strip.empty?
-      if @current_stream
-
-        if @current_stream == Streams::COMBAT && text.match(GagPatterns.combat_regexp)
-          return
-        end
-
-        # LNet chat arrives on the thoughts stream. Move it to the lnet window
-        # only when the layout has one; otherwise it stays on thoughts, which
-        # falls back to main when there is no thoughts window either.
-        if @current_stream == Streams::THOUGHTS && @wm.stream[Streams::LNET] && (text =~ /^\[.+?\]-[A-Za-z]+:[A-Z][a-z]+: "|^\[server\]: /)
-          @current_stream = Streams::LNET
-        end
-
-        # Handle room components for dedicated RoomWindow
-        room_result = @room.process_room_stream(text, @current_stream, @line_colors)
-        if room_result == :consumed
-          return
-        elsif room_result == :continue
-          # Room players: also update the indicator, then stop
-          @room.update_room_players_indicator(text, @line_colors)
-          return
-        end
-
-        if (@wm.stream[@current_stream])
-          if @current_stream == Streams::DEATH
-            # "HH:MM Name ..." (e.g. DR "Name MF", GS "Name AREA"); an
-            # empty entry hides the line (GS vaporized/incinerated)
-            if (entry = @game_rules.death_summary(text))
-              text = entry.empty? ? '' : time_prefixed(entry, 'ff0000')
-            end
-          elsif @current_stream == Streams::LOGONS
-            if (logon = @game_rules.logon(text))
-              name, fg = logon
-              text = time_prefixed(name, fg)
-            end
-          elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && @speech_timestamps
-            text = append_speech_timestamp(text)
-          end
-
-          if @current_stream == Streams::PERC
-            # Shorten the line. The color runs already on it (tag colors and
-            # the highlights applied above, on the text as sent) move with
-            # the text they color, so a highlight on a full spell name
-            # colors its abbreviation.
-            styled = StyledText.new(text, @line_colors)
-
-            # Apply configurable text transformations from XML
-            # Example: <perc-transform pattern=" (roisaen|roisan)" replace=""/>
-            PERC_TRANSFORMS.each do |pattern, replacement|
-              styled = styled.sub(pattern, replacement)
-            end
-
-            paren_pos = styled.text.index('(')
-            if paren_pos && paren_pos > 1
-              spell_name = styled.text[0..paren_pos - 2]
-              # Shorten spell names
-              short_name = @game_rules.spell_abbreviation(spell_name)
-              styled = styled.sub(/^#{Regexp.escape(spell_name)}/, short_name) if short_name
-            end
-
-            styled = styled.gsub(/  /, ' ').strip
-            text = styled.text
-            @line_colors = styled.runs
-
-            # Highlights that match the shortened text (e.g. on "POM" or on a
-            # transform's "Cyclic"); skip runs already carried over.
-            HighlightProcessor.apply_highlights(text, []).each do |run|
-              @line_colors.push(run) unless @line_colors.include?(run)
-            end
-
-            if (colors = Presets.colors(@current_stream))
-              @line_colors.push(start: 0, **colors, end: text.length)
-            end
-          end
-          unless text =~ /^\[server\]: "(?:kill|connect)/
-            @event_bus.emit(:stream_text, stream: @current_stream, text: text, colors: @line_colors)
-            @pending_render.request_update
-            # Remembered so the game's main copy of it, if next, is dropped
-            @prompts.stream_text_sent(text)
-          end
-        elsif Streams::FALLBACK_TO_MAIN.include?(@current_stream)
-          # Timestamp thoughts/familiar when --speech-ts is active (not speech:
-          # see Streams::TIMESTAMPED_IN_MAIN)
-          if Streams::TIMESTAMPED_IN_MAIN.include?(@current_stream) && @speech_timestamps
-            text = append_speech_timestamp(text)
-          end
-          if (colors = Presets.colors(@current_stream))
-            @line_colors.push(start: 0, **colors, end: text.length)
-          end
-          unless text.empty?
-            # Detect movement in stream content too
-            @prompts.movement_seen if @prompts.movement?(text)
-            @prompts.emit_prompt_if_needed
-            @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: text, colors: @line_colors)
-            @pending_render.request_update
-            # Shown in main, so it is the next main-bound line: the stored
-            # stream-window text expires. Not compared: this is stream text
-            # itself, never the game's main copy of a stream line.
-            @prompts.forget_stream_text
-          end
-        end
-      elsif @wm.stream[MAIN_STREAM]
-        # Drop the game's main copy of the line just sent to a stream window.
-        unless @prompts.stream_text_copy?(text)
-          # Detect movement messages to suppress following prompts/empty lines
-          is_movement = @prompts.movement?(text)
-          @prompts.emit_prompt_if_needed
-
-          # Strip leading whitespace from room-captured text (e.g., "  You also see..."
-          # left after description extraction from the same server line)
-          if room_captured
-            styled = StyledText.new(text, @line_colors).lstrip
-            text = styled.text
-            @line_colors = styled.runs
-          end
-          @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: text, colors: @line_colors, indent: room_captured ? false : nil)
-          @pending_render.request_update
-          @prompts.movement_seen if is_movement
-        end
-      end
-    end
+    @router.route(text, @line_colors, room_captured: room_captured)
   ensure
     @line_colors = []
     @open_monsterbold.clear
