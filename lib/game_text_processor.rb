@@ -5,6 +5,7 @@ require_relative 'room_assembler'
 require_relative 'familiar_notifier'
 require_relative 'xml_tokenizer'
 require_relative 'tag_handlers'
+require_relative 'span_tracker'
 require_relative 'event_bus'
 require_relative 'streams'
 require_relative 'presets'
@@ -30,6 +31,8 @@ require_relative 'stream_router'
 #   tokenize-and-dispatch tag parser ({TagHandlers}: colors, bold, presets,
 #   links, indicators, progress bars, countdowns), and the game-text checks
 #   (familiar notifications, stun, the hands glance, nerve damage).
+# - {SpanTracker} holds the color spans open in the line and the color
+#   runs they record.
 # - {StreamRouter} owns the current stream and the pushStream stack, and
 #   routes each chunk of text to its window or to main.
 # - {RoomAssembler} assembles the room window's data from both room
@@ -98,13 +101,8 @@ class GameTextProcessor
                                prompts: @prompts, room: @room, game_rules: game_rules, clock: clock,
                                speech_timestamps: speech_timestamps)
 
-    # Line color/style tracking
-    @line_colors = []
-    @open_monsterbold = []
-    @open_preset = []
-    @open_style = nil
-    @open_color = []
-    @open_link = []
+    # Open color spans and the runs they record
+    @spans = SpanTracker.new
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
@@ -224,13 +222,9 @@ class GameTextProcessor
       end
     end
 
-    handle_game_text(text_buffer)
+    handle_game_text(text_buffer, @spans.split_at_line_end(text_buffer.length))
   ensure
-    # A bold, preset or color span still open at the end of the line
-    # colors nothing more.
-    @open_monsterbold.clear
-    @open_preset.clear
-    @open_color.clear
+    @spans.end_line
   end
 
   # Process a chunk of game text after XML tags have been stripped.
@@ -243,26 +237,11 @@ class GameTextProcessor
   #
   # @param text [String] game text with XML tags already removed and
   #   entities already unescaped
+  # @param runs [Array<Hash>] the color runs for +text+ (see
+  #   SpanTracker#split_at_flush and SpanTracker#split_at_line_end)
   # @return [void]
   # @api private
-  def handle_game_text(text)
-    # A style or color still open colors this text to its end and, when
-    # this is a mid-line flush, continues from the start of the text that
-    # follows (see TagHandlers#flush_text_buffer). Done first, so this holds
-    # for text captured for the room window only.
-    if @open_style
-      h = @open_style.dup
-      h[:end] = text.length
-      @line_colors.push(h)
-      @open_style[:start] = 0
-    end
-    @open_color.each do |oc|
-      ocd = oc.dup
-      ocd[:end] = text.length
-      @line_colors.push(ocd)
-      oc[:start] = 0
-    end
-
+  def handle_game_text(text, runs)
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
@@ -306,11 +285,6 @@ class GameTextProcessor
       end
     end
 
-    @router.route(text, @line_colors, room_captured: room_captured)
-  ensure
-    @line_colors = []
-    # Links aren't carried over a flush: one without a cmd attribute takes
-    # its command from its text, which the flush would cut.
-    @open_link.clear
+    @router.route(text, runs, room_captured: room_captured)
   end
 end

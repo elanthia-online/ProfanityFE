@@ -16,13 +16,12 @@ require_relative 'room_assembler'
 #
 # Expects the including class to provide:
 # - @wm, @state, @xml_escapes, @event_bus
-# - @line_colors, @open_monsterbold, @open_preset, @open_style,
-#   @open_color, @open_link
+# - @spans (a SpanTracker: the open color spans and the runs they record)
 # - @router (a StreamRouter: the current stream and the open pushStreams)
 # - @pending_render (a PendingRender: screen updates to flush)
 # - @room (a RoomAssembler)
 # - @prompts (a PromptTracker)
-# - handle_game_text
+# - handle_game_text(text, runs)
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
@@ -112,31 +111,14 @@ module TagHandlers
   private
 
   # Flush accumulated text through handle_game_text and clear the buffer.
-  # Bold and preset spans still open color the flushed text and continue
-  # in the text that follows (handle_game_text does the same for styles
-  # and colors).
+  # Spans still open color the flushed text and continue in the text that
+  # follows, except links (see SpanTracker::POLICIES).
   #
   # @param buf [String] mutable text buffer to flush and clear
   # @return [void]
   def flush_text_buffer(buf)
-    unless buf.empty?
-      split_open_spans(buf.length)
-      handle_game_text(buf.dup)
-    end
+    handle_game_text(buf.dup, @spans.split_at_flush(buf.length)) unless buf.empty?
     buf.clear
-  end
-
-  # Split the bold and preset spans still open at a mid-line flush: each
-  # colors the flushed text up to its end, and restarts at the start of
-  # the text that follows, where its closing tag ends it.
-  #
-  # @param length [Integer] length of the text being flushed
-  # @return [void]
-  def split_open_spans(length)
-    (@open_monsterbold + @open_preset).each do |h|
-      @line_colors.push(h.merge(end: length)) if h[:fg] || h[:bg]
-      h[:start] = 0
-    end
   end
 
   # End a roomName/roomDesc capture: flush its text, and disarm the capture
@@ -287,18 +269,12 @@ module TagHandlers
 
   # Handle <pushBold/> or <b> tag. Opens a monster bold color region.
   def handle_push_bold(_xml, text_buffer)
-    h = { start: text_buffer.length }
-    colors = Presets.colors(Presets::MONSTERBOLD)
-    h.merge!(colors) if colors
-    @open_monsterbold.push(h)
+    @spans.open(:bold, text_buffer.length, **Presets.colors(Presets::MONSTERBOLD).to_h)
   end
 
   # Handle <popBold/> or </b> tag. Closes the most recent monster bold region.
   def handle_pop_bold(_xml, text_buffer)
-    if (h = @open_monsterbold.pop)
-      h[:end] = text_buffer.length
-      @line_colors.push(h) if h[:fg] || h[:bg]
-    end
+    @spans.close(:bold, text_buffer.length)
   end
 
   # Handle <preset id='...'> opening tag.
@@ -310,10 +286,7 @@ module TagHandlers
       flush_text_buffer(text_buffer)
       @room.capture_mode = :desc
     end
-    h = { start: text_buffer.length }
-    colors = Presets.colors(preset_id)
-    h.merge!(colors) if colors
-    @open_preset.push(h)
+    @spans.open(:preset, text_buffer.length, **Presets.colors(preset_id).to_h)
   end
 
   # Handle </preset> closing tag.
@@ -321,26 +294,19 @@ module TagHandlers
     if @room.capture_mode == :desc
       end_room_capture(text_buffer)
     end
-    if (h = @open_preset.pop)
-      h[:end] = text_buffer.length
-      @line_colors.push(h) if h[:fg] || h[:bg]
-    end
+    @spans.close(:preset, text_buffer.length)
   end
 
   # Handle <color fg='...' bg='...' ul='...'> opening tag.
   def handle_open_color(xml, text_buffer)
-    h = { start: text_buffer.length }
     attrs = XmlTokenizer.attrs(xml)
-    %w[fg bg ul].each { |name| h[name.to_sym] = attrs[name].downcase if attrs[name] }
-    @open_color.push(h)
+    colors = %w[fg bg ul].filter_map { |name| [name.to_sym, attrs[name].downcase] if attrs[name] }.to_h
+    @spans.open(:color, text_buffer.length, **colors)
   end
 
   # Handle </color> closing tag.
   def handle_close_color(_xml, text_buffer)
-    if (h = @open_color.pop)
-      h[:end] = text_buffer.length
-      @line_colors.push(h)
-    end
+    @spans.close(:color, text_buffer.length)
   end
 
   # Handle <style id='...'> tag (both opening and "closing" via empty id).
@@ -353,18 +319,10 @@ module TagHandlers
       if @room.capture_mode == :title || @room.capture_mode == :desc
         end_room_capture(text_buffer)
       end
-      if @open_style
-        @open_style[:end] = text_buffer.length
-        if (@open_style[:start] < @open_style[:end]) && (@open_style[:fg] || @open_style[:bg])
-          @line_colors.push(@open_style)
-        end
-        @open_style = nil
-      end
+      @spans.close(:style, text_buffer.length)
     else
       # Non-empty id = opening style
-      @open_style = { start: text_buffer.length }
-      colors = Presets.colors(style_id)
-      @open_style.merge!(colors) if colors
+      @spans.open(:style, text_buffer.length, **Presets.colors(style_id).to_h)
       @room.capture_mode = :title if style_id == Presets::ROOM_NAME
       @room.capture_mode = :desc if style_id == Presets::ROOM_DESC && @wm.room[Streams::ROOM]
     end
@@ -404,7 +362,7 @@ module TagHandlers
       # are meaningful — they clear the displayed data. Since flush_text_buffer
       # skips empty text, handle this directly.
       if @wm.room[Streams::ROOM]
-        result = @room.process_room_stream('', stream, @line_colors)
+        result = @room.process_room_stream('', stream, @spans.runs)
         @room.update_room_players_indicator(nil) if result == :continue
       elsif stream == Streams::ROOM_PLAYERS
         # No RoomWindow -- still clear the indicator
@@ -445,19 +403,15 @@ module TagHandlers
     return unless @state.blue_links || @router.current_stream&.start_with?(Streams::ROOM)
 
     colors = Presets.colors(Presets::LINKS, LinkExtractor::DEFAULT_LINK_COLOR)
-    link = { start: text_buffer.length, fg: colors[:fg], bg: colors[:bg] }
-    link[:cmd] = LinkExtractor.extract_cmd(xml)
-    @open_link.push(link)
+    @spans.open(:link, text_buffer.length, fg: colors[:fg], bg: colors[:bg], cmd: LinkExtractor.extract_cmd(xml))
   end
 
   # Handle </a> or </d> link closing tag.
   def handle_close_link(_xml, text_buffer)
-    if (h = @open_link.pop)
-      h[:end] = text_buffer.length
+    @spans.close(:link, text_buffer.length) do |h|
       # For tags without cmd/exist (e.g., exit directions),
       # use the link text itself as the command
       h[:cmd] ||= text_buffer[h[:start]...h[:end]] if h[:start] && h[:end] > h[:start]
-      @line_colors.push(h) if h[:fg] || h[:bg]
     end
   end
 
