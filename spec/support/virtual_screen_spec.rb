@@ -223,6 +223,40 @@ RSpec.describe Curses::Window do
     end
   end
 
+  # Screen positions read back from a real terminal (the output replayed
+  # through a terminal emulator) after the same calls.
+  describe 'the terminal cursor' do
+    let(:top) { described_class.new(3, 10, 0, 0) }
+    let(:bottom) { described_class.new(1, 10, 5, 2) }
+
+    it 'goes where the window refreshed last before doupdate left its cursor' do
+      bottom.setpos(0, 4)
+      bottom.noutrefresh
+      top.addstr('hi')
+      top.noutrefresh
+      Curses.doupdate
+      expect(Curses::TerminalCursor.position).to eq [0, 2]
+
+      bottom.noutrefresh
+      Curses.doupdate
+      expect(Curses::TerminalCursor.position).to eq [5, 6]
+    end
+
+    it 'does not follow a setpos made after the window was refreshed' do
+      bottom.setpos(0, 4)
+      bottom.noutrefresh
+      bottom.setpos(0, 1)
+      Curses.doupdate
+      expect(Curses::TerminalCursor.position).to eq [5, 6]
+    end
+
+    it 'moves at once on refresh' do
+      bottom.setpos(0, 1)
+      bottom.refresh
+      expect(Curses::TerminalCursor.position).to eq [5, 3]
+    end
+  end
+
   describe 'a closed window' do
     %i[maxy cury addstr close].each do |meth|
       it "raises on #{meth}, as the curses gem does" do

@@ -14,11 +14,11 @@
 # Each cursor/edit action delegates to {CommandBuffer}, which only stages
 # its changes to the curses virtual screen via +noutrefresh+. The physical
 # terminal is not repainted until +doupdate+ is called, so *every* action
-# that mutates the visible command line must end with
-# {CursesRenderer.doupdate}. Omitting it leaves the edit invisible until
-# the next keystroke happens to trigger a flush -- the class of bug that
-# previously affected +cursor_backspace_word+, +cursor_delete_word+, and
-# +cursor_yank+.
+# that changes the screen must end with {CommandBuffer#flush_screen},
+# which also leaves the terminal cursor on the command line. Omitting it
+# leaves the edit invisible until the next keystroke happens to trigger a
+# flush -- the class of bug that previously affected
+# +cursor_backspace_word+, +cursor_delete_word+, and +cursor_yank+.
 #
 # @example
 #   actions = KeyActionRegistry.new(cmd_buffer: cmd_buffer, window_mgr: window_mgr,
@@ -28,7 +28,7 @@
 #   actions['cursor_home'].call
 #
 # @see CommandBuffer#backspace_word
-# @see CursesRenderer.doupdate
+# @see CommandBuffer#flush_screen
 class KeyActionRegistry
   # @return [Hash{String => Proc}] the actions by name; +switch_tab+ and
   #   +switch_tab_reverse+ are the same Procs as +next_tab+ and +prev_tab+
@@ -63,22 +63,22 @@ class KeyActionRegistry
   def register_editing_actions
     @actions['resize'] = proc {
       @window_mgr.resize(@cmd_buffer)
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
 
-    @actions['cursor_left']           = proc { @cmd_buffer.cursor_left; CursesRenderer.doupdate }
-    @actions['cursor_right']          = proc { @cmd_buffer.cursor_right; CursesRenderer.doupdate }
-    @actions['cursor_word_left']      = proc { @cmd_buffer.cursor_word_left; CursesRenderer.doupdate }
-    @actions['cursor_word_right']     = proc { @cmd_buffer.cursor_word_right; CursesRenderer.doupdate }
-    @actions['cursor_home']           = proc { @cmd_buffer.cursor_home; CursesRenderer.doupdate }
-    @actions['cursor_end']            = proc { @cmd_buffer.cursor_end; CursesRenderer.doupdate }
-    @actions['cursor_backspace']      = proc { @cmd_buffer.backspace; CursesRenderer.doupdate }
-    @actions['cursor_delete']         = proc { @cmd_buffer.delete_char; CursesRenderer.doupdate }
-    @actions['cursor_backspace_word'] = proc { @cmd_buffer.backspace_word; CursesRenderer.doupdate }
-    @actions['cursor_delete_word']    = proc { @cmd_buffer.delete_word; CursesRenderer.doupdate }
-    @actions['cursor_kill_forward']   = proc { @cmd_buffer.kill_forward; CursesRenderer.doupdate }
-    @actions['cursor_kill_line']      = proc { @cmd_buffer.kill_line; CursesRenderer.doupdate }
-    @actions['cursor_yank']           = proc { @cmd_buffer.yank; CursesRenderer.doupdate }
+    @actions['cursor_left']           = proc { @cmd_buffer.cursor_left; @cmd_buffer.flush_screen }
+    @actions['cursor_right']          = proc { @cmd_buffer.cursor_right; @cmd_buffer.flush_screen }
+    @actions['cursor_word_left']      = proc { @cmd_buffer.cursor_word_left; @cmd_buffer.flush_screen }
+    @actions['cursor_word_right']     = proc { @cmd_buffer.cursor_word_right; @cmd_buffer.flush_screen }
+    @actions['cursor_home']           = proc { @cmd_buffer.cursor_home; @cmd_buffer.flush_screen }
+    @actions['cursor_end']            = proc { @cmd_buffer.cursor_end; @cmd_buffer.flush_screen }
+    @actions['cursor_backspace']      = proc { @cmd_buffer.backspace; @cmd_buffer.flush_screen }
+    @actions['cursor_delete']         = proc { @cmd_buffer.delete_char; @cmd_buffer.flush_screen }
+    @actions['cursor_backspace_word'] = proc { @cmd_buffer.backspace_word; @cmd_buffer.flush_screen }
+    @actions['cursor_delete_word']    = proc { @cmd_buffer.delete_word; @cmd_buffer.flush_screen }
+    @actions['cursor_kill_forward']   = proc { @cmd_buffer.kill_forward; @cmd_buffer.flush_screen }
+    @actions['cursor_kill_line']      = proc { @cmd_buffer.kill_line; @cmd_buffer.flush_screen }
+    @actions['cursor_yank']           = proc { @cmd_buffer.yank; @cmd_buffer.flush_screen }
   end
 
   # The scroll-window, tab and scrolling actions.
@@ -89,65 +89,56 @@ class KeyActionRegistry
       SCROLL_WINDOW[0]&.set_active(false)
       SCROLL_WINDOW.push(SCROLL_WINDOW.shift)
       SCROLL_WINDOW[0]&.set_active(true)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
 
     @actions['next_tab'] = proc {
       TabbedTextWindow.list.each(&:next_tab)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
     @actions['switch_tab'] = @actions['next_tab']
 
     @actions['prev_tab'] = proc {
       TabbedTextWindow.list.each(&:prev_tab)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
     @actions['switch_tab_reverse'] = @actions['prev_tab']
 
     (1..5).each do |n|
       @actions["switch_tab_#{n}"] = proc {
         TabbedTextWindow.list.each { |w| w.switch_tab_by_index(n) }
-        @cmd_buffer.refresh
-        CursesRenderer.doupdate
+        @cmd_buffer.flush_screen
       }
     end
 
     @actions['scroll_current_window_up_one'] = proc {
       SCROLL_WINDOW[0]&.scroll_lines(-1)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
 
     @actions['scroll_current_window_down_one'] = proc {
       SCROLL_WINDOW[0]&.scroll_lines(1)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
 
     @actions['scroll_current_window_up_page'] = proc {
       if (w = SCROLL_WINDOW[0])
         w.scroll_lines(0 - w.maxy + 1)
       end
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
 
     @actions['scroll_current_window_down_page'] = proc {
       if (w = SCROLL_WINDOW[0])
         w.scroll_lines(w.maxy - 1)
       end
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
 
     @actions['scroll_current_window_bottom'] = proc {
       # buffer_pos counts rows; the buffer size counts (wrapped) lines
       SCROLL_WINDOW[0]&.scroll_lines(SCROLL_WINDOW[0]&.buffer_pos)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     }
   end
 
@@ -155,8 +146,8 @@ class KeyActionRegistry
   #
   # @return [void]
   def register_history_actions
-    @actions['previous_command'] = proc { @cmd_buffer.previous_command; CursesRenderer.doupdate }
-    @actions['next_command']     = proc { @cmd_buffer.next_command; CursesRenderer.doupdate }
+    @actions['previous_command'] = proc { @cmd_buffer.previous_command; @cmd_buffer.flush_screen }
+    @actions['next_command']     = proc { @cmd_buffer.next_command; @cmd_buffer.flush_screen }
 
     @actions['switch_arrow_mode'] = proc {
       if @key_binding[Curses::KEY_UP] == @actions['previous_command']

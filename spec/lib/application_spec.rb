@@ -629,12 +629,6 @@ RSpec.describe Application do
       expect(app.send(:tick_countdowns)).to be true
     end
 
-    it 'refreshes cmd_buffer window when countdown changed' do
-      app.cmd_buffer.window.call_log.clear
-      app.send(:tick_countdowns)
-      expect(app.cmd_buffer.window.call_log.map(&:first)).to include(:noutrefresh)
-    end
-
     it 'returns false when no countdowns are registered' do
       app.window_mgr.instance_variable_set(:@countdown, {})
       expect(app.send(:tick_countdowns)).to be false
@@ -664,15 +658,6 @@ RSpec.describe Application do
       def no_change.tick = false
       app.window_mgr.instance_variable_set(:@countdown, { 'roundtime' => no_change })
       expect(app.send(:tick_countdowns)).to be false
-    end
-
-    it 'does not call noutrefresh when nothing changed' do
-      no_change = Object.new
-      def no_change.tick = false
-      app.window_mgr.instance_variable_set(:@countdown, { 'roundtime' => no_change })
-      app.cmd_buffer.window.call_log.clear
-      app.send(:tick_countdowns)
-      expect(app.cmd_buffer.window.call_log.map(&:first)).not_to include(:noutrefresh)
     end
   end
 

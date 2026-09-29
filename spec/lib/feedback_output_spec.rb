@@ -137,14 +137,14 @@ RSpec.describe 'Feedback lines in the main window' do
   end
 
   describe 'with a main window' do
-    it '.help frames the help lines with "*" rows in the feedback color and flushes once, leaving the command line alone' do
-      expect(run('.help')).to eq [[:doupdate, help_rows]]
+    it '.help frames the help lines with "*" rows in the feedback color and redraws the command line, then flushes once' do
+      expect(run('.help')).to eq [:refresh_command_line, [:doupdate, help_rows]]
       expect(screen).to eq(help_rows.map { |row| [row, feedback] })
     end
 
     it '.tab lists each tabbed window\'s tabs in the feedback color and flushes once' do
       rows = ['* Tabs: 1:thoughts* 2:logons', '* Tabs: 1:speech* 2:familiar']
-      expect(run('.tab')).to eq [[:doupdate, rows]]
+      expect(run('.tab')).to eq [:refresh_command_line, [:doupdate, rows]]
       expect(screen).to eq(rows.map { |row| [row, feedback] })
     end
 
@@ -159,27 +159,27 @@ RSpec.describe 'Feedback lines in the main window' do
       end
 
       it '.tab says so in the feedback color and flushes once' do
-        expect(run('.tab')).to eq [[:doupdate, ['* No tabbed windows configured']]]
+        expect(run('.tab')).to eq [:refresh_command_line, [:doupdate, ['* No tabbed windows configured']]]
         expect(screen).to eq [['* No tabbed windows configured', feedback]]
       end
     end
 
     it '.links says the new state in the feedback color and flushes once' do
       msg = '* Links: ON (clickable links + drag-to-select; Shift+drag for native selection)'
-      expect(run('.links')).to eq [[:doupdate, [msg]]]
+      expect(run('.links')).to eq [:refresh_command_line, [:doupdate, [msg]]]
       expect(screen).to eq [[msg, feedback]]
     end
 
     it '.links, turned off again while .select is on, says drag-to-select stays on' do
       run('.select')
       run('.links')
-      expect(run('.links')).to eq [[:doupdate, shown]]
+      expect(run('.links')).to eq [:refresh_command_line, [:doupdate, shown]]
       expect(shown.last).to eq '* Links: OFF (drag-to-select still on via .select)'
     end
 
     it '.arrow says the new arrow mode in the feedback color and flushes once' do
       app.key_binding[Curses::KEY_UP] = app.key_action['previous_command']
-      expect(run('.arrow')).to eq [[:doupdate, ['* Arrow mode: page scroll']]]
+      expect(run('.arrow')).to eq [:refresh_command_line, [:doupdate, ['* Arrow mode: page scroll']]]
       expect(run('.arrow').last).to eq [:doupdate, ['* Arrow mode: page scroll', '* Arrow mode: line scroll']]
       expect(run('.arrow').last.last.last).to eq '* Arrow mode: history'
       expect(screen.map(&:last).uniq).to eq [feedback]
@@ -210,12 +210,12 @@ RSpec.describe 'Feedback lines in the main window' do
     end
 
     it '.highlight with none active says so in the feedback color and flushes once' do
-      expect(run('.highlight')).to eq [[:doupdate, ['* No inline highlights active']]]
+      expect(run('.highlight')).to eq [:refresh_command_line, [:doupdate, ['* No inline highlights active']]]
       expect(screen).to eq [['* No inline highlights active', feedback]]
     end
 
     it '.highlight <text> confirms in the highlight color and flushes once' do
-      expect(run('.highlight goblin')).to eq [[:doupdate, ['* Highlight added: goblin']]]
+      expect(run('.highlight goblin')).to eq [:refresh_command_line, [:doupdate, ['* Highlight added: goblin']]]
       expect(screen).to eq [['* Highlight added: goblin', inline]]
     end
 
@@ -223,26 +223,27 @@ RSpec.describe 'Feedback lines in the main window' do
       run('.highlight goblin')
       run('.highlight "a troll"')
 
-      expect(run('.highlight').last(1)).to eq [[:doupdate, shown]]
-      expect(events.size).to eq 1
+      expect(run('.highlight')).to eq [:refresh_command_line, [:doupdate, shown]]
       expect(screen.last(4)).to eq [['*', feedback], ['*   goblin', inline], ['*   a\\ troll', inline], ['*', feedback]]
     end
 
     it '.unhighlight confirms in the feedback color and flushes once' do
       run('.highlight goblin')
-      expect(run('.unhighlight goblin')).to eq [[:doupdate, ['* Highlight added: goblin', '* Highlight removed: goblin']]]
+      rows = ['* Highlight added: goblin', '* Highlight removed: goblin']
+      expect(run('.unhighlight goblin')).to eq [:refresh_command_line, [:doupdate, rows]]
       expect(screen.last).to eq ['* Highlight removed: goblin', feedback]
     end
 
     it '.unhighlight of an unknown text says so in the feedback color and flushes once' do
-      expect(run('.unhighlight troll')).to eq [[:doupdate, ['* No inline highlight found for: troll']]]
+      expect(run('.unhighlight troll')).to eq [:refresh_command_line, [:doupdate, ['* No inline highlight found for: troll']]]
       expect(screen).to eq [['* No inline highlight found for: troll', feedback]]
     end
 
-    it '.key asks for a key (redrawing the command line), then shows the code framed by "*" rows' do
+    it '.key asks for a key, then shows the code framed by "*" rows, redrawing the command line each time' do
       press_key('q')
       expect(run('.key')).to eq [:refresh_command_line,
                                  [:doupdate, ['*', '* Waiting for key press...']],
+                                 :refresh_command_line,
                                  [:doupdate, ['*', '* Waiting for key press...', '* Detected keycode: q', '*']]]
       expect(screen.map(&:last).uniq).to eq [feedback]
     end
@@ -275,7 +276,7 @@ RSpec.describe 'Feedback lines in the main window' do
       app.key_action['autocomplete'].call
 
       listed = ['[autocomplete:2]', '[0] look at troll', '[1] look at goblin']
-      expect(events).to eq [:refresh_command_line, [:doupdate, []], [:doupdate, listed]]
+      expect(events).to eq [:refresh_command_line, [:doupdate, []], :refresh_command_line, [:doupdate, listed]]
       expect(screen).to eq(listed.map { |row| [row, suggestion] })
       expect(app.cmd_buffer.text).to eq 'look at '
     end
@@ -300,7 +301,7 @@ RSpec.describe 'Feedback lines in the main window' do
         listed << '[... 5 more]'
         expect(listed[1]).to eq '[0] look at thing25'
         expect(listed[20]).to eq '[19] look at thing06'
-        expect(events).to eq [:refresh_command_line, [:doupdate, []], [:doupdate, listed]]
+        expect(events).to eq [:refresh_command_line, [:doupdate, []], :refresh_command_line, [:doupdate, listed]]
         expect(screen).to eq(listed.map { |row| [row, suggestion] })
         expect(app.cmd_buffer.text).to eq 'look at thing'
       end
@@ -310,7 +311,7 @@ RSpec.describe 'Feedback lines in the main window' do
 
         listed = ['[autocomplete:20]'] + things(20).reverse.each_with_index.map { |cmd, i| "[#{i}] #{cmd}" }
         expect(listed.last).to eq '[19] look at thing01'
-        expect(events).to eq [:refresh_command_line, [:doupdate, []], [:doupdate, listed]]
+        expect(events).to eq [:refresh_command_line, [:doupdate, []], :refresh_command_line, [:doupdate, listed]]
         expect(screen).to eq(listed.map { |row| [row, suggestion] })
       end
 
@@ -331,7 +332,7 @@ RSpec.describe 'Feedback lines in the main window' do
 
       app.key_action['autocomplete'].call
 
-      expect(events).to eq [[:doupdate, ['[autocomplete] no suggestions']]]
+      expect(events).to eq [:refresh_command_line, [:doupdate, ['[autocomplete] no suggestions']]]
       expect(screen).to eq [['[autocomplete] no suggestions', suggestion]]
     end
 
@@ -460,7 +461,7 @@ RSpec.describe 'Feedback lines in the main window' do
       end
 
       expect(SelectionManager).to have_received(:copy_to_clipboard).with('You see')
-      expect(events).to eq [[:doupdate, []]]
+      expect(events).to eq [:refresh_command_line, [:doupdate, []]]
       expect(shown(other)).to eq ['You see a goblin here.']
     end
   end
@@ -478,9 +479,9 @@ RSpec.describe 'Feedback lines in the main window' do
     let(:other) { app.window_mgr.stream['other'] }
 
     it 'still flushes (and redraws the command line) as if the lines were shown' do
-      expect(run('.help')).to eq [[:doupdate, []]]
+      expect(run('.help')).to eq [:refresh_command_line, [:doupdate, []]]
       expect(run('.select')).to eq [:refresh_command_line, [:doupdate, []]]
-      expect(run('.tab')).to eq [[:doupdate, []]]
+      expect(run('.tab')).to eq [:refresh_command_line, [:doupdate, []]]
       expect(shown(other)).to be_empty
     end
   end

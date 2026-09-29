@@ -88,7 +88,7 @@ module Curses
   def self.init_pair(*) = nil
   def self.init_color(*) = nil
   def self.color_content(*) = [0, 0, 0]
-  def self.doupdate = nil
+  def self.doupdate = TerminalCursor.flush
   def self.use_default_colors = nil
   def self.mousemask(*) = nil
 
@@ -120,8 +120,8 @@ require_relative 'support/virtual_screen'
 
 module CursesRenderer
   def self.synchronize = yield
-  def self.render = (yield; nil)
-  def self.doupdate = nil
+  def self.render = (yield; Curses::TerminalCursor.flush)
+  def self.doupdate = Curses::TerminalCursor.flush
   def self.outside_lock = yield
 end
 
@@ -215,5 +215,6 @@ RSpec.configure do |config|
     GagPatterns.load_defaults
     # Windows register themselves in per-class instance lists; start empty.
     BaseWindow.window_classes.each { |klass| klass.list.clear }
+    Curses::TerminalCursor.reset
   end
 end

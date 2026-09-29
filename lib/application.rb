@@ -223,24 +223,20 @@ class Application
 
   # ---- Feedback helpers ----
 
-  # Show feedback lines in the main window (see {Feedback.write}). With
-  # no main window nothing is drawn, the command line is not redrawn and
-  # the screen is not flushed. Takes no lock of its own: it runs inside
+  # Show feedback lines in the main window (see {Feedback.write}), then
+  # flush the screen with the cursor on the command line
+  # ({CommandBuffer#flush_screen}). With no main window nothing is drawn
+  # and the screen is not flushed. Takes no lock of its own: it runs inside
   # the render lock only if the caller holds it.
   #
   # @param lines [Array<String>] the lines, oldest first
   # @param fg [String] hex foreground color of the lines
   # @param banner [Boolean] frame the lines with {Feedback::BANNER} rows
-  # @param refresh [Boolean] redraw the command line afterwards, which
-  #   puts the cursor back on it
-  # @param doupdate [Boolean] flush the screen afterwards with
-  #   {CursesRenderer.doupdate}
   # @return [Boolean] whether there was a main window
-  def write_to_client(*lines, fg: FEEDBACK_COLOR, banner: false, refresh: true, doupdate: true)
+  def write_to_client(*lines, fg: FEEDBACK_COLOR, banner: false)
     return false unless Feedback.write(@window_mgr.stream[MAIN_STREAM], *lines, fg: fg, banner: banner)
 
-    @cmd_buffer.refresh if refresh
-    CursesRenderer.doupdate if doupdate
+    @cmd_buffer.flush_screen
     true
   end
 
@@ -255,7 +251,7 @@ class Application
           else
             "* Detected keycode: #{ch}"
           end
-    write_to_client(msg, Feedback::BANNER, refresh: false)
+    write_to_client(msg, Feedback::BANNER)
   end
 
   # Read one key from the command window, waiting up to DOT_KEY_TIMEOUT_MS.
@@ -301,7 +297,7 @@ class Application
 
   def handle_dot_tab(arg)
     if TabbedTextWindow.list.empty?
-      write_to_client('* No tabbed windows configured', refresh: false)
+      write_to_client('* No tabbed windows configured')
     elsif arg.nil? || arg.empty?
       lines = TabbedTextWindow.list.map do |win|
         tabs_info = win.tabs.keys.each_with_index.map do |name, i|
@@ -309,13 +305,13 @@ class Application
         end.join(' ')
         "* Tabs: #{tabs_info}"
       end
-      write_to_client(*lines, refresh: false)
+      write_to_client(*lines)
     elsif arg =~ /^\d+$/
       TabbedTextWindow.list.each { |w| w.switch_tab_by_index(arg.to_i) }
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     else
       TabbedTextWindow.list.each { |w| w.switch_tab(arg) }
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
     end
   end
 
@@ -328,7 +324,7 @@ class Application
            else
              'line scroll'
            end
-    write_to_client("* Arrow mode: #{mode}", refresh: false)
+    write_to_client("* Arrow mode: #{mode}")
   end
 
   def handle_dot_links
@@ -350,7 +346,7 @@ class Application
           else
             '* Links: OFF (native terminal selection)'
           end
-    write_to_client(msg, refresh: false)
+    write_to_client(msg)
   end
 
   def handle_dot_select
@@ -416,10 +412,10 @@ class Application
     if pattern.nil? || pattern.empty?
       @inline_highlights ||= {}
       if @inline_highlights.empty?
-        write_to_client('* No inline highlights active', refresh: false)
+        write_to_client('* No inline highlights active')
       else
         write_to_client(*@inline_highlights.keys.map { |regex| "*   #{regex.source}" },
-                        fg: INLINE_HIGHLIGHT_COLOR, banner: true, refresh: false)
+                        fg: INLINE_HIGHLIGHT_COLOR, banner: true)
       end
       return
     end
@@ -429,7 +425,7 @@ class Application
     begin
       regex = Regexp.new(Regexp.escape(pattern), Regexp::IGNORECASE)
     rescue RegexpError => e
-      write_to_client("* Invalid pattern: #{e.message}", refresh: false)
+      write_to_client("* Invalid pattern: #{e.message}")
       return
     end
 
@@ -439,7 +435,7 @@ class Application
     end
     @inline_highlights[regex] = colors
 
-    write_to_client("* Highlight added: #{pattern}", fg: INLINE_HIGHLIGHT_COLOR, refresh: false)
+    write_to_client("* Highlight added: #{pattern}", fg: INLINE_HIGHLIGHT_COLOR)
   end
 
   def handle_dot_unhighlight(pattern)
@@ -449,7 +445,7 @@ class Application
     pattern = pattern.sub(/^"(.*)"$/, '\1')
     target = @inline_highlights.keys.find { |r| r.source == Regexp.escape(pattern) }
     unless target
-      write_to_client("* No inline highlight found for: #{pattern}", refresh: false)
+      write_to_client("* No inline highlight found for: #{pattern}")
       return
     end
 
@@ -458,11 +454,11 @@ class Application
     end
     @inline_highlights.delete(target)
 
-    write_to_client("* Highlight removed: #{pattern}", refresh: false)
+    write_to_client("* Highlight removed: #{pattern}")
   end
 
   def handle_dot_help
-    write_to_client(*DOT_COMMANDS.flat_map(&:help).map { |line| "*   #{line}" }, banner: true, refresh: false)
+    write_to_client(*DOT_COMMANDS.flat_map(&:help).map { |line| "*   #{line}" }, banner: true)
   end
 
   # ---- Command sending ----
@@ -478,8 +474,7 @@ class Application
     if (window = @window_mgr.stream[MAIN_STREAM])
       @window_mgr.add_prompt(window, @shared_state.prompt_text, cmd)
     end
-    @cmd_buffer.refresh
-    CursesRenderer.doupdate
+    @cmd_buffer.flush_screen
     @cmd_buffer.add_to_history(cmd)
     execute_command(cmd)
   end
@@ -494,8 +489,7 @@ class Application
     if (cmd = @cmd_buffer.history[index])
       if (window = @window_mgr.stream[MAIN_STREAM])
         @window_mgr.add_prompt(window, @shared_state.prompt_text, cmd)
-        @cmd_buffer.refresh
-        CursesRenderer.doupdate
+        @cmd_buffer.flush_screen
       end
       execute_command(cmd)
     end
@@ -639,7 +633,7 @@ class Application
 
   # ---- Input loop ----
 
-  # Poll all countdown windows and flush if any changed.
+  # Poll all countdown windows; the input loop flushes if any changed.
   # Called on every input loop iteration (~100ms) to replace the
   # per-countdown Thread.new pattern.
   #
@@ -649,7 +643,6 @@ class Application
     @window_mgr.countdown.each_value do |window|
       any_updated = true if window.tick
     end
-    @cmd_buffer.window&.noutrefresh if any_updated
     any_updated
   end
 
@@ -669,7 +662,7 @@ class Application
 
         ch = read_key
         if ch.nil?
-          Curses.doupdate if countdown_updated || drag_scrolled
+          @cmd_buffer.flush_screen if countdown_updated || drag_scrolled
           next
         end
 
@@ -732,8 +725,7 @@ class Application
       @key_binding[ch]
     elsif ch.instance_of?(String)
       @cmd_buffer.put_ch(ch)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
+      @cmd_buffer.flush_screen
       nil
     end
   rescue IOError, SystemCallError

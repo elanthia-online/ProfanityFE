@@ -65,11 +65,10 @@ class MacroInterpreter
       @cmd_buffer.cursor_left while at_pos < @cmd_buffer.pos
       @cmd_buffer.cursor_right while at_pos > @cmd_buffer.pos
     end
-    @cmd_buffer.refresh
     if backfill
       @cmd_buffer.window.setpos(0, backfill)
       backfill = nil
     end
-    CursesRenderer.doupdate
+    @cmd_buffer.flush_screen
   end
 end

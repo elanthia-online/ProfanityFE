@@ -8,7 +8,8 @@
 # {.write} only adds the lines to the window, which stages them with
 # +noutrefresh+; it never flushes the screen or takes the render lock. The
 # caller decides whether and when to flush. {Application#write_to_client}
-# writes to the main window and flushes.
+# writes to the main window and flushes with the cursor on the command
+# line.
 #
 # @example A block of lines framed by "* " rows
 #   Feedback.write(window, '* Connection closed', banner: true)

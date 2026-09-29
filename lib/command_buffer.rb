@@ -28,7 +28,8 @@ using StringClassification
 #
 # All cursor and editing methods call +noutrefresh+ on the underlying
 # window but never call +Curses.doupdate+; the caller is responsible
-# for flushing the virtual screen to the terminal.
+# for flushing the virtual screen to the terminal, with {#flush_screen}
+# on the input path.
 #
 # @example Basic usage
 #   buf = CommandBuffer.new
@@ -433,6 +434,24 @@ class CommandBuffer
   # @return [void]
   def refresh
     @window&.noutrefresh
+  end
+
+  # Flush the virtual screen to the terminal, leaving the terminal cursor
+  # on the command line: at the edit position, or where a macro's `\?`
+  # moved the window's cursor (see {MacroInterpreter}).
+  #
+  # ncurses puts the terminal cursor where the window refreshed last left
+  # it, so this refreshes the command window last, then calls
+  # {CursesRenderer.doupdate}. Every flush from the input path (keys,
+  # dot-commands, macros, autocomplete, the mouse) goes through here, so a
+  # reply drawn in another window never leaves the cursor there. Call it
+  # with the render lock held, as the input loop does for every key, so no
+  # other thread refreshes a window in between.
+  #
+  # @return [void]
+  def flush_screen
+    refresh
+    CursesRenderer.doupdate
   end
 
   # Clear the visible command line display.

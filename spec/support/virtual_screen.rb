@@ -1,6 +1,37 @@
 # frozen_string_literal: true
 
 module Curses
+  # Where the terminal cursor is. As in ncurses, each Window#noutrefresh
+  # stages that window's cursor (as a screen position) and doupdate moves
+  # the terminal cursor to the one staged last, so after a flush the cursor
+  # is wherever the window refreshed last left it. Window#refresh does
+  # both. spec_helper's Curses.doupdate and its CursesRenderer stub call
+  # {.flush}, and every example starts with {.reset}.
+  module TerminalCursor
+    class << self
+      # @return [Array(Integer, Integer), nil] screen row and column of the
+      #   terminal cursor after the last flush; nil before the first
+      attr_reader :position
+
+      # Stage a screen position for the next {.flush}.
+      def stage(y, x)
+        @staged = [y, x]
+      end
+
+      # Move the terminal cursor to the position staged last.
+      def flush
+        @position = @staged
+        nil
+      end
+
+      # Forget the staged and flushed positions.
+      def reset
+        @staged = nil
+        @position = nil
+      end
+    end
+  end
+
   # Headless stand-in for Curses::Window that models what a real curses
   # window shows: a grid of cells (character + attributes), a cursor, a
   # scrolling region, and the attribute state. Specs can assert on the
@@ -243,9 +274,24 @@ module Curses
       nil
     end
 
+    # Like wnoutrefresh, stages the cursor for the next doupdate (see
+    # TerminalCursor).
+    def noutrefresh
+      log(:noutrefresh)
+      TerminalCursor.stage(@begy + @cury, @begx + @curx)
+      nil
+    end
+
+    # Like wrefresh: wnoutrefresh, then doupdate.
+    def refresh
+      log(:refresh)
+      TerminalCursor.stage(@begy + @cury, @begx + @curx)
+      TerminalCursor.flush
+    end
+
     # --- Calls with no effect on the modelled screen ---
 
-    %i[noutrefresh refresh redraw keypad].each do |meth|
+    %i[redraw keypad].each do |meth|
       define_method(meth) do |*args|
         log(meth, *args)
         nil
