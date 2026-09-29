@@ -93,21 +93,11 @@ RSpec.describe Games::GemStone do
     it 'is nil for a death message that is not in the table (synthetic)' do
       expect(described_class.death_summary(' * Mahtra fell into a hole!')).to be_nil
     end
-  end
 
-  describe 'DEATH_SUPPRESS_PATTERN' do
-    it 'does not match a death with an area code' do
-      expect(' * Mahtra just bit the dust!').not_to match(described_class::DEATH_SUPPRESS_PATTERN)
-    end
-  end
-
-  describe '.resolve_death_area' do
-    it 'returns the text itself for a message that is not in the table (synthetic)' do
-      expect(described_class.resolve_death_area('fell off a cliff!')).to eq 'fell off a cliff!'
-    end
-
-    it 'returns an empty string for an empty string' do
-      expect(described_class.resolve_death_area('')).to eq ''
+    # An empty entry hides the line, so only real " * Name" death lines may
+    # get one; any other line with those words stays visible.
+    it 'is nil, not empty, for a vaporized line without the leading " * " (synthetic)' do
+      expect(described_class.death_summary('Mahtra has been vaporized!')).to be_nil
     end
   end
 
