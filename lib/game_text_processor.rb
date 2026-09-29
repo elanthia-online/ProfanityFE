@@ -225,6 +225,12 @@ class GameTextProcessor
     end
 
     handle_game_text(text_buffer)
+  ensure
+    # A bold, preset or color span still open at the end of the line
+    # colors nothing more.
+    @open_monsterbold.clear
+    @open_preset.clear
+    @open_color.clear
   end
 
   # Process a chunk of game text after XML tags have been stripped.
@@ -240,6 +246,23 @@ class GameTextProcessor
   # @return [void]
   # @api private
   def handle_game_text(text)
+    # A style or color still open colors this text to its end and, when
+    # this is a mid-line flush, continues from the start of the text that
+    # follows (see TagHandlers#flush_text_buffer). Done first, so this holds
+    # for text captured for the room window only.
+    if @open_style
+      h = @open_style.dup
+      h[:end] = text.length
+      @line_colors.push(h)
+      @open_style[:start] = 0
+    end
+    @open_color.each do |oc|
+      ocd = oc.dup
+      ocd[:end] = text.length
+      @line_colors.push(ocd)
+      oc[:start] = 0
+    end
+
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
@@ -283,25 +306,11 @@ class GameTextProcessor
       end
     end
 
-    if @open_style
-      h = @open_style.dup
-      h[:end] = text.length
-      @line_colors.push(h)
-      @open_style[:start] = 0
-    end
-    @open_color.each do |oc|
-      ocd = oc.dup
-      ocd[:end] = text.length
-      @line_colors.push(ocd)
-      oc[:start] = 0
-    end
-
     @router.route(text, @line_colors, room_captured: room_captured)
   ensure
     @line_colors = []
-    @open_monsterbold.clear
-    @open_preset.clear
-    @open_color.clear
+    # Links aren't carried over a flush: one without a cmd attribute takes
+    # its command from its text, which the flush would cut.
     @open_link.clear
   end
 end

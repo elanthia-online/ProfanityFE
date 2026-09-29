@@ -112,12 +112,31 @@ module TagHandlers
   private
 
   # Flush accumulated text through handle_game_text and clear the buffer.
+  # Bold and preset spans still open color the flushed text and continue
+  # in the text that follows (handle_game_text does the same for styles
+  # and colors).
   #
   # @param buf [String] mutable text buffer to flush and clear
   # @return [void]
   def flush_text_buffer(buf)
-    handle_game_text(buf.dup) unless buf.empty?
+    unless buf.empty?
+      split_open_spans(buf.length)
+      handle_game_text(buf.dup)
+    end
     buf.clear
+  end
+
+  # Split the bold and preset spans still open at a mid-line flush: each
+  # colors the flushed text up to its end, and restarts at the start of
+  # the text that follows, where its closing tag ends it.
+  #
+  # @param length [Integer] length of the text being flushed
+  # @return [void]
+  def split_open_spans(length)
+    (@open_monsterbold + @open_preset).each do |h|
+      @line_colors.push(h.merge(end: length)) if h[:fg] || h[:bg]
+      h[:start] = 0
+    end
   end
 
   # Unescape XML entities in a text segment.
