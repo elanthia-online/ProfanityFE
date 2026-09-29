@@ -12,6 +12,7 @@ require_relative 'event_bus'
 require_relative 'streams'
 require_relative 'presets'
 require_relative 'boot_profiler'
+require_relative 'clock'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -92,8 +93,9 @@ class GameTextProcessor
   # @param speech_timestamps [Boolean] timestamp the lines of the streams in
   #   {Streams::TIMESTAMPED_IN_WINDOW} and {Streams::TIMESTAMPED_IN_MAIN}
   #   (--speech-ts)
+  # @param clock [Clock] read for timestamps and the server time offset (see TagHandlers#handle_prompt_tag)
   def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:,
-                 boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false)
+                 boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false, clock: Clock.new)
     @wm = window_mgr
     @state = shared_state
     @cmd_buffer = cmd_buffer
@@ -101,6 +103,7 @@ class GameTextProcessor
     @event_bus = event_bus
     @boot_profiler = boot_profiler
     @speech_timestamps = speech_timestamps
+    @clock = clock
 
     # Line color/style tracking
     @line_colors = []
@@ -353,7 +356,22 @@ class GameTextProcessor
   # @return [String] text with appended timestamp
   # @api private
   def append_speech_timestamp(text)
-    "#{text} (#{Time.now.strftime('%H:%M:%S').sub(/^0/, '')})"
+    "#{text} (#{@clock.h_mm_ss})"
+  end
+
+  # A death or logon line: +rest+ after the current time (HH:MM), with the
+  # line's highlights and the time drawn in +fg+. Replaces @line_colors.
+  #
+  # @param rest [String] the text after the time, e.g. the character's name
+  # @param fg [String] hex foreground color of the time
+  # @return [String] the line, e.g. "14:35 Mahtra"
+  # @api private
+  def time_prefixed(rest, fg)
+    timestamp = @clock.hh_mm
+    text = "#{timestamp} #{rest}"
+    @line_colors = HighlightProcessor.apply_highlights(text, [])
+    @line_colors.push({ start: 0, end: timestamp.length, fg: fg })
+    text
   end
 
   # Decide whether a raw server line should be suppressed as part of a
@@ -577,24 +595,19 @@ class GameTextProcessor
             if (death_match = text.match(Games::DragonRealms::DEATH_PATTERN))
               # DR death: "Name" or "Name MF" (moonfire phoenix)
               name = death_match[:name]
-              timestamp = Time.now.strftime('%H:%M')
-              text = if text.match?(/A fiery phoenix soars into the heavens as/)
-                       "#{timestamp} #{name} MF"
+              rest = if text.match?(/A fiery phoenix soars into the heavens as/)
+                       "#{name} MF"
                      elsif text.match?(/was just sacrificed to/)
-                       "#{timestamp} #{name} Sacrifice"
+                       "#{name} Sacrifice"
                      else
-                       "#{timestamp} #{name}"
+                       name
                      end
-              @line_colors = HighlightProcessor.apply_highlights(text, [])
-              @line_colors.push({ start: 0, end: 5, fg: 'ff0000' })
+              text = time_prefixed(rest, 'ff0000')
             elsif (gs_match = text.match(Games::GemStone::DEATH_PATTERN))
               # GS death: "Name AREA HH:MM" with area code consolidation
               name = gs_match[:name]
               area = Games::GemStone.resolve_death_area(gs_match[:area])
-              timestamp = Time.now.strftime('%H:%M')
-              text = "#{timestamp} #{name} #{area}"
-              @line_colors = HighlightProcessor.apply_highlights(text, [])
-              @line_colors.push({ start: 0, end: 5, fg: 'ff0000' })
+              text = time_prefixed("#{name} #{area}", 'ff0000')
             elsif text.match?(Games::GemStone::DEATH_SUPPRESS_PATTERN)
               # GS vaporized/incinerated — suppress
               text = ''
@@ -603,14 +616,7 @@ class GameTextProcessor
             if (logon_match = text.match(LOGON_REGEXP))
               name = logon_match[:name]
               logon_type = logon_match[:type]
-              timestamp = Time.now.strftime('%H:%M')
-              text = "#{timestamp} #{name}"
-              @line_colors = HighlightProcessor.apply_highlights(text, [])
-              @line_colors.push({
-                start: 0,
-                end: 5,
-                fg: ALL_LOGON_PATTERNS[logon_type]
-              })
+              text = time_prefixed(name, ALL_LOGON_PATTERNS[logon_type])
             end
           elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && @speech_timestamps
             text = append_speech_timestamp(text)

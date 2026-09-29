@@ -348,6 +348,7 @@ BaseWindow.register_type('tabbed') do |height, width, top, left, element, wm|
   window.setscrreg(1, window.maxy - 1)
   window.max_buffer_size = element.attributes['buffer-size'] || 1000
   window.time_stamp = BaseWindow.parse_flag_attr(element, 'timestamp')
+  window.clock = wm.clock
   tab_names = (element.attributes['tabs'] || element.attributes['value'] || MAIN_STREAM).split(',')
   tab_names.each do |tab_name|
     window.add_tab(tab_name.strip)

@@ -285,16 +285,16 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
 
   describe ':stun' do
     let(:countdown) { SpyCountdownWindow.new }
+    let(:wm) { described_class.new(clock: Clock.new(now: -> { Time.at(1000.0) })) }
 
     before do
-      $server_time_offset = 0.0
       wm.instance_variable_set(:@countdown, { 'stunned' => countdown })
     end
 
-    it 'sets end_time to current time plus stun duration and triggers a redraw' do
-      before_time = Time.now.to_f
+    it 'sets end_time to the server time plus the stun duration and triggers a redraw' do
+      wm.clock.server_time_offset = 2.5
       event_bus.emit(:stun, seconds: 10)
-      expect(countdown.end_time).to be >= before_time + 10 - 1
+      expect(countdown.end_time).to eq 1007.5
       expect(countdown.calls).to include(a_hash_including(method: :tick))
     end
 

@@ -4,6 +4,7 @@ require_relative 'streams'
 require_relative 'feedback'
 require_relative 'window_layout'
 require_relative 'platform'
+require_relative 'clock'
 
 # Manages Curses window creation, layout loading, and handler hash access
 # for the profanity terminal UI.
@@ -51,10 +52,18 @@ class WindowManager
   # @api private
   attr_reader :old_windows
 
+  # The clock read by the windows this manager builds and by stun
+  # countdowns.
+  #
+  # @return [Clock]
+  attr_reader :clock
+
   # Create a new window manager with empty handler hashes.
   #
+  # @param clock [Clock] handed to the windows the layout builds
   # @return [WindowManager]
-  def initialize
+  def initialize(clock: Clock.new)
+    @clock = clock
     @stream = {}
     @indicator = {}
     @progress = {}
@@ -196,7 +205,7 @@ class WindowManager
       window = @countdown['stunned']
       next unless window
 
-      window.end_time = Time.now.to_f - $server_time_offset.to_f + data[:seconds].to_f
+      window.end_time = @clock.now.to_f - @clock.server_time_offset.to_f + data[:seconds].to_f
       window.tick
     end
 

@@ -4,6 +4,7 @@ require_relative 'dot_command'
 require_relative 'streams'
 require_relative 'feedback'
 require_relative 'boot_profiler'
+require_relative 'clock'
 
 # Core application class for ProfanityFE.
 #
@@ -136,7 +137,8 @@ class Application
     @shared_state.update_terminal_title
 
     @cmd_buffer = CommandBuffer.new
-    @window_mgr = WindowManager.new
+    @clock = Clock.new
+    @window_mgr = WindowManager.new(clock: @clock)
     @key_binding = {}
     @key_action = {}
     @selection_enabled = false
@@ -678,7 +680,7 @@ class Application
     @server.puts "SET_FRONTEND_PID #{Process.pid}"
     @server.flush
 
-    @shared_state.server_time_offset = 0.0
+    @clock.server_time_offset = 0.0
 
     # Time sync thread
     Thread.new do
@@ -721,7 +723,8 @@ class Application
       xml_escapes: @xml_escapes,
       event_bus: @event_bus,
       boot_profiler: @boot_profiler,
-      speech_timestamps: @cli_options[:speech_ts]
+      speech_timestamps: @cli_options[:speech_ts],
+      clock: @clock
     )
     # The server thread only reports how the connection ended; the input
     # loop picks that up and ends the session on the main thread.

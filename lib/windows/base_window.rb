@@ -21,6 +21,11 @@ class BaseWindow < Curses::Window
   #   again when the terminal is resized
   attr_accessor :layout
 
+  # @return [Clock, nil] read for the window's timestamps (and a
+  #   countdown's remaining time); the layout's builder sets it to
+  #   {WindowManager#clock}
+  attr_accessor :clock
+
   # Create a new window and register it in the class instance list.
   #
   # @param args [Array] arguments forwarded to +Curses::Window.new+
@@ -78,12 +83,13 @@ class BaseWindow < Curses::Window
     list.delete(instance)
   end
 
-  # Format a timestamp string for the current time (HH:MM).
+  # Format a timestamp string for the current time (HH:MM), from one
+  # reading of {#clock}.
   #
   # @return [String] formatted timestamp like " [14:35]"
   # @api private
   def format_timestamp
-    " [#{Time.now.hour.to_s.rjust(2, '0')}:#{Time.now.min.to_s.rjust(2, '0')}]"
+    " [#{clock.hh_mm}]"
   end
 
   # Text to store in a line buffer for an added string. A trailing newline
