@@ -216,5 +216,10 @@ RSpec.configure do |config|
     # Windows register themselves in per-class instance lists; start empty.
     BaseWindow.window_classes.each { |klass| klass.list.clear }
     Curses::TerminalCursor.reset
+    # A spec that finishes a selection copies it, and without a clipboard
+    # tool (as on CI) the copy lands in ~/.profanity/selection.txt in the
+    # shared SPEC_HOME. Left there, it breaks a later example that plants
+    # a symlink at that path (clipboard_file_spec).
+    FileUtils.rm_f(File.join(SPEC_HOME, '.profanity', 'selection.txt'))
   end
 end
