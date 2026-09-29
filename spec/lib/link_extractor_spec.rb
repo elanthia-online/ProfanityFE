@@ -311,21 +311,21 @@ RSpec.describe LinkExtractor do
 
       it 'reads well-formed links in either quotes' do
         expect_each(
-          "<d cmd='go'>door</d>"          => ['door', [[0, 4, 'go']], 'door'],
-          '<d cmd="go">door</d>'          => ['door', [[0, 4, 'go']], 'door'],
-          %(<d cmd="a'b">x</d>)           => ['x', [[0, 1, "a'b"]], 'x'],
-          "<d\tcmd='go'>n</d>"            => ['n', [[0, 1, 'go']], 'n'],
-          "<d  cmd='go'>n</d>"            => ['n', [[0, 1, 'go']], 'n'],
-          "<d>n</d><d>s</d>"              => ['ns', [[0, 1, 'n'], [1, 2, 's']], 'ns'],
-          "<d>n</d> <a exist='1'>s</a>"   => ['n s', [[0, 1, 'n'], [2, 3, '_drag #1']], 'n s'],
-          '<d></d>'                       => ['', [[0, 0, '']], ''],
-          "<d cmd='go'></d>"              => ['', [[0, 0, 'go']], ''],
-          "<d cmd='a'b'>x</d>"            => ['x', [[0, 1, 'a']], 'x'],
-          '<d>a<b>b</b>c</d>'             => ['abc', [[0, 3, 'abc']], 'abc'],
-          '<b>x</b><d>y</d>'              => ['xy', [[1, 2, 'y']], 'xy'],
-          '<right>sword</right> <d>n</d>' => ['sword n', [[6, 7, 'n']], 'sword n'],
+          "<d cmd='go'>door</d>"                                                    => ['door', [[0, 4, 'go']], 'door'],
+          '<d cmd="go">door</d>'                                                    => ['door', [[0, 4, 'go']], 'door'],
+          %(<d cmd="a'b">x</d>)                                                     => ['x', [[0, 1, "a'b"]], 'x'],
+          "<d\tcmd='go'>n</d>"                                                      => ['n', [[0, 1, 'go']], 'n'],
+          "<d  cmd='go'>n</d>"                                                      => ['n', [[0, 1, 'go']], 'n'],
+          "<d>n</d><d>s</d>"                                                        => ['ns', [[0, 1, 'n'], [1, 2, 's']], 'ns'],
+          "<d>n</d> <a exist='1'>s</a>"                                             => ['n s', [[0, 1, 'n'], [2, 3, '_drag #1']], 'n s'],
+          '<d></d>'                                                                 => ['', [[0, 0, '']], ''],
+          "<d cmd='go'></d>"                                                        => ['', [[0, 0, 'go']], ''],
+          "<d cmd='a'b'>x</d>"                                                      => ['x', [[0, 1, 'a']], 'x'],
+          '<d>a<b>b</b>c</d>'                                                       => ['abc', [[0, 3, 'abc']], 'abc'],
+          '<b>x</b><d>y</d>'                                                        => ['xy', [[1, 2, 'y']], 'xy'],
+          '<right>sword</right> <d>n</d>'                                           => ['sword n', [[6, 7, 'n']], 'sword n'],
           "Also here: <a exist='1' noun='Bob'>Bob</a> and <d cmd='look Al'>Al</d>." =>
-            ['Also here: Bob and Al.', [[11, 14, 'look #1'], [19, 21, 'look Al']], 'Also here: Bob and Al.']
+                                                                                       ['Also here: Bob and Al.', [[11, 14, 'look #1'], [19, 21, 'look Al']], 'Also here: Bob and Al.']
         )
       end
 
