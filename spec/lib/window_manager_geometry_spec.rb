@@ -184,13 +184,14 @@ RSpec.describe WindowManager, '#resize geometry' do
     end
 
     # main is the current scroll window, so its scrollbar is the active one.
+    # The tabbed windows are inactive, so they show none.
     it 'draws only the first text window\'s scrollbar, beside the text, after a resize' do
       resize_to(40, 120)
 
       expect(scrollbars).to eq(
         main: { at: [0, 59, 20, 1], rows: ["\u25B6"] + ["\u2503"] * 18 + [''], thumb: [19] },
         thoughts: { at: [0, 89, 10, 1], rows: [''] * 10, thumb: [] },
-        combat: { at: [0, 119, 20, 1], rows: [''] + ['|'] * 18 + [''], thumb: [19] },
+        combat: { at: [0, 119, 20, 1], rows: [''] * 20, thumb: [] },
         atmo: { at: [10, 89, 1, 1], rows: [''], thumb: [] }
       )
     end
@@ -228,7 +229,7 @@ RSpec.describe WindowManager, '#resize geometry' do
       expect(scrollbars).to eq(
         main: { at: [0, 19, 6, 1], rows: ["\u25B6"] + ["\u2503"] * 4 + [''], thumb: [5] },
         thoughts: { at: [0, 29, 3, 1], rows: [''] * 3, thumb: [] },
-        combat: { at: [0, 39, 6, 1], rows: [''] + ['|'] * 4 + [''], thumb: [5] },
+        combat: { at: [0, 39, 6, 1], rows: [''] * 6, thumb: [] },
         atmo: { at: [3, 29, 1, 1], rows: [''], thumb: [] }
       )
     end
@@ -307,7 +308,7 @@ RSpec.describe WindowManager, '#resize geometry' do
 
       expect(flushed.chunk_while { |a, b| a == b }.map(&:first)).to eq %i[
         main main_scrollbar main thoughts thoughts_scrollbar thoughts
-        combat_scrollbar combat combat_scrollbar combat atmo_scrollbar atmo
+        combat_scrollbar combat atmo_scrollbar atmo
         exp spells room kneeling prompt health roundtime command prompt command
       ]
     end

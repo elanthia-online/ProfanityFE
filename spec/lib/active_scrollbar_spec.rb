@@ -83,8 +83,8 @@ RSpec.describe 'The active scrollbar across resizes' do
     allow(ProfanitySettings).to receive(:load_mouse_settings).and_return(nil)
     stub_const('Curses::ALL_MOUSE_EVENTS', Curses::REPORT_MOUSE_POSITION - 1)
     app.send(:load_settings_and_layout)
-    # A line in the tabbed window, so that every resize draws its
-    # scrollbar, as inactive.
+    # A line in the tabbed window: it is inactive, so no resize draws its
+    # scrollbar (spec/lib/tabbed_inactive_scrollbar_spec.rb).
     tabbed.route_string('You swing.', [], 'combat')
     room.update_exits('Obvious paths: north.')
   end
@@ -95,21 +95,21 @@ RSpec.describe 'The active scrollbar across resizes' do
     terminal_resize
 
     expect(scrollbar_cells(main)).to eq active(6)
-    expect(tabbed_cells).to eq inactive(4)
+    expect(tabbed_cells).to eq blank(4)
   end
 
   it 'keeps the marker on the current window after .resize' do
     app.execute_command('.resize')
 
     expect(scrollbar_cells(main)).to eq active(6)
-    expect(tabbed_cells).to eq inactive(4)
+    expect(tabbed_cells).to eq blank(4)
   end
 
   it 'keeps the marker on the current window after .layout' do
     app.execute_command('.layout default')
 
     expect(scrollbar_cells(main)).to eq active(6)
-    expect(tabbed_cells).to eq inactive(4)
+    expect(tabbed_cells).to eq blank(4)
   end
 
   it 'keeps the marker on a current window other than the first text window after a resize' do
@@ -129,7 +129,7 @@ RSpec.describe 'The active scrollbar across resizes' do
     expect(scrollbar_cells(thoughts)).to eq active(4)
     expect(scrollbar_cells(main)).to eq blank(6)
 
-    switch_window # the tabbed window, whose scrollbar the resize drew as inactive
+    switch_window # the tabbed window, whose scrollbar the resize left blank too
 
     expect(tabbed_cells).to eq active(4)
     expect(scrollbar_cells(thoughts)).to eq blank(4)
