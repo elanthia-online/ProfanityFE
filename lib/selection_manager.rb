@@ -225,7 +225,7 @@ module SelectionManager
       appended = @active_window.lines_appended
 
       if @click_count == 2
-        text = AnchoredSelection.line_at(buffer, appended, @start_id)
+        text = pressed_line_text(buffer, appended)
         span = text && AnchoredSelection.word_span(text, @start_x)
         return false unless span
 
@@ -241,6 +241,22 @@ module SelectionManager
 
       @active_window.highlight_selection(@start_id, @start_x, @end_id, @end_x)
       true
+    end
+
+    # Text of the buffer line shown on the pressed row. A press below the
+    # text or on a tab bar anchors to the nearest line (so a drag started
+    # there still selects), but a double-click there is on no word.
+    #
+    # @param buffer [Array<Array(String, Array<Hash>)>] the window's rows, newest first
+    # @param appended [Integer] the window's monotonic append counter
+    # @return [String, nil] the line text, or nil if the pressed row shows
+    #   another line or none
+    def pressed_line_text(buffer, appended)
+      row = AnchoredSelection.row_of_id(@start_id, lines_appended: appended, buffer_pos: @active_window.buffer_pos,
+                                                   buffer_length: buffer.length, height: @active_window.content_height)
+      return nil unless row == @press_y - @active_window.content_top
+
+      AnchoredSelection.line_at(buffer, appended, @start_id)
     end
 
     public

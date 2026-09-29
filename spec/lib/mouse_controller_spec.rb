@@ -167,6 +167,117 @@ RSpec.describe MouseController do
         expect(copied).to be_empty
       end
 
+      # Row 3 is the last line, 'delta'. No copy notice is shown, so the
+      # rows stay as they were.
+      it 'selects and copies nothing for a double click right of the text' do
+        2.times { click(3, 20) }
+
+        expect(reversed_columns(main, 3)).to be_empty
+        expect(copied).to be_empty
+        expect(main.rows).to eq %w[alpha bravo charlie delta]
+      end
+
+      it 'selects and copies nothing for a double click just past the last character' do
+        2.times { click(3, 5) }
+
+        expect(reversed_columns(main, 3)).to be_empty
+        expect(copied).to be_empty
+      end
+
+      it 'selects and copies nothing for a double click between two words' do
+        main.add_string('get the pack')
+
+        2.times { click(3, 3) }
+
+        expect(reversed_columns(main, 3)).to be_empty
+        expect(copied).to be_empty
+      end
+    end
+
+    # Main wraps 'one two three four five six seven eight nine ten' at 40
+    # columns, so 'nine ten' goes on an indented continuation row. Rows 2
+    # and 3 are empty.
+    describe 'double clicking where a row shows no text' do
+      before { main.add_string('one two three four five six seven eight nine ten') }
+
+      it 'shows the wrapped line on two rows with two empty rows below' do
+        expect(main.rows).to eq ['one two three four five six seven eight', '  nine ten', '', '']
+      end
+
+      it 'selects nothing right of the continuation row' do
+        2.times { click(1, 15) }
+
+        expect(reversed_columns(main, 1)).to be_empty
+        expect(copied).to be_empty
+      end
+
+      it 'selects nothing on an empty row below the text, under a word of the last row' do
+        2.times { click(2, 3) }
+
+        expect((0...main.maxy).flat_map { |y| reversed_columns(main, y) }).to be_empty
+        expect(copied).to be_empty
+        expect(main.rows).to eq ['one two three four five six seven eight', '  nine ten', '', '']
+      end
+
+      it 'still copies the word under a double click on the continuation row' do
+        2.times { click(1, 3) }
+
+        expect(reversed_columns(main, 1)).to eq [2, 3, 4, 5]
+        expect(copied).to eq ['nine']
+      end
+    end
+
+    # A tabbed window 4 rows high: the tab bar on row 0, text below.
+    context 'in a tabbed window' do
+      let(:layout) do
+        <<~XML
+          <layout>
+            <window class='tabbed' top='0' left='0' height='4' width='22' tabs='main,thoughts'/>
+            <window class='command' top='9' left='0' height='1' width='22'/>
+          </layout>
+        XML
+      end
+
+      before { main.add_string('hello world') }
+
+      # @return [Array<Integer>] reversed columns on every text row (the
+      #   tab bar marks the active tab in reverse video)
+      def reversed_text_columns
+        (TabbedTextWindow::TAB_BAR_HEIGHT...main.maxy).flat_map { |y| reversed_columns(main, y) }
+      end
+
+      it 'copies the word under a double click' do
+        2.times { click(1, 8) }
+
+        expect(reversed_columns(main, 1)).to eq [6, 7, 8, 9, 10]
+        expect(copied).to eq ['world']
+      end
+
+      it 'selects nothing right of the text' do
+        2.times { click(1, 15) }
+
+        expect(reversed_text_columns).to be_empty
+        expect(copied).to be_empty
+      end
+
+      it 'selects nothing on an empty row below the text' do
+        2.times { click(2, 3) }
+
+        expect(reversed_text_columns).to be_empty
+        expect(copied).to be_empty
+      end
+
+      it 'selects nothing on the tab bar' do
+        2.times { click(0, 8) }
+
+        expect(reversed_text_columns).to be_empty
+        expect(copied).to be_empty
+      end
+    end
+
+    describe 'pressing outside every window' do
+      before { %w[alpha bravo charlie delta].each { |line| main.add_string(line) } }
+
       it 'drops the selection at a press outside every window' do
         mouse(Curses::BUTTON1_PRESSED, 1, 0)
         mouse(Curses::BUTTON1_PRESSED, 20, 60)
