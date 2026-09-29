@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative 'selection_manager'
 require_relative 'window_layout'
 
 # Turns a layout from the settings file into windows.
@@ -119,13 +120,15 @@ class LayoutLoader
   end
 
   # Close a window the new layout did not reuse, and remove it from every
-  # list that could still hit-test, repaint, or scroll it.
+  # list that could still hit-test, repaint, or scroll it, and from the
+  # mouse selection (see {SelectionManager.forget_window}).
   #
   # @param window [BaseWindow] a window from the previous layout
   # @return [void]
   def close_window(window)
     window.class.unregister_instance(window)
     SCROLL_WINDOW.delete(window)
+    SelectionManager.forget_window(window)
     window.scrollbar&.close if window.respond_to?(:scrollbar)
     window.close
   end

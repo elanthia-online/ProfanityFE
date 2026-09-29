@@ -268,5 +268,57 @@ RSpec.describe MouseController do
       expect(copied).to eq ['alpha']
       expect(main.rows).to eq ['go north', 'alpha bravo', '* [copied 5 chars]', '']
     end
+
+    # .layout closes the windows the new layout drops; any curses call on
+    # a closed window raises "already closed window". A selection left
+    # pointing at one broke the drag auto-scroll tick, and the next
+    # press's clear_selection.
+    describe 'after a .layout that drops the window of a selection' do
+      let(:thoughts) { app.window_mgr.stream['thoughts'] }
+
+      before do
+        LAYOUT['main only'] = REXML::Document.new(<<~XML).root
+          <layout>
+            <window class='text' top='0' left='0' height='4' width='42' value='main'/>
+            <window class='command' top='9' left='0' height='1' width='42'/>
+          </layout>
+        XML
+        (1..8).each { |n| thoughts.add_string("t#{n}") }
+      end
+
+      # Runs the real input loop for two ticks with no key pressed, then
+      # ends it as Ctrl+C would. An error raised in the loop is logged
+      # and ends it (and the client) at once.
+      def run_input_loop_for_two_ticks
+        allow(IO).to receive(:select).and_return(nil)
+        keys = [nil]
+        allow(app).to receive(:read_key) { keys.empty? ? raise(Interrupt) : keys.shift }
+        app.send(:input_loop)
+      end
+
+      it 'ends a drag held at the edge of that window, and the input loop keeps running' do
+        logged = []
+        allow(ProfanityLog).to receive(:write) { |source, message, **| logged << [source, message] }
+        mouse(Curses::BUTTON1_PRESSED, 6, 0)
+        mouse(Curses::REPORT_MOUSE_POSITION, 5, 1)
+
+        app.execute_command('.layout main only')
+        run_input_loop_for_two_ticks
+
+        expect(logged.select { |source, _| source == 'main' }).to eq []
+        expect(app).to have_received(:read_key).twice
+        expect(SelectionManager.selecting).to be false
+      end
+
+      it 'forgets the selection kept there, so a drag in another window still copies' do
+        drag([6, 0], [7, 1])
+        expect(copied).to eq ["t7\nt"]
+
+        app.execute_command('.layout main only')
+        drag([0, 0], [0, 5])
+
+        expect(copied).to eq ["t7\nt", 'go no']
+      end
+    end
   end
 end

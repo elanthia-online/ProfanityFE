@@ -12,7 +12,11 @@ module Curses
   # - "\n" clears to the end of the line and moves to the next line;
   # - moving past the bottom of the scrolling region scrolls it when
   #   scrollok is on, and otherwise leaves the cursor on the bottom line;
-  # - scrl scrolls only the scrolling region (the whole window by default).
+  # - scrl scrolls only the scrolling region (the whole window by default);
+  # - after #close, every curses call, a second #close and the size,
+  #   position and cursor readers included, raises RuntimeError "already
+  #   closed window", as the curses gem does. The inspection helpers
+  #   ({#rows}, {#row}, {#attrs_at}, {#call_log}) keep working.
   #
   # Every call is also recorded in {#call_log} for specs that assert on
   # the calls themselves.
@@ -26,10 +30,15 @@ module Curses
     BLANK = [' ', 0].freeze
 
     # @return [Integer] window height, width, and screen position
-    attr_accessor :maxy, :maxx, :begy, :begx
+    attr_writer :maxy, :maxx, :begy, :begx
 
-    # @return [Integer] cursor row and column
-    attr_reader :cury, :curx
+    # Window height, width, screen position, and cursor row and column.
+    %i[maxy maxx begy begx cury curx].each do |meth|
+      define_method(meth) do
+        ensure_open
+        instance_variable_get(:"@#{meth}")
+      end
+    end
 
     # @return [Array<Array(Symbol, Array)>] every call made, in order
     attr_reader :call_log
@@ -236,11 +245,18 @@ module Curses
 
     # --- Calls with no effect on the modelled screen ---
 
-    %i[noutrefresh refresh redraw close keypad].each do |meth|
+    %i[noutrefresh refresh redraw keypad].each do |meth|
       define_method(meth) do |*args|
         log(meth, *args)
         nil
       end
+    end
+
+    # Like the curses gem, frees the window: any later call raises.
+    def close
+      log(:close)
+      @closed = true
+      nil
     end
 
     def nodelay=(val)
@@ -255,7 +271,13 @@ module Curses
     private
 
     def log(meth, *args)
+      ensure_open
       @call_log << [meth, args]
+    end
+
+    # The curses gem's GetWINDOW check on a freed window.
+    def ensure_open
+      raise 'already closed window' if @closed
     end
 
     def blank_row(width)
