@@ -138,7 +138,6 @@ COUNTDOWN_OFFSET = 0.2
 TIME_SYNC_DELAY = 15
 FEEDBACK_COLOR = 'ffff00'
 BACKTRACE_LIMIT = 4
-SPEECH_TS = false
 
 # Mutable runtime state owned by CONFIG, aliased for compatibility.
 # Same pattern as lib/constants.rb — specs use the same Config object.

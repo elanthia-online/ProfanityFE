@@ -14,6 +14,13 @@ require 'rexml/document'
 require_relative '../../lib/game_text_processor'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/window_manager'
+require_relative '../../lib/kill_ring'
+require_relative '../../lib/string_classification'
+require_relative '../../lib/command_buffer'
+require_relative '../../lib/mouse_scroll'
+require_relative '../../lib/autocomplete'
+require_relative '../../lib/selection_manager'
+require_relative '../../lib/application'
 
 RSpec.describe 'Stream fallback and timestamp lists' do
   # The routable-stream alternation, as written twice before Streams.
@@ -30,6 +37,8 @@ RSpec.describe 'Stream fallback and timestamp lists' do
   let(:event_bus) { EventBus.new }
   let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
   let(:shown) { [] }
+  # The processor's speech_timestamps: flag (--speech-ts).
+  let(:speech_ts) { false }
 
   before do
     event_bus.on(:stream_text) { |data| shown << data unless data[:text].empty? }
@@ -44,7 +53,7 @@ RSpec.describe 'Stream fallback and timestamp lists' do
     processor = GameTextProcessor.new(
       window_mgr: wm, shared_state: state, cmd_buffer: Struct.new(:window).new(nil),
       xml_escapes: { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' },
-      event_bus: event_bus
+      event_bus: event_bus, speech_timestamps: speech_ts
     )
     queue = lines.map { |line| "#{line}\r\n" }
     server = Object.new
@@ -95,7 +104,7 @@ RSpec.describe 'Stream fallback and timestamp lists' do
   end
 
   describe 'with --speech-ts' do
-    before { stub_const('SPEECH_TS', true) }
+    let(:speech_ts) { true }
 
     in_window = %w[speech thoughts familiar]
     in_main = %w[thoughts familiar]
@@ -157,6 +166,21 @@ RSpec.describe 'Stream fallback and timestamp lists' do
         on_stream(id, 'Some text.')
 
         expect(shown.map { |d| d[:text] }.uniq).to eq ['Some text.']
+      end
+    end
+  end
+
+  describe 'Application' do
+    [true, false].each do |flag|
+      it "passes speech_ts: #{flag} from the command-line options to the GameTextProcessor" do
+        app = Application.new({ char: nil, no_status: true, links: false, room_window_only: false, speech_ts: flag },
+                              settings_file: File.join(SPEC_HOME, 'settings.xml'), host: '127.0.0.1', port: 8000)
+        app.instance_variable_set(:@server, StringIO.new)
+        allow(GameTextProcessor).to receive(:new).and_call_original
+
+        app.send(:start_server_thread).join
+
+        expect(GameTextProcessor).to have_received(:new).with(a_hash_including(speech_timestamps: flag))
       end
     end
   end

@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
-
 require_relative 'spell_abbreviations'
 require_relative 'games/dragonrealms'
 require_relative 'games/gemstone'
@@ -13,6 +11,7 @@ require_relative 'styled_text'
 require_relative 'event_bus'
 require_relative 'streams'
 require_relative 'presets'
+require_relative 'boot_profiler'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -88,12 +87,20 @@ class GameTextProcessor
   # @param cmd_buffer [CommandBuffer] the command-line input buffer (used for Curses refresh coordination)
   # @param xml_escapes [Hash<String, String>] XML entity to character mappings (e.g. +"&gt;"+ => +">"+)
   # @param event_bus [EventBus] event bus for decoupled UI updates
-  def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:)
+  # @param boot_profiler [BootProfiler] logs when the first server data,
+  #   prompt and screen render arrive (--profile)
+  # @param speech_timestamps [Boolean] timestamp the lines of the streams in
+  #   {Streams::TIMESTAMPED_IN_WINDOW} and {Streams::TIMESTAMPED_IN_MAIN}
+  #   (--speech-ts)
+  def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:,
+                 boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false)
     @wm = window_mgr
     @state = shared_state
     @cmd_buffer = cmd_buffer
     @xml_escapes = xml_escapes
     @event_bus = event_bus
+    @boot_profiler = boot_profiler
+    @speech_timestamps = speech_timestamps
 
     # Line color/style tracking
     @line_colors = []
@@ -166,9 +173,8 @@ class GameTextProcessor
     first_line = true
 
     while (line = server.gets)
-      if first_line && BOOT_PROFILE
-        elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
-        ProfanityLog.write('boot-profile', "first server data received: #{elapsed}ms")
+      if first_line && @boot_profiler.enabled?
+        @boot_profiler.log_elapsed('first server data received')
         first_line = false
       end
 
@@ -283,9 +289,8 @@ class GameTextProcessor
         end
         @cmd_buffer.window&.noutrefresh
         Curses.doupdate
-        if @first_render && BOOT_PROFILE
-          elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
-          ProfanityLog.write('boot-profile', "first screen render: #{elapsed}ms")
+        if @first_render && @boot_profiler.enabled?
+          @boot_profiler.log_elapsed('first screen render')
           @first_render = false
         end
       end
@@ -607,7 +612,7 @@ class GameTextProcessor
                 fg: ALL_LOGON_PATTERNS[logon_type]
               })
             end
-          elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && SPEECH_TS
+          elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && @speech_timestamps
             text = append_speech_timestamp(text)
           end
 
@@ -654,7 +659,7 @@ class GameTextProcessor
         elsif Streams::FALLBACK_TO_MAIN.include?(@current_stream)
           # Timestamp thoughts/familiar when --speech-ts is active (not speech:
           # see Streams::TIMESTAMPED_IN_MAIN)
-          if Streams::TIMESTAMPED_IN_MAIN.include?(@current_stream) && SPEECH_TS
+          if Streams::TIMESTAMPED_IN_MAIN.include?(@current_stream) && @speech_timestamps
             text = append_speech_timestamp(text)
           end
           if (colors = Presets.colors(@current_stream))
