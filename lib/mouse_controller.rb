@@ -124,7 +124,9 @@ class MouseController
   end
 
   # Button 1 released: a click follows a link, a double or triple click or
-  # a drag copies the selection.
+  # a drag copies the selection. A release on the press's row, at most 3
+  # columns from it, ends a click; the link it follows is the one under
+  # the press, the cell the user aimed at.
   def handle_release(screen_y, screen_x)
     return unless SelectionManager.selecting
 
@@ -143,8 +145,8 @@ class MouseController
         # Double/triple click: copy the expanded word/line selection
         finalize_selection
       else
-        # Single click (no drag): check for link, skip selection
-        dispatch_link(window, rel_y, rel_x)
+        # Single click (no drag): check for a link under the press, skip selection
+        dispatch_link(window, *start_pos)
         SelectionManager.clear_selection
       end
     else
