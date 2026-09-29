@@ -1189,6 +1189,88 @@ RSpec.describe TagHandlers do
       ) { |h, tag| events_of(h, tag, :clear_spells).size }
     end
 
+    it 'reads color fg, bg and ul, lowercased' do
+      expect_each(
+        %(<color fg="FF0000" bg='00FF00' ul="true">) => { start: 0, fg: 'ff0000', bg: '00ff00', ul: 'true' },
+        "<color bg='B' fg='A'>"                      => { start: 0, fg: 'a', bg: 'b' },
+        "<color  fg='a'>"                            => { start: 0, fg: 'a' },
+        "<color\tfg='a'>"                            => { start: 0, fg: 'a' },
+        "<color fg=''>"                              => { start: 0, fg: '' },
+        "<color fg='a>b'>"                           => { start: 0, fg: 'a>b' },
+        %(<color fg="a'b">)                          => { start: 0, fg: "a'b" },
+        "<color fg='a' fg='b'>"                      => { start: 0, fg: 'a' },
+        "<color fg='x' />"                           => { start: 0, fg: 'x' },
+        "<color xfg='a'>"                            => { start: 0 },
+        %(<color fg="a'>)                            => { start: 0 },
+        '<color fg=a>'                               => { start: 0 },
+        # A value runs to a closing quote followed by whitespace or >, so it
+        # can hold its own quote, and a value followed by /> isn't read.
+        "<color fg='a'b'>"                           => { start: 0, fg: "a'b" },
+        "<color fg='a'b' bg='c'>"                    => { start: 0, fg: "a'b", bg: 'c' },
+        "<color fg='a'x fg='b'>"                     => { start: 0, fg: "a'x fg='b" },
+        "<color fg='x'/>"                            => { start: 0 },
+        # fg= is found anywhere after whitespace: after junk, inside another
+        # value, or after a longer element name.
+        "<color junk fg='a'>"                        => { start: 0, fg: 'a' },
+        %(<color title=" fg='a' ">)                  => { start: 0, fg: 'a' },
+        "<color-x fg='a'>"                           => { start: 0, fg: 'a' }
+      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_color.last } }
+    end
+
+    it 'reads compass dirs wherever <dir starts, even inside a quoted value' do
+      expect_each(
+        %(<compass><dir value='a>b'/></compass>)              => ['a>b'],
+        %(<compass><dir value='n'</compass>)                  => ['n'],
+        %(<compass><dir-x value="n"/></compass>)              => [],
+        %(<compass></dir value='n'></compass>)                => [],
+        %(<compass x="<dir value='n'/>"></compass>)           => ['n'],
+        %(<compass><b t='<dir value="n"/>'/></compass>)       => ['n'],
+        %(<compass><x <dir value='n'/></compass>)             => ['n'],
+        %(<compass><dir value="<dir value='n'/>"/></compass>) => ["<dir value='n'/>", 'n']
+      ) { |h, tag| events_of(h, tag, :compass_update).last[:dirs] }
+    end
+
+    it 'resets the combat flag on a tag starting <popStream' do
+      expect_each(
+        '<popStream/>'              => false,
+        "<popStream id='x'/>"       => false,
+        '<popStream-x/>'            => false,
+        '<popStreams id="combat"/>' => false,
+        '</popStream>'              => true,
+        '<pushStream/>'             => true
+      ) { |h, tag| h.combat_next_line = true; h.dispatch_tag(tag, String.new); h.combat_next_line }
+    end
+
+    it 'resyncs streams at a tag named prompt, not at its end tag' do
+      expect_each(
+        "<prompt time='1'>&gt;</prompt>" => [nil, []],
+        '<prompt>'                       => [nil, []],
+        '<prompt-x>'                     => [nil, []],
+        '<promptX>'                      => ['combat', ['combat']],
+        '</prompt>'                      => ['combat', ['combat']]
+      ) do |h, tag|
+        h.dispatch_tag("<pushStream id='combat'/>", String.new)
+        h.dispatch_tag(tag, String.new)
+        [h.current_stream, h.stream_stack]
+      end
+    end
+
+    it 'records only a pushStream as open, and closes one only at a popStream' do
+      expect_each(
+        "<pushStream id='a'/>"  => ['a', %w[x a]],
+        "<component id='a'/>"   => ['a', %w[x]],
+        "<compDef id='a'/>"     => ['a', %w[x]],
+        "<popStream id='x'/>"   => [nil, []],
+        "<popStream-x id='x'/>" => [nil, []],
+        '</component>'          => ['x', %w[x]],
+        '</compDef>'            => ['x', %w[x]]
+      ) do |h, tag|
+        h.dispatch_tag("<pushStream id='x'/>", String.new)
+        h.dispatch_tag(tag, String.new)
+        [h.current_stream, h.stream_stack]
+      end
+    end
+
     it 'reads a room streamWindow in either quotes and any order' do
       expect_each(
         %(<streamWindow id='room' subtitle=" - [Hall]"/>)              => 'Hall',

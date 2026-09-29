@@ -290,5 +290,81 @@ RSpec.describe LinkExtractor do
         expect(clean[colors.first[:start]...colors.first[:end]]).to eq 'a sword'
       end
     end
+
+    # What extract_links makes of each spelling of link markup: the clean
+    # text, and each link as [start, end, cmd]; and the clean text with links
+    # off (the same text, no links).
+    describe 'acceptance' do
+      # @param text [String] the markup
+      # @return [Array(String, Array<Array>, String)]
+      def extracted(text)
+        clean, colors = described_class.extract_links(text, links_enabled: true)
+        off, off_colors = described_class.extract_links(text, links_enabled: false)
+        raise "links off gave colors for #{text}" unless off_colors.empty?
+
+        [clean, colors.map { |c| [c[:start], c[:end], c[:cmd]] }, off]
+      end
+
+      def expect_each(table)
+        table.each { |text, expected| expect(extracted(text)).to eq(expected), text }
+      end
+
+      it 'reads well-formed links in either quotes' do
+        expect_each(
+          "<d cmd='go'>door</d>"          => ['door', [[0, 4, 'go']], 'door'],
+          '<d cmd="go">door</d>'          => ['door', [[0, 4, 'go']], 'door'],
+          %(<d cmd="a'b">x</d>)           => ['x', [[0, 1, "a'b"]], 'x'],
+          "<d\tcmd='go'>n</d>"            => ['n', [[0, 1, 'go']], 'n'],
+          "<d  cmd='go'>n</d>"            => ['n', [[0, 1, 'go']], 'n'],
+          "<d>n</d><d>s</d>"              => ['ns', [[0, 1, 'n'], [1, 2, 's']], 'ns'],
+          "<d>n</d> <a exist='1'>s</a>"   => ['n s', [[0, 1, 'n'], [2, 3, '_drag #1']], 'n s'],
+          '<d></d>'                       => ['', [[0, 0, '']], ''],
+          "<d cmd='go'></d>"              => ['', [[0, 0, 'go']], ''],
+          "<d cmd='a'b'>x</d>"            => ['x', [[0, 1, 'a']], 'x'],
+          '<d>a<b>b</b>c</d>'             => ['abc', [[0, 3, 'abc']], 'abc'],
+          '<b>x</b><d>y</d>'              => ['xy', [[1, 2, 'y']], 'xy'],
+          '<right>sword</right> <d>n</d>' => ['sword n', [[6, 7, 'n']], 'sword n'],
+          "Also here: <a exist='1' noun='Bob'>Bob</a> and <d cmd='look Al'>Al</d>." =>
+            ['Also here: Bob and Al.', [[11, 14, 'look #1'], [19, 21, 'look Al']], 'Also here: Bob and Al.']
+        )
+      end
+
+      it 'pairs each link with the next end tag of its letter; tags between count as link text' do
+        expect_each(
+          '<d>a<d>b</d>c</d>'  => ['abc', [[0, 5, 'a<d>b'], [1, 3, 'bc']], 'abc'],
+          '<a>x<d>y</d></a>'   => ['xy', [[0, 9, 'x<d>y</d>'], [1, 2, 'y']], 'xy'],
+          # an unpaired link tag before a link still counts for its position
+          '<a>x<d>y</d>'       => ['xy', [[4, 5, 'y']], 'xy'],
+          '</d><d>n</d>'       => ['n', [[4, 5, 'n']], 'n'],
+          "<d cmd='go'>orphan" => ['orphan', [], 'orphan'],
+          '<a>x</d>'           => ['x', [], 'x']
+        )
+      end
+
+      it 'counts only <a and <d followed by whitespace or > as link tags' do
+        expect_each(
+          '<d/>n</d>'  => ['n', [], 'n'],
+          '<a-b>x</a>' => ['x', [], 'x'],
+          '<a<b>x</a>' => ['x', [], 'x'],
+          '<dx>n</dx>' => ['n', [], 'n']
+        )
+      end
+
+      it 'ends every tag at its first >, even inside a quoted value' do
+        expect_each(
+          "<d cmd='a>b'>x</d>" => ["b'>x", [[0, 4, "b'>x"]], "b'>x"],
+          "<b t='>'><d>n</d>"  => ["'>n", [[2, 3, 'n']], "'>n"],
+          "<d x='<'>n</d>"     => ['', [], ''],
+          'x <b <d>y</d>'      => ['x y', [], 'x y']
+        )
+      end
+
+      it 'keeps <> as text' do
+        expect_each(
+          'x <> y'     => ['x <> y', [], 'x <> y'],
+          '<d>a</d><>' => ['a<>', [[0, 1, 'a']], 'a<>']
+        )
+      end
+    end
   end
 end

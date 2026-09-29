@@ -124,6 +124,73 @@ RSpec.describe RoomDataProcessor do
     end
   end
 
+  describe 'inline "You also see" objects' do
+    subject(:host) { RoomTitleHost.new }
+
+    # @param raw_line [String] the raw server line the objects text came from
+    # @return [String] the objects markup kept for the room window
+    def objects(raw_line)
+      host.room_capture_mode = nil
+      host.current_raw_line = raw_line
+      host.process_room_data('You also see a box.')
+      host.instance_variable_get(:@room_pending_objects)
+    end
+
+    it 'drops component and compDef tags, and keeps every other tag' do
+      {
+        "<component id='room objs'>You also see a box.</component>" => 'You also see a box.',
+        "You also see a box.</component><component id='x'>"         => 'You also see a box.',
+        'You also see <pushBold/>a goblin<popBold/>.</component>'   => 'You also see <pushBold/>a goblin<popBold/>.',
+        'You also see <compass>x</compass>'                         => 'You also see <compass>x</compass>',
+        # any tag whose name starts with component or compDef
+        'You also see a <componentX>box</componentX>.'              => 'You also see a box.',
+        'You also see a </compDef >box<compDefs/>.'                 => 'You also see a box.',
+        # a tag ends at its first >, even inside a quoted value
+        %(You also see <component id="a>b">box</component>)         => %(You also see b">box),
+        %(You also see <b t="<component id='x'>">box)               => %(You also see <b t="">box)
+      }.each do |raw, expected|
+        expect(objects(raw)).to eq(expected), raw
+      end
+    end
+  end
+
+  describe '#extract_inline_creatures' do
+    subject(:host) { RoomTitleHost.new }
+
+    it 'reads the text of each <pushBold/>...<popBold/> region, tags removed' do
+      {
+        '<pushBold/>a goblin<popBold/>, <pushBold/>a troll<popBold/>'  => ['a goblin', 'a troll'],
+        '<pushBold/>a goblin<popBold/>, <pushBold/>a goblin<popBold/>' => ['a goblin'],
+        "<pushBold />a <d cmd='x'>goblin</d><popBold />"               => ['a goblin'],
+        '<pushBold>a<popBold>'                                         => ['a'],
+        '<pushBold/>a<pushBold/>b<popBold/>c<popBold/>'                => ['ab'],
+        '<pushBold/><right>x</right><popBold/>'                        => ['x'],
+        '<pushBold/>a'                                                 => [],
+        '<popBold/>a<pushBold/><popBold/>'                             => [],
+        # only <pushBold>, <pushBold/> and <pushBold /> (same for popBold)
+        "<pushBold x='1'/>a goblin<popBold/>"                          => [],
+        '<pushBold/ >a<popBold/>'                                      => [],
+        '<pushBold-x/>a<popBold/>'                                     => [],
+        # a tag ends at its first >, even inside a quoted value; <> is text
+        "<pushBold/>a <b t='>'>b<popBold/>"                            => ["a '>b"],
+        %(<pushBold/>a<b t="<popBold/>">b<popBold/>)                   => ['a<b t="'],
+        '<pushBold/>a <> b<popBold/>'                                  => ['a <> b']
+      }.each do |raw, expected|
+        expect(host.send(:extract_inline_creatures, raw)).to eq(expected), raw
+      end
+    end
+  end
+
+  describe '#structurize_text' do
+    subject(:host) { RoomTitleHost.new }
+
+    it 'reads a player list with link markup into text and link regions' do
+      text = "Also here: <a exist='1' noun='Bob'>Bob</a> and <pushBold/><d cmd='look Al'>Al</d><popBold/>."
+      expect(host.send(:structurize_text, text))
+        .to eq ['Also here: Bob and Al.', [{ start: 11, end: 14, cmd: 'look #1' }, { start: 19, end: 21, cmd: 'look Al' }]]
+    end
+  end
+
   describe '#parse_player_names' do
     subject(:host) { RoomTitleHost.new }
 

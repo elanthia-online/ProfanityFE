@@ -116,6 +116,72 @@ RSpec.describe 'GameTextProcessor gagged lines' do
     end
   end
 
+  describe 'which stream tags a gagged line keeps' do
+    # @param line [String] a raw server line, gagged
+    # @return [Array(String, nil)] what the tag dispatcher is given (nil when
+    #   nothing is left) and the gag log line's marker
+    def kept(line)
+      GagPatterns.add_general_pattern('.')
+      processed = []
+      allow(processor).to receive(:process_line_tags) { |tags| processed << tags }
+      receive_from_server(line)
+      [processed.first, gag_log.first[/\Ageneral( STREAM-TAG)?/, 1]]
+    end
+
+    it 'keeps pushStream, popStream and clearStream tags, as written, in order' do
+      {
+        '<pushStream id="percWindow"/>x<popStream/>y'              => ['<pushStream id="percWindow"/><popStream/>', ' STREAM-TAG'],
+        '<popStream id="combat" /><clearStream id="percWindow"/>z' => ['<popStream id="combat" /><clearStream id="percWindow"/>', ' STREAM-TAG'],
+        '<popStream/><popStream/>x'                                => ['<popStream/><popStream/>', ' STREAM-TAG'],
+        '<pushStream-x id="y"/>x'                                  => ['<pushStream-x id="y"/>', ' STREAM-TAG'],
+        '<pushStreamX id="y"/>x'                                   => [nil, nil],
+        '</popStream>x'                                            => [nil, nil],
+        '<popStream'                                               => [nil, nil],
+        'no tags'                                                  => [nil, nil]
+      }.each do |line, expected|
+        gag_log.clear
+        expect(kept(line)).to eq(expected), line
+      end
+    end
+
+    it 'finds stream tags by their text, whatever tag or quote they sit in' do
+      {
+        # a stream tag ends at its first >, even inside a quoted value
+        %(<pushStream id="a>b"/>x)                           => ['<pushStream id="a>', ' STREAM-TAG'],
+        # the content of a paired tag
+        '<prompt time="1"><pushStream id="x"/>&gt;</prompt>' => ['<pushStream id="x"/>', ' STREAM-TAG'],
+        # after an unclosed tag, and inside another tag's quoted value
+        '<b <popStream/>x'                                   => ['<popStream/>', ' STREAM-TAG'],
+        %(<b title="<popStream/>">x)                         => ['<popStream/>', ' STREAM-TAG']
+      }.each do |line, expected|
+        gag_log.clear
+        expect(kept(line)).to eq(expected), line
+      end
+    end
+  end
+
+  describe 'which lines end a multi-line gag that runs to a prompt' do
+    it 'ends it at any line containing <prompt followed by a non-word character' do
+      {
+        '<prompt time="1">&gt;</prompt>' => false,
+        '<prompt>'                       => false,
+        '<prompt'                        => false,
+        %(<b t="<prompt>">)              => false,
+        '<spell><prompt>x</spell>'       => false,
+        'x <promptX>'                    => true,
+        '</prompt>'                      => true,
+        'plain'                          => true
+      }.each do |line, gagged|
+        GagPatterns.load_defaults
+        GagPatterns.add_multiline_gag('^START')
+        fresh = GameTextProcessor.new(window_mgr: wm, shared_state: state, cmd_buffer: Struct.new(:window).new(nil),
+                                      xml_escapes: {}, event_bus: EventBus.new)
+        fresh.send(:multiline_gag?, 'START')
+        expect(fresh.send(:multiline_gag?, line)).to eq(gagged), line
+      end
+    end
+  end
+
   describe 'with --log-gags' do
     it 'logs a line dropped by a general gag, with the pattern that matched' do
       GagPatterns.add_general_pattern('^A warm breeze')
