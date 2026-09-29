@@ -177,9 +177,8 @@ RSpec.describe WindowManager, '#resize geometry' do
         exp: ['Parry Ability: 1709 59% [34/3', '4]', '', '', ''],
         spells: ['Shadows (2 roisaen)', '', '', '', ''],
         room: ['[[Town Square]]', 'A wide square paved with old stones.', 'Obvious paths: north, south.'] + [''] * 13,
-        # One-row widgets are only moved, not redrawn: they keep the cells
-        # they had.
-        health: ['HP                50'], roundtime: ['RT                 ?'], kneeling: ['Kneeling'],
+        # The bar and the countdown fill their new widths.
+        health: ["HP#{'50'.rjust(28)}"], roundtime: ["RT#{'?'.rjust(58)}"], kneeling: ['Kneeling'],
         prompt: ['H>'], command: ['look at the stones']
       )
     end
@@ -220,7 +219,10 @@ RSpec.describe WindowManager, '#resize geometry' do
         exp: ['Parry Abi', 'lity: 170', '9 59% [34', '/34]', ''],
         spells: ['Shadows', '  (2', '  roisae', '  n)', ''],
         room: ['[[Town Square]]', 'A wide square paved'],
-        health: ['HP'], roundtime: ['R'], kneeling: ['Kneeling'],
+        # A label wider than the window: each drawn part that doesn't fit
+        # ends in the last column, as in ncurses, so the countdown shows
+        # the last part it draws.
+        health: ["HP#{'50'.rjust(8)}"], roundtime: ['T'], kneeling: ['Kneeling'],
         prompt: ['H>'], command: ['look at the stones']
       )
       expect(scrollbars).to eq(
@@ -243,7 +245,7 @@ RSpec.describe WindowManager, '#resize geometry' do
       expect(screens).to eq(
         main: ['dow'], thoughts: [''], combat: [''], atmo: [''],
         exp: ['P', 'a', 'r', 'r', ''], spells: ['S', 'h', 'a', 'd', ''], room: ['[[To'],
-        health: ['HP'], roundtime: ['R'], kneeling: ['Kneeling'],
+        health: ['H5'], roundtime: ['T'], kneeling: ['Kneeling'],
         prompt: ['H>'], command: [' stones']
       )
       expect(scrollbars).to eq(
@@ -253,6 +255,17 @@ RSpec.describe WindowManager, '#resize geometry' do
         atmo: { at: [0, 6, 1, 1], rows: [''], thumb: [] }
       )
       expect(command.window.curx).to eq 7
+    end
+
+    # Every window is drawn again from what it holds; one whose size is
+    # the same shows the same cells, colors included.
+    it 'draws every window the same when the terminal size has not changed' do
+      cells = windows.transform_values { |window| window.instance_variable_get(:@cells).map(&:dup) }
+
+      resize_to(24, 80)
+
+      expect(windows.transform_values { |window| window.instance_variable_get(:@cells) }).to eq cells
+      expect(scrollbars).to eq(scrollbars)
     end
 
     it 'leaves everything as it was when the terminal is under 3 lines or under 10 columns' do

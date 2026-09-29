@@ -27,7 +27,7 @@ class Clock
   # How many seconds this clock runs ahead of the game server's clock,
   # measured at a +<prompt time=...>+ (see TagHandlers#handle_prompt_tag).
   # Countdown end times are server times; subtracting this offset from
-  # {#now} gives the server's time now.
+  # {#now} gives the server's time now ({#server_now}).
   #
   # @return [Float]
   def server_time_offset
@@ -48,6 +48,14 @@ class Clock
   # @return [Time] the current time
   def now
     @now.call
+  end
+
+  # The game server's time now: one reading of {#now} less
+  # {#server_time_offset}. Countdown end times are server times.
+  #
+  # @return [Float] seconds since the epoch
+  def server_now
+    now.to_f - server_time_offset.to_f
   end
 
   # The current time as hours and minutes, both two digits.

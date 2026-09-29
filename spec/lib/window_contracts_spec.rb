@@ -451,6 +451,18 @@ RSpec.describe 'Window contracts' do
         .to eq [[nil, 'ff0000'], [nil, 'ff0000'], [nil, '0000ff'], [nil, '0000ff'], [nil, nil]]
     end
 
+    # Both values come from one reading of the clock, so a tick that
+    # straddles a second boundary can't show them a second apart.
+    it 'takes the primary and secondary time left from the same moment' do
+      event_bus.emit(:countdown_update, id: 'roundtime', end_time: now[0] + 5.2, secondary_end_time: now[0] + 5.2)
+      readings = [now[0] + 0.95, now[0] + 1.05]
+      allow(Time).to receive(:now) { Time.at(readings.shift || readings.last) }
+
+      countdown.tick
+
+      expect(countdown.secondary_value).to eq countdown.value
+    end
+
     it 'counts a stun into the stunned countdown' do
       LAYOUT['stun'] = REXML::Document.new(<<~XML).root
         <layout><window class='countdown' top='0' left='0' height='1' width='12' value='stunned' label='S'/></layout>
@@ -513,7 +525,8 @@ RSpec.describe 'Window contracts' do
 
   # Not a characterization: before BaseWindow#repaint became the repaint
   # every class answers, it did nothing on indicator, progress, exp, spell
-  # and room windows.
+  # and room windows, and it did nothing on a countdown until it drew
+  # from its stored values.
   describe 'repaint' do
     before do
       (1..6).each { |n| stream_text('main', "line #{n}") }
@@ -525,10 +538,11 @@ RSpec.describe 'Window contracts' do
       stream_text('percWindow', 'Shadows (2 roisaen)')
       event_bus.emit(:room_title, text: '[Town Square]')
       event_bus.emit(:room_exits, text: 'Obvious paths: north.')
+      event_bus.emit(:countdown_update, id: 'roundtime', end_time: now[0] + 2, secondary_end_time: now[0] + 4)
     end
 
     it 'draws every window with contents again from what it holds' do
-      [main, tabbed, indicator, compass, progress, exp, perc, room].each do |window|
+      [main, tabbed, indicator, compass, progress, countdown, exp, perc, room].each do |window|
         shown = window.instance_variable_get(:@cells).map(&:dup)
         window.erase
 

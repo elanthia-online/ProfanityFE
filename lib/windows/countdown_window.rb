@@ -79,47 +79,62 @@ class CountdownWindow < BaseWindow
 
   public
 
-  # Recalculate the seconds left from the clock and redraw if the display
-  # changed. Called on every input-loop tick and after each countdown
-  # event. Unlike the +update+ of {IndicatorWindow} and {ProgressWindow},
-  # it takes no new value: the countdown's state is set through its
-  # attributes and the time.
+  # Recalculate the seconds left from one reading of the clock and redraw
+  # if the display changed. Called on every input-loop tick and after each
+  # countdown event. Unlike the +update+ of {IndicatorWindow} and
+  # {ProgressWindow}, it takes no new value: the countdown's state is set
+  # through its attributes and the time.
   #
   # @return [Boolean] true if the display was redrawn, false if unchanged
   def tick
     old_value = @value
     old_secondary_value = @secondary_value
-    @value = [(@end_time.to_f - clock.now.to_f + clock.server_time_offset.to_f - COUNTDOWN_OFFSET).ceil, 0].max
-    @secondary_value = [(@secondary_end_time.to_f - clock.now.to_f + clock.server_time_offset.to_f - COUNTDOWN_OFFSET).ceil,
-                        0].max
-    if old_value != @value || old_secondary_value != @secondary_value || @old_active != @active
-      str = "#{@label}#{[@value, @secondary_value].max.to_s.rjust(maxx - @label.length)}"
-      setpos(0, 0)
-      if @value == 0 && @secondary_value == 0
-        if @active
-          str = "#{@label}#{'?'.rjust(maxx - @label.length)}"
-          left_background_str = str[0, 1].to_s
-          right_background_str = str[left_background_str.length, (@label.length + (maxx - @label.length))].to_s
-          draw_segment(left_background_str, @fg[1], @bg[1])
-          draw_segment(right_background_str, @fg[2], @bg[2])
-        else
-          draw_segment(str, @fg[0], @bg[0])
-        end
+    server_now = clock.server_now
+    @value = seconds_left(@end_time, server_now)
+    @secondary_value = seconds_left(@secondary_end_time, server_now)
+    return false if old_value == @value && old_secondary_value == @secondary_value && @old_active == @active
+
+    repaint
+    true
+  end
+
+  # Draw the countdown from its label, colors and the values the last
+  # {#tick} computed, without reading the clock (see {BaseWindow#repaint}).
+  #
+  # @return [void]
+  def repaint
+    str = "#{@label}#{[@value, @secondary_value].max.to_s.rjust(maxx - @label.length)}"
+    setpos(0, 0)
+    if @value == 0 && @secondary_value == 0
+      if @active
+        str = "#{@label}#{'?'.rjust(maxx - @label.length)}"
+        left_background_str = str[0, 1].to_s
+        right_background_str = str[left_background_str.length, (@label.length + (maxx - @label.length))].to_s
+        draw_segment(left_background_str, @fg[1], @bg[1])
+        draw_segment(right_background_str, @fg[2], @bg[2])
       else
-        left_background_str = str[0, @value].to_s
-        secondary_background_str = str[left_background_str.length, (@secondary_value - @value)].to_s
-        right_background_str = str[(left_background_str.length + secondary_background_str.length),
-                                   (@label.length + (maxx - @label.length))].to_s
-        draw_segment(left_background_str, @fg[1], @bg[1]) unless left_background_str.empty?
-        draw_segment(secondary_background_str, @fg[2], @bg[2]) unless secondary_background_str.empty?
-        draw_segment(right_background_str, @fg[3], @bg[3]) unless right_background_str.empty?
+        draw_segment(str, @fg[0], @bg[0])
       end
-      @old_active = @active
-      noutrefresh
-      true
     else
-      false
+      left_background_str = str[0, @value].to_s
+      secondary_background_str = str[left_background_str.length, (@secondary_value - @value)].to_s
+      right_background_str = str[(left_background_str.length + secondary_background_str.length),
+                                 (@label.length + (maxx - @label.length))].to_s
+      draw_segment(left_background_str, @fg[1], @bg[1]) unless left_background_str.empty?
+      draw_segment(secondary_background_str, @fg[2], @bg[2]) unless secondary_background_str.empty?
+      draw_segment(right_background_str, @fg[3], @bg[3]) unless right_background_str.empty?
     end
+    @old_active = @active
+    noutrefresh
+  end
+
+  # Whole seconds left until a server end time, never below 0.
+  #
+  # @param end_time [Numeric] the server time the countdown ends at
+  # @param server_now [Float] the server's time now ({Clock#server_now})
+  # @return [Integer]
+  private def seconds_left(end_time, server_now)
+    [(end_time.to_f - server_now - COUNTDOWN_OFFSET).ceil, 0].max
   end
 end
 

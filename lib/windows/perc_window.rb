@@ -103,16 +103,6 @@ class PercWindow < BaseWindow
     redraw
   end
 
-  # Show the window again after {#move_to_layout} moved it: redraw its
-  # contents at the new size.
-  #
-  # @return [void]
-  # @api private
-  def redraw_after_resize
-    redraw
-    noutrefresh
-  end
-
   # Start a new batch of spells and redraw the (now empty) window.
   # Called for +<clearStream id="percWindow"/>+; the spell lines that
   # follow are added with {#add_string}.

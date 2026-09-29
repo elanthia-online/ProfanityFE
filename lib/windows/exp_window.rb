@@ -115,16 +115,6 @@ class ExpWindow < BaseWindow
     redraw
   end
 
-  # Show the window again after {#move_to_layout} moved it: redraw its
-  # contents at the new size.
-  #
-  # @return [void]
-  # @api private
-  def redraw_after_resize
-    redraw
-    noutrefresh
-  end
-
   private
 
   # @param text [String] the skill text
