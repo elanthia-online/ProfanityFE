@@ -83,12 +83,13 @@ class BaseWindow < Curses::Window
     list.delete(instance)
   end
 
-  # Format a timestamp string for the current time (HH:MM).
+  # Format a timestamp string for the current time (HH:MM), from one
+  # reading of {#clock}.
   #
   # @return [String] formatted timestamp like " [14:35]"
   # @api private
   def format_timestamp
-    " [#{clock.now.hour.to_s.rjust(2, '0')}:#{clock.now.min.to_s.rjust(2, '0')}]"
+    " [#{clock.hh_mm}]"
   end
 
   # Text to store in a line buffer for an added string. A trailing newline

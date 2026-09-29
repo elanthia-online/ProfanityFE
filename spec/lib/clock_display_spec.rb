@@ -94,6 +94,28 @@ RSpec.describe 'The time shown in windows' do
 
       expect(shown('main')).to eq ['first [09:05]', 'second [23:00]']
     end
+
+    # BUG FOUND (fixed here): the hour and the minute came from two
+    # readings of the clock, so a line added as the minute rolled over
+    # could show the old hour with the new minute.
+    context 'when the clock moves on between two readings' do
+      let(:readings) { [] }
+      let(:clock) { Clock.new(now: -> { readings.empty? ? @now : readings.shift }) }
+
+      {
+        [Time.new(2026, 9, 29, 9, 59, 59), Time.new(2026, 9, 29, 10, 0, 0)] => '09:59',
+        [Time.new(2026, 9, 29, 23, 59, 59), Time.new(2026, 9, 30, 0, 0, 0)] => '23:59'
+      }.each do |(first, second), shown_time|
+        it "shows the time of one reading (#{shown_time}, as #{second.strftime('%H:%M')} begins)" do
+          window = window_manager.stream['main']
+          readings.push(first, second)
+
+          window.add_string('A goblin waves.')
+
+          expect(shown('main')).to eq ["A goblin waves. [#{shown_time}]"]
+        end
+      end
+    end
   end
 
   describe 'the death window' do
