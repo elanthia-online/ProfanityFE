@@ -39,15 +39,16 @@ RSpec.describe 'Stream routing of a captured game stream' do
       xml_escapes: { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' },
       event_bus: event_bus
     )
-    # No 'look' at the first prompt: this server only reads
-    @processor.instance_variable_get(:@prompts).instance_variable_set(:@first_prompt, false)
   end
 
   # Feed raw server lines through GameTextProcessor#run, as the socket would.
+  # The 'look' the client sends at the first prompt is dropped.
   def receive_from_server(lines)
     queue = lines.map { |line| "#{line}\r\n" }
     server = Object.new
     server.define_singleton_method(:gets) { queue.shift&.dup }
+    server.define_singleton_method(:puts) { |_command| nil }
+    server.define_singleton_method(:flush) { self }
     allow(IO).to receive(:select).and_return(nil)
     @processor.run(server)
   end

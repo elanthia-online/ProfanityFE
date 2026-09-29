@@ -6,6 +6,7 @@
 # clipboard command (SelectionManager.copy_to_clipboard).
 
 require 'stringio'
+require 'rexml/document'
 require_relative '../spec_helper'
 require_relative '../../lib/platform'
 require_relative '../../lib/event_bus'
@@ -48,9 +49,14 @@ RSpec.describe Platform do
     let(:event_bus) { EventBus.new }
     let(:url) { 'https://www.play.net/x$(touch /tmp/pwned)`id`' }
 
+    # The LaunchURL handler does nothing without a main window (where
+    # --remote-url shows the URL), so the layout has one.
     before do
+      LAYOUT['browser'] = REXML::Document.new(<<~XML).root
+        <layout><window class='text' top='0' left='0' height='3' width='40' value='main'/></layout>
+      XML
       wm = WindowManager.new
-      wm.instance_variable_set(:@stream, { MAIN_STREAM => Object.new })
+      wm.load_layout('browser')
       wm.subscribe_to_events(event_bus)
       allow(Process).to receive(:spawn).and_return(4242)
       allow(Process).to receive(:detach)
