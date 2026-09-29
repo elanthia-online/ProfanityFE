@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 # Tests how GameTextProcessor treats lines dropped by general and multi-line
-# gags: the text is hidden but stream tags are still processed, so a gag
-# cannot leave routing stuck on a side stream; and with --log-gags every
-# gagged line is written to the log in full.
+# gags: the text is hidden but stream and style tags are still processed, so
+# a gag cannot leave routing stuck on a side stream (or a style open); and
+# with --log-gags every gagged line is written to the log in full.
 
 require_relative '../spec_helper'
 require 'rexml/document'
@@ -116,7 +116,7 @@ RSpec.describe 'GameTextProcessor gagged lines' do
     end
   end
 
-  describe 'which stream tags a gagged line keeps' do
+  describe 'which tags a gagged line keeps' do
     # @param line [String] a raw server line, gagged
     # @return [Array(String, nil)] what the tag dispatcher is given (nil when
     #   nothing is left) and the gag log line's marker
@@ -138,6 +138,18 @@ RSpec.describe 'GameTextProcessor gagged lines' do
         '</popStream>x'                                            => [nil, nil],
         '<popStream'                                               => [nil, nil],
         'no tags'                                                  => [nil, nil]
+      }.each do |line, expected|
+        gag_log.clear
+        expect(kept(line)).to eq(expected), line
+      end
+    end
+
+    it 'keeps style tags too, in order with the stream tags, flagging only stream tags' do
+      {
+        '<style id="roomName" />[Town Square]'             => ['<style id="roomName" />', nil],
+        '<style id=""/>  You also see a rat.'              => ['<style id=""/>', nil],
+        '<style id=""/><popStream/>x<style id="whisper"/>' => ['<style id=""/><popStream/><style id="whisper"/>', ' STREAM-TAG'],
+        '</style>x<styles id="a"/>'                        => [nil, nil]
       }.each do |line, expected|
         gag_log.clear
         expect(kept(line)).to eq(expected), line

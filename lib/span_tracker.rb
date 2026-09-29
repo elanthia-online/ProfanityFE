@@ -38,7 +38,9 @@ class SpanTracker
   #   @return [Symbol] when the line's last text is handed off: +:split+
   #     (as at a flush), +:drop+, or +:keep+ (record nothing)
   # @!attribute [r] at_line_end
-  #   @return [Symbol] after the line: +:drop+, or +:keep+ for the next line
+  #   @return [Symbol] after the line: +:drop+, +:keep+ for the next line,
+  #     or +:until_prompt+ (keep for the next line, unless the line had a
+  #     prompt; see {#prompt})
   Policy = Data.define(:stack, :record, :at_flush, :at_last_text, :at_line_end)
 
   # The rules for each kind of span, in the order a hand-off records their
@@ -48,12 +50,14 @@ class SpanTracker
   # attribute takes its command from its text, which a flush would cut. So
   # none is left at the end of a line. Bold left open at the end of a line
   # is carried to the next by GameTextProcessor#carry_bold, which closes it
-  # on each line and reopens it on the next.
+  # on each line and reopens it on the next. A style left open is kept for
+  # the next line here, and like carried bold it ends with a line that has
+  # a prompt.
   POLICIES = [
     # kind   stack  record         at_flush        at_last_text  at_line_end
     [:bold,   true,  :colored,      :split_colored, :keep,        :drop],
     [:preset, true,  :colored,      :split_colored, :keep,        :drop],
-    [:style,  false, :colored_text, :split,         :split,       :keep],
+    [:style,  false, :colored_text, :split,         :split,       :until_prompt],
     [:color,  true,  :always,       :split,         :split,       :drop],
     [:link,   true,  :colored,      :drop,          :drop,        :keep]
   ].to_h { |kind, *rules| [kind, Policy.new(*rules)] }.freeze
@@ -62,6 +66,7 @@ class SpanTracker
   def initialize
     @open = POLICIES.keys.to_h { |kind| [kind, []] }
     @runs = []
+    @prompt = false
   end
 
   # Open a span.
@@ -110,12 +115,22 @@ class SpanTracker
     hand_off(length, :at_last_text)
   end
 
+  # Note a prompt in the line: the spans that last +:until_prompt+ end
+  # with the line (see {#end_line}).
+  #
+  # @return [void]
+  def prompt
+    @prompt = true
+  end
+
   # End the line: drop the spans the next line doesn't inherit. Called
   # even when parsing the line failed.
   #
   # @return [void]
   def end_line
-    POLICIES.each { |kind, policy| @open[kind].clear if policy.at_line_end == :drop }
+    ending = @prompt ? %i[drop until_prompt] : %i[drop]
+    POLICIES.each { |kind, policy| @open[kind].clear if ending.include?(policy.at_line_end) }
+    @prompt = false
   end
 
   # The runs recorded since the last hand-off, for text that is used

@@ -163,6 +163,17 @@ RSpec.describe SpanTracker do
       expect(spans.split_at_line_end(2)).to eq [{ start: 0, **red, end: 2 }]
     end
 
+    it 'after #prompt, drops a style too, and only at the end of that line' do
+      spans.prompt
+      spans.open(:style, 1, **red)
+      expect(spans.split_at_line_end(3)).to eq [{ start: 1, **red, end: 3 }]
+      spans.end_line
+      expect(spans.open_span(:style)).to be_nil
+      spans.open(:style, 0, **red)
+      spans.end_line
+      expect(spans.open_span(:style)).to eq(start: 0, **red)
+    end
+
     it 'leaves the runs recorded alone (a line that failed keeps them)' do
       spans.open(:color, 0, fg: 'c')
       spans.close(:color, 1)
