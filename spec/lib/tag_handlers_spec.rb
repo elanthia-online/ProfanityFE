@@ -1189,7 +1189,7 @@ RSpec.describe TagHandlers do
       ) { |h, tag| events_of(h, tag, :clear_spells).size }
     end
 
-    it 'reads color fg, bg and ul, lowercased' do
+    it 'reads color fg, bg and ul in either quotes and any order, lowercased' do
       expect_each(
         %(<color fg="FF0000" bg='00FF00' ul="true">) => { start: 0, fg: 'ff0000', bg: '00ff00', ul: 'true' },
         "<color bg='B' fg='A'>"                      => { start: 0, fg: 'a', bg: 'b' },
@@ -1203,17 +1203,16 @@ RSpec.describe TagHandlers do
         "<color xfg='a'>"                            => { start: 0 },
         %(<color fg="a'>)                            => { start: 0 },
         '<color fg=a>'                               => { start: 0 },
-        # A value runs to a closing quote followed by whitespace or >, so it
-        # can hold its own quote, and a value followed by /> isn't read.
-        "<color fg='a'b'>"                           => { start: 0, fg: "a'b" },
-        "<color fg='a'b' bg='c'>"                    => { start: 0, fg: "a'b", bg: 'c' },
-        "<color fg='a'x fg='b'>"                     => { start: 0, fg: "a'x fg='b" },
-        "<color fg='x'/>"                            => { start: 0 },
-        # fg= is found anywhere after whitespace: after junk, inside another
-        # value, or after a longer element name.
-        "<color junk fg='a'>"                        => { start: 0, fg: 'a' },
-        %(<color title=" fg='a' ">)                  => { start: 0, fg: 'a' },
-        "<color-x fg='a'>"                           => { start: 0, fg: 'a' }
+        # A value ends at its closing quote; what follows isn't an attribute.
+        "<color fg='a'b'>"                           => { start: 0, fg: 'a' },
+        "<color fg='a'b' bg='c'>"                    => { start: 0, fg: 'a' },
+        "<color fg='a'x fg='b'>"                     => { start: 0, fg: 'a' },
+        "<color fg='x'/>"                            => { start: 0, fg: 'x' },
+        # Only attributes are read: not after junk, inside another value, or
+        # after a longer element name.
+        "<color junk fg='a'>"                        => { start: 0 },
+        %(<color title=" fg='a' ">)                  => { start: 0 },
+        "<color-x fg='a'>"                           => { start: 0 }
       ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_color.last } }
     end
 

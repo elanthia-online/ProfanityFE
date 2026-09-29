@@ -336,15 +336,8 @@ module TagHandlers
   # Handle <color fg='...' bg='...' ul='...'> opening tag.
   def handle_open_color(xml, text_buffer)
     h = { start: text_buffer.length }
-    if (fg_match = xml.match(/\sfg=(?<q>'|")(?<val>.*?)\k<q>[\s>]/))
-      h[:fg] = fg_match[:val].downcase
-    end
-    if (bg_match = xml.match(/\sbg=(?<q>'|")(?<val>.*?)\k<q>[\s>]/))
-      h[:bg] = bg_match[:val].downcase
-    end
-    if (ul_match = xml.match(/\sul=(?<q>'|")(?<val>.*?)\k<q>[\s>]/))
-      h[:ul] = ul_match[:val].downcase
-    end
+    attrs = XmlTokenizer.attrs(xml)
+    %w[fg bg ul].each { |name| h[name.to_sym] = attrs[name].downcase if attrs[name] }
     @open_color.push(h)
   end
 
