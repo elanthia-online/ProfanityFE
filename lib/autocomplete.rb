@@ -74,10 +74,8 @@ module Autocomplete
       prefix = common_prefix(matches)
       apply_completion(cmd_buffer, prefix, current) if prefix.length > current.length
 
-      show_message(display_window, "[autocomplete:#{matches.length}]")
-      matches.each_with_index do |match, i|
-        show_message(display_window, "[#{i}] #{match}")
-      end
+      candidates = matches.each_with_index.map { |match, i| "[#{i}] #{match}" }
+      show_message(display_window, "[autocomplete:#{matches.length}]", *candidates)
     end
   rescue StandardError => e
     ProfanityLog.write('autocomplete', e.message, backtrace: e.backtrace)
@@ -101,13 +99,14 @@ module Autocomplete
     CursesRenderer.doupdate
   end
 
-  # Display a message in the main window with autocomplete highlight color.
+  # Display lines in the main window with autocomplete highlight color,
+  # then update the screen once for all of them.
   #
   # @param window [BaseWindow, nil] window to display in
-  # @param text [String] message text
+  # @param lines [Array<String>] message lines, oldest first
   # @return [void]
   # @api private
-  def self.show_message(window, text)
-    CursesRenderer.doupdate if Feedback.write(window, text, fg: HIGHLIGHT_COLOR)
+  def self.show_message(window, *lines)
+    CursesRenderer.doupdate if Feedback.write(window, *lines, fg: HIGHLIGHT_COLOR)
   end
 end
