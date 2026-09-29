@@ -45,6 +45,8 @@ module SelectionManager
   @last_press_y = nil
   @last_press_x = nil
   @multi_click_selected = false
+  @link_followed = false
+  @repeats_link_click = false
 
   class << self
     attr_reader :active_window, :start_id, :start_x, :end_id, :end_x, :selecting,
@@ -68,13 +70,33 @@ module SelectionManager
       @multi_click_selected
     end
 
+    # Whether the current press repeats, as the second or third click of
+    # a double or triple click, a click that followed a link (see
+    # {.link_followed}). Such a press selects no word or line, and the
+    # release handler neither copies nor follows a link for it.
+    #
+    # @return [Boolean]
+    def repeats_link_click?
+      @repeats_link_click
+    end
+
+    # Note that the click of the last press followed a link. Presses that
+    # repeat it (see {.repeats_link_click?}) keep the note; the next press
+    # that doesn't drops it.
+    #
+    # @return [void]
+    def link_followed
+      @link_followed = true
+    end
+
     # Begin a new text selection at the given window coordinates.
     # Clears any previous selection highlight first, then resolves the
     # press position to a stable [line_id, x] anchor immediately — before
     # any incoming text can shift the buffer under it.
     #
     # Rapid repeat presses at the same spot count as double/triple clicks
-    # and expand the selection to the word / logical line under the cursor.
+    # and expand the selection to the word / logical line under the cursor,
+    # unless they repeat a click that followed a link.
     #
     # @param window [BaseWindow] the window where selection starts
     # @param y [Integer] starting row (window-relative)
@@ -94,7 +116,7 @@ module SelectionManager
         @end_id, @end_x = anchor
       end
       @selecting = true
-      @multi_click_selected = expand_multi_click
+      @multi_click_selected = !@repeats_link_click && expand_multi_click
     end
 
     # Extend the current selection to a new endpoint and redraw highlights.
@@ -194,8 +216,9 @@ module SelectionManager
       Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
-    # Track rapid repeat presses at the same spot for double/triple-click.
-    # Called before the previous press state is cleared.
+    # Track rapid repeat presses at the same spot for double/triple-click,
+    # and whether they repeat a click that followed a link. Called before
+    # the previous press state is cleared.
     #
     # @param window [BaseWindow] the pressed window
     # @param y [Integer] press row (window-relative)
@@ -208,6 +231,8 @@ module SelectionManager
                @last_press_window.equal?(window) &&
                @last_press_y == y && @last_press_x && (@last_press_x - x).abs <= 1
       @click_count = repeat ? (@click_count % 3) + 1 : 1
+      @link_followed = false unless repeat
+      @repeats_link_click = @link_followed
       @last_press_time = now
       @last_press_window = window
       @last_press_y = y
