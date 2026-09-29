@@ -41,6 +41,15 @@ RSpec.describe 'GameTextProcessor event emissions' do
     )
   end
 
+  # The processor's stream router
+  def router = processor.send(:instance_variable_get, :@router)
+
+  # The processor's prompt tracker
+  def prompts = processor.send(:instance_variable_get, :@prompts)
+
+  # The screen updates the processor asked for
+  def pending_render = processor.send(:instance_variable_get, :@pending_render)
+
   # Send text through handle_game_text via the private method
   def process(text)
     processor.send(:handle_game_text, text)
@@ -61,9 +70,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
       expect(left_event).to include(label: 'Empty')
     end
 
-    it 'sets need_update after emitting empty hands events' do
+    it 'asks for a screen update after emitting empty hands events' do
       process('You glance down at your empty hands.')
-      expect(processor.send(:instance_variable_get, :@need_update)).to be true
+      expect(pending_render.update_requested?).to be true
     end
   end
 
@@ -125,7 +134,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
 
     it 'emits stream_text to the current stream when a dedicated window exists' do
       wm.stream['combat'] = main_window
-      processor.send(:instance_variable_set, :@current_stream, 'combat')
+      router.send(:instance_variable_set, :@current_stream, 'combat')
       events = []
       event_bus.on(:stream_text) { |data| events << data }
 
@@ -135,7 +144,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     end
 
     it 'falls back to main stream when no dedicated window exists for a known stream' do
-      processor.send(:instance_variable_set, :@current_stream, 'thoughts')
+      router.send(:instance_variable_set, :@current_stream, 'thoughts')
       events = []
       event_bus.on(:stream_text) { |data| events << data }
 
@@ -155,9 +164,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
 
     it 'skips duplicate text already sent to a stream window' do
       wm.stream['combat'] = main_window
-      processor.send(:instance_variable_set, :@current_stream, 'combat')
+      router.send(:instance_variable_set, :@current_stream, 'combat')
       process('A goblin attacks!')
-      processor.send(:instance_variable_set, :@current_stream, nil)
+      router.send(:instance_variable_set, :@current_stream, nil)
 
       events = []
       event_bus.on(:stream_text) { |data| events << data }
@@ -183,7 +192,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
 
     it 'suppresses prompt after movement text' do
       state.need_prompt = true
-      processor.send(:instance_variable_set, :@last_was_movement, true)
+      prompts.movement_seen
       events = []
       event_bus.on(:add_prompt) { |data| events << data }
 
@@ -194,19 +203,19 @@ RSpec.describe 'GameTextProcessor event emissions' do
 
     it 'detects movement text and sets last_was_movement flag' do
       process('You walk north.')
-      expect(processor.send(:instance_variable_get, :@last_was_movement)).to be true
+      expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be true
     end
 
     %w[run go swim climb crawl drag stride sneak stalk].each do |verb|
       it "detects '#{verb}' as a movement verb" do
         process("You #{verb} through the archway.")
-        expect(processor.send(:instance_variable_get, :@last_was_movement)).to be true
+        expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be true
       end
     end
 
     it 'does not detect non-movement verbs as movement' do
       process('You attack the goblin.')
-      expect(processor.send(:instance_variable_get, :@last_was_movement)).to be false
+      expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be false
     end
   end
 
@@ -263,8 +272,11 @@ RSpec.describe 'GameTextProcessor event emissions' do
   # ---- Multi-line gag state machine ----
 
   describe 'multi-line gag suppression' do
+    # The processor's line filter, which runs the gag state machine
+    def line_filter = processor.send(:instance_variable_get, :@line_filter)
+
     def gag?(line)
-      processor.send(:multiline_gag?, line)
+      line_filter.send(:multiline_gag?, line)
     end
 
     def start_block(gag)
@@ -279,7 +291,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     it 'suppresses the start line and begins a block' do
       start_block({ start: /START/, end: nil })
       expect(gag?('the START of knowledge')).to be true
-      expect(processor.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
+      expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
     end
 
     context 'prompt-terminated block (no end pattern)' do
@@ -296,7 +308,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
       it 'releases on a prompt line and lets the prompt through' do
         gag?('body line')
         expect(gag?('<prompt time="123">&gt;</prompt>')).to be false
-        expect(processor.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
+        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
       end
 
       it 'resumes normal processing after the block ends' do
@@ -316,22 +328,22 @@ RSpec.describe 'GameTextProcessor event emissions' do
       it 'suppresses lines until the end pattern, inclusive' do
         expect(gag?('middle line')).to be true
         expect(gag?('here is THE END of it')).to be true
-        expect(processor.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
+        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
       end
 
       it 'does not release on a prompt line (only the end pattern ends it)' do
         expect(gag?('<prompt time="123">&gt;</prompt>')).to be true
-        expect(processor.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
+        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
       end
     end
 
     it 'releases the block after the safety cap and lets the line through' do
       start_block({ start: /START/, end: /NEVER MATCHES/ })
       gag?('the START of a runaway block')
-      GameTextProcessor::MULTILINE_GAG_MAX_LINES.times { gag?('still going') }
+      LineFilter::MULTILINE_GAG_MAX_LINES.times { gag?('still going') }
       # The next line exceeds the cap and is released.
       expect(gag?('one line too many')).to be false
-      expect(processor.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
+      expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
     end
   end
 
@@ -356,7 +368,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     end
 
     def process_line(line)
-      processor.send(:instance_variable_set, :@current_raw_line, line)
+      processor.send(:instance_variable_get, :@room).line_started(line)
       processor.send(:process_line_tags, line)
     end
 
@@ -378,16 +390,16 @@ RSpec.describe 'GameTextProcessor event emissions' do
       expect(events.last).to include(text: a_string_matching(/goblin/))
     end
 
-    it 'sets need_room_render for non-exit room components' do
+    it 'asks for a room render for non-exit room components' do
       process_line("<component id='room players'>Also here: Mahtra.</component>")
 
-      expect(processor.send(:instance_variable_get, :@need_room_render)).to be true
+      expect(pending_render.room_render_requested?).to be true
     end
 
-    it 'sets need_update for room components' do
+    it 'asks for a screen update for room components' do
       process_line("<component id='room players'>Also here: Mahtra.</component>")
 
-      expect(processor.send(:instance_variable_get, :@need_update)).to be true
+      expect(pending_render.update_requested?).to be true
     end
 
     it 'subscriber receives room_players event and calls update_players on window' do
@@ -415,8 +427,8 @@ RSpec.describe 'GameTextProcessor event emissions' do
         cmd_buffer: cmd_buffer, xml_escapes: xml_escapes, event_bus: event_bus
       )
 
-      test_processor.send(:instance_variable_set, :@current_raw_line,
-                          "<component id='room players'>Also here: Mahtra.</component>")
+      test_processor.send(:instance_variable_get, :@room)
+                    .line_started("<component id='room players'>Also here: Mahtra.</component>")
       test_processor.send(:process_line_tags,
                           "<component id='room players'>Also here: Mahtra.</component>")
 
@@ -441,10 +453,10 @@ RSpec.describe 'GameTextProcessor event emissions' do
       expect(indicator_events.last).to include(id: 'room players', value: false)
     end
 
-    it 'sets need_room_render for empty room components' do
+    it 'asks for a room render for empty room components' do
       process_line("<component id='room players'></component>")
 
-      expect(processor.send(:instance_variable_get, :@need_room_render)).to be true
+      expect(pending_render.room_render_requested?).to be true
     end
 
     it 'room_render event triggers render on the room window' do
@@ -469,7 +481,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     # No wm.room['room'] set -- the default wm has an empty room hash
 
     def process_line(line)
-      processor.send(:instance_variable_set, :@current_raw_line, line)
+      processor.send(:instance_variable_get, :@room).line_started(line)
       processor.send(:process_line_tags, line)
     end
 
@@ -551,7 +563,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
   describe 'stream fallback applies preset colors' do
     it 'applies preset color when falling back to main for a known stream' do
       PRESET['thoughts'] = ['00ff00', '000000']
-      processor.send(:instance_variable_set, :@current_stream, 'thoughts')
+      router.send(:instance_variable_set, :@current_stream, 'thoughts')
       events = []
       event_bus.on(:stream_text) { |data| events << data }
 
@@ -572,7 +584,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     end
 
     def process_line(line)
-      processor.send(:instance_variable_set, :@current_raw_line, line)
+      processor.send(:instance_variable_get, :@room).line_started(line)
       processor.send(:process_line_tags, line)
     end
 

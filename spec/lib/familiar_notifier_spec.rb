@@ -6,18 +6,19 @@
 
 require_relative '../../lib/event_bus'
 require_relative '../../lib/familiar_notifier'
+require_relative '../../lib/pending_render'
 
 # Minimal host class that includes FamiliarNotifier
 class FamiliarNotifierHost
   include FamiliarNotifier
 
-  attr_accessor :line_colors, :need_update
-  attr_reader :event_bus
+  attr_accessor :line_colors
+  attr_reader :event_bus, :pending_render
 
   def initialize(event_bus:)
     @event_bus = event_bus
     @line_colors = []
-    @need_update = false
+    @pending_render = PendingRender.new
   end
 end
 
@@ -180,9 +181,9 @@ RSpec.describe FamiliarNotifier do
       expect(events.last[:stream]).to eq 'familiar'
     end
 
-    it 'sets need_update when notification sent' do
+    it 'asks for a screen update when a notification is sent' do
       host.check_familiar_notification('You sense nothing wrong with Mahtra')
-      expect(host.need_update).to be true
+      expect(host.pending_render.update_requested?).to be true
     end
 
     it 'does not emit for non-matching text' do
@@ -191,9 +192,9 @@ RSpec.describe FamiliarNotifier do
       expect(events).to be_empty
     end
 
-    it 'does not set need_update for non-matching text' do
+    it 'does not ask for a screen update for non-matching text' do
       host.check_familiar_notification('Hello world')
-      expect(host.need_update).to be false
+      expect(host.pending_render.update_requested?).to be false
     end
 
     it 'applies monsterbold preset colors when available' do

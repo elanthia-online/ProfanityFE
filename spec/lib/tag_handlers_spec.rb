@@ -10,6 +10,11 @@ require_relative '../../lib/xml_tokenizer'
 require_relative '../../lib/tag_handlers'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/clock'
+require_relative '../../lib/pending_render'
+require_relative '../../lib/prompt_tracker'
+require_relative '../../lib/room_assembler'
+require_relative '../../lib/stream_router'
+require 'stringio'
 
 # Minimal host class that includes TagHandlers, providing the instance
 # variables and helper methods the module expects.
@@ -17,17 +22,14 @@ class TagHandlerHost
   include TagHandlers
 
   attr_accessor :line_colors, :open_monsterbold, :open_preset, :open_style,
-                :open_color, :open_link, :current_stream, :combat_next_line,
-                :need_update, :need_room_render, :room_capture_mode
+                :open_color, :open_link
 
-  attr_reader :flushed_texts, :wm, :state, :cmd_buffer, :event_bus, :stream_stack
+  attr_reader :flushed_texts, :wm, :state, :event_bus, :pending_render
 
   def initialize(wm:, state:, event_bus:, clock: Clock.new)
     @wm = wm
     @state = state
     @event_bus = event_bus
-    @clock = clock
-    @cmd_buffer = Struct.new(:window).new(nil)
     @xml_escapes = { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' }
     @line_colors = []
     @open_monsterbold = []
@@ -35,18 +37,19 @@ class TagHandlerHost
     @open_style = nil
     @open_color = []
     @open_link = []
-    @current_stream = nil
-    @stream_stack = []
-    @combat_next_line = nil
-    @need_update = false
-    @need_room_render = false
-    @room_capture_mode = nil
+    @pending_render = PendingRender.new
+    @prompts = PromptTracker.new(shared_state: state, event_bus: event_bus, pending_render: @pending_render,
+                                 window_mgr: wm, clock: clock)
+    @prompts.server = StringIO.new
+    @room = RoomAssembler.new(window_mgr: wm, event_bus: event_bus, pending_render: @pending_render, shared_state: state)
+    @router = StreamRouter.new(window_mgr: wm, event_bus: event_bus, pending_render: @pending_render,
+                               prompts: @prompts, room: @room)
     @flushed_texts = []
   end
 
   # Capture flushed text instead of processing it
   def handle_game_text(text)
-    @flushed_texts << { text: text.dup, colors: @line_colors.dup, stream: @current_stream }
+    @flushed_texts << { text: text.dup, colors: @line_colors.dup, stream: current_stream }
     @line_colors = []
     @open_monsterbold.clear
     @open_preset.clear
@@ -54,11 +57,23 @@ class TagHandlerHost
     @open_link.clear
   end
 
-  # Stubs for methods defined in GameTextProcessor
-  def parse_room_subtitle(subtitle)
-    text = subtitle.sub(/^\s*-\s*/, '')
-    text.sub(/^\[(.+?)\]/, '\1').strip
+  # What room styled text is being captured (see RoomAssembler#capture_mode)
+  def room_capture_mode = @room.capture_mode
+
+  # The router's stream state, read and set directly
+  def current_stream = @router.current_stream
+
+  def current_stream=(stream)
+    @router.instance_variable_set(:@current_stream, stream)
   end
+
+  def combat_next_line = @router.instance_variable_get(:@combat_next_line)
+
+  def combat_next_line=(value)
+    @router.instance_variable_set(:@combat_next_line, value)
+  end
+
+  def stream_stack = @router.instance_variable_get(:@stream_stack)
 
   def new_stun(_seconds) = nil
 end

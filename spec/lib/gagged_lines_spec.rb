@@ -174,8 +174,7 @@ RSpec.describe 'GameTextProcessor gagged lines' do
       }.each do |line, gagged|
         GagPatterns.load_defaults
         GagPatterns.add_multiline_gag('^START')
-        fresh = GameTextProcessor.new(window_mgr: wm, shared_state: state, cmd_buffer: Struct.new(:window).new(nil),
-                                      xml_escapes: {}, event_bus: EventBus.new)
+        fresh = LineFilter.new(shared_state: state)
         fresh.send(:multiline_gag?, 'START')
         expect(fresh.send(:multiline_gag?, line)).to eq(gagged), line
       end
