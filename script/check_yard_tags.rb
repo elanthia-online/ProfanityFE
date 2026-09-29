@@ -24,10 +24,11 @@
 # and section banners on constants, classes and modules.
 #
 # Only the tags written in the comment count, not those YARD infers. The
-# body checks skip nested def/class/module bodies, lambdas, blocks that run
-# later or on another thread (given to proc, lambda, on, at_exit, trap,
-# define_method, Thread.new/start), and a raise that a rescue around it in
-# the same method catches.
+# body checks skip nested def/class/module bodies. A yield in a lambda or
+# in a block that runs later or on another thread (given to proc, lambda,
+# on, at_exit, trap, define_method, Thread.new/start) still counts, since
+# it calls the method's block; a raise there doesn't, and neither does a
+# raise that a rescue around it in the same method catches.
 #
 # Each gap is printed as "file:line Path: gap"; the exit status is 1 when
 # there is at least one gap.
@@ -190,41 +191,48 @@ module YardTagCheck
   end
 
   # Whether a method body yields or raises. Nested def/class/module bodies
-  # are skipped, and so are code that runs later or on another thread
-  # (lambdas, and blocks given to {DEFERRING_CALLS} or Thread.new/start)
-  # and a raise that a surrounding rescue in the method catches: none of
-  # those raises leaves this method.
+  # are skipped: a yield or raise there belongs to that other method. A
+  # lambda, or a block given to {DEFERRING_CALLS} or Thread.new/start, runs
+  # later or on another thread: a yield there still calls this method's
+  # block, so it counts, but a raise there doesn't leave this method, so it
+  # doesn't. Nor does a raise that a surrounding rescue in the method
+  # catches.
   def body_calls(body)
     found = { yields: false, raises: false }
-    stack = [[body, []]]
+    stack = [[body, [], false]]
     until stack.empty?
-      node, rescued = stack.pop
+      node, rescued, deferred = stack.pop
       next if node.nil?
 
       case node
-      when Prism::DefNode, Prism::ClassNode, Prism::ModuleNode, Prism::SingletonClassNode, Prism::LambdaNode
+      when Prism::DefNode, Prism::ClassNode, Prism::ModuleNode, Prism::SingletonClassNode
         next
+      when Prism::LambdaNode
+        deferred = true
       when Prism::YieldNode
         found[:yields] = true
       when Prism::BeginNode
         caught = rescued + rescued_classes(node.rescue_clause)
-        stack << [node.statements, caught]
-        stack.concat([node.rescue_clause, node.else_clause, node.ensure_clause].map { |child| [child, rescued] })
+        stack << [node.statements, caught, deferred]
+        stack.concat([node.rescue_clause, node.else_clause, node.ensure_clause].map { |child| [child, rescued, deferred] })
         next
       when Prism::RescueModifierNode
-        stack << [node.expression, rescued + ['StandardError']] << [node.rescue_expression, rescued]
+        stack << [node.expression, rescued + ['StandardError'], deferred] << [node.rescue_expression, rescued, deferred]
         next
       when Prism::CallNode
         if node.receiver.nil?
           found[:yields] = true if node.name == :block_given?
-          found[:raises] = true if %i[raise fail].include?(node.name) && !caught?(raised_class(node), rescued)
+          if %i[raise fail].include?(node.name) && !deferred && !caught?(raised_class(node), rescued)
+            found[:raises] = true
+          end
         end
         if deferred_block?(node)
-          stack.concat([node.receiver, node.arguments].map { |child| [child, rescued] })
+          stack.concat([node.receiver, node.arguments].map { |child| [child, rescued, deferred] })
+          stack << [node.block, rescued, true]
           next
         end
       end
-      stack.concat(node.compact_child_nodes.map { |child| [child, rescued] })
+      stack.concat(node.compact_child_nodes.map { |child| [child, rescued, deferred] })
     end
     found
   end
@@ -323,6 +331,16 @@ module YardTagCheck
       def self.undocumented_yield
         yield 1
       end
+
+      # Yields, on another thread, without @yield.
+      # @return [Thread]
+      def self.undocumented_yield_in_thread
+        Thread.new { yield 1 }
+      end
+
+      # Yields, from a lambda, without @yield.
+      # @return [Integer]
+      def self.undocumented_yield_in_lambda = -> { yield 1 }.call
 
       # Tests block_given? without @yield.
       # @return [Boolean]
@@ -459,23 +477,25 @@ module YardTagCheck
 
   # The gaps the checker must report for {SELF_TEST_SOURCE}, by object path.
   SELF_TEST_EXPECTED = {
-    'Fixture::LIMIT'                      => ['@return on a constant (YARD ignores it)'],
-    'Fixture.missing_param'               => ['missing @param b'],
-    'Fixture.stale_param'                 => ['stale @param gone'],
-    'Fixture.missing_return'              => ['missing @return'],
-    'Fixture.missing_predicate_return?'   => ['missing @return'],
-    'Fixture.undocumented_yield'          => ['yields but has no @yield or @yieldparam'],
-    'Fixture.undocumented_block_given'    => ['yields but has no @yield or @yieldparam'],
-    'Fixture.undocumented_raise'          => ['calls raise but has no @raise'],
-    'Fixture.undocumented_reraise'        => ['calls raise but has no @raise'],
-    'Fixture.undocumented_raise_in_block' => ['calls raise but has no @raise'],
-    'Fixture.undocumented_uncaught_raise' => ['calls raise but has no @raise'],
-    'Fixture.untyped'                     => ['@param a has no type', '@return has no type'],
-    'Fixture.undocumented'                => ['no docstring', 'missing @return'],
-    'Fixture.banner_only'                 => ['docstring is only a section banner', 'missing @return'],
-    'Fixture::BANNER_CONSTANT'            => ['docstring is only a section banner'],
-    'Fixture#placeholder'                 => ['attribute has only the placeholder docstring YARD writes'],
-    'Fixture#untyped_attribute'           => ['@return has no type']
+    'Fixture::LIMIT'                       => ['@return on a constant (YARD ignores it)'],
+    'Fixture.missing_param'                => ['missing @param b'],
+    'Fixture.stale_param'                  => ['stale @param gone'],
+    'Fixture.missing_return'               => ['missing @return'],
+    'Fixture.missing_predicate_return?'    => ['missing @return'],
+    'Fixture.undocumented_yield'           => ['yields but has no @yield or @yieldparam'],
+    'Fixture.undocumented_yield_in_thread' => ['yields but has no @yield or @yieldparam'],
+    'Fixture.undocumented_yield_in_lambda' => ['yields but has no @yield or @yieldparam'],
+    'Fixture.undocumented_block_given'     => ['yields but has no @yield or @yieldparam'],
+    'Fixture.undocumented_raise'           => ['calls raise but has no @raise'],
+    'Fixture.undocumented_reraise'         => ['calls raise but has no @raise'],
+    'Fixture.undocumented_raise_in_block'  => ['calls raise but has no @raise'],
+    'Fixture.undocumented_uncaught_raise'  => ['calls raise but has no @raise'],
+    'Fixture.untyped'                      => ['@param a has no type', '@return has no type'],
+    'Fixture.undocumented'                 => ['no docstring', 'missing @return'],
+    'Fixture.banner_only'                  => ['docstring is only a section banner', 'missing @return'],
+    'Fixture::BANNER_CONSTANT'             => ['docstring is only a section banner'],
+    'Fixture#placeholder'                  => ['attribute has only the placeholder docstring YARD writes'],
+    'Fixture#untyped_attribute'            => ['@return has no type']
   }.freeze
 
   # Check the checker against {SELF_TEST_SOURCE}: it must report exactly
