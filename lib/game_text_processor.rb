@@ -13,6 +13,7 @@ require_relative 'boot_profiler'
 require_relative 'clock'
 require_relative 'pending_render'
 require_relative 'server_reader'
+require_relative 'line_filter'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -55,24 +56,9 @@ class GameTextProcessor
   # Movement verbs that suppress the following prompt and empty line.
   MOVEMENT_PATTERN = /^You (?:run|walk|go|swim|climb|crawl|drag|stride|sneak|stalk)\b/
 
-  # Safety cap: a multi-line gag whose end pattern (or prompt) never arrives
-  # is released after this many suppressed lines so it cannot swallow the
-  # stream. Real blocks (e.g. sanowret crystal knowledge) are 2-3 lines.
-  MULTILINE_GAG_MAX_LINES = 100
-
-  # Stream tags kept when a gag drops a line's text. Losing a <popStream/>
-  # with the text would leave routing stuck on that stream (e.g. game text
-  # landing in the spell window), so gagged lines keep these tags and gag
-  # logging flags them. Element names; see #stream_tags.
-  STREAM_TAGS = %w[pushStream popStream clearStream].freeze
-
   # Element names of the bold tags. The last of them on a line tells
   # whether the line leaves bold open (see #carry_bold).
   BOLD_TAGS = %w[pushBold popBold].freeze
-
-  # Longest gag pattern source quoted in a gag log line. Some gags are long
-  # alternations; the prefix is enough to find the gag in the settings XML.
-  GAG_LOG_PATTERN_LIMIT = 80
 
   # Create a new processor wired to the given window manager and shared state.
   #
@@ -106,6 +92,7 @@ class GameTextProcessor
     @pending_render = PendingRender.new
     @reader = ServerReader.new(line_handler: self, pending_render: @pending_render, event_bus: event_bus,
                                cmd_buffer: cmd_buffer, shared_state: shared_state, boot_profiler: boot_profiler)
+    @line_filter = LineFilter.new(shared_state: shared_state)
 
     # Line color/style tracking
     @line_colors = []
@@ -121,7 +108,6 @@ class GameTextProcessor
     # (see TagHandlers#handle_stream_close). Cleared at every <prompt>.
     @stream_stack = []
     @bold_next_line = false
-    @emptycount = 0
     @combat_next_line = nil
     @first_prompt = true
 
@@ -133,11 +119,6 @@ class GameTextProcessor
 
     # Track movement messages to suppress prompts/empty lines after them
     @last_was_movement = false
-
-    # Multi-line gag state: the active { start:, end: } gag being suppressed
-    # (nil when not inside a block) and how many lines it has swallowed so far.
-    @active_multiline_gag = nil
-    @multiline_gag_lines = 0
 
     # Room data tracking for RoomWindow
     @room_capture_mode = nil # :title, :desc, or nil
@@ -169,31 +150,13 @@ class GameTextProcessor
   end
 
   # First step for one server line, before the render lock is taken:
-  # bold carry-over, gags and blank-line collapsing (see {ServerReader}).
+  # bold carry-over, then gags and blank-line collapsing ({LineFilter}).
+  # See {ServerReader}.
   #
   # @param line [String] raw server line, UTF-8, line ending removed
   # @return [String, nil] the line to process, or nil to drop it
   def prepare_line(line)
-    line = carry_bold(line)
-
-    gagged = multiline_gag?(line)
-    if !gagged && (gag = GagPatterns.match_general(line))
-      log_gagged_line('general', gag, line)
-      gagged = true
-    end
-
-    if gagged
-      # A gag hides the line's text, never its stream tags: dropping a
-      # <popStream/> would leave routing stuck on that stream.
-      line = stream_tags(line).join
-      return if line.empty?
-    elsif line.empty?
-      @emptycount += 1
-      return if @emptycount > 1
-    else
-      @emptycount = 0
-    end
-    line
+    @line_filter.filter(carry_bold(line))
   end
 
   # Second step for one server line, inside the render lock: a blank line
@@ -277,16 +240,6 @@ class GameTextProcessor
     XmlTokenizer.tags(line).map { |tag| XmlTokenizer.start_tag_name(tag) }
   end
 
-  # The stream tags ({STREAM_TAGS}) of a raw line, as written and in order,
-  # as the tag dispatcher reads the line.
-  #
-  # @param line [String] raw server line
-  # @return [Array<String>] the tags
-  # @api private
-  def stream_tags(line)
-    XmlTokenizer.tags(line).select { |tag| STREAM_TAGS.include?(XmlTokenizer.start_tag_name(tag)) }
-  end
-
   # Parse a room subtitle attribute into a clean room title string.
   #
   # Handles both GemStone and DragonRealms subtitle formats:
@@ -326,73 +279,6 @@ class GameTextProcessor
     @line_colors = HighlightProcessor.apply_highlights(text, [])
     @line_colors.push({ start: 0, end: timestamp.length, fg: fg })
     text
-  end
-
-  # Decide whether a raw server line should be suppressed as part of a
-  # multi-line gag block, advancing the gag state machine as a side effect.
-  #
-  # When no block is active, the line is tested against the configured
-  # multi-line gag start patterns; a match begins a block and suppresses
-  # the start line. While a block is active every line is suppressed until:
-  #   - the gag's end pattern matches (that end line is also suppressed), or
-  #   - for prompt-terminated gags (no end pattern), a prompt line is seen
-  #     (the prompt is NOT suppressed and passes through normally), or
-  #   - the safety cap is exceeded (the block is released, line passes through).
-  #
-  # @param line [String] raw server line (post-chomp, XML tags intact)
-  # @return [Boolean] true if the line's text should be suppressed (its
-  #   stream tags are still processed)
-  # @api private
-  def multiline_gag?(line)
-    if @active_multiline_gag
-      gag = @active_multiline_gag
-      @multiline_gag_lines += 1
-
-      if @multiline_gag_lines > MULTILINE_GAG_MAX_LINES
-        ProfanityLog.write('gag', "multiline gag exceeded #{MULTILINE_GAG_MAX_LINES} lines; releasing")
-        @active_multiline_gag = nil
-        false
-      elsif gag[:end]
-        # Explicit end pattern: the end line is part of the block (suppressed).
-        @active_multiline_gag = nil if line.match?(gag[:end])
-        log_gagged_line('multiline', gag[:start], line)
-        true
-      elsif start_tag_names(line).include?('prompt')
-        # Prompt-terminated: stop gagging and let the prompt line through.
-        @active_multiline_gag = nil
-        false
-      else
-        log_gagged_line('multiline', gag[:start], line)
-        true
-      end
-    elsif (gag = GagPatterns.match_multiline_start(line))
-      @active_multiline_gag = gag
-      @multiline_gag_lines = 0
-      log_gagged_line('multiline', gag[:start], line)
-      true
-    else
-      false
-    end
-  end
-
-  # Log a gagged line in full when +--log-gags+ is active.
-  #
-  # The line is logged raw (XML tags intact) and inspected so control
-  # characters are visible. Lines carrying a stream tag are marked
-  # +STREAM-TAG+; the tag itself is still processed after the text is dropped.
-  #
-  # @param kind [String] which gag type matched ('general' or 'multiline')
-  # @param pattern [Regexp] the gag pattern responsible (start pattern for multiline)
-  # @param line [String] raw server line being dropped
-  # @return [void]
-  # @api private
-  def log_gagged_line(kind, pattern, line)
-    return unless @state.log_gags
-
-    marker = stream_tags(line).empty? ? '' : ' STREAM-TAG'
-    source = pattern.source
-    source = "#{source[0, GAG_LOG_PATTERN_LIMIT]}..." if source.length > GAG_LOG_PATTERN_LIMIT
-    ProfanityLog.write('gag', "#{kind}#{marker} /#{source}/ #{line.inspect}")
   end
 
   # Emit a prompt to the main stream if one is pending and the last

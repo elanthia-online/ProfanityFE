@@ -266,8 +266,11 @@ RSpec.describe 'GameTextProcessor event emissions' do
   # ---- Multi-line gag state machine ----
 
   describe 'multi-line gag suppression' do
+    # The processor's line filter, which runs the gag state machine
+    def line_filter = processor.send(:instance_variable_get, :@line_filter)
+
     def gag?(line)
-      processor.send(:multiline_gag?, line)
+      line_filter.send(:multiline_gag?, line)
     end
 
     def start_block(gag)
@@ -282,7 +285,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     it 'suppresses the start line and begins a block' do
       start_block({ start: /START/, end: nil })
       expect(gag?('the START of knowledge')).to be true
-      expect(processor.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
+      expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
     end
 
     context 'prompt-terminated block (no end pattern)' do
@@ -299,7 +302,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
       it 'releases on a prompt line and lets the prompt through' do
         gag?('body line')
         expect(gag?('<prompt time="123">&gt;</prompt>')).to be false
-        expect(processor.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
+        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
       end
 
       it 'resumes normal processing after the block ends' do
@@ -319,22 +322,22 @@ RSpec.describe 'GameTextProcessor event emissions' do
       it 'suppresses lines until the end pattern, inclusive' do
         expect(gag?('middle line')).to be true
         expect(gag?('here is THE END of it')).to be true
-        expect(processor.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
+        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
       end
 
       it 'does not release on a prompt line (only the end pattern ends it)' do
         expect(gag?('<prompt time="123">&gt;</prompt>')).to be true
-        expect(processor.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
+        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
       end
     end
 
     it 'releases the block after the safety cap and lets the line through' do
       start_block({ start: /START/, end: /NEVER MATCHES/ })
       gag?('the START of a runaway block')
-      GameTextProcessor::MULTILINE_GAG_MAX_LINES.times { gag?('still going') }
+      LineFilter::MULTILINE_GAG_MAX_LINES.times { gag?('still going') }
       # The next line exceeds the cap and is released.
       expect(gag?('one line too many')).to be false
-      expect(processor.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
+      expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
     end
   end
 
