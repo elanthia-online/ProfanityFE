@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../spell_abbreviations'
+require_relative 'rules'
 
 =begin
 DragonRealms-specific game text processing.
@@ -14,13 +15,14 @@ module Games
   #
   # Provides pattern matching and formatting for DR game streams:
   # death messages, logon/logoff messages, Raise Dead stun detection,
-  # Shadow Valley stun, nerve wound detection, and spell abbreviation
-  # for the percWindow.
+  # Shadow Valley stun, and spell abbreviation for the percWindow.
+  # Answers the {Games::Rules} questions for DragonRealms.
   #
   # @example
-  #   include Games::DragonRealms
-  #   abbreviate_spell('Aesandry Darlaeth')  #=> 'AD'
+  #   Games::DragonRealms.spell_abbreviation('Aesandry Darlaeth')  #=> 'AD'
   module DragonRealms
+    extend Rules
+
     # DR spell abbreviation lookup for percWindow.
     SPELL_ABBREVIATIONS = DR_SPELL_ABBREVIATIONS
 
@@ -55,6 +57,10 @@ module Games
       'has disconnected.'                                                    => 'aa7733'
     }.freeze
 
+    # Matches a " * Name <message>" arrival/departure line whose message is a
+    # key of {LOGON_PATTERNS}; captures +name+ and the message as +type+.
+    LOGON_REGEXP = Rules.logon_regexp(LOGON_PATTERNS.keys)
+
     # DR death message pattern (phoenix, struck down, disintegrated, etc.)
     #
     # @return [Regexp]
@@ -70,12 +76,59 @@ module Games
     # @return [Regexp]
     SHADOW_VALLEY_PATTERN = /^Just as you think the falling will never end, you crash through an ethereal barrier which bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness and you feel unusually heavy for a moment\.  Everything seems to stop for a prolonged second and then WHUMP!!!/.freeze
 
-    # Abbreviate a DR spell name for compact percWindow display.
+    # Seconds of stun for a Raise Dead chant.
+    RAISE_DEAD_STUN_SECONDS = 30.6
+
+    # Seconds of stun for the fall out of the Shadow Valley.
+    SHADOW_VALLEY_STUN_SECONDS = 16.2
+
+    # A DR death line's entry: the name, then "MF" for a moonfire phoenix
+    # or "Sacrifice" for a sacrifice.
     #
-    # @param spell_name [String] full spell name from game server
-    # @return [String] abbreviated name, or original if no abbreviation exists
-    def abbreviate_spell(spell_name)
-      SPELL_ABBREVIATIONS[spell_name.strip] || spell_name
+    # @param text [String] the line, tags removed
+    # @return [String, nil] e.g. "Mahtra" or "Mahtra MF"; nil when
+    #   {DEATH_PATTERN} doesn't match
+    def self.death_summary(text)
+      match = text.match(DEATH_PATTERN) or return nil
+
+      name = match[:name]
+      if text.match?(/A fiery phoenix soars into the heavens as/)
+        "#{name} MF"
+      elsif text.match?(/was just sacrificed to/)
+        "#{name} Sacrifice"
+      else
+        name
+      end
+    end
+
+    # (see Games::Rules#logon)
+    def self.logon(text)
+      match = text.match(LOGON_REGEXP) or return nil
+
+      [match[:name], LOGON_PATTERNS[match[:type]]]
+    end
+
+    # The stun of a Raise Dead chant ({RAISE_DEAD_PATTERN}) or of the fall
+    # out of the Shadow Valley ({SHADOW_VALLEY_PATTERN}).
+    #
+    # @param text [String] a game line, tags removed
+    # @return [Float, nil] the stun in seconds; nil for any other line
+    def self.stun_seconds(text)
+      if text.match?(RAISE_DEAD_PATTERN)
+        RAISE_DEAD_STUN_SECONDS
+      elsif text.match?(SHADOW_VALLEY_PATTERN)
+        SHADOW_VALLEY_STUN_SECONDS
+      end
+    end
+
+    # The short name of a DR spell, from {SPELL_ABBREVIATIONS}.
+    #
+    # @param spell_name [String] the spell's name as sent (surrounding
+    #   whitespace is ignored; the case must match)
+    # @return [String, nil] e.g. "AD" for "Aesandry Darlaeth"; nil when the
+    #   spell has no short name
+    def self.spell_abbreviation(spell_name)
+      SPELL_ABBREVIATIONS[spell_name.strip]
     end
   end
 end
