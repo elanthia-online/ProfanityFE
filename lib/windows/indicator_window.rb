@@ -100,30 +100,30 @@ class IndicatorWindow < BaseWindow
     setpos(0, 0)
     clrtoeol
 
+    index = color_index
     # Use label_colors if set (for highlight support), otherwise use single-color mode
     if @label_colors&.any?
-      # Determine base color based on value state
-      base_fg = @value ? @fg[1] : @fg[0]
-      base_bg = @value ? @bg[1] : @bg[0]
-
       # Create base color region spanning entire label, then overlay highlights.
       # Highlights before base so they win ties (sort_by is stable; equal-range
       # entries keep input order, and first non-nil fg wins).
-      base_color = { start: 0, end: @label.length, fg: base_fg, bg: base_bg }
+      base_color = { start: 0, end: @label.length, fg: @fg[index], bg: @bg[index] }
       colors = @label_colors + [base_color]
       add_line(@label, colors)
-    elsif @value
-      # Original single-color behavior
-      if @value.is_a?(Integer)
-        render_colored(@label, @fg[@value], @bg[@value])
-      else
-        render_colored(@label, @fg[1], @bg[1])
-      end
     else
-      render_colored(@label, @fg[0], @bg[0])
+      render_colored(@label, @fg[index], @bg[index])
     end
     noutrefresh
     true
+  end
+
+  # Index into {#fg}/{#bg} for the current value: an Integer is its own
+  # index (0 is off), any other truthy value is 1 (on), false or nil 0.
+  #
+  # @return [Integer]
+  private def color_index
+    return @value if @value.is_a?(Integer)
+
+    @value ? 1 : 0
   end
 
   # Draw the window again from its current state: the same as {#redraw}
