@@ -4,6 +4,7 @@ require_relative 'window_layout'
 require_relative 'layout_loader'
 require_relative 'event_bridge'
 require_relative 'clock'
+require_relative 'shared_state'
 
 # Manages Curses window creation, layout loading, and handler hash access
 # for the profanity terminal UI.
@@ -30,12 +31,21 @@ class WindowManager
   # @return [Clock]
   attr_reader :clock
 
+  # The state the windows this manager builds read their settings from:
+  # the room window reads whether links are on ({RoomWindow#shared_state}).
+  #
+  # @return [SharedState]
+  attr_reader :shared_state
+
   # Create a new window manager with empty handler hashes.
   #
   # @param clock [Clock] handed to the windows the layout builds
+  # @param shared_state [SharedState] handed to the windows the layout
+  #   builds that follow a setting of it
   # @return [WindowManager]
-  def initialize(clock: Clock.new)
+  def initialize(clock: Clock.new, shared_state: SharedState.new)
     @clock = clock
+    @shared_state = shared_state
     @stream = {}
     @indicator = {}
     @progress = {}

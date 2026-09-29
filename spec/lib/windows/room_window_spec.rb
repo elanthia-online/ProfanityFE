@@ -18,9 +18,9 @@ RSpec.describe RoomWindow do
     LAYOUT['test'] = REXML::Document.new(<<~XML).root
       <layout><window class='room' top='0' left='0' height='5' width='10'/></layout>
     XML
-    window_manager = WindowManager.new
+    window_manager = WindowManager.new(shared_state: SharedState.new.tap { |state| state.blue_links = true })
     window_manager.load_layout('test')
-    window_manager.room['room'].tap { |room| room.links_enabled = true }
+    window_manager.room['room']
   end
 
   before do

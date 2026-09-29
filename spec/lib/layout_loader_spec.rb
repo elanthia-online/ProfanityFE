@@ -453,4 +453,127 @@ RSpec.describe LayoutLoader do
       expect(main.rows.reject(&:empty?)).to eq ['A goblin arrives.']
     end
   end
+
+  # Startup and .layout apply a layout through the same steps
+  # (Application#apply_layout): the room window follows the current links
+  # setting, and a text window the layout adds starts its text on its
+  # bottom row, whichever of the two built it.
+  describe 'a layout applied at startup and by .layout' do
+    let(:links) { true }
+    let(:app) do
+      Application.new({ char: nil, no_status: true, links: links, room_window_only: false },
+                      settings_file: settings_path, host: '127.0.0.1', port: 8000)
+    end
+    let(:settings_path) { File.join(@dir, 'settings.xml') }
+
+    # The room window of the layout shown now.
+    def room
+      app.window_mgr.room['room']
+    end
+
+    around do |example|
+      Dir.mktmpdir { |dir| @dir = dir; example.run }
+    end
+
+    before do
+      File.write(settings_path, <<~XML)
+        <settings>
+          <layout id='default'>
+            <window class='text' top='0' left='0' height='10' width='40' value='main'/>
+            <window class='room' top='10' left='0' height='5' width='40'/>
+            <window class='command' top='23' left='0' height='1' width='80'/>
+          </layout>
+          <layout id='second'>
+            <window class='text' top='0' left='0' height='10' width='40' value='main'/>
+            <window class='text' top='0' left='40' height='4' width='40' value='thoughts'/>
+            <window class='room' top='10' left='0' height='6' width='40'/>
+            <window class='command' top='23' left='0' height='1' width='80'/>
+          </layout>
+        </settings>
+      XML
+      allow(ProfanitySettings).to receive(:load_mouse_settings).and_return(nil)
+      stub_const('Curses::ALL_MOUSE_EVENTS', Curses::REPORT_MOUSE_POSITION - 1)
+      app.send(:load_settings_and_layout)
+    end
+
+    # Show a room whose exit "north" is a link, as the game's exits do.
+    def show_room
+      room.update_exits('Obvious paths: north.', links: [{ start: 15, end: 20, cmd: 'north' }])
+    end
+
+    # What a click on each cell of "north" in the room window sends.
+    def north_clicks
+      y = room.rows.index('Obvious paths: north.')
+      (15...20).map { |x| room.link_cmd_at(y, x) }.uniq
+    end
+
+    it 'keeps the room window\'s links on after .layout when --links turned them on' do
+      show_room
+      expect(north_clicks).to eq ['north']
+
+      app.execute_command('.layout second')
+      show_room
+
+      expect(north_clicks).to eq ['north']
+    end
+
+    context 'when started without --links' do
+      let(:links) { false }
+
+      it 'keeps the room window\'s links on after .layout when .links turned them on' do
+        app.execute_command('.links')
+
+        app.execute_command('.layout second')
+        show_room
+
+        expect(north_clicks).to eq ['north']
+      end
+
+      it 'turns the links of a room window .layout built on and off with .links' do
+        app.execute_command('.layout second')
+        show_room
+        expect(north_clicks).to eq [nil]
+
+        app.execute_command('.links')
+        expect(north_clicks).to eq ['north']
+
+        app.execute_command('.links')
+        expect(north_clicks).to eq [nil]
+      end
+    end
+
+    it 'starts the text of a text window .layout adds on its bottom row, as at startup' do
+      main = app.window_mgr.stream['main']
+      main.add_string('You wave.')
+      expect(main.rows.last(2)).to eq ['', 'You wave.']
+
+      app.execute_command('.layout second')
+      thoughts = app.window_mgr.stream['thoughts']
+      thoughts.add_string('You think.')
+
+      expect(thoughts.rows).to eq ['', '', '', 'You think.']
+    end
+
+    it 'shows the current window\'s scrollbar as active after .layout, as at startup' do
+      active = ["\u25B6", *Array.new(8, "\u2503"), ''] # the thumb, at the bottom, is a reverse-video blank
+      main = app.window_mgr.stream['main']
+      expect(main.scrollbar.rows).to eq active
+
+      app.execute_command('.layout second')
+
+      expect(main.scrollbar.rows).to eq active
+      expect(app.window_mgr.stream['thoughts'].scrollbar.rows).to all(be_empty)
+    end
+
+    it 'does not fill a text window .layout keeps: its lines stay where they were' do
+      main = app.window_mgr.stream['main']
+      main.add_string('You wave.')
+      shown = main.rows
+
+      app.execute_command('.layout second')
+
+      expect(app.window_mgr.stream['main']).to be main
+      expect(main.rows).to eq shown
+    end
+  end
 end

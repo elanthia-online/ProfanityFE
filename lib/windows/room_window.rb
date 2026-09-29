@@ -35,8 +35,13 @@ class RoomWindow < BaseWindow
   # @return [String, nil] preset name applied to creature highlight color
   attr_accessor :creatures_preset
 
-  # @return [Boolean] whether clickable links are rendered
-  attr_accessor :links_enabled
+  # Where the window reads whether links are on: the {SharedState} that
+  # +--links+ and +.links+ set. The builder hands every room window the
+  # {WindowManager}'s, so a window a layout builds, at startup or by
+  # +.layout+, follows the current setting. Without one, links are off.
+  #
+  # @return [SharedState, nil]
+  attr_accessor :shared_state
 
   # Create a new room window with empty section fields.
   #
@@ -56,8 +61,16 @@ class RoomWindow < BaseWindow
     @room_number = ''
     @stringprocs = ''
     @rendered_lines = [] # {text:, colors:} per window row, for link_cmd_at
-    @links_enabled = false
+    @shared_state = nil
     super
+  end
+
+  # Whether clickable links are rendered: the current setting of
+  # {#shared_state}, read at every render.
+  #
+  # @return [Boolean]
+  def links_enabled
+    @shared_state&.blue_links || false
   end
 
   # Update the room title text.
@@ -343,7 +356,7 @@ class RoomWindow < BaseWindow
   # @return [void]
   # @api private
   def render_lich_exits_section(text)
-    clean_text, line_colors = LinkExtractor.extract_links(text, links_enabled: @links_enabled)
+    clean_text, line_colors = LinkExtractor.extract_links(text, links_enabled: links_enabled)
     clean_text = "#{clean_text} none." if clean_text.rstrip.end_with?(':')
 
     HighlightProcessor.apply_highlights(clean_text, line_colors)
@@ -356,7 +369,7 @@ class RoomWindow < BaseWindow
   # @return [Array<Hash>] color regions with link preset colors and :cmd
   # @api private
   def build_link_colors(links)
-    return [] unless @links_enabled && links&.any?
+    return [] unless links_enabled && links&.any?
 
     colors = Presets.colors(Presets::LINKS, LinkExtractor::DEFAULT_LINK_COLOR)
     links.map do |link|
@@ -403,6 +416,7 @@ BaseWindow.register_type('room') do |height, width, top, left, element, wm|
   window.title_preset = element.attributes['title-preset'] || Presets::ROOM_NAME
   window.desc_preset = element.attributes['desc-preset']
   window.creatures_preset = element.attributes['creatures-preset'] || Presets::MONSTERBOLD
+  window.shared_state = wm.shared_state
   wm.room[Streams::ROOM] = window
   window
 end

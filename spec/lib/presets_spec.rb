@@ -283,7 +283,7 @@ RSpec.describe Presets do
 
     it 'colors exit links with the default link color, or the links preset once there is one' do
       window = room_window
-      window.links_enabled = true
+      window.shared_state.blue_links = true
       window.update_exits('Obvious paths: north.', links: [{ start: 15, end: 20, cmd: 'north' }])
       expect(drawn_in(window, 0, 3)).to eq 'north'
 

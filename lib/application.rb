@@ -55,11 +55,7 @@ class Application
     DotCommand.new(name: 'layout',
                    args: :required,
                    help: ['.layout <name>     Switch to a named window layout'],
-                   handler: proc { |layout|
-                     @window_mgr.load_layout(layout)
-                     @cmd_buffer.window = @window_mgr.command_window
-                     @key_action['resize'].call
-                   }),
+                   handler: proc { |layout| apply_layout(layout) }),
     DotCommand.new(name: 'resize',
                    help: ['.resize            Recalculate window sizes for terminal'],
                    handler: proc { @key_action['resize'].call }),
@@ -149,7 +145,7 @@ class Application
 
     @cmd_buffer = CommandBuffer.new
     @clock = Clock.new
-    @window_mgr = WindowManager.new(clock: @clock)
+    @window_mgr = WindowManager.new(clock: @clock, shared_state: @shared_state)
     @key_binding = {}
     @selection_enabled = false
 
@@ -335,10 +331,8 @@ class Application
       # Keep mouse capture when .select is still on
       @mouse_scroll.disable_click_events
     end
-    if (room_win = @window_mgr.room[Streams::ROOM])
-      room_win.links_enabled = @shared_state.blue_links
-      room_win.render
-    end
+    # The room window reads the setting from the shared state; draw it again
+    @window_mgr.room[Streams::ROOM]&.render
     msg = if @shared_state.blue_links
             '* Links: ON (clickable links + drag-to-select; Shift+drag for native selection)'
           elsif @selection_enabled
@@ -518,15 +512,36 @@ class Application
       end
     end
 
-    @window_mgr.load_layout('default')
+    apply_layout('default')
+    return if @cmd_buffer.window
+
+    fatal_error("ERROR: Layout has no command window. Add <window class='command'/> to your layout.")
+  end
+
+  # Switch to a layout and show it: the one sequence for the default
+  # layout at startup and for +.layout+. Builds the layout's windows
+  # (reusing the previous layout's where it can, see
+  # {WindowManager#load_layout}), moves the command line to the layout's
+  # command window, fills each text window the layout added with blank
+  # lines, so that its text starts on its bottom row, and fits every
+  # window to the terminal. The resize shows every scrollbar as inactive,
+  # so the current scroll window's is then drawn again as the active one.
+  #
+  # @param layout_id [String] key into the global LAYOUT hash
+  # @return [void]
+  def apply_layout(layout_id)
+    kept = TextWindow.list.dup
+    @window_mgr.load_layout(layout_id)
     @cmd_buffer.window = @window_mgr.command_window
-    @window_mgr.room[Streams::ROOM]&.links_enabled = @cli_options[:links]
-
-    unless @cmd_buffer.window
-      fatal_error("ERROR: Layout has no command window. Add <window class='command'/> to your layout.")
+    TextWindow.list.each do |window|
+      window.maxy.times { window.add_string "\n".dup } unless kept.any? { |old| old.equal?(window) }
     end
-
-    TextWindow.list.each { |w| w.maxy.times { w.add_string "\n".dup } }
+    @window_mgr.resize(@cmd_buffer)
+    if (current = SCROLL_WINDOW[0])
+      current.clear_scrollbar
+      current.set_active(true)
+      @cmd_buffer.flush_screen
+    end
   end
 
   # Connect to the game server (see {ServerConnection#connect}), forget the
