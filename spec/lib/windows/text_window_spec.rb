@@ -34,10 +34,10 @@ RSpec.describe TextWindow do
     %w[l1 l2 l3 l4 l5].each { |line| window.add_string(line) }
     window.add_string('one two three four')
 
-    window.scroll(-2)
+    window.scroll_lines(-2)
     expect(window.rows).to eq ['l4', 'l5', 'one two']
 
-    window.scroll(2)
+    window.scroll_lines(2)
     expect(window.rows).to eq ['one two', '  three', '  four']
   end
 
@@ -112,7 +112,7 @@ RSpec.describe TextWindow do
   it 'shows a full page of older lines after scrolling back by the whole window height' do
     %w[l1 l2 l3 l4 l5 l6 l7 l8 l9].each { |line| window.add_string(line) }
 
-    window.scroll(-window.maxy)
+    window.scroll_lines(-window.maxy)
 
     expect(window.rows).to eq %w[l4 l5 l6]
   end
@@ -130,7 +130,7 @@ RSpec.describe TextWindow do
 
     before do
       %w[l1 l2 l3 l4 l5 l6].each { |line| window.add_string(line) }
-      window.scroll(-window.maxy)
+      window.scroll_lines(-window.maxy)
     end
 
     it 'moves the view past the evicted oldest line and draws the next line on the bottom row' do
@@ -142,7 +142,7 @@ RSpec.describe TextWindow do
     it 'shows the newest lines after scrolling back down past the new lines' do
       %w[l7 l8].each { |line| window.add_string(line) }
 
-      window.scroll(window.maxy)
+      window.scroll_lines(window.maxy)
 
       expect(window.rows).to eq %w[l6 l7 l8]
     end

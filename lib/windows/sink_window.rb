@@ -6,8 +6,8 @@ Null-object window that silently discards all content.
 
 # Null-object window for stream suppression.
 #
-# Implements the same interface as BaseWindow text methods but discards
-# all input. Does not inherit from BaseWindow or Curses::Window — it's
+# Answers the messages WindowManager sends a stream window (see
+# {StreamWindow}) but discards all input. Does not inherit from BaseWindow or Curses::Window — it's
 # a pure duck-type that responds to the same messages without creating
 # any Curses resources.
 #

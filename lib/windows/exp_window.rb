@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../streams'
+require_relative 'stream_window'
 
 # Experience/skills display window with sorted skill list and highlight support.
 
@@ -11,6 +12,8 @@ require_relative '../streams'
 # maintains a sorted skill map. Redraws the full skill list on every
 # update, applying highlights via {HighlightProcessor}.
 class ExpWindow < BaseWindow
+  include StreamWindow
+
   # The layout's last column is left blank, both when the window is built
   # and when it is resized, so the window doesn't widen on resize.
   #
@@ -76,8 +79,9 @@ class ExpWindow < BaseWindow
   #
   # @param text [String] the skill text to parse
   # @param _line_colors [Array<Hash>] color regions (unused; highlights are recomputed)
+  # @param indent [Boolean, nil] unused; accepted like every stream window's +add_string+
   # @return [void]
-  def add_string(text, _line_colors, indent: nil) # rubocop:disable Lint/UnusedMethodArgument
+  def add_string(text, _line_colors = [], indent: nil) # rubocop:disable Lint/UnusedMethodArgument
     skill = parse_skill(text)
     return unless skill
 
@@ -101,6 +105,14 @@ class ExpWindow < BaseWindow
       add_line(skill_text, skill_colors, newline: true)
     end
     noutrefresh
+  end
+
+  # Draw the window again from its current state: the same as {#redraw}
+  # (see {BaseWindow#repaint}).
+  #
+  # @return [void]
+  def repaint
+    redraw
   end
 
   # Show the window again after {#move_to_layout} moved it: redraw its

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative '../streams'
+require_relative 'stream_window'
 
 # Active spells/effects display with duration-based sorting.
 
@@ -19,6 +20,8 @@ require_relative '../streams'
 # received so far; {#redraw} (used on terminal resize) repaints the same
 # batch at the current width.
 class PercWindow < BaseWindow
+  include StreamWindow
+
   # The layout's last column is left blank, both when the window is built
   # and when it is resized, so the window doesn't widen on resize.
   #
@@ -54,15 +57,6 @@ class PercWindow < BaseWindow
     display_lines
   end
 
-  # Render a spell line with a trailing newline and immediate refresh.
-  #
-  # @param line [String] the spell/effect text
-  # @param line_colors [Array<Hash>] color region descriptors
-  # @return [void]
-  def add_line(line, line_colors = [])
-    super(line, line_colors, newline: true, refresh: true)
-  end
-
   # Add a spell/effect line to the current batch and redraw the window.
   #
   # The line is stored unwrapped; wrapping happens when drawing. A line
@@ -94,11 +88,19 @@ class PercWindow < BaseWindow
     erase
     display_lines.first(maxy).each_with_index do |(line, line_colors), row|
       setpos(row, 0)
-      add_line(line, line_colors)
+      add_line(line, line_colors, newline: true, refresh: true)
     end
     noutrefresh
   rescue StandardError => e
     ProfanityLog.write('perc_window', "Error drawing spells: #{e}", backtrace: e.backtrace)
+  end
+
+  # Draw the window again from its current state: the same as {#redraw}
+  # (see {BaseWindow#repaint}).
+  #
+  # @return [void]
+  def repaint
+    redraw
   end
 
   # Show the window again after {#move_to_layout} moved it: redraw its
@@ -138,6 +140,31 @@ class PercWindow < BaseWindow
         lines << [line, line_colors, continuation]
       end
       lines
+    end
+  end
+
+  # Wrap a string to the given width, splitting color regions across lines.
+  # Yields each [line, line_colors, continuation] triple to the caller.
+  #
+  # Delegates to {StyledText#wrap} which encapsulates all the position
+  # arithmetic. This eliminates the manual start/end adjustment loops
+  # that were the primary source of off-by-one color region bugs.
+  #
+  # @param string [String] the text to wrap
+  # @param width [Integer] maximum line width in characters
+  # @param string_colors [Array<Hash>] color region descriptors for the full string
+  # @param indent [Boolean] whether continuation lines should be indented
+  # @yield [line, line_colors, continuation] each wrapped line, its adjusted
+  #   color regions, and whether it continues the previous wrapped line
+  # @yieldparam line [String] one wrapped line of text
+  # @yieldparam line_colors [Array<Hash>] color regions scoped to this line
+  # @yieldparam continuation [Boolean] true for the 2nd+ line of a wrapped string
+  # @return [void]
+  # @api private
+  def wrap_text(string, width, string_colors, indent: true)
+    styled = StyledText.new(string, string_colors)
+    styled.wrap(width, indent: indent).each_with_index do |wrapped_line, idx|
+      yield wrapped_line.text, wrapped_line.runs, idx.positive?
     end
   end
 

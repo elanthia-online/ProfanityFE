@@ -587,20 +587,20 @@ class Application
     end
 
     @key_action['scroll_current_window_up_one'] = proc {
-      SCROLL_WINDOW[0]&.scroll(-1)
+      SCROLL_WINDOW[0]&.scroll_lines(-1)
       @cmd_buffer.refresh
       CursesRenderer.doupdate
     }
 
     @key_action['scroll_current_window_down_one'] = proc {
-      SCROLL_WINDOW[0]&.scroll(1)
+      SCROLL_WINDOW[0]&.scroll_lines(1)
       @cmd_buffer.refresh
       CursesRenderer.doupdate
     }
 
     @key_action['scroll_current_window_up_page'] = proc {
       if (w = SCROLL_WINDOW[0])
-        w.scroll(0 - w.maxy + 1)
+        w.scroll_lines(0 - w.maxy + 1)
       end
       @cmd_buffer.refresh
       CursesRenderer.doupdate
@@ -608,7 +608,7 @@ class Application
 
     @key_action['scroll_current_window_down_page'] = proc {
       if (w = SCROLL_WINDOW[0])
-        w.scroll(w.maxy - 1)
+        w.scroll_lines(w.maxy - 1)
       end
       @cmd_buffer.refresh
       CursesRenderer.doupdate
@@ -616,7 +616,7 @@ class Application
 
     @key_action['scroll_current_window_bottom'] = proc {
       # buffer_pos counts rows; the buffer size counts (wrapped) lines
-      SCROLL_WINDOW[0]&.scroll(SCROLL_WINDOW[0]&.buffer_pos)
+      SCROLL_WINDOW[0]&.scroll_lines(SCROLL_WINDOW[0]&.buffer_pos)
       @cmd_buffer.refresh
       CursesRenderer.doupdate
     }
@@ -776,7 +776,7 @@ class Application
   def tick_countdowns
     any_updated = false
     @window_mgr.countdown.each_value do |window|
-      any_updated = true if window.update
+      any_updated = true if window.tick
     end
     @cmd_buffer.window&.noutrefresh if any_updated
     any_updated

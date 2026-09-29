@@ -3,6 +3,7 @@
 # Main scrollable text buffer window with word wrap, timestamps, and selection.
 
 require_relative 'line_buffered'
+require_relative 'stream_window'
 
 # Scrollable text buffer window.
 #
@@ -12,6 +13,7 @@ require_relative 'line_buffered'
 # whole window (see {LineBuffered}).
 class TextWindow < BaseWindow
   include LineBuffered
+  include StreamWindow
 
   # The layout's last column holds the scrollbar.
   #

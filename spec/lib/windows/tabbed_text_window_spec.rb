@@ -95,7 +95,7 @@ RSpec.describe TabbedTextWindow do
   it 'shows a blank line again when scrolled back to it' do
     ['l1', '', 'l2', 'l3', 'l4'].each { |line| window.add_string(line) }
 
-    window.scroll(-2)
+    window.scroll_lines(-2)
 
     expect(text_rows).to eq ['l1', '', 'l2']
   end
@@ -119,10 +119,10 @@ RSpec.describe TabbedTextWindow do
     end
 
     it 'keeps the tab bar when scrolled back and forward' do
-      window.scroll(-1)
+      window.scroll_lines(-1)
       expect(window.rows).to eq [' 1:main', 'l2']
 
-      window.scroll(1)
+      window.scroll_lines(1)
       expect(window.rows).to eq [' 1:main', 'l3']
     end
 
@@ -151,7 +151,7 @@ RSpec.describe TabbedTextWindow do
   it 'shows a full page of older lines after a page-up of the whole text area' do
     %w[l1 l2 l3 l4 l5 l6 l7 l8 l9].each { |line| window.add_string(line) }
 
-    window.scroll(-window.content_height)
+    window.scroll_lines(-window.content_height)
 
     expect(window.rows).to eq [' 1:main', 'l4', 'l5', 'l6']
   end
@@ -174,7 +174,7 @@ RSpec.describe TabbedTextWindow do
 
     it 'keeps a scrolled-back tab in place, so it shows the same lines on switching back' do
       window.switch_tab('combat')
-      window.scroll(-1)
+      window.scroll_lines(-1)
       window.switch_tab('main')
 
       %w[c6 c7].each { |line| window.add_string_to_tab('combat', line) }
@@ -192,7 +192,7 @@ RSpec.describe TabbedTextWindow do
 
     it 'leaves the shown tab on screen while a scrolled-back tab takes new lines' do
       window.switch_tab('combat')
-      window.scroll(-1)
+      window.scroll_lines(-1)
       window.switch_tab('main')
 
       %w[c6 c7].each { |line| window.add_string_to_tab('combat', line) }
@@ -214,7 +214,7 @@ RSpec.describe TabbedTextWindow do
       it 'moves the view past each evicted oldest line, as a shown tab does' do
         window.add_string_to_tab('combat', 'c6')
         window.switch_tab('combat')
-        window.scroll(-window.content_height)
+        window.scroll_lines(-window.content_height)
         window.switch_tab('main')
 
         %w[c7 c8].each { |line| window.add_string_to_tab('combat', line) }
@@ -240,7 +240,7 @@ RSpec.describe TabbedTextWindow do
       ['one two three four five six seven eight', 'nine ten eleven twelve thirteen fourteen', 'l1'].each do |line|
         window.add_string(line)
       end
-      window.scroll(-window.content_height)
+      window.scroll_lines(-window.content_height)
       window.switch_tab('combat')
 
       %w[l2 l3].each { |line| window.add_string_to_tab('main', line) }
@@ -263,7 +263,7 @@ RSpec.describe TabbedTextWindow do
 
     it 'draws no scrollbar beside the tab bar as lines arrive while scrolled back' do
       %w[l1 l2 l3 l4 l5 l6].each { |line| window.add_string(line) }
-      window.scroll(-2)
+      window.scroll_lines(-2)
       allow(Curses).to receive(:lines).and_return(21)
       window_manager.resize(nil)
       window.set_active(true)
@@ -288,7 +288,7 @@ RSpec.describe TabbedTextWindow do
 
     before do
       %w[l1 l2 l3 l4 l5 l6].each { |line| window.add_string(line) }
-      window.scroll(-window.content_height)
+      window.scroll_lines(-window.content_height)
     end
 
     it 'moves the view past the evicted oldest line and draws the next line on the bottom row' do
@@ -300,7 +300,7 @@ RSpec.describe TabbedTextWindow do
     it 'shows the newest lines after scrolling back down past the new lines' do
       %w[l7 l8].each { |line| window.add_string(line) }
 
-      window.scroll(window.content_height)
+      window.scroll_lines(window.content_height)
 
       expect(text_rows).to eq %w[l6 l7 l8]
     end
@@ -332,10 +332,10 @@ RSpec.describe TabbedTextWindow do
     end
 
     it 'shows just the tab bar when scrolled back and forward' do
-      window.scroll(-1)
+      window.scroll_lines(-1)
       expect(window.rows).to eq [' 1:main']
 
-      window.scroll(1)
+      window.scroll_lines(1)
       expect(window.rows).to eq [' 1:main']
     end
 
@@ -360,7 +360,7 @@ RSpec.describe TabbedTextWindow do
     end
 
     it 'shows the kept lines once a resize makes the window taller' do
-      window.scroll(-1)
+      window.scroll_lines(-1)
       window.add_string('l4')
       allow(Curses).to receive(:lines).and_return(27)
 

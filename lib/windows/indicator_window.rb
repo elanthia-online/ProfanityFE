@@ -125,6 +125,14 @@ class IndicatorWindow < BaseWindow
     noutrefresh
     true
   end
+
+  # Draw the window again from its current state: the same as {#redraw}
+  # (see {BaseWindow#repaint}).
+  #
+  # @return [void]
+  def repaint
+    redraw
+  end
 end
 
 BaseWindow.register_type('indicator') do |height, width, top, left, element, wm|

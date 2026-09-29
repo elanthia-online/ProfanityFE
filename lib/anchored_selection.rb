@@ -97,7 +97,7 @@ module AnchoredSelection
   # appended are skipped; column bounds are clamped to line length.
   #
   # Buffer entries may carry a wrap-continuation flag at index 2 (set by
-  # BaseWindow#wrap_text). Consecutive selected display lines that belong
+  # PercWindow's wrap_text). Consecutive selected display lines that belong
   # to one logical line are rejoined without the hard wrap: the previous
   # piece keeps its break whitespace (StyledText#wrap leaves it there) and
   # the continuation's artificial indent is stripped, so copied text has

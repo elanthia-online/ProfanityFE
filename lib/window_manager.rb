@@ -102,7 +102,7 @@ class WindowManager
 
   # Display a prompt in a stream window, with optional command text.
   # Deduplicates consecutive identical prompts via the window's
-  # +duplicate_prompt?+ method ({BaseWindow#duplicate_prompt?}) if it has
+  # +duplicate_prompt?+ method ({StreamWindow#duplicate_prompt?}) if it has
   # one; a {SinkWindow} doesn't, and discards the prompt.
   #
   # @param window [BaseWindow] the target stream window
@@ -181,7 +181,7 @@ class WindowManager
 
       window.end_time = data[:end_time] if data.key?(:end_time)
       window.secondary_end_time = data[:secondary_end_time] if data.key?(:secondary_end_time)
-      window.update
+      window.tick
     end
 
     event_bus.on(:countdown_active) do |data|
@@ -189,7 +189,7 @@ class WindowManager
       next unless window
 
       window.active = data[:active]
-      window.update
+      window.tick
     end
 
     event_bus.on(:stun) do |data|
@@ -197,7 +197,7 @@ class WindowManager
       next unless window
 
       window.end_time = Time.now.to_f - $server_time_offset.to_f + data[:seconds].to_f
-      window.update
+      window.tick
     end
 
     # ---- Prompt resize ----
@@ -453,7 +453,7 @@ class WindowManager
   def close_window(window)
     window.class.unregister_instance(window)
     SCROLL_WINDOW.delete(window)
-    window.scrollbar&.close
+    window.scrollbar&.close if window.respond_to?(:scrollbar)
     window.close
   end
 

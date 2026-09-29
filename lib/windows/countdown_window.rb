@@ -49,7 +49,9 @@ class CountdownWindow < BaseWindow
     @label = String.new
     @fg = []
     @bg = DEFAULT_BG.dup
-    @active = nil
+    # false, not nil: differing from @old_active makes the builder's first
+    # tick draw the label and 0
+    @active = false
     @old_active = nil
     @end_time = 0
     @secondary_end_time = 0
@@ -77,10 +79,14 @@ class CountdownWindow < BaseWindow
 
   public
 
-  # Recalculate remaining time and redraw if the display changed.
+  # Recalculate the seconds left from the clock and redraw if the display
+  # changed. Called on every input-loop tick and after each countdown
+  # event. Unlike the +update+ of {IndicatorWindow} and {ProgressWindow},
+  # it takes no new value: the countdown's state is set through its
+  # attributes and the time.
   #
   # @return [Boolean] true if the display was redrawn, false if unchanged
-  def update
+  def tick
     old_value = @value
     old_secondary_value = @secondary_value
     @value = [(@end_time.to_f - Time.now.to_f + $server_time_offset.to_f - COUNTDOWN_OFFSET).ceil, 0].max
@@ -129,6 +135,6 @@ BaseWindow.register_type('countdown') do |height, width, top, left, element, wm|
   window.fg = BaseWindow.parse_color_attrs(element, 'fg') if element.attributes['fg']
   window.bg = BaseWindow.parse_color_attrs(element, 'bg') if element.attributes['bg']
   wm.countdown[element.attributes['value']] = window if element.attributes['value']
-  window.update
+  window.tick
   window
 end

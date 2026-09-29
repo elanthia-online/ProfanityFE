@@ -58,20 +58,20 @@ RSpec.describe WindowManager, '#resize re-wrapping' do
 
     it 'keeps the line on the bottom row there when scrolled back' do
       (%w[l1 l2 l3 l4 l5] + ['one two three four']).each { |line| window.add_string(line) }
-      window.scroll(-2)
+      window.scroll_lines(-2)
       expect(window.rows).to eq %w[l2 l3 l4]
 
       resize_to(48)
 
       expect(window.rows).to eq %w[l2 l3 l4]
-      window.scroll(window.buffer_pos)
+      window.scroll_lines(window.buffer_pos)
       expect(window.rows).to eq ['one two', '  three', '  four']
     end
 
     it 'moves a view scrolled back to the oldest line down when widening leaves fewer rows' do
       allow(Curses).to receive(:cols).and_return(48)
       ['l1', 'one two three four', 'l2', 'l3'].each { |line| window.add_string(line) }
-      window.scroll(-window.maxy)
+      window.scroll_lines(-window.maxy)
       expect(window.rows).to eq ['l1', 'one two', '  three']
 
       resize_to(80)

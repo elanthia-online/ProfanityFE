@@ -409,7 +409,7 @@ RSpec.describe Application do
       app.window_mgr.load_layout('test')
       window = app.window_mgr.stream['main']
       ['one two three four five six seven', 'one two three four'].each { |line| window.add_string(line) }
-      window.scroll(-window.maxy)
+      window.scroll_lines(-window.maxy)
       expect(window.buffer_pos).to be > window.max_buffer_size
 
       app.key_action['scroll_current_window_bottom'].call
@@ -608,7 +608,7 @@ RSpec.describe Application do
       obj = Object.new
       def obj.updates = @updates ||= []
 
-      def obj.update
+      def obj.tick
         updates << Time.now
         updates.length <= 3 # return true for first 3 calls
       end
@@ -620,7 +620,7 @@ RSpec.describe Application do
       app.cmd_buffer.window = Curses::Window.new(1, 80, 0, 0)
     end
 
-    it 'calls update on all countdown windows' do
+    it 'ticks every countdown window' do
       app.send(:tick_countdowns)
       expect(countdown_window.updates.length).to eq 1
     end
@@ -647,10 +647,10 @@ RSpec.describe Application do
 
     it 'updates every countdown window and reports a change from any of them' do
       no_change = Object.new
-      def no_change.update = false
+      def no_change.tick = false
       stun_window = Object.new
       def stun_window.updates = @updates ||= 0
-      def stun_window.update = (@updates = updates + 1).positive?
+      def stun_window.tick = (@updates = updates + 1).positive?
       app.window_mgr.instance_variable_set(:@countdown, {
         'roundtime' => no_change,
         'stunned'   => stun_window,
@@ -661,14 +661,14 @@ RSpec.describe Application do
 
     it 'returns false when all countdowns return false (no change)' do
       no_change = Object.new
-      def no_change.update = false
+      def no_change.tick = false
       app.window_mgr.instance_variable_set(:@countdown, { 'roundtime' => no_change })
       expect(app.send(:tick_countdowns)).to be false
     end
 
     it 'does not call noutrefresh when nothing changed' do
       no_change = Object.new
-      def no_change.update = false
+      def no_change.tick = false
       app.window_mgr.instance_variable_set(:@countdown, { 'roundtime' => no_change })
       app.cmd_buffer.window.call_log.clear
       app.send(:tick_countdowns)
@@ -1032,7 +1032,7 @@ RSpec.describe Application do
       stub_const('Curses::ALL_MOUSE_EVENTS', Curses::REPORT_MOUSE_POSITION - 1)
       allow(ProfanitySettings).to receive(:save_mouse_settings) { |up, down| saved_masks << [up, down] }
       %w[l1 l2 l3 l4 l5].each { |line| window.add_string(line) }
-      window.scroll(-1)
+      window.scroll_lines(-1)
     end
 
     def mouse_event(bstate, times: 1)
