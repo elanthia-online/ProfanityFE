@@ -9,6 +9,7 @@ require_relative '../../lib/event_bus'
 require_relative '../../lib/xml_tokenizer'
 require_relative '../../lib/tag_handlers'
 require_relative '../../lib/shared_state'
+require_relative '../../lib/clock'
 
 # Minimal host class that includes TagHandlers, providing the instance
 # variables and helper methods the module expects.
@@ -21,10 +22,11 @@ class TagHandlerHost
 
   attr_reader :flushed_texts, :wm, :state, :cmd_buffer, :event_bus, :stream_stack
 
-  def initialize(wm:, state:, event_bus:)
+  def initialize(wm:, state:, event_bus:, clock: Clock.new)
     @wm = wm
     @state = state
     @event_bus = event_bus
+    @clock = clock
     @cmd_buffer = Struct.new(:window).new(nil)
     @xml_escapes = { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' }
     @line_colors = []

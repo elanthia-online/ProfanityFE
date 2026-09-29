@@ -14,7 +14,7 @@ require_relative 'presets'
 # understand, test, and modify independently.
 #
 # Expects the including class to provide:
-# - @wm, @state, @cmd_buffer, @xml_escapes, @event_bus
+# - @wm, @state, @cmd_buffer, @xml_escapes, @event_bus, @clock
 # - @line_colors, @open_monsterbold, @open_preset, @open_style,
 #   @open_color, @open_link
 # - @current_stream, @combat_next_line, @need_update, @need_room_render
@@ -162,7 +162,7 @@ module TagHandlers
     return unless (m = xml.match(%r{\A.*?>(?<text>.*?)&gt;</prompt>$}))
 
     unless @state.skip_server_time_offset
-      @state.server_time_offset = Time.now.to_f - time.to_f
+      @state.server_time_offset = @clock.now.to_f - time.to_f
       @state.skip_server_time_offset = true
     end
 
