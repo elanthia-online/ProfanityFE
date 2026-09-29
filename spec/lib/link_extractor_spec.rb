@@ -329,40 +329,40 @@ RSpec.describe LinkExtractor do
         )
       end
 
-      it 'pairs each link with the next end tag of its letter; tags between count as link text' do
+      it 'pairs each end tag with the earliest open link of its element; tags never count as link text' do
         expect_each(
-          '<d>a<d>b</d>c</d>'  => ['abc', [[0, 5, 'a<d>b'], [1, 3, 'bc']], 'abc'],
-          '<a>x<d>y</d></a>'   => ['xy', [[0, 9, 'x<d>y</d>'], [1, 2, 'y']], 'xy'],
-          # an unpaired link tag before a link still counts for its position
-          '<a>x<d>y</d>'       => ['xy', [[4, 5, 'y']], 'xy'],
-          '</d><d>n</d>'       => ['n', [[4, 5, 'n']], 'n'],
+          '<d>a<d>b</d>c</d>'  => ['abc', [[0, 2, 'ab'], [1, 3, 'bc']], 'abc'],
+          '<a>x<d>y</d></a>'   => ['xy', [[0, 2, 'xy'], [1, 2, 'y']], 'xy'],
+          # an unpaired link tag is dropped and takes no room
+          '<a>x<d>y</d>'       => ['xy', [[1, 2, 'y']], 'xy'],
+          '</d><d>n</d>'       => ['n', [[0, 1, 'n']], 'n'],
           "<d cmd='go'>orphan" => ['orphan', [], 'orphan'],
           '<a>x</d>'           => ['x', [], 'x']
         )
       end
 
-      it 'counts only <a and <d followed by whitespace or > as link tags' do
+      it 'counts every tag the dispatcher reads as a or d as a link tag' do
         expect_each(
-          '<d/>n</d>'  => ['n', [], 'n'],
-          '<a-b>x</a>' => ['x', [], 'x'],
-          '<a<b>x</a>' => ['x', [], 'x'],
+          '<d/>n</d>'  => ['n', [[0, 1, 'n']], 'n'],
+          '<a-b>x</a>' => ['x', [[0, 1, 'x']], 'x'],
+          '<a<b>x</a>' => ['x', [[0, 1, 'x']], 'x'],
           '<dx>n</dx>' => ['n', [], 'n']
         )
       end
 
-      it 'ends every tag at its first >, even inside a quoted value' do
+      it 'keeps a > inside a quoted value within its tag' do
         expect_each(
-          "<d cmd='a>b'>x</d>" => ["b'>x", [[0, 4, "b'>x"]], "b'>x"],
-          "<b t='>'><d>n</d>"  => ["'>n", [[2, 3, 'n']], "'>n"],
-          "<d x='<'>n</d>"     => ['', [], ''],
+          "<d cmd='a>b'>x</d>" => ['x', [[0, 1, 'a>b']], 'x'],
+          "<b t='>'><d>n</d>"  => ['n', [[0, 1, 'n']], 'n'],
+          "<d x='<'>n</d>"     => ['n', [[0, 1, 'n']], 'n'],
           'x <b <d>y</d>'      => ['x y', [], 'x y']
         )
       end
 
-      it 'keeps <> as text' do
+      it 'removes <> like any other tag' do
         expect_each(
-          'x <> y'     => ['x <> y', [], 'x <> y'],
-          '<d>a</d><>' => ['a<>', [[0, 1, 'a']], 'a<>']
+          'x <> y'     => ['x  y', [], 'x  y'],
+          '<d>a</d><>' => ['a', [[0, 1, 'a']], 'a']
         )
       end
     end
