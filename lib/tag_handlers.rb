@@ -88,16 +88,16 @@ module TagHandlers
   #   are tracked via text_buffer.length)
   # @return [void]
   def dispatch_tag(xml, text_buffer)
+    name = XmlTokenizer.tag_name(xml)
+    closing = xml.start_with?('</')
+
     # Combat tracking: reset flag on any <popStream> tag, bare or with an id.
     # A combat block closed by a bare <popStream/> must not leave later
     # unrecognized tags routed to combat.
     # This runs for every tag, before dispatch (matching original behavior).
-    @combat_next_line = false if xml.start_with?('<popStream')
+    @combat_next_line = false if name == 'popStream' && !closing
     # A prompt is the stream resync point: it closes any stream left open.
-    resync_streams_at_prompt(text_buffer) if xml.match?(/\A<prompt\b/)
-
-    name = XmlTokenizer.tag_name(xml)
-    closing = xml.start_with?('</')
+    resync_streams_at_prompt(text_buffer) if name == 'prompt' && !closing
 
     table = closing ? CLOSING_TAG_DISPATCH : TAG_DISPATCH
     handler = table[name]
@@ -236,10 +236,8 @@ module TagHandlers
 
   # Handle <compass>...<dir value="n"/>...</compass> paired tag.
   def handle_compass_tag(xml, _text_buffer)
-    # attrs reads only the start tag it is given, so each <dir> is read from
-    # where it starts.
-    current_dirs = xml.to_enum(:scan, /<dir\b/).filter_map do
-      XmlTokenizer.attrs(xml[Regexp.last_match.begin(0)..])['value']
+    current_dirs = XmlTokenizer.tags(xml, paired: false).filter_map do |tag|
+      XmlTokenizer.attrs(tag)['value'] if XmlTokenizer.start_tag_name(tag) == 'dir'
     end
     @event_bus.emit(:compass_update, dirs: current_dirs)
     @need_update = true
@@ -401,7 +399,7 @@ module TagHandlers
         end
       end
     end
-    push_open_stream(@current_stream) if xml.start_with?('<pushStream')
+    push_open_stream(@current_stream) if XmlTokenizer.start_tag_name(xml) == 'pushStream'
 
     @combat_next_line = true if @current_stream == Streams::COMBAT
   end
@@ -430,7 +428,7 @@ module TagHandlers
       flush_text_buffer(text_buffer)
     end
     @event_bus.emit(:exp_delete_skill) if @current_stream == Streams::EXP
-    pop_open_stream(XmlTokenizer.attrs(xml)['id']) if xml.start_with?('<popStream')
+    pop_open_stream(XmlTokenizer.attrs(xml)['id']) if XmlTokenizer.start_tag_name(xml) == 'popStream'
     @current_stream = @stream_stack.last
   end
 

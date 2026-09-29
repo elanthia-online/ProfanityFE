@@ -1216,25 +1216,26 @@ RSpec.describe TagHandlers do
       ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_color.last } }
     end
 
-    it 'reads compass dirs wherever <dir starts, even inside a quoted value' do
+    it 'reads compass dirs from the dir tags inside the compass' do
       expect_each(
         %(<compass><dir value='a>b'/></compass>)              => ['a>b'],
         %(<compass><dir value='n'</compass>)                  => ['n'],
         %(<compass><dir-x value="n"/></compass>)              => [],
         %(<compass></dir value='n'></compass>)                => [],
-        %(<compass x="<dir value='n'/>"></compass>)           => ['n'],
-        %(<compass><b t='<dir value="n"/>'/></compass>)       => ['n'],
-        %(<compass><x <dir value='n'/></compass>)             => ['n'],
-        %(<compass><dir value="<dir value='n'/>"/></compass>) => ["<dir value='n'/>", 'n']
+        # not from a quoted value, or after an unclosed <
+        %(<compass x="<dir value='n'/>"></compass>)           => [],
+        %(<compass><b t='<dir value="n"/>'/></compass>)       => [],
+        %(<compass><x <dir value='n'/></compass>)             => [],
+        %(<compass><dir value="<dir value='n'/>"/></compass>) => []
       ) { |h, tag| events_of(h, tag, :compass_update).last[:dirs] }
     end
 
-    it 'resets the combat flag on a tag starting <popStream' do
+    it 'resets the combat flag on a tag named popStream' do
       expect_each(
         '<popStream/>'              => false,
         "<popStream id='x'/>"       => false,
         '<popStream-x/>'            => false,
-        '<popStreams id="combat"/>' => false,
+        '<popStreams id="combat"/>' => true,
         '</popStream>'              => true,
         '<pushStream/>'             => true
       ) { |h, tag| h.combat_next_line = true; h.dispatch_tag(tag, String.new); h.combat_next_line }
