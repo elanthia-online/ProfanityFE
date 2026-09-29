@@ -72,10 +72,12 @@ module LineBuffered
   # Scroll the shown buffer by the given number of lines.
   # Negative values scroll up (toward older content), positive values scroll
   # down (toward newer content). A text area with no rows doesn't scroll.
+  # Not to be confused with +Curses::Window#scroll+, which the window
+  # keeps: it takes no argument and moves the window's cells up one row.
   #
   # @param scroll_num [Integer] lines to scroll (negative = up, positive = down)
   # @return [void]
-  def scroll(scroll_num)
+  def scroll_lines(scroll_num)
     line_buffer = shown_buffer
     return unless line_buffer && content_height.positive?
 
@@ -186,9 +188,9 @@ module LineBuffered
   def drag_auto_scroll(rel_y)
     before = buffer_pos
     if rel_y <= content_top
-      scroll(-1)
+      scroll_lines(-1)
     elsif rel_y >= maxy - 1
-      scroll(1)
+      scroll_lines(1)
     end
     buffer_pos != before
   end
@@ -343,7 +345,7 @@ module LineBuffered
     return unless excess.positive?
 
     if excess < height && line_buffer.length >= height
-      scroll(excess)
+      scroll_lines(excess)
     else
       line_buffer.pos -= excess
       paint_content

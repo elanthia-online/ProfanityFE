@@ -172,7 +172,7 @@ module Curses
       nil
     end
 
-    # Curses::Window#scroll scrolls up one line; ProfanityFE's windows override it.
+    # Curses::Window#scroll scrolls up one line (a window's buffer scrolls with LineBuffered#scroll_lines).
     def scroll
       scrl(1)
     end

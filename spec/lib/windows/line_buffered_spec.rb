@@ -53,7 +53,7 @@ RSpec.describe LineBuffered do
     end
 
     it 'scrolls forward one line when a drag reaches the bottom row' do
-      window.scroll(-2)
+      window.scroll_lines(-2)
 
       expect(window.drag_auto_scroll(window.maxy - 1)).to be true
       expect(text_rows).to eq %w[l2 l3 l4]
@@ -64,7 +64,7 @@ RSpec.describe LineBuffered do
     end
 
     it 'keeps the scrolled-back view in place as new lines arrive' do
-      window.scroll(-1)
+      window.scroll_lines(-1)
 
       window.add_string('l6')
 
@@ -75,24 +75,24 @@ RSpec.describe LineBuffered do
     context 'when scrolled back two pages' do
       before do
         %w[l6 l7 l8 l9 l10 l11 l12].each { |line| window.add_string(line) }
-        2.times { window.scroll(-window.content_height) }
+        2.times { window.scroll_lines(-window.content_height) }
       end
 
       it 'shows the newest lines on jumping to the bottom (the bottom key)' do
-        window.scroll(window.max_buffer_size)
+        window.scroll_lines(window.max_buffer_size)
 
         expect(text_rows).to eq %w[l10 l11 l12]
         expect(window.buffer_pos).to eq 0
       end
 
       it 'shows the next page on scrolling forward exactly one text area' do
-        window.scroll(window.content_height)
+        window.scroll_lines(window.content_height)
 
         expect(text_rows).to eq %w[l7 l8 l9]
       end
 
       it 'shows the right lines on scrolling forward more than one text area' do
-        window.scroll(window.content_height + 1)
+        window.scroll_lines(window.content_height + 1)
 
         expect(text_rows).to eq %w[l8 l9 l10]
       end
@@ -101,7 +101,7 @@ RSpec.describe LineBuffered do
     it 'shows the right lines on scrolling back more than one text area' do
       %w[l6 l7 l8 l9 l10 l11 l12].each { |line| window.add_string(line) }
 
-      window.scroll(-(window.content_height + 1))
+      window.scroll_lines(-(window.content_height + 1))
 
       expect(text_rows).to eq %w[l6 l7 l8]
     end
@@ -125,7 +125,7 @@ RSpec.describe LineBuffered do
     it 'moves the scrollbar thumb to the top text row when scrolled back to the oldest line' do
       window.set_active(true)
 
-      window.scroll(-2)
+      window.scroll_lines(-2)
 
       expect(scrollbar_cells).to eq Array.new(window.content_top, '') +
                                     ['thumb', BaseWindow::ACTIVE_SCROLLBAR_CHAR, BaseWindow::ACTIVE_SCROLLBAR_CHAR]
@@ -135,7 +135,7 @@ RSpec.describe LineBuffered do
       line_id, = window.selection_anchor_at(window_row(1), 0)
       window.highlight_selection(line_id, 0, line_id, 2)
 
-      window.scroll(-1)
+      window.scroll_lines(-1)
 
       expect(text_rows).to eq %w[l2 l3 l4]
       expect(window.attrs_at(window_row(1), 0) & Curses::A_REVERSE).to eq 0
@@ -154,14 +154,14 @@ RSpec.describe LineBuffered do
     it 'keeps a wrapped line whole while it is under the cap' do
       ['one two three four', 'l1', 'l2', 'l3'].each { |line| window.add_string(line) }
 
-      window.scroll(-window.content_height)
+      window.scroll_lines(-window.content_height)
 
       expect(text_rows).to eq ['one two', '  three', '  four']
     end
 
     it 'moves a view showing only an evicted line onto the oldest line left' do
       ['one two three four', 'l1', 'l2', 'l3'].each { |line| window.add_string(line) }
-      window.scroll(-window.content_height)
+      window.scroll_lines(-window.content_height)
 
       window.add_string('l4')
 
@@ -170,7 +170,7 @@ RSpec.describe LineBuffered do
 
     it 'moves a view showing part of an evicted line up by the rows it lost' do
       ['one two three four', 'l1', 'l2', 'l3'].each { |line| window.add_string(line) }
-      window.scroll(-2)
+      window.scroll_lines(-2)
       expect(text_rows).to eq ['  three', '  four', 'l1']
 
       window.add_string('l4')
@@ -225,10 +225,10 @@ RSpec.describe LineBuffered do
 
     it 'keeps text off the tab bar on jumping to the bottom from one line more than a page back' do
       %w[l1 l2 l3 l4 l5 l6 l7].each { |line| window.add_string(line) }
-      window.scroll(-window.content_height)
-      window.scroll(-1)
+      window.scroll_lines(-window.content_height)
+      window.scroll_lines(-1)
 
-      window.scroll(window.max_buffer_size)
+      window.scroll_lines(window.max_buffer_size)
 
       expect(window.rows).to eq [' 1:main | 2:combat', 'l5', 'l6', 'l7']
     end
@@ -238,10 +238,10 @@ RSpec.describe LineBuffered do
 
       it 'keeps old text off the tab bar on jumping to the bottom right after the tab bar is redrawn' do
         %w[l1 l2 l3 l4 l5 l6 l7 l8 l9 l10 l11 l12].each { |line| window.add_string(line) }
-        2.times { window.scroll(-window.content_height) }
+        2.times { window.scroll_lines(-window.content_height) }
         window.add_string_to_tab('combat', 'c1') # marks the tab: redraws the tab bar
 
-        window.scroll(window.max_buffer_size)
+        window.scroll_lines(window.max_buffer_size)
 
         expect(window.rows).to eq [' 1:main | 2:combat*', 'l10', 'l11', 'l12']
       end

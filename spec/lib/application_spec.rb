@@ -409,7 +409,7 @@ RSpec.describe Application do
       app.window_mgr.load_layout('test')
       window = app.window_mgr.stream['main']
       ['one two three four five six seven', 'one two three four'].each { |line| window.add_string(line) }
-      window.scroll(-window.maxy)
+      window.scroll_lines(-window.maxy)
       expect(window.buffer_pos).to be > window.max_buffer_size
 
       app.key_action['scroll_current_window_bottom'].call
@@ -1032,7 +1032,7 @@ RSpec.describe Application do
       stub_const('Curses::ALL_MOUSE_EVENTS', Curses::REPORT_MOUSE_POSITION - 1)
       allow(ProfanitySettings).to receive(:save_mouse_settings) { |up, down| saved_masks << [up, down] }
       %w[l1 l2 l3 l4 l5].each { |line| window.add_string(line) }
-      window.scroll(-1)
+      window.scroll_lines(-1)
     end
 
     def mouse_event(bstate, times: 1)
