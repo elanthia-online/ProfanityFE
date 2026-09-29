@@ -1912,7 +1912,11 @@ entries that start with the whole command line (wherever the cursor is):
 
 - **Single match:** the command line is auto-filled with the matched command.
 - **Multiple matches:** a numbered list of candidates is displayed in the main
-  window, and the common prefix is filled in automatically.
+  window, and the common prefix is filled in automatically. The list shows at
+  most 20 candidates, most recent first; if there are more, a last line such
+  as `[... 5 more]` says how many were left out (the `[autocomplete:25]`
+  header still gives the full count). The common prefix comes from all
+  matches, listed or not.
 
 Whenever text is filled in, the cursor moves to the end of the command line.
 
