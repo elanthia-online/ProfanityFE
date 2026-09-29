@@ -23,8 +23,9 @@ RSpec.describe 'Room component lines' do
   # Color pair number per foreground color, so a cell's color can be read
   # back from its attributes. 444444 and ffff00 are the room players
   # indicator's off and on colors (fg='444444,ffff00' in the layouts
-  # below).
-  let(:pairs) { { 'ff0000' => 1, '00ff00' => 2, 'ffff00' => 3, '444444' => 4 } }
+  # below); 5555ff is the color links are drawn in when no 'links' preset
+  # is set.
+  let(:pairs) { { 'ff0000' => 1, '00ff00' => 2, 'ffff00' => 3, '444444' => 4, '5555ff' => 5 } }
 
   before do
     allow(HighlightProcessor).to receive(:get_color_pair_id) { |fg, _bg| pairs.fetch(fg, 0) }
@@ -168,6 +169,16 @@ RSpec.describe 'Room component lines' do
         # The game bolds "a dwarven blacksmith assistant", article included
         expect(color_of(room, 'a dwarven blacksmith assistant')).to eq 'ff0000'
         expect(color_of(room, 'the Wayside Lodge and ')).to be_nil
+      end
+
+      it 'with links on, draws the bolded article in the monsterbold color and the creature, a link, in the link color' do
+        state.blue_links = true
+
+        receive_from_server(objects_line)
+
+        # The game bolds "a dwarven blacksmith assistant"; only the name is a link
+        expect(color_of(room, 'dwarven blacksmith assistant')).to eq '5555ff'
+        expect(color_of(room, 'a dwarven blacksmith assistant')).to eq %w[ff0000 5555ff]
       end
 
       it 'keeps the links of objects shown with links off, so they work once links are turned on' do
