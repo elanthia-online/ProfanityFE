@@ -1,5 +1,14 @@
 # frozen_string_literal: true
 
+# Tests Games::DragonRealms: spell abbreviations, the death window entry for
+# each death line (.death_summary), the stun of a Raise Dead chant or the
+# Shadow Valley fall (.stun_seconds), and logon lines (.logon).
+#
+# The game lines come from the patterns and tables in
+# lib/games/dragonrealms.rb and the lines already used in
+# game_rules_processing_spec, which checks how they are shown. Lines made up
+# only to check what is not recognized say "synthetic" in the example name.
+
 require_relative '../../../lib/spell_abbreviations'
 require_relative '../../../lib/games/dragonrealms'
 
@@ -17,7 +26,6 @@ RSpec.describe Games::DragonRealms do
       expect(described_class.spell_abbreviation('  Aesandry Darlaeth  ')).to eq 'AD'
     end
 
-    # Adversarial
     it 'has no abbreviation for an empty string' do
       expect(described_class.spell_abbreviation('')).to be_nil
     end
@@ -31,61 +39,44 @@ RSpec.describe Games::DragonRealms do
     end
   end
 
-  describe 'DEATH_PATTERN' do
-    let(:pattern) { described_class::DEATH_PATTERN }
-
-    it 'captures name from standard death' do
-      match = ' * Mahtra was just struck down!'.match(pattern)
-      expect(match[:name]).to eq 'Mahtra'
+  describe '.death_summary' do
+    {
+      ' * Mahtra was just struck down!'                                                              => 'Mahtra',
+      " * A fiery phoenix soars into the heavens as Mahtra's spirit arises from the ashes of death." => 'Mahtra MF',
+      ' * Grocha just disintegrated!'                                                                => 'Grocha',
+      ' * Mahtra was lost to the Plane of Exile!'                                                    => 'Mahtra',
+      ' * Grocha was smote by Aldauth!'                                                              => 'Grocha',
+      ' * Chanepheous failed within the Bank of Duskruin!'                                           => 'Chanepheous',
+      ' * Serapheim was just sacrificed to Dergati!'                                                 => 'Serapheim Sacrifice',
+    }.each do |line, entry|
+      it "gives #{line.strip.inspect} the entry #{entry.inspect}" do
+        expect(described_class.death_summary(line)).to eq entry
+      end
     end
 
-    it 'captures name from phoenix death' do
-      text = " * A fiery phoenix soars into the heavens as Mahtra's spirit arises from the ashes of death."
-      expect(text.match(pattern)[:name]).to eq 'Mahtra'
+    it 'is nil for a death line without the leading " * " (synthetic)' do
+      expect(described_class.death_summary('Mahtra was just struck down!')).to be_nil
     end
 
-    it 'captures name from disintegration' do
-      expect(' * Grocha just disintegrated!'.match(pattern)[:name]).to eq 'Grocha'
+    it 'is nil for a death line with a lowercase name (synthetic)' do
+      expect(described_class.death_summary(' * mahtra was just struck down!')).to be_nil
     end
 
-    it 'captures name from Plane of Exile' do
-      expect(' * Mahtra was lost to the Plane of Exile!'.match(pattern)[:name]).to eq 'Mahtra'
+    it 'is nil for a name starting with a digit (synthetic)' do
+      expect(described_class.death_summary(' * 1mahtra was just struck down!')).to be_nil
     end
 
-    it 'captures name from smote' do
-      expect(' * Grocha was smote by Aldauth!'.match(pattern)[:name]).to eq 'Grocha'
-    end
-
-    it 'captures name from failed within (Duskruin Bank)' do
-      expect(' * Chanepheous failed within the Bank of Duskruin!'.match(pattern)[:name]).to eq 'Chanepheous'
-    end
-
-    it 'captures name from sacrifice' do
-      expect(' * Serapheim was just sacrificed to Dergati!'.match(pattern)[:name]).to eq 'Serapheim'
-    end
-
-    # Adversarial
-    it 'does not match without leading " * "' do
-      expect('Mahtra was just struck down!').not_to match(pattern)
-    end
-
-    it 'does not match lowercase names' do
-      expect(' * mahtra was just struck down!').not_to match(pattern)
-    end
-
-    it 'does not match names starting with numbers' do
-      expect(' * 1mahtra was just struck down!').not_to match(pattern)
-    end
-
-    it 'requires name to start with uppercase followed by lowercase' do
-      expect(' * MA was just struck down!').not_to match(pattern)
+    it 'is nil for an all-capitals name (synthetic)' do
+      expect(described_class.death_summary(' * MA was just struck down!')).to be_nil
     end
   end
 
-  describe 'RAISE_DEAD_PATTERN' do
-    let(:pattern) { described_class::RAISE_DEAD_PATTERN }
+  describe '.stun_seconds' do
+    raise_dead_stun = 30.6
+    shadow_valley_stun = 16.2
 
-    # Test each deity variant
+    # The start of each deity's Raise Dead chant, as RAISE_DEAD_PATTERN
+    # lists them.
     [
       'Deep and resonating, you feel the chant that falls from your lips',
       'Moisture beads upon your skin and you feel your eyes cloud over',
@@ -101,49 +92,48 @@ RSpec.describe Games::DragonRealms do
       'As you begin to chant, you notice the scent of dry, dusty parchment',
       'Wrapped in an aura of chill, you close your eyes and softly begin to chant',
       'As Cleric begins to chant, your spirit is drawn closer to your body',
-    ].each do |text|
-      it "matches: #{text[0..60]}..." do
-        expect(text).to match(pattern)
+    ].each do |chant|
+      it "is #{raise_dead_stun} for the Raise Dead chant #{chant.inspect}" do
+        expect(described_class.stun_seconds(chant)).to eq raise_dead_stun
       end
     end
 
-    it 'does not match normal combat text' do
-      expect('You swing a sword at a goblin').not_to match(pattern)
+    it "is #{shadow_valley_stun} for the fall out of the Shadow Valley" do
+      fall = 'Just as you think the falling will never end, you crash through an ethereal barrier which ' \
+             'bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness ' \
+             'and you feel unusually heavy for a moment.  Everything seems to stop for a prolonged second ' \
+             'and then WHUMP!!!'
+      expect(described_class.stun_seconds(fall)).to eq shadow_valley_stun
     end
 
-    it 'does not match partial raise dead text' do
-      expect('I feel the chant').not_to match(pattern)
+    it 'is nil for only the first sentence of the Shadow Valley fall' do
+      expect(described_class.stun_seconds('Just as you think the falling will never end')).to be_nil
+    end
+
+    it 'is nil for a combat line (synthetic)' do
+      expect(described_class.stun_seconds('You swing a sword at a goblin')).to be_nil
+    end
+
+    it 'is nil for a line that only mentions a chant (synthetic)' do
+      expect(described_class.stun_seconds('I feel the chant')).to be_nil
     end
   end
 
-  describe 'SHADOW_VALLEY_PATTERN' do
-    it 'matches the shadow valley stun message' do
-      text = 'Just as you think the falling will never end, you crash through an ethereal barrier which bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness and you feel unusually heavy for a moment.  Everything seems to stop for a prolonged second and then WHUMP!!!'
-      expect(text).to match(described_class::SHADOW_VALLEY_PATTERN)
+  describe '.logon' do
+    it 'gives an arrival the name and green' do
+      expect(described_class.logon(' * Mahtra joins the adventure with little fanfare.')).to eq %w[Mahtra 007700]
     end
 
-    it 'does not match partial text' do
-      expect('Just as you think the falling will never end').not_to match(described_class::SHADOW_VALLEY_PATTERN)
-    end
-  end
-
-  describe 'LOGON_PATTERNS' do
-    let(:patterns) { described_class::LOGON_PATTERNS }
-
-    it 'has green for all login variants' do
-      login_patterns = patterns.select { |_, color| color == '007700' }
-      expect(login_patterns.length).to be >= 10
+    it 'gives a departure the name and yellow' do
+      expect(described_class.logon(' * Mahtra departs from the adventure with little fanfare.')).to eq %w[Mahtra 777700]
     end
 
-    it 'has yellow for all logout variants' do
-      logout_patterns = patterns.select { |_, color| color == '777700' }
-      expect(logout_patterns.length).to be >= 5
+    it 'gives a disconnect the name and orange' do
+      expect(described_class.logon(' * Mahtra has disconnected.')).to eq %w[Mahtra aa7733]
     end
 
-    it 'has exactly one disconnect pattern' do
-      disconnect = patterns.select { |_, color| color == 'aa7733' }
-      expect(disconnect.length).to eq 1
-      expect(disconnect.keys.first).to eq 'has disconnected.'
+    it 'is nil without the leading " * " (synthetic)' do
+      expect(described_class.logon('Mahtra joins the adventure with little fanfare.')).to be_nil
     end
   end
 end
