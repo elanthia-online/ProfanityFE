@@ -20,7 +20,7 @@ Manages the ~/.profanity/ directory structure for config, logs, and state.
 # @example
 #   ProfanitySettings.file('debug.log')       #=> "/home/user/.profanity/debug.log"
 #   ProfanitySettings.file('mahtra.xml')      #=> "/home/user/.profanity/mahtra.xml"
-#   ProfanitySettings.resolve_template('Mahtra', app_dir: '/path/to/profanity')
+#   ProfanitySettings.resolve_template(char: 'Mahtra', app_dir: '/path/to/profanity')
 module ProfanitySettings
   @lock = Mutex.new
 
@@ -28,7 +28,7 @@ module ProfanitySettings
   # message is what profanity.rb prints to stderr before it exits 1.
   class NotFoundError < StandardError; end
 
-  # @return [String] the application data directory
+  # The application data directory, +~/.profanity+.
   APP_DIR = File.join(Dir.home, '.profanity')
 
   # Create {APP_DIR} if it doesn't exist. profanity.rb calls this at
@@ -101,7 +101,11 @@ module ProfanitySettings
   #   looked up in <app_dir>/templates/ as typed, then lowercased
   # @param settings_file [String, nil] explicit path from --settings-file flag
   # @param app_dir [String] the ProfanityFE installation directory
-  # @return [String] resolved full path to the settings XML
+  #   (profanity.rb passes its own directory, which is relative when it
+  #   was started with a relative path)
+  # @return [String] path to the settings XML: absolute for
+  #   --settings-file and ~/.profanity/, otherwise under +app_dir+ (so
+  #   relative when +app_dir+ is)
   # @raise [NotFoundError] if --settings-file or --template names a file
   #   that doesn't exist, or no settings file is found at all
   def self.resolve_template(char: nil, template: nil, settings_file: nil, app_dir: '.')

@@ -172,7 +172,7 @@ class BaseWindow < Curses::Window
   # @yieldparam width [Integer] computed window width
   # @yieldparam top [Integer] computed top position
   # @yieldparam left [Integer] computed left position
-  # @yieldparam element [REXML::Element] the XML element for this window
+  # @yieldparam element [CachedElement] the XML element for this window
   # @yieldparam wm [WindowManager] the window manager instance
   # @return [void]
   def self.register_type(xml_class, &builder)
@@ -183,7 +183,7 @@ class BaseWindow < Curses::Window
   # Splits a comma-separated attribute value into an array, converting
   # the string 'nil' to actual nil.
   #
-  # @param element [REXML::Element] XML element containing the attribute
+  # @param element [CachedElement] XML element containing the attribute
   # @param attr_name [String] attribute name to parse (e.g. 'fg', 'bg')
   # @return [Array<String, nil>, nil] parsed color values, or nil if attribute absent
   def self.parse_color_attrs(element, attr_name)
@@ -202,7 +202,7 @@ class BaseWindow < Curses::Window
   # is off, and so are 'false', 'no', '0' and 'off' in any case. Any other
   # value is on, as every value was before the attribute was parsed.
   #
-  # @param element [REXML::Element] XML element containing the attribute
+  # @param element [CachedElement] XML element containing the attribute
   # @param attr_name [String] attribute name to parse (e.g. 'timestamp')
   # @return [Boolean]
   def self.parse_flag_attr(element, attr_name)

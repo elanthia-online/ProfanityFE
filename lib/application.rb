@@ -30,6 +30,23 @@ class Application
   attr_reader :key_binding, :key_action, :cmd_buffer, :window_mgr,
               :shared_state, :mouse_scroll
 
+  # @!attribute [r] key_binding
+  #   @return [Hash{Integer, String => Proc, Hash}] the key binding map:
+  #     key code or character => key action Proc, or the combo map
+  #     (the same shape) for a key that starts a key combo
+  # @!attribute [r] key_action
+  #   @return [Hash{String => Proc}] the key actions by name, from
+  #     {KeyActionRegistry}
+  # @!attribute [r] cmd_buffer
+  #   @return [CommandBuffer] the command line
+  # @!attribute [r] window_mgr
+  #   @return [WindowManager] the windows of the current layout
+  # @!attribute [r] shared_state
+  #   @return [SharedState] the state shared with the server thread
+  # @!attribute [r] mouse_scroll
+  #   @return [MouseScroll] the mouse wheel and click capture, from the
+  #     {MouseController}
+
   # @return [ServerConnection] the connection to the game server
   attr_reader :connection
 
@@ -168,7 +185,8 @@ class Application
   # This is the main entry point -- blocks until the connection closes
   # or the user quits.
   #
-  # @return [void] never returns normally; calls +exit+ on disconnect
+  # @return [void] returns only when the user presses Ctrl+C; the session
+  #   otherwise ends through +exit+ (+.quit+, a disconnect or a fatal error)
   def run
     load_settings_and_layout
     @boot_profiler.mark('settings + layout')
@@ -238,6 +256,11 @@ class Application
 
   # ---- Dot-command handlers ----
 
+  # +.key+: wait for one key press (see {#wait_for_key}) and show its key
+  # code in the main window, or say that none came. Does nothing without a
+  # main window.
+  #
+  # @return [void]
   def handle_dot_key
     return unless write_to_client(Feedback::BANNER, '* Waiting for key press...')
 
@@ -291,6 +314,15 @@ class Application
     nil
   end
 
+  # +.tab+: with no argument, list each tabbed window's tabs as
+  # +N:name+, the active one marked with +*+; with a number, switch every
+  # tabbed window to its Nth tab (from 1); with anything else, switch every
+  # tabbed window that has a tab of that name to it. A window without the
+  # tab (or with fewer tabs) stays as it is. Says so when the layout has no
+  # tabbed window.
+  #
+  # @param arg [String, nil] the tab number or name, or nil for the list
+  # @return [void]
   def handle_dot_tab(arg)
     if TabbedTextWindow.list.empty?
       write_to_client('* No tabbed windows configured')
@@ -311,6 +343,11 @@ class Application
     end
   end
 
+  # +.arrow+: run the +switch_arrow_mode+ key action, which moves the up
+  # and down arrows on to the next of command history, page scroll and
+  # line scroll, then show the mode the up arrow is now bound to.
+  #
+  # @return [void]
   def handle_dot_arrow
     @key_action['switch_arrow_mode'].call
     mode = if @key_binding[Curses::KEY_UP] == @key_action['previous_command']
@@ -323,6 +360,11 @@ class Application
     write_to_client("* Arrow mode: #{mode}")
   end
 
+  # +.links+: turn clickable links on or off. Turning them on captures the
+  # mouse; turning them off releases it unless +.select+ is on. Redraws the
+  # room window, whose links follow the setting, and shows the new state.
+  #
+  # @return [void]
   def handle_dot_links
     @shared_state.blue_links = !@shared_state.blue_links
     if @shared_state.blue_links
@@ -343,6 +385,11 @@ class Application
     write_to_client(msg)
   end
 
+  # +.select+: turn drag-to-select on or off without links. Captures the
+  # mouse while either this or +.links+ is on and releases it when both
+  # are off, then shows the new state.
+  #
+  # @return [void]
   def handle_dot_select
     @selection_enabled = !@selection_enabled
     if @selection_enabled || @shared_state.blue_links
@@ -360,6 +407,11 @@ class Application
     write_to_client(msg)
   end
 
+  # +.draghl+: toggle whether the selection highlight follows the pointer
+  # while dragging (on) or appears only on release (off), and show the new
+  # state.
+  #
+  # @return [void]
   def handle_dot_draghl
     @mouse_scroll.drag_highlight = !@mouse_scroll.drag_highlight
     msg = if @mouse_scroll.drag_highlight
@@ -432,6 +484,14 @@ class Application
     write_to_client("* Highlight added: #{pattern}", fg: INLINE_HIGHLIGHT_COLOR)
   end
 
+  # +.unhighlight+: remove the inline highlight added by +.highlight+ for
+  # the same text (optionally in double quotes), from HIGHLIGHT and
+  # +@inline_highlights+, and say whether one was found. Does nothing
+  # without a main window. Highlights from the settings file are not
+  # touched.
+  #
+  # @param pattern [String] the text given to +.highlight+
+  # @return [void]
   def handle_dot_unhighlight(pattern)
     return unless @window_mgr.stream[MAIN_STREAM]
 
@@ -451,6 +511,10 @@ class Application
     write_to_client("* Highlight removed: #{pattern}")
   end
 
+  # +.help+: show every dot-command's help lines, in {DOT_COMMANDS} order,
+  # between banner rows in the main window.
+  #
+  # @return [void]
   def handle_dot_help
     write_to_client(*DOT_COMMANDS.flat_map(&:help).map { |line| "*   #{line}" }, banner: true)
   end
@@ -661,6 +725,15 @@ class Application
     any_updated
   end
 
+  # Read and dispatch keys until the session ends. Each pass waits up to
+  # 0.1 s for input, ends the session (see {#end_session}) once the server
+  # thread reports the connection over, and then, holding the render lock,
+  # ticks the countdown windows and the drag auto-scroll and hands one key
+  # to {#handle_key}. Ctrl+C (Interrupt) returns quietly; any other error
+  # is logged and ends the session through {#fatal_error}. Either way the
+  # connection and the curses screen are closed on the way out.
+  #
+  # @return [nil] only after Ctrl+C; otherwise it leaves through +exit+
   def input_loop
     key_combo = nil
     @cmd_buffer.window.nodelay = true
@@ -713,6 +786,8 @@ class Application
   # @param ch [Integer, String] the key code or character from {#read_key}
   # @param key_combo [Hash, nil] the pending key-combo map from earlier keys
   # @return [Hash, nil] the key-combo map to use for the next key
+  # @raise [IOError, SystemCallError] a connection error raised by the
+  #   action, passed on so that {#input_loop} ends the session
   def handle_key(ch, key_combo)
     if ch == Curses::KEY_MOUSE
       @mouse_controller.handle_event

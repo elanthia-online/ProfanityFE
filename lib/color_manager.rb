@@ -38,6 +38,23 @@ module ColorManager
                   :default_color_code, :default_background_color_code,
                   :custom_colors
 
+    # @!attribute [rw] default_color_id
+    #   @return [Integer] curses color id of the default foreground
+    #     (--default-color-id; 7 until {.configure})
+    # @!attribute [rw] default_background_color_id
+    #   @return [Integer] curses color id of the default background
+    #     (--default-background-color-id; 0 until {.configure})
+    # @!attribute [rw] default_color_code
+    #   @return [String, nil] 6-digit hex code of the default foreground
+    #     color, read from curses by {.configure}; nil until then
+    # @!attribute [rw] default_background_color_code
+    #   @return [String, nil] 6-digit hex code of the default background
+    #     color, read from curses by {.configure}; nil until then
+    # @!attribute [rw] custom_colors
+    #   @return [Boolean] whether hex colors are drawn by redefining curses
+    #     colors (+init_color+) rather than picking the nearest of the
+    #     terminal's colors
+
     # Initialize the color system. Must be called after Curses.init_screen and CLI parsing.
     # Resets all color and pair caches (and the once-per-pool recycle log).
     # The pair pool holds pairs 1...min(Curses.color_pairs, {MAX_RENDERABLE_COLOR_PAIRS}).

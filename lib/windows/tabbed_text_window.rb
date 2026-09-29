@@ -239,6 +239,7 @@ class TabbedTextWindow < BaseWindow
   # @param text [String] the text to display
   # @param colors [Array<Hash>] color region descriptors
   # @param stream [String, nil] stream name used for tab routing
+  # @param indent [Boolean, nil] indent continuation lines (nil = window default)
   # @return [void]
   def route_string(text, colors, stream = nil, indent: nil)
     target_tab = stream && @tab_buffers.key?(stream) ? stream : (@active_tab || MAIN_STREAM)
@@ -277,6 +278,7 @@ class TabbedTextWindow < BaseWindow
   #
   # @param string [String] the text to append
   # @param string_colors [Array<Hash>] color region descriptors
+  # @param indent [Boolean, nil] indent continuation lines (nil = window default)
   # @return [void]
   def add_string(string, string_colors = [], indent: nil)
     return unless @active_tab

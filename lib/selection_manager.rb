@@ -52,6 +52,31 @@ module SelectionManager
     attr_reader :active_window, :start_id, :start_x, :end_id, :end_x, :selecting,
                 :last_drag_pos, :click_count
 
+    # @!attribute [r] active_window
+    #   @return [BaseWindow, nil] the window the selection is in; nil when
+    #     there is none
+    # @!attribute [r] start_id
+    #   @return [Integer, nil] buffer line ID of the selection's start
+    #     anchor (the press); nil when there is no selection or the press
+    #     anchored to nothing
+    # @!attribute [r] start_x
+    #   @return [Integer, nil] column of the start anchor in that line
+    # @!attribute [r] end_id
+    #   @return [Integer, nil] buffer line ID of the selection's end anchor
+    #     (the pointer)
+    # @!attribute [r] end_x
+    #   @return [Integer, nil] column of the end anchor in that line
+    # @!attribute [r] selecting
+    #   @return [Boolean] whether button 1 is held on a selection (from the
+    #     press until the release)
+    # @!attribute [r] last_drag_pos
+    #   @return [Array(Integer, Integer), nil] the last drag position,
+    #     window-relative [y, x], for the edge auto-scroll; nil before the
+    #     first motion of a selection
+    # @!attribute [r] click_count
+    #   @return [Integer] 1, 2 or 3 for a single, double or triple click of
+    #     the last press (0 before the first)
+
     # Return the window-relative [y, x] press coordinates, or nil if no
     # selection. Used by the input loop's click-vs-drag heuristic, which
     # compares screen positions — not buffer anchors.
@@ -272,7 +297,8 @@ module SelectionManager
     # text or on a tab bar anchors to the nearest line (so a drag started
     # there still selects), but a double-click there is on no word.
     #
-    # @param buffer [Array<Array(String, Array<Hash>)>] the window's rows, newest first
+    # @param buffer [Array<Array>] the window's rows, newest first; only
+    #   each row's text (index 0) is read
     # @param appended [Integer] the window's monotonic append counter
     # @return [String, nil] the line text, or nil if the pressed row shows
     #   another line or none

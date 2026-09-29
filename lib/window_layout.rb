@@ -23,7 +23,7 @@ require_relative 'safe_arithmetic'
 WindowLayout = Data.define(:height, :width, :top, :left) do
   # The layout of a +<window>+ element in a layout file.
   #
-  # @param element [REXML::Element] the element, with height, width, top
+  # @param element [CachedElement] the element, with height, width, top
   #   and left attributes
   # @return [WindowLayout]
   def self.from_element(element)

@@ -31,6 +31,9 @@ class SharedState
   # @return [Boolean] whether every gagged line is written to the log in full (--log-gags)
   attr_accessor :log_gags
 
+  # The state before any server data: no prompt pending, a +>+ prompt, no
+  # room title, links and remote URLs off, no character name (so no
+  # terminal title).
   def initialize
     @mutex = Mutex.new
     @need_prompt = false

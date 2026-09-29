@@ -99,6 +99,12 @@ class MouseController
   private
 
   # Button 1 pressed: start a selection in the window under the pointer.
+  # A press outside every window clears the selection. A double or triple
+  # click selects a word or line at once, so the screen is flushed.
+  #
+  # @param screen_y [Integer] the pointer's row on the screen
+  # @param screen_x [Integer] the pointer's column on the screen
+  # @return [void]
   def handle_press(screen_y, screen_x)
     window = BaseWindow.find_window_at(screen_y, screen_x)
     unless window
@@ -114,6 +120,10 @@ class MouseController
 
   # Live highlight update from a motion report while button 1 is held.
   # SelectionManager throttles redraws so a motion flood coalesces.
+  #
+  # @param screen_y [Integer] the pointer's row on the screen
+  # @param screen_x [Integer] the pointer's column on the screen
+  # @return [void]
   def handle_drag(screen_y, screen_x)
     window = SelectionManager.active_window
     return unless window && SelectionManager.selecting
@@ -128,6 +138,10 @@ class MouseController
   # columns from it, ends a click; the link it follows is the one under
   # the press, the cell the user aimed at. A double or triple click whose
   # first click followed a link does nothing more.
+  #
+  # @param screen_y [Integer] the pointer's row on the screen
+  # @param screen_x [Integer] the pointer's column on the screen
+  # @return [void]
   def handle_release(screen_y, screen_x)
     return unless SelectionManager.selecting
 
@@ -161,6 +175,10 @@ class MouseController
   end
 
   # Copy the finished selection and show brief feedback in the main window.
+  # With nothing copied (or no main window to show the notice in) the
+  # screen is just flushed.
+  #
+  # @return [void]
   def finalize_selection
     chars = SelectionManager.end_selection
     # write_to_client flushes when it shows the notice
@@ -170,7 +188,13 @@ class MouseController
   end
 
   # Send the command of the link at a window position, if links are on
-  # and there is one there.
+  # and there is one there: echo it after the prompt in the main window,
+  # add it to the command history and send it to the game server.
+  #
+  # @param window [BaseWindow] the window under the pointer
+  # @param rel_y [Integer] row within the window
+  # @param rel_x [Integer] column within the window
+  # @return [true, nil] true if a link's command was sent, nil otherwise
   def dispatch_link(window, rel_y, rel_x)
     # Links may be toggled off while selection capture (.select) stays on;
     # lines rendered earlier can still carry cmd runs that must not fire

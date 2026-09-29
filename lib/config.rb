@@ -30,7 +30,7 @@ class Config
   # @return [Hash<String, Array>] color presets mapping id => [fg, bg]
   attr_reader :preset
 
-  # @return [Hash<String, REXML::Element>] window layouts mapping id => XML element
+  # @return [Hash<String, CachedElement>] window layouts mapping id => +<layout>+ element
   attr_reader :layout
 
   # @return [Array<BaseWindow>] ordered list of scrollable windows for Ctrl+W cycling
@@ -50,6 +50,8 @@ class Config
   # @return [Mutex] synchronization lock for HIGHLIGHT reads during settings reload
   attr_reader :lock
 
+  # Empty highlights, presets, layouts, scroll windows and perc-transforms,
+  # with the default notification stream and history size.
   def initialize
     @highlight = {}
     @preset = {}

@@ -7,6 +7,7 @@
 # is drawn once. A room render is asked for separately and drawn at the
 # next flush.
 class PendingRender
+  # Nothing asked for yet.
   def initialize
     @update = false
     @room_render = false

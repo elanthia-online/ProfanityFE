@@ -13,35 +13,35 @@ require_relative 'streams'
 
 # ---- Immutable constants ----
 
-# @return [String] default stream name for the primary game output window.
-#   Alias of {Streams::MAIN}, kept for its many existing callers.
+# Default stream name for the primary game output window.
+# Alias of {Streams::MAIN}, kept for its many existing callers.
 MAIN_STREAM = Streams::MAIN
 
-# @return [Integer] default maximum number of lines retained per text window buffer
+# Default maximum number of lines retained per text window buffer.
 DEFAULT_BUFFER_SIZE = 250
 
-# @return [String] default log file name, used when neither --log-file nor --char is given.
-#   profanity.rb hands the resolved path to {ProfanityLog.configure} after CLI parsing.
+# Default log file name, used when neither --log-file nor --char is given.
+# profanity.rb hands the resolved path to {ProfanityLog.configure} after CLI parsing.
 DEFAULT_LOG_FILE = 'profanity.log'
 
-# @return [Integer] number of backtrace frames written to the log on errors
+# Number of backtrace frames written to the log on errors.
 BACKTRACE_LIMIT = 4
 
-# @return [Integer] seconds to wait before allowing server time offset recalculation
+# Seconds to wait before allowing server time offset recalculation.
 TIME_SYNC_DELAY = 15
 
-# @return [Float] seconds subtracted from countdown timers to compensate for network latency
+# Seconds subtracted from countdown timers to compensate for network latency.
 COUNTDOWN_OFFSET = 0.2
 
-# @return [Integer] fallback terminal width when no Curses window is attached
+# Fallback terminal width when no Curses window is attached.
 DEFAULT_TERMINAL_WIDTH = 80
 
-# @return [String] hex color for all ProfanityFE feedback messages (dot-commands, status, etc.)
+# Hex color for all ProfanityFE feedback messages (dot-commands, status, etc.).
 FEEDBACK_COLOR = 'ffff00'
 
 # ---- Mutable runtime state (owned by CONFIG, aliased for compatibility) ----
 
-# @return [Config] centralized mutable configuration object
+# Centralized mutable configuration object (a {Config}).
 CONFIG = Config.new
 
 # Aliases to CONFIG internals. These are the SAME Hash/Array objects,

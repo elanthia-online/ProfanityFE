@@ -14,8 +14,6 @@ module Games
   # Each game's rules by the start of its game code. Lich's codes are DR,
   # DRT, DRF (DragonRealms) and GS4, GSX, GST, GSF (GemStone); case is
   # ignored.
-  #
-  # @return [Hash{Regexp => Games::Rules}]
   RULES_BY_CODE = {
     /\ADR/i => DragonRealms,
     /\AGS/i => GemStone,

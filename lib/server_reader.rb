@@ -93,6 +93,8 @@ class ServerReader
   #
   # @param line [String] raw line read from the server
   # @return [void]
+  # @raise [IOError, SystemCallError] a connection error, passed on to
+  #   {#run}
   # @api private
   def process_server_line(line)
     # Socket reads are BINARY. Treat them as UTF-8 (replacing invalid bytes)

@@ -16,6 +16,7 @@
 #   bus.on(:stream_text) { |data| puts data[:text] }
 #   bus.emit(:stream_text, stream: 'main', text: 'Hello', colors: [])
 class EventBus
+  # A bus with no subscribers.
   def initialize
     @subscribers = Hash.new { |h, k| h[k] = [] }
   end
@@ -23,7 +24,9 @@ class EventBus
   # Subscribe a handler to an event type.
   #
   # @param event_type [Symbol] the event to listen for
-  # @yield [Hash] called with event data when the event fires
+  # @yield [data] called with the event data each time the event fires
+  # @yieldparam data [Hash{Symbol => Object}] the keyword arguments given
+  #   to {#emit}
   # @return [self] for chaining
   def on(event_type, &handler)
     @subscribers[event_type] << handler
