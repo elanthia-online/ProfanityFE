@@ -35,6 +35,7 @@ require_relative 'lib/version'
 require_relative 'lib/cli_options'
 require_relative 'lib/profanity_settings'
 require_relative 'lib/profanity_log'
+require_relative 'lib/boot_profiler'
 
 # ~/.profanity holds the settings cache, settings.json, selection.txt and,
 # with --char, the log. Created first thing, even for --help or a bad option.
@@ -69,32 +70,15 @@ ProfanityLog.configure(path: ProfanitySettings.resolve_log(
   log_dir: cli_options[:log_dir]
 ))
 
-# True when started with --profile (or an abbreviation such as --prof):
-# boot timings are recorded and logged.
-BOOT_PROFILE = cli_options[:profile]
-
-if BOOT_PROFILE
-  # Monotonic clock reading at startup; {#boot_mark} measures from here.
-  BOOT_T0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-  # Recorded boot milestones as [label, elapsed milliseconds] pairs.
-  BOOT_TIMINGS = []
-
-  # Record a boot milestone in {BOOT_TIMINGS}. Only defined with --profile.
-  #
-  # @param label [String] name of the milestone
-  # @return [Array<Array(String, Float)>] {BOOT_TIMINGS}
-  def boot_mark(label)
-    elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
-    BOOT_TIMINGS << [label, elapsed]
-  end
-
-  boot_mark('stdlib loaded')
-end
+# Boot timings, recorded and logged only with --profile (or an
+# abbreviation such as --prof); passed to Application.
+boot_profiler = BootProfiler.new(enabled: cli_options[:profile])
+boot_profiler.mark('stdlib loaded')
 
 # Initialize curses
 require_relative 'lib/curses_setup'
 CursesSetup.start
-boot_mark('curses init') if BOOT_PROFILE
+boot_profiler.mark('curses init')
 
 # Load global constants (HIGHLIGHT, PRESET, LAYOUT, etc.)
 require_relative 'lib/constants'
@@ -140,7 +124,7 @@ require_relative 'lib/application'
 
 # Initialize gag patterns with defaults (can be extended via XML config)
 GagPatterns.load_defaults
-boot_mark('requires + gag defaults') if BOOT_PROFILE
+boot_profiler.mark('requires + gag defaults')
 
 # Ensure terminal is restored on any exit path (graceful shutdown)
 at_exit do
@@ -169,9 +153,10 @@ ColorManager.configure(
 )
 
 # ========== RUN ==========
-boot_mark('constants + color config') if BOOT_PROFILE
+boot_profiler.mark('constants + color config')
 
 Application.new(cli_options,
                 settings_file: settings_filename,
                 host: cli_options[:host],
-                port: cli_options[:port]).run
+                port: cli_options[:port],
+                boot_profiler: boot_profiler).run

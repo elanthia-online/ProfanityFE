@@ -3,9 +3,7 @@
 require_relative 'dot_command'
 require_relative 'streams'
 require_relative 'feedback'
-
-# Default BOOT_PROFILE to false when loaded outside profanity.rb (e.g. specs)
-BOOT_PROFILE = false unless defined?(BOOT_PROFILE)
+require_relative 'boot_profiler'
 
 # Core application class for ProfanityFE.
 #
@@ -108,11 +106,14 @@ class Application
   #   startup and by +.reload+
   # @param host [String] game server (Lich) host
   # @param port [Integer] game server (Lich) port
-  def initialize(cli_options, settings_file:, host:, port:)
+  # @param boot_profiler [BootProfiler] records startup timings (--profile);
+  #   also passed to the {GameTextProcessor}
+  def initialize(cli_options, settings_file:, host:, port:, boot_profiler: BootProfiler.new(enabled: false))
     @cli_options = cli_options
     @settings_file = settings_file
     @host = host
     @port = port
+    @boot_profiler = boot_profiler
     @server = nil
     # Receives the server thread's outcome (see #start_server_thread)
     @session_end = Queue.new
@@ -144,7 +145,7 @@ class Application
 
     @mouse_scroll = MouseScroll.new(@key_action, method(:write_to_client))
     @mouse_scroll.enable_click_events if cli_options[:links]
-    boot_mark('Application.new') if BOOT_PROFILE
+    @boot_profiler.mark('Application.new')
   end
 
   # Load settings, connect to the game server, and run the input loop.
@@ -154,12 +155,12 @@ class Application
   # @return [void] never returns normally; calls +exit+ on disconnect
   def run
     load_settings_and_layout
-    boot_mark('settings + layout') if BOOT_PROFILE
+    @boot_profiler.mark('settings + layout')
     connect_server
-    boot_mark('connect_server') if BOOT_PROFILE
+    @boot_profiler.mark('connect_server')
     start_server_thread
-    boot_mark('server thread started') if BOOT_PROFILE
-    flush_boot_profile if BOOT_PROFILE
+    @boot_profiler.mark('server thread started')
+    @boot_profiler.log_timings
     input_loop
   end
 
@@ -237,16 +238,6 @@ class Application
   private
 
   # ---- Feedback helpers ----
-
-  def flush_boot_profile
-    prev = 0.0
-    lines = BOOT_TIMINGS.map do |label, ms|
-      delta = (ms - prev).round(1)
-      prev = ms
-      format('  %7.1fms (+%6.1fms)  %s', ms, delta, label)
-    end
-    ProfanityLog.write('boot-profile', "Startup timing:\n#{lines.join("\n")}")
-  end
 
   # Show feedback lines in the main window (see {Feedback.write}). With
   # no main window nothing is drawn, the command line is not redrawn and
@@ -728,7 +719,8 @@ class Application
       shared_state: @shared_state,
       cmd_buffer: @cmd_buffer,
       xml_escapes: @xml_escapes,
-      event_bus: @event_bus
+      event_bus: @event_bus,
+      boot_profiler: @boot_profiler
     )
     # The server thread only reports how the connection ended; the input
     # loop picks that up and ends the session on the main thread.

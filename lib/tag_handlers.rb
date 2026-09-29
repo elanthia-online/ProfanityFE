@@ -20,6 +20,7 @@ require_relative 'presets'
 # - @current_stream, @combat_next_line, @need_update, @need_room_render
 # - @stream_stack (an empty Array: the open pushStreams, innermost last)
 # - @room_capture_mode
+# - @boot_profiler (a BootProfiler)
 # - handle_game_text, new_stun, parse_room_subtitle, add_prompt
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
@@ -173,10 +174,7 @@ module TagHandlers
         @server.puts 'look'
         @server.flush
       end
-      if BOOT_PROFILE
-        elapsed = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - BOOT_T0) * 1000).round(1)
-        ProfanityLog.write('boot-profile', "first prompt (sent look): #{elapsed}ms")
-      end
+      @boot_profiler.log_elapsed('first prompt (sent look)')
     end
 
     new_prompt_text = "#{m[:text]}>"
