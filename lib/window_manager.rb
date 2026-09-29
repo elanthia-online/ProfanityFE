@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require_relative 'streams'
-require_relative 'feedback'
 require_relative 'window_layout'
-require_relative 'platform'
+require_relative 'layout_loader'
+require_relative 'event_bridge'
 require_relative 'clock'
 
 # Manages Curses window creation, layout loading, and handler hash access
@@ -15,7 +14,8 @@ require_relative 'clock'
 # room) that map string keys to their corresponding window objects, plus
 # the command input window. Provides mutex-protected layout reloading so
 # the server read thread can safely read handler hashes while a layout
-# reload replaces them.
+# reload replaces them. {LayoutLoader} builds the windows of a layout,
+# and {EventBridge} shows the parser's events in them.
 #
 # @example
 #   wm = WindowManager.new
@@ -23,34 +23,6 @@ require_relative 'clock'
 #   wm.stream['main'].add_string("Hello")
 class WindowManager
   attr_reader :command_window, :command_window_layout
-
-  # Previous-layout hashes exposed for builder procs during {#load_layout}.
-  # These are only meaningful inside a layout reload; outside that context
-  # they are empty hashes.
-  #
-  # @return [Hash] previous indicator windows keyed by value
-  # @api private
-  attr_reader :previous_indicator
-
-  # @return [Hash] previous stream windows keyed by stream name
-  # @api private
-  attr_reader :previous_stream
-
-  # @return [Hash] previous progress windows keyed by value
-  # @api private
-  attr_reader :previous_progress
-
-  # @return [Hash] previous countdown windows keyed by value
-  # @api private
-  attr_reader :previous_countdown
-
-  # Windows from the previous layout that have not been reused.
-  # Builder procs delete reused windows from this set; remaining
-  # windows are closed after the layout loop.
-  #
-  # @return [Array<BaseWindow>]
-  # @api private
-  attr_reader :old_windows
 
   # The clock read by the windows this manager builds and by stun
   # countdowns.
@@ -71,12 +43,8 @@ class WindowManager
     @room = {}
     @command_window = nil
     @command_window_layout = nil
-    @previous_indicator = {}
-    @previous_stream = {}
-    @previous_progress = {}
-    @previous_countdown = {}
-    @old_windows = []
     @prompt_text = nil
+    @layout_loader = LayoutLoader.new(self)
   end
 
   # Returns the live stream handler hash mapping stream names to window objects.
@@ -127,171 +95,15 @@ class WindowManager
 
   # Subscribe to events from the parser's EventBus.
   #
-  # Bridges typed events to the appropriate window objects: routes text
-  # to stream windows, updates indicator/progress/countdown displays,
-  # dispatches room data to the RoomWindow, and handles prompt resize.
+  # Bridges typed events to the appropriate window objects through an
+  # {EventBridge}: routes text to stream windows, updates
+  # indicator/progress/countdown displays, dispatches room data to the
+  # RoomWindow, and handles prompt resize.
   #
   # @param event_bus [EventBus] the event bus to subscribe to
   # @return [void]
   def subscribe_to_events(event_bus)
-    # ---- Text display events ----
-
-    event_bus.on(:stream_text) do |data|
-      window = @stream[data[:stream]]
-      next unless window
-
-      window.route_string(data[:text], data[:colors], data[:stream], indent: data[:indent])
-    end
-
-    event_bus.on(:add_prompt) do |data|
-      window = @stream[data[:stream] || MAIN_STREAM]
-      next unless window
-      args = [window, data[:text]]
-      args << data[:command] if data[:command]
-      add_prompt(*args)
-    end
-
-    # ---- Indicator events ----
-
-    event_bus.on(:indicator_update) do |data|
-      window = @indicator[data[:id]]
-      next unless window
-
-      # One redraw after all attributes are set (label= would redraw with
-      # stale label_colors).
-      window.apply_changes(data.slice(:label, :label_colors, :value))
-    end
-
-    event_bus.on(:compass_update) do |data|
-      dirs = data[:dirs]
-      %w[up down out n ne e se s sw w nw].each do |dir|
-        window = @indicator["compass:#{dir}"]
-        window&.update(dirs.include?(dir))
-      end
-    end
-
-    # ---- Progress bar events ----
-
-    event_bus.on(:progress_update) do |data|
-      window = @progress[data[:id]]
-      next unless window
-
-      window.label = data[:label] if data.key?(:label)
-      window.fg = data[:fg] if data.key?(:fg)
-      window.bg = data[:bg] if data.key?(:bg)
-      window.update(data[:value], data[:max])
-    end
-
-    # ---- Countdown events ----
-
-    event_bus.on(:countdown_update) do |data|
-      window = @countdown[data[:id]]
-      next unless window
-
-      window.end_time = data[:end_time] if data.key?(:end_time)
-      window.secondary_end_time = data[:secondary_end_time] if data.key?(:secondary_end_time)
-      window.tick
-    end
-
-    event_bus.on(:countdown_active) do |data|
-      window = @countdown[data[:id]]
-      next unless window
-
-      window.active = data[:active]
-      window.tick
-    end
-
-    event_bus.on(:stun) do |data|
-      window = @countdown['stunned']
-      next unless window
-
-      window.end_time = @clock.now.to_f - @clock.server_time_offset.to_f + data[:seconds].to_f
-      window.tick
-    end
-
-    # ---- Prompt resize ----
-
-    event_bus.on(:prompt_changed) do |data|
-      @prompt_text = data[:text]
-      fit_prompt
-    end
-
-    # ---- Room events ----
-
-    event_bus.on(:room_title) do |data|
-      @room[Streams::ROOM]&.update_title(data[:text])
-    end
-
-    event_bus.on(:room_desc) do |data|
-      @room[Streams::ROOM]&.update_desc(data[:text], links: data[:links] || [])
-    end
-
-    event_bus.on(:room_objects) do |data|
-      @room[Streams::ROOM]&.update_objects(data[:text], links: data[:links] || [], creatures: data[:creatures] || [])
-    end
-
-    event_bus.on(:room_players) do |data|
-      @room[Streams::ROOM]&.update_players(data[:text], links: data[:links] || [])
-    end
-
-    event_bus.on(:room_exits) do |data|
-      @room[Streams::ROOM]&.update_exits(data[:text], links: data[:links] || [])
-    end
-
-    event_bus.on(:room_lich_exits) do |data|
-      @room[Streams::ROOM]&.update_lich_exits(data[:text])
-    end
-
-    event_bus.on(:room_number) do |data|
-      @room[Streams::ROOM]&.update_room_number(data[:text])
-    end
-
-    event_bus.on(:room_stringprocs) do |data|
-      @room[Streams::ROOM]&.update_stringprocs(data[:text])
-    end
-
-    event_bus.on(:room_supplemental_clear) do |_data|
-      @room[Streams::ROOM]&.clear_supplemental
-    end
-
-    event_bus.on(:room_render) do |_data|
-      @room[Streams::ROOM]&.render
-    end
-
-    # ---- Stream management events ----
-
-    event_bus.on(:exp_set_current) do |data|
-      @stream[Streams::EXP]&.set_current(data[:skill])
-    end
-
-    event_bus.on(:exp_delete_skill) do |_data|
-      @stream[Streams::EXP]&.delete_skill
-    end
-
-    event_bus.on(:clear_spells) do |_data|
-      @stream[Streams::PERC]&.clear_spells
-    end
-
-    # ---- Special events ----
-
-    event_bus.on(:launch_url) do |data|
-      window = @stream[MAIN_STREAM]
-      next unless window
-
-      if data[:remote]
-        # --remote-url: display URL on screen for copy/paste (SSH/remote sessions)
-        window.add_string(' *'.dup)
-        window.add_string(" * LaunchURL: #{data[:url]}")
-        window.add_string(' *'.dup)
-      else
-        # Default: open URL in system browser
-        open_in_browser(data[:url])
-      end
-    end
-
-    event_bus.on(:disconnect) do |_data|
-      Feedback.write(@stream[MAIN_STREAM], '* Connection closed', '* Press any key to exit...', banner: true)
-    end
+    EventBridge.new(self).subscribe(event_bus)
   end
 
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
@@ -310,56 +122,58 @@ class WindowManager
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
   def load_layout(layout_id)
-    xml = LAYOUT[layout_id]
-    unless xml
-      warn "Warning: layout '#{layout_id}' not found in LAYOUT (available: #{LAYOUT.keys.join(', ')})"
-      return
-    end
+    @layout_loader.load(layout_id)
+  end
 
-    @old_windows = BaseWindow.all_windows
-
-    @previous_indicator = @indicator
-    @indicator = {}
-
-    @previous_stream = @stream
+  # Point each handler hash (stream, indicator, progress, countdown, room)
+  # at a new, empty hash. The old hashes are left as they were, so the
+  # layout loader can still read the previous layout's windows from them.
+  #
+  # @return [void]
+  # @api private
+  def reset_registries
     @stream = {}
-
-    @previous_progress = @progress
+    @indicator = {}
     @progress = {}
-
-    @previous_countdown = @countdown
     @countdown = {}
     @room = {}
-
-    xml.elements.each do |e|
-      next unless e.name == 'window'
-
-      if e.attributes['class'] == 'sink'
-        sink = SinkWindow.new
-        e.attributes['value']&.split(',')&.each do |str|
-          @stream[str.strip] = sink
-        end
-        next
-      end
-
-      layout = WindowLayout.from_element(e)
-      size = layout.geometry
-
-      next unless (size.height > 0) && (size.width > 0) && (size.top >= 0) && (size.left >= 0) &&
-                  (size.top < Curses.lines) && (size.left < Curses.cols)
-
-      builder = BaseWindow.type_registry[e.attributes['class']]
-      window = builder&.call(size.height, size.width, size.top, size.left, e, self)
-      window.layout = layout if window.is_a?(BaseWindow)
-    end
-
-    @old_windows.each { |window| close_window(window) }
-    forget_previous_layout
-
-    SCROLL_WINDOW[0]&.set_active(true)
-
-    CursesRenderer.doupdate
   end
+
+  # The previous layout's indicator windows keyed by value, for builder
+  # procs during {#load_layout}; empty outside a layout reload.
+  #
+  # @return [Hash]
+  # @api private
+  def previous_indicator = @layout_loader.previous_indicator
+
+  # The previous layout's stream windows keyed by stream name, for builder
+  # procs during {#load_layout}; empty outside a layout reload.
+  #
+  # @return [Hash]
+  # @api private
+  def previous_stream = @layout_loader.previous_stream
+
+  # The previous layout's progress windows keyed by value, for builder
+  # procs during {#load_layout}; empty outside a layout reload.
+  #
+  # @return [Hash]
+  # @api private
+  def previous_progress = @layout_loader.previous_progress
+
+  # The previous layout's countdown windows keyed by value, for builder
+  # procs during {#load_layout}; empty outside a layout reload.
+  #
+  # @return [Hash]
+  # @api private
+  def previous_countdown = @layout_loader.previous_countdown
+
+  # Windows from the previous layout that have not been reused. Builder
+  # procs delete reused windows from this list; the layout loader closes
+  # the rest after the layout loop.
+  #
+  # @return [Array<BaseWindow>]
+  # @api private
+  def old_windows = @layout_loader.old_windows
 
   # Take the command window a layout asks for. The first layout creates
   # it with the block; later layouts keep that window, which the command
@@ -426,6 +240,17 @@ class WindowManager
     end # CursesRenderer.synchronize
   end
 
+  # Remember the prompt the game sent last and fit the prompt indicator
+  # and command window to it (see +fit_prompt+). Called on every
+  # +:prompt_changed+ event.
+  #
+  # @param prompt_text [String] the prompt text (e.g. "H>")
+  # @return [void]
+  def fit_prompt_to(prompt_text)
+    @prompt_text = prompt_text
+    fit_prompt
+  end
+
   private
 
   # Size the prompt indicator to the last prompt the game sent and shift
@@ -452,51 +277,6 @@ class WindowManager
     end
     prompt_window.label = @prompt_text
     true
-  end
-
-  # Close a window the new layout did not reuse, and remove it from every
-  # list that could still hit-test, repaint, or scroll it.
-  #
-  # @param window [BaseWindow] a window from the previous layout
-  # @return [void]
-  def close_window(window)
-    window.class.unregister_instance(window)
-    SCROLL_WINDOW.delete(window)
-    window.scrollbar&.close if window.respond_to?(:scrollbar)
-    window.close
-  end
-
-  # Drop the previous-layout references the builders used during
-  # {#load_layout}, so closed windows are not kept reachable.
-  #
-  # @return [void]
-  def forget_previous_layout
-    @old_windows = []
-    @previous_indicator = {}
-    @previous_stream = {}
-    @previous_progress = {}
-    @previous_countdown = {}
-  end
-
-  # Open a URL in the system browser without blocking the caller.
-  #
-  # The command is spawned as an argument list, so the URL is never parsed
-  # by a shell: characters such as +$(...)+ or backticks in a server-supplied
-  # URL stay literal.
-  #
-  # @param url [String] the URL to open
-  # @return [void]
-  def open_in_browser(url)
-    command = case Platform.os
-              when :macos then ['open', url]
-              when :unix then ['xdg-open', url]
-              when :windows then ['rundll32', 'url.dll,FileProtocolHandler', url]
-              end
-    return unless command
-
-    Process.detach(Process.spawn(*command, out: File::NULL, err: File::NULL))
-  rescue SystemCallError => e
-    ProfanityLog.write('launch_url', "could not open #{url}: #{e.message}")
   end
 end
 

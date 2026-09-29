@@ -2,7 +2,7 @@
 
 # Tests Platform.os, the one place that reads host_os, and the commands its
 # two users pick from it: the browser command for LaunchURL
-# (WindowManager#open_in_browser, spawned as an argument list) and the
+# (UrlLauncher.open, spawned as an argument list) and the
 # clipboard command (SelectionManager.copy_to_clipboard).
 
 require 'stringio'

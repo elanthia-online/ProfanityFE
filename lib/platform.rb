@@ -4,7 +4,7 @@ require 'rbconfig'
 
 # The operating system ProfanityFE runs on, read from Ruby's +host_os+.
 # Used to pick the browser command for LaunchURL
-# ({WindowManager#open_in_browser}) and the clipboard command
+# ({UrlLauncher.command}) and the clipboard command
 # ({SelectionManager#copy_to_clipboard}).
 #
 # @example
