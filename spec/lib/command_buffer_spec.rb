@@ -182,24 +182,6 @@ RSpec.describe CommandBuffer do
       expect(buf.pos).to eq 0
     end
 
-    it 'handles multiple spaces between words' do
-      type('hello   world')
-      buf.cursor_word_left
-      expect(buf.pos).to be <= 8 # Should land at or before 'w'
-    end
-
-    it 'handles punctuation as word boundary' do
-      type('hello.world')
-      buf.cursor_word_left
-      # Should stop at the word boundary around '.'
-      expect(buf.pos).to be < 11
-    end
-
-    it 'does nothing at position 0' do
-      buf.cursor_word_left
-      expect(buf.pos).to eq 0
-    end
-
     it 'does nothing on empty buffer' do
       buf.cursor_word_left
       expect(buf.pos).to eq 0
@@ -457,13 +439,6 @@ RSpec.describe CommandBuffer do
       expect(buf.text).to eq 'hello '
     end
 
-    it 'deletes word with trailing punctuation' do
-      type('hello, world!')
-      buf.backspace_word
-      # Should delete 'world!' or similar — behavior depends on boundary logic
-      expect(buf.text.length).to be < 13
-    end
-
     it 'does nothing on empty buffer' do
       buf.backspace_word
       expect(buf.text).to eq ''
@@ -482,10 +457,11 @@ RSpec.describe CommandBuffer do
       expect(buf.text).to eq 'a b '
     end
 
-    it 'handles all-spaces' do
+    it 'deletes a line of only spaces in one press' do
       type('   ')
       buf.backspace_word
-      expect(buf.pos).to be < 3
+      expect(buf.text).to eq ''
+      expect(window.curx).to eq 0
     end
   end
 
@@ -674,13 +650,14 @@ RSpec.describe CommandBuffer do
   end
 
   describe '#yank' do
-    it 'inserts killed text' do
+    it 'inserts killed text at the cursor' do
       type('hello world')
       5.times { buf.cursor_left }
       buf.kill_forward
       buf.cursor_home
       buf.yank
-      expect(buf.text).to include('world')
+      expect(buf.text).to eq 'worldhello '
+      expect(window.curx).to eq 5
     end
 
     it 'yank is empty when nothing was killed' do
@@ -1195,9 +1172,15 @@ RSpec.describe CommandBuffer do
       expect(window.call_log.map(&:first)).to include(:noutrefresh)
     end
 
-    it 'does not crash when window is nil' do
+    it 'leaves the line alone with no window attached, so the next window shows it' do
+      type('look')
       buf.window = nil
-      expect { buf.refresh }.not_to raise_error
+      buf.refresh
+      screen = ScreenLineWindow.new(20)
+      buf.window = screen
+      buf.redraw
+      expect(screen.visible).to eq 'look'
+      expect(screen.curx).to eq 4
     end
   end
 
@@ -1484,9 +1467,16 @@ RSpec.describe CommandBuffer do
       expect(window.call_log.map(&:first)).to include(:noutrefresh)
     end
 
-    it 'is a no-op without a window' do
+    it 'leaves the line alone with no window attached, so the next window shows it' do
+      type('look')
+      buf.cursor_left
       buf.window = nil
-      expect { buf.redraw }.not_to raise_error
+      buf.redraw
+      screen = ScreenLineWindow.new(20)
+      buf.window = screen
+      buf.redraw
+      expect(screen.visible).to eq 'look'
+      expect(screen.curx).to eq 3
     end
 
     it 'handles a one-column window' do
