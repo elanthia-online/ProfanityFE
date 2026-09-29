@@ -5,7 +5,8 @@
 # become windows and where, which windows a second layout reuses, that
 # every window it drops is closed, and what an unknown layout does.
 # Switching with the .layout command is driven through the real
-# Application at the end.
+# Application at the end, as is starting the client with (and switching
+# to) a layout that has a text window with no value.
 
 require 'rexml/document'
 require 'socket'
@@ -21,6 +22,7 @@ require_relative '../../lib/autocomplete'
 require_relative '../../lib/selection_manager'
 require_relative '../../lib/game_text_processor'
 require_relative '../../lib/key_codes'
+require_relative '../../lib/settings_loader'
 require_relative '../../lib/application'
 
 RSpec.describe LayoutLoader do
@@ -360,6 +362,95 @@ RSpec.describe LayoutLoader do
       app.execute_command('.layout roundtime')
 
       expect(app.window_mgr.countdown['roundtime'].rows).to eq ["Roundtime#{'0'.rjust(21)}"]
+    end
+  end
+
+  # BUG FOUND (fixed here): the text builder read the value attribute
+  # without checking it was there, so a text window with no value raised
+  # NoMethodError halfway through the layout. At startup the client exited
+  # with a Ruby backtrace; after .layout no stream had a window, so all game
+  # text was lost. It now gets a window that shows no stream, like a
+  # progress, countdown or indicator window with no value.
+  describe 'a text window with no value' do
+    let(:app) do
+      Application.new({ char: nil, no_status: true, links: false, room_window_only: false },
+                      settings_file: File.join(@dir, 'settings.xml'), host: '127.0.0.1', port: 8000)
+    end
+
+    # The empty window comes first, so every window after it depends on
+    # the builder getting past it.
+    let(:layout_with_empty_text) do
+      <<~XML
+        <window class='text' top='0' left='0' height='5' width='40'/>
+        <window class='text' top='5' left='0' height='10' width='60' value='main'/>
+        <window class='progress' top='20' left='0' height='1' width='30' value='health' label='HP'/>
+        <window class='command' top='23' left='0' height='1' width='80'/>
+      XML
+    end
+
+    around do |example|
+      Dir.mktmpdir { |dir| @dir = dir; example.run }
+    end
+
+    before do
+      allow(ProfanitySettings).to receive(:load_mouse_settings).and_return(nil)
+      stub_const('Curses::ALL_MOUSE_EVENTS', Curses::REPORT_MOUSE_POSITION - 1)
+      allow(IO).to receive(:select).and_return(nil)
+    end
+
+    # Feed raw server lines through the real server loop into the app's
+    # windows, as the server thread does.
+    def receive_from_server(*lines)
+      event_bus = EventBus.new
+      app.window_mgr.subscribe_to_events(event_bus)
+      processor = GameTextProcessor.new(
+        window_mgr: app.window_mgr, shared_state: SharedState.new.tap { |s| s.skip_server_time_offset = true },
+        cmd_buffer: app.cmd_buffer, event_bus: event_bus,
+        xml_escapes: { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' }
+      )
+      queue = lines.map { |line| "#{line}\r\n" }
+      server = Object.new
+      server.define_singleton_method(:gets) { queue.shift&.dup }
+      processor.run(server)
+    end
+
+    it 'is built, shows no stream, and the rest of the layout loads' do
+      load(layout_with_empty_text)
+
+      empty = TextWindow.list.find { |window| window.begy.zero? }
+      expect(geometry(empty)).to eq [0, 0, 5, 39]
+      expect(wm.stream.keys).to eq ['main']
+      expect(wm.stream.values).not_to include(empty)
+      expect(geometry(wm.progress['health'])).to eq [20, 0, 1, 30]
+      expect(wm.command_window_layout).to eq WindowLayout.new(height: '1', width: '80', top: '23', left: '0')
+    end
+
+    it 'starts the client with it, and game text reaches main' do
+      File.write(File.join(@dir, 'settings.xml'),
+                 "<settings><layout id='default'>#{layout_with_empty_text}</layout></settings>")
+
+      app.send(:load_settings_and_layout)
+      receive_from_server('A goblin arrives.')
+
+      expect(app.cmd_buffer.window).to be app.window_mgr.command_window
+      expect(app.window_mgr.stream['main'].rows.reject(&:empty?)).to eq ['A goblin arrives.']
+    end
+
+    it 'switches to it with .layout, and game text still reaches main' do
+      File.write(File.join(@dir, 'settings.xml'), '<settings/>')
+      define(first_layout, 'first')
+      define(layout_with_empty_text, 'empty-text')
+      app.window_mgr.load_layout('first')
+      app.cmd_buffer.window = app.window_mgr.command_window
+      main = app.window_mgr.stream['main']
+      tabbed = app.window_mgr.stream['thoughts']
+
+      app.execute_command('.layout empty-text')
+      receive_from_server('A goblin arrives.')
+
+      expect(app.window_mgr.stream['main']).to be main
+      expect(closed?(tabbed)).to be true
+      expect(main.rows.reject(&:empty?)).to eq ['A goblin arrives.']
     end
   end
 end
