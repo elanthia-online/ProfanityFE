@@ -39,13 +39,26 @@ jobs:
       - name: YARD warnings
         run: bundle exec yard doc --private --fail-on-warning --no-save --no-stats --output-dir "$RUNNER_TEMP/yard"
 
-      # Every public module, class, constant, method and attribute must have
-      # a docstring. Private methods are not checked (yet).
-      - name: Undocumented public objects
+      # Every module, class, constant, method and attribute, private
+      # methods included, must have a docstring.
+      - name: Undocumented objects
         shell: bash
         run: |
-          bundle exec yard stats --list-undoc --no-save | tee "$RUNNER_TEMP/yard-stats.txt"
+          bundle exec yard stats --private --list-undoc --no-save | tee "$RUNNER_TEMP/yard-stats.txt"
           if grep -q '^Undocumented Objects:' "$RUNNER_TEMP/yard-stats.txt"; then
             echo "::error::Add a YARD docstring to each undocumented object listed above."
             exit 1
           fi
+
+      # The checker's self-test: it must still report each kind of gap in
+      # its fixture (missing or stale @param, missing @return, yield without
+      # @yield, raise without @raise, ...) and nothing else.
+      - name: YARD tag checker self-test
+        run: bundle exec ruby script/check_yard_tags.rb --self-test
+
+      # Every method's tags must match its code: a @param for each
+      # parameter and none for a parameter it doesn't have, a @return, a
+      # @yield if it yields, a @raise if it raises, typed tags, and no
+      # method tags on constants. Each gap is listed as file:line.
+      - name: YARD tags match the code
+        run: bundle exec ruby script/check_yard_tags.rb
