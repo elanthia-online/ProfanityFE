@@ -25,8 +25,8 @@ require_relative 'stream_router'
 #
 # - {ServerReader} reads the socket, guards each line and flushes the
 #   screen when no more data is waiting; this class is its line handler.
-# - {LineFilter} drops gagged lines (keeping their stream tags) and runs
-#   of blank lines.
+# - {LineFilter} drops gagged lines (keeping their stream and style tags)
+#   and runs of blank lines.
 # - The markup parse stays here: bold carry-over across lines, the
 #   tokenize-and-dispatch tag parser ({TagHandlers}: colors, bold, presets,
 #   links, indicators, progress bars, countdowns), and the game-text checks
@@ -151,6 +151,15 @@ class GameTextProcessor
   end
 
   private
+
+  # Whether a gag dropped the text of the line being parsed (see
+  # {LineFilter#gagged?}); its tags are still parsed.
+  #
+  # @return [Boolean]
+  # @api private
+  def line_gagged?
+    @line_filter.gagged?
+  end
 
   # Carry bold across line ends. The game can open bold on one line and
   # close it on a later one, but the tag parser drops any bold region still
