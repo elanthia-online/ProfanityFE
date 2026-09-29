@@ -108,13 +108,20 @@ RSpec.describe 'Window contracts' do
 
   after { SelectionManager.clear_selection }
 
+  # Every cell of +window+ as the user sees it: its character and
+  # attributes, row by row.
+  def cells(window)
+    (0...window.maxy).map do |y|
+      (0...window.maxx).map { |x| [window.row(y)[x] || ' ', window.attrs_at(y, x)] }
+    end
+  end
+
   # Everything every window shows: characters and attributes of each cell,
   # and the scrollbars.
   def screens
     windows.to_h do |window|
-      cells = window.instance_variable_get(:@cells).map(&:dup)
-      bar = window.respond_to?(:scrollbar) && window.scrollbar ? window.scrollbar.instance_variable_get(:@cells).map(&:dup) : nil
-      [window.class.name + window.begy.to_s, [cells, bar]]
+      bar = window.respond_to?(:scrollbar) && window.scrollbar ? cells(window.scrollbar) : nil
+      [window.class.name + window.begy.to_s, [cells(window), bar]]
     end
   end
 
@@ -434,11 +441,11 @@ RSpec.describe 'Window contracts' do
       expect((0...20).count { |x| color_at(countdown, 0, x) == [nil, 'ff0000'] }).to eq 5
 
       now[0] += 2
-      expect(app.send(:tick_countdowns)).to be true
+      expect(countdown.tick).to be true
       expect(countdown.rows).to eq ["RT#{'3'.rjust(18)}"]
       expect((0...20).count { |x| color_at(countdown, 0, x) == [nil, 'ff0000'] }).to eq 3
 
-      expect(app.send(:tick_countdowns)).to be false
+      expect(countdown.tick).to be false
     end
 
     it 'shows a question mark while active with no time left, and draws the secondary time' do
@@ -543,12 +550,12 @@ RSpec.describe 'Window contracts' do
 
     it 'draws every window with contents again from what it holds' do
       [main, tabbed, indicator, compass, progress, countdown, exp, perc, room].each do |window|
-        shown = window.instance_variable_get(:@cells).map(&:dup)
+        shown = cells(window)
         window.erase
 
         window.repaint
 
-        expect(window.instance_variable_get(:@cells)).to eq(shown), "#{window.class} was not repainted"
+        expect(cells(window)).to eq(shown), "#{window.class} was not repainted"
       end
     end
   end
