@@ -300,7 +300,7 @@ RSpec.describe TagHandlers do
       expect(events).to eq [{ type: :prompt_changed, text: 'H>' }]
     end
 
-    it 'shows nothing and leaves the prompt pending on a repeated prompt' do
+    it 'shows nothing on a repeated prompt, and shows it in main at the next blank line' do
       state.prompt_text = 'H>'
       events = collect_events(:add_prompt, :prompt_changed)
 
@@ -308,7 +308,10 @@ RSpec.describe TagHandlers do
 
       expect(screen).to be_empty
       expect(events).to be_empty
-      expect(state.consume_prompt!).to be true
+
+      receive_from_server('')
+
+      expect(screen).to eq('main' => ['H>'])
     end
 
     it 'puts a new prompt in the terminal title' do
@@ -318,7 +321,9 @@ RSpec.describe TagHandlers do
 
       receive_from_server(prompt)
 
-      expect(Process).to have_received(:setproctitle).with('Mahtra [H]')
+      # OSC 0 sets the terminal title (a screen or tmux TERM appends the
+      # window name after it).
+      expect($stdout).to have_received(:write).with(a_string_starting_with("\e]0;Mahtra [H]\a"))
     end
   end
 
@@ -879,8 +884,8 @@ RSpec.describe TagHandlers do
   # Which spellings of each tag a handler accepts: quote style, attribute
   # order, spacing, attribute names that merely contain the one read, extra
   # attributes. Each row is what a new client does with a line holding that
-  # exact tag.
-  describe 'attribute acceptance' do
+  # exact tag. A failure lists every row that fails, not only the first.
+  describe 'attribute acceptance', :aggregate_failures do
     # @param tags [Hash{String => Object}] tag => expected result
     # @yieldparam fresh [Hash] a new client for each tag (see #build_client)
     # @yieldparam tag [String] the tag
