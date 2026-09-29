@@ -92,10 +92,16 @@ RSpec.describe WindowManager, '#add_prompt' do
     end
   end
 
-  it 'shows nothing for a stream sent to a sink' do
-    load("<window class='sink' value='main'/>")
+  it 'shows a prompt for a stream sent to a sink nowhere' do
+    load(<<~XML)
+      <window class='sink' value='main'/>
+      <window class='text' top='0' left='0' height='4' width='21' value='death'/>
+    XML
 
-    expect { wm.add_prompt(wm.stream['main'], 'H>') }.not_to raise_error
+    wm.add_prompt(wm.stream['main'], 'H>')
+
+    expect(wm.stream['main']).to be_a SinkWindow
+    expect(wm.stream['death'].rows).to eq ['', '', '', '']
   end
 
   it 'shows nothing in a window without a line buffer' do
