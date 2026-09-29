@@ -109,12 +109,13 @@ RSpec.describe 'Calibrating the scroll wheel with .scrollcfg' do
 
   it 'learns a wheel-down that ncurses reports as pointer motion' do
     stub_const('MouseScroll::WHEEL_DOWN_IS_MOTION', true)
-    wheel_up = 0x80000
+    # BUTTON4_PRESSED in that version 1 mouse ABI: 2 << (3 * 6)
+    six_bit_wheel_up = 0x80000
 
     run_client(keyboard(*start_calibration, *mouse(Curses::REPORT_MOUSE_POSITION, times: 20),
-                        *mouse(wheel_up, times: 20), *mouse(Curses::REPORT_MOUSE_POSITION, times: 20)))
+                        *mouse(six_bit_wheel_up, times: 20), *mouse(Curses::REPORT_MOUSE_POSITION, times: 20)))
 
-    expect(saved_wheel_buttons).to eq [[wheel_up, Curses::REPORT_MOUSE_POSITION]]
+    expect(saved_wheel_buttons).to eq [[six_bit_wheel_up, Curses::REPORT_MOUSE_POSITION]]
   end
 
   it 'learns the wheel past middle and right clicks, so they do not scroll' do

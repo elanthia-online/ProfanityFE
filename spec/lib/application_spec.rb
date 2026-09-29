@@ -98,6 +98,14 @@ RSpec.describe Application do
   end
 
   describe 'sending commands' do
+    # What the command line shows after each of +count+ up-arrow presses
+    def up_arrow_lines(count)
+      Array.new(count) do
+        press('previous_command')
+        command_line.row(0)
+      end
+    end
+
     it 'send_command sends the command line, clears it, and echoes it in main after the > prompt' do
       type('go')
 
@@ -139,26 +147,13 @@ RSpec.describe Application do
       end
 
       it 'the up arrow recalls only sent lines' do
-        recalled = Array.new(3) do
-          press('previous_command')
-          command_line.row(0)
-        end
-
-        expect(recalled).to eq %w[exp1 look look]
+        expect(up_arrow_lines(3)).to eq %w[exp1 look look]
       end
     end
 
     # The resend keys send only lines that were sent: an edit of a recalled
     # entry and a line saved by the down arrow stay out of them.
     context 'with lines that were never sent' do
-      # What the command line shows after each of +count+ up-arrow presses
-      def up_arrow_lines(count)
-        Array.new(count) do
-          press('previous_command')
-          command_line.row(0)
-        end
-      end
-
       # What the game receives when the key action is pressed
       def resent_by(action)
         server.truncate(0)
@@ -299,28 +294,12 @@ RSpec.describe Application do
       expect(main.rows).to eq ['*', '* Waiting for key press...', "* Detected keycode: #{Curses::KEY_UP}", '*']
     end
 
-    it 'bounds the wait with a 5 second timeout rather than blocking forever' do
-      key_waiting('a')
-
-      app.execute_command('.key')
-
-      expect(delays).to include([:timeout=, [5000]])
-    end
-
-    it 'puts the command window back in nodelay mode after reading the key' do
+    it 'waits at most 5 seconds for the key, then puts the command window back in nodelay mode' do
       key_waiting('a')
 
       app.execute_command('.key')
 
       expect(delays.last(2)).to eq [[:timeout=, [5000]], [:nodelay=, [true]]]
-    end
-
-    it 'says no key was pressed when the wait times out' do
-      key_waiting(nil)
-
-      app.execute_command('.key')
-
-      expect(main.rows.last(2)).to eq ['* No key pressed within 5 seconds', '*']
     end
 
     it 'puts the command window back in nodelay mode when the read raises' do

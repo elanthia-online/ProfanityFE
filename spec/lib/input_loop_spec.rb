@@ -161,6 +161,10 @@ RSpec.describe 'The input loop' do
     let(:main) { TabbedTextWindow.list.first }
     let(:terminal) { { lines: 60, cols: 200 } }
     let(:main_size_before_resize) { [] }
+    # default.xml sizes main lines-2 high and (cols/3)*2 wide, less the
+    # column its scrollbar takes: [maxy, maxx] at 60x200 and at 40x150
+    let(:main_size_at_60x200) { [58, 131] }
+    let(:main_size_at_40x150) { [38, 99] }
 
     before do
       allow(Curses).to receive(:lines) { terminal[:lines] }
@@ -179,21 +183,21 @@ RSpec.describe 'The input loop' do
     it 'fits the layout to the new size when the settings file does not bind the resize key' do
       run_client(keyboard(resize_terminal))
 
-      expect(main_size_before_resize).to eq [58, 131]
-      expect([main.maxy, main.maxx]).to eq [38, 99]
+      expect(main_size_before_resize).to eq main_size_at_60x200
+      expect([main.maxy, main.maxx]).to eq main_size_at_40x150
     end
 
     it 'still fits the layout after a .reload' do
       run_client(keyboard(".reload\n", resize_terminal))
 
-      expect([main.maxy, main.maxx]).to eq [38, 99]
+      expect([main.maxy, main.maxx]).to eq main_size_at_40x150
     end
 
     it 'fits the layout while a key combo is pending, and keeps the combo' do
       # A lone Escape starts the alt+N combos (alt+2: switch_tab_2)
       run_client(keyboard("\e", resize_terminal, '2'))
 
-      expect([main.maxy, main.maxx]).to eq [38, 99]
+      expect([main.maxy, main.maxx]).to eq main_size_at_40x150
       expect(main.active_tab).to eq 'combat'
     end
 
@@ -204,7 +208,7 @@ RSpec.describe 'The input loop' do
         run_client(keyboard(resize_terminal))
 
         expect(game_server.commands).to eq ['look']
-        expect([main.maxy, main.maxx]).to eq [58, 131]
+        expect([main.maxy, main.maxx]).to eq main_size_at_60x200
       end
     end
   end

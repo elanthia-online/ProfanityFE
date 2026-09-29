@@ -288,6 +288,7 @@ RSpec.describe 'Dot-commands typed on the command line' do
     commands.each_key do |name|
       %w[x s - 1 _].each do |suffix|
         it "sends .#{name}#{suffix} to the game as ;#{name}#{suffix}" do
+          # Not raising covers exiting, as above (.quitx must not quit)
           expect { app.execute_command(".#{name}#{suffix}") }.not_to raise_error
           expect(server.string).to eq ";#{name}#{suffix}\n"
         end

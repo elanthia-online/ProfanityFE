@@ -104,7 +104,7 @@ RSpec.describe 'Reloading the settings with .reload' do
 
     message = "* Reload failed, settings unchanged: Missing end tag for 'gag' (got 'gags') (line 1)"
     expect(main.rows.last).to eq message
-    expect((0...message.length).map { |x| pairs.key(main.attrs_at(main.maxy - 1, x) >> 8) }.uniq).to eq [FEEDBACK_COLOR]
+    expect(color_on_screen(message, message)).to eq FEEDBACK_COLOR
   end
 
   # BUG FOUND (fixed here): an empty file was reported as
