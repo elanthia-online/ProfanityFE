@@ -21,6 +21,19 @@ RSpec.describe 'spec_helper desktop sandbox' do
     File.read(File.join(SPEC_BIN, file))
   end
 
+  def terminal_opened_for_writing
+    File.open('/dev/tty', 'w') { |tty| return tty }
+  end
+
+  # Run before an example acts: a failed expectation raises and ends the
+  # example there. So when a stand-in is gone this guard fails without
+  # copying its text to the real clipboard, opening the real browser or
+  # sending an OSC 52 escape to the real terminal.
+  def abort_unless_sandboxed(*commands)
+    commands.each { |command| expect(command_on_path(command)).to eq(File.join(SPEC_BIN, command)) }
+    expect(terminal_opened_for_writing).to be(spec_terminal)
+  end
+
   around do |example|
     saved_env = ENV.to_h
     example.run
@@ -41,11 +54,7 @@ RSpec.describe 'spec_helper desktop sandbox' do
   end
 
   it 'gives code that opens /dev/tty for writing the spec terminal instead' do
-    opened = nil
-
-    File.open('/dev/tty', 'w') { |tty| opened = tty }
-
-    expect(opened).to be(spec_terminal)
+    expect(terminal_opened_for_writing).to be(spec_terminal)
   end
 
   context 'when a selection is copied' do
@@ -53,6 +62,7 @@ RSpec.describe 'spec_helper desktop sandbox' do
 
     it 'pipes it to the stand-in pbcopy on macOS' do
       stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'darwin24'))
+      abort_unless_sandboxed('pbcopy')
 
       SelectionManager.copy_to_clipboard(selection)
 
@@ -62,6 +72,7 @@ RSpec.describe 'spec_helper desktop sandbox' do
     it 'pipes it to the stand-in xclip, for the clipboard selection, under X11' do
       stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
       ENV['DISPLAY'] = ':0'
+      abort_unless_sandboxed('xclip')
 
       SelectionManager.copy_to_clipboard(selection)
 
@@ -72,6 +83,7 @@ RSpec.describe 'spec_helper desktop sandbox' do
     it 'pipes it to the stand-in wl-copy under Wayland' do
       stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
       ENV['WAYLAND_DISPLAY'] = 'wayland-0'
+      abort_unless_sandboxed('wl-copy')
 
       SelectionManager.copy_to_clipboard(selection)
 
@@ -80,6 +92,7 @@ RSpec.describe 'spec_helper desktop sandbox' do
 
     it 'sends its OSC 52 escape to the spec terminal' do
       stub_const('RbConfig::CONFIG', RbConfig::CONFIG.merge('host_os' => 'linux-gnu'))
+      abort_unless_sandboxed
 
       SelectionManager.copy_to_clipboard(selection)
 
@@ -91,6 +104,7 @@ RSpec.describe 'spec_helper desktop sandbox' do
     url = 'https://www.play.net/dr/'
     record = File.join(SPEC_BIN, 'open.args')
     allow(Platform).to receive(:os).and_return(:macos)
+    abort_unless_sandboxed('open')
 
     UrlLauncher.open(url)
 
