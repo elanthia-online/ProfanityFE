@@ -87,11 +87,16 @@ RSpec.describe 'The terminal cursor after an input-path flush' do
   end
 
   # Run the real input loop for one tick with no key pressed (the command
-  # window reads no key), then end it as Ctrl+C would.
+  # window reads no key), then end it as Ctrl+C would. getch answers like
+  # get_char (what read_key reads), so a read_key that stopped calling
+  # get_char still ends the loop instead of reading the virtual screen's
+  # nil getch forever.
   def run_input_loop_for_one_tick
     allow(IO).to receive(:select).and_return(nil)
     keys = [nil]
-    cmd_window.define_singleton_method(:get_char) { keys.empty? ? raise(Interrupt) : keys.shift }
+    %i[get_char getch].each do |reader|
+      cmd_window.define_singleton_method(reader) { keys.empty? ? raise(Interrupt) : keys.shift }
+    end
     app.send(:input_loop)
   end
 

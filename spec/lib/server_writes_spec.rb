@@ -101,8 +101,14 @@ RSpec.describe 'Writes to the game server' do
     end
 
     # Type +keys+ into the real input loop, then end it as Ctrl+C would.
+    # The command window hands out the same keys from getch as from
+    # get_char (what read_key reads): the virtual screen's getch returns
+    # nil forever, so a read_key that stopped calling get_char would
+    # otherwise never reach the Interrupt and the loop would never end.
     def type(*keys)
-      app.cmd_buffer.window.define_singleton_method(:get_char) { keys.empty? ? raise(Interrupt) : keys.shift }
+      %i[get_char getch].each do |reader|
+        app.cmd_buffer.window.define_singleton_method(reader) { keys.empty? ? raise(Interrupt) : keys.shift }
+      end
       app.connection.attach(server)
       app.send(:input_loop)
     end
