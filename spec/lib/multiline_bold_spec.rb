@@ -183,12 +183,12 @@ RSpec.describe 'Bold across lines' do
       end
     end
 
-    it 'reads bold tags and a prompt wherever their text appears' do
+    it 'reads bold tags and a prompt only where the tag dispatcher reads them' do
       {
-        '<prompt time="1"><pushBold/>&gt;</prompt>' => ['<prompt time="1"><pushBold/>&gt;</prompt><popBold/>', false],
+        '<prompt time="1"><pushBold/>&gt;</prompt>' => ['<prompt time="1"><pushBold/>&gt;</prompt>', false],
         '<pushBold/><prompt time="1">&gt;</prompt>' => ['<pushBold/><prompt time="1">&gt;</prompt><popBold/>', false],
-        '<pushBold/> <prompt'                       => ['<pushBold/> <prompt<popBold/>', false],
-        %(<pushBold/><b t="<prompt>"/>)             => [%(<pushBold/><b t="<prompt>"/><popBold/>), false],
+        '<pushBold/> <prompt'                       => ['<pushBold/> <prompt<popBold/>', true],
+        %(<pushBold/><b t="<prompt>"/>)             => [%(<pushBold/><b t="<prompt>"/><popBold/>), true],
         '<pushBold/></prompt>'                      => ['<pushBold/></prompt><popBold/>', true],
         '<pushBold/><promptX>'                      => ['<pushBold/><promptX><popBold/>', true]
       }.each do |line, expected|

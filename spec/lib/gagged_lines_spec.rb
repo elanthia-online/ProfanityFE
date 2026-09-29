@@ -144,15 +144,15 @@ RSpec.describe 'GameTextProcessor gagged lines' do
       end
     end
 
-    it 'finds stream tags by their text, whatever tag or quote they sit in' do
+    it 'keeps only the stream tags the tag dispatcher would read' do
       {
-        # a stream tag ends at its first >, even inside a quoted value
-        %(<pushStream id="a>b"/>x)                           => ['<pushStream id="a>', ' STREAM-TAG'],
-        # the content of a paired tag
-        '<prompt time="1"><pushStream id="x"/>&gt;</prompt>' => ['<pushStream id="x"/>', ' STREAM-TAG'],
-        # after an unclosed tag, and inside another tag's quoted value
-        '<b <popStream/>x'                                   => ['<popStream/>', ' STREAM-TAG'],
-        %(<b title="<popStream/>">x)                         => ['<popStream/>', ' STREAM-TAG']
+        # a > inside a quoted value stays inside the tag
+        %(<pushStream id="a>b"/>x)                           => [%(<pushStream id="a>b"/>), ' STREAM-TAG'],
+        # not inside a paired tag's content
+        '<prompt time="1"><pushStream id="x"/>&gt;</prompt>' => [nil, nil],
+        # not after an unclosed tag, or inside another tag's quoted value
+        '<b <popStream/>x'                                   => [nil, nil],
+        %(<b title="<popStream/>">x)                         => [nil, nil]
       }.each do |line, expected|
         gag_log.clear
         expect(kept(line)).to eq(expected), line
@@ -161,13 +161,13 @@ RSpec.describe 'GameTextProcessor gagged lines' do
   end
 
   describe 'which lines end a multi-line gag that runs to a prompt' do
-    it 'ends it at any line containing <prompt followed by a non-word character' do
+    it 'ends it at a line with a prompt tag the tag dispatcher would read' do
       {
         '<prompt time="1">&gt;</prompt>' => false,
         '<prompt>'                       => false,
-        '<prompt'                        => false,
-        %(<b t="<prompt>">)              => false,
-        '<spell><prompt>x</spell>'       => false,
+        '<prompt'                        => true,
+        %(<b t="<prompt>">)              => true,
+        '<spell><prompt>x</spell>'       => true,
         'x <promptX>'                    => true,
         '</prompt>'                      => true,
         'plain'                          => true
