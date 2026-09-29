@@ -142,10 +142,26 @@ RSpec.describe 'Feedback lines in the main window' do
       expect(screen).to eq(help_rows.map { |row| [row, feedback] })
     end
 
-    it '.tab lists each tabbed window\'s tabs in the feedback color without flushing' do
-      expect(run('.tab')).to eq []
-      expect(screen).to eq [['* Tabs: 1:thoughts* 2:logons', feedback],
-                            ['* Tabs: 1:speech* 2:familiar', feedback]]
+    it '.tab lists each tabbed window\'s tabs in the feedback color and flushes once' do
+      rows = ['* Tabs: 1:thoughts* 2:logons', '* Tabs: 1:speech* 2:familiar']
+      expect(run('.tab')).to eq [[:doupdate, rows]]
+      expect(screen).to eq(rows.map { |row| [row, feedback] })
+    end
+
+    context 'with no tabbed window' do
+      let(:layout) do
+        <<~XML
+          <layout>
+            <window class='text' top='0' left='0' height='30' width='120' value='main'/>
+            <window class='command' top='39' left='0' height='1' width='150'/>
+          </layout>
+        XML
+      end
+
+      it '.tab says so in the feedback color and flushes once' do
+        expect(run('.tab')).to eq [[:doupdate, ['* No tabbed windows configured']]]
+        expect(screen).to eq [['* No tabbed windows configured', feedback]]
+      end
     end
 
     it '.links says the new state in the feedback color and flushes once' do
@@ -420,7 +436,7 @@ RSpec.describe 'Feedback lines in the main window' do
     it 'still flushes (and redraws the command line) as if the lines were shown' do
       expect(run('.help')).to eq [[:doupdate, []]]
       expect(run('.select')).to eq [:refresh_command_line, [:doupdate, []]]
-      expect(run('.tab')).to eq []
+      expect(run('.tab')).to eq [[:doupdate, []]]
       expect(shown(other)).to be_empty
     end
   end
