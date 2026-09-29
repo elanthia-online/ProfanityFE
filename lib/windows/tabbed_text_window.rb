@@ -96,8 +96,7 @@ class TabbedTextWindow < BaseWindow
 
     # Selection line IDs are per-tab; a stale selection would map onto
     # unrelated text in the new tab
-    @selection_start = nil
-    @selection_end = nil
+    drop_selection
     @active_tab = name
     @tab_activity[name] = false
     redraw
