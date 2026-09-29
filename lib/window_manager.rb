@@ -3,6 +3,7 @@
 require_relative 'streams'
 require_relative 'feedback'
 require_relative 'window_layout'
+require_relative 'platform'
 
 # Manages Curses window creation, layout loading, and handler hash access
 # for the profanity terminal UI.
@@ -477,10 +478,10 @@ class WindowManager
   # @param url [String] the URL to open
   # @return [void]
   def open_in_browser(url)
-    command = case RbConfig::CONFIG['host_os']
-              when /darwin/ then ['open', url]
-              when /linux|bsd/ then ['xdg-open', url]
-              when /mswin|mingw|cygwin/ then ['rundll32', 'url.dll,FileProtocolHandler', url]
+    command = case Platform.os
+              when :macos then ['open', url]
+              when :unix then ['xdg-open', url]
+              when :windows then ['rundll32', 'url.dll,FileProtocolHandler', url]
               end
     return unless command
 

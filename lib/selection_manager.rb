@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'profanity_settings'
+require_relative 'platform'
 
 # selection_manager.rb: Mouse text selection and clipboard operations for ProfanityFE.
 
@@ -240,7 +241,7 @@ module SelectionManager
     # @return [void]
     def copy_to_clipboard(text)
       # Try platform-native clipboard
-      clipboard_cmd = if RbConfig::CONFIG['host_os'] =~ /darwin/
+      clipboard_cmd = if Platform.os == :macos
                         'pbcopy'
                       elsif ENV['WAYLAND_DISPLAY']
                         'wl-copy'
