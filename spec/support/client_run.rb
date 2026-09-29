@@ -154,11 +154,18 @@ module ClientRun
   # loop ends.
   #
   # @param command_window [Curses::Window] see {#keyboard}
-  # @param server [GameServer, #gets] what +Socket.tcp+ returns
+  # @param server [GameServer, #gets, nil] what +Socket.tcp+ returns; nil
+  #   connects for real
+  # @param connect_error [Exception, Class, nil] what +Socket.tcp+ raises
+  #   instead, when given
   # @return [Array(Integer, String)] the exit status (nil when the client
   #   returned without exiting) and what it printed to stderr
-  def run_client(command_window, server: game_server)
-    allow(Socket).to receive(:tcp).and_return(server)
+  def run_client(command_window, server: game_server, connect_error: nil)
+    if connect_error
+      allow(Socket).to receive(:tcp).and_raise(connect_error)
+    elsif server
+      allow(Socket).to receive(:tcp).and_return(server)
+    end
     allow(IO).to receive(:select).and_return(nil)
     # The layout keeps the command window it finds (it is created once)
     app.window_mgr.install_command_window(nil) { command_window }
