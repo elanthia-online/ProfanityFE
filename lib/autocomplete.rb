@@ -68,7 +68,7 @@ module Autocomplete
     matches = find_matches(current, cmd_buffer.history)
 
     if matches.empty?
-      show_message(display_window, '[autocomplete] no suggestions')
+      show_message(cmd_buffer, display_window, '[autocomplete] no suggestions')
       return
     end
 
@@ -83,7 +83,7 @@ module Autocomplete
       candidates = matches.first(MAX_LISTED).each_with_index.map { |match, i| "[#{i}] #{match}" }
       hidden = matches.length - candidates.length
       candidates << "[... #{hidden} more]" if hidden.positive?
-      show_message(display_window, "[autocomplete:#{matches.length}]", *candidates)
+      show_message(cmd_buffer, display_window, "[autocomplete:#{matches.length}]", *candidates)
     end
   rescue StandardError => e
     ProfanityLog.write('autocomplete', e.message, backtrace: e.backtrace)
@@ -103,18 +103,20 @@ module Autocomplete
   def self.apply_completion(cmd_buffer, completion, original)
     cmd_buffer.cursor_end
     completion[original.length..].each_char { |ch| cmd_buffer.put_ch(ch) }
-    cmd_buffer.refresh
-    CursesRenderer.doupdate
+    cmd_buffer.flush_screen
   end
 
   # Display lines in the main window with autocomplete highlight color,
-  # then update the screen once for all of them.
+  # then update the screen once for all of them, with the cursor on the
+  # command line.
   #
+  # @param cmd_buffer [CommandBuffer] flushes the screen (see
+  #   {CommandBuffer#flush_screen})
   # @param window [BaseWindow, nil] window to display in
   # @param lines [Array<String>] message lines, oldest first
   # @return [void]
   # @api private
-  def self.show_message(window, *lines)
-    CursesRenderer.doupdate if Feedback.write(window, *lines, fg: HIGHLIGHT_COLOR)
+  def self.show_message(cmd_buffer, window, *lines)
+    cmd_buffer.flush_screen if Feedback.write(window, *lines, fg: HIGHLIGHT_COLOR)
   end
 end

@@ -27,7 +27,8 @@ class MouseController
   # @param window_mgr [WindowManager] gives the main window link commands
   #   are echoed in
   # @param shared_state [SharedState] whether links are on, and the prompt
-  # @param cmd_buffer [CommandBuffer] the history a clicked link is added to
+  # @param cmd_buffer [CommandBuffer] the history a clicked link is added
+  #   to; flushes the screen (see {CommandBuffer#flush_screen})
   # @param write_to_client [#call] shows feedback lines in the main window;
   #   returns whether there was one (see {Application}'s +write_to_client+)
   # @param send_to_server [#call] sends one line to the game server
@@ -111,7 +112,7 @@ class MouseController
     # Motion reporting only while the button is held — a permanent
     # motion stream corrupts the display
     @mouse_scroll.begin_drag_capture
-    CursesRenderer.doupdate if multi_click
+    @cmd_buffer.flush_screen if multi_click
   end
 
   # Live highlight update from a motion report while button 1 is held.
@@ -122,7 +123,7 @@ class MouseController
 
     rel_y = screen_y - window.begy
     rel_x = screen_x - window.begx
-    CursesRenderer.doupdate if SelectionManager.drag_update(rel_y, rel_x)
+    @cmd_buffer.flush_screen if SelectionManager.drag_update(rel_y, rel_x)
   end
 
   # Button 1 released: a click follows a link, a double or triple click or
@@ -163,7 +164,7 @@ class MouseController
     # write_to_client flushes when it shows the notice
     return if chars&.positive? && @write_to_client.call("* [copied #{chars} chars]")
 
-    CursesRenderer.doupdate
+    @cmd_buffer.flush_screen
   end
 
   # Send the command of the link at a window position, if links are on
@@ -176,7 +177,7 @@ class MouseController
     if (link_cmd = window.link_cmd_at(rel_y, rel_x))
       if (main = @window_mgr.stream[MAIN_STREAM])
         @window_mgr.add_prompt(main, @shared_state.prompt_text, link_cmd)
-        CursesRenderer.doupdate
+        @cmd_buffer.flush_screen
       end
       @cmd_buffer.add_to_history(link_cmd)
       @send_to_server.call(link_cmd)
