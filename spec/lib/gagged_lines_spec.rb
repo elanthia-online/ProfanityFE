@@ -57,8 +57,6 @@ RSpec.describe 'GameTextProcessor gagged lines' do
     server = Object.new
     server.define_singleton_method(:gets) { queue.shift&.dup }
     allow(IO).to receive(:select).and_return(nil)
-    allow(processor).to receive(:show_disconnect_message)
-    allow(processor).to receive(:exit)
     processor.run(server)
   end
 
