@@ -136,7 +136,8 @@ BaseWindow.register_type('text') do |height, width, top, left, element, wm|
   window.max_buffer_size = element.attributes['buffer-size'] || 1000
   window.time_stamp = BaseWindow.parse_flag_attr(element, 'timestamp')
   window.clock = wm.clock
-  element.attributes['value'].split(',').each do |str|
+  # A window with no value is still built, and shows no stream.
+  streams.each do |str|
     wm.stream[str] = window
   end
   SCROLL_WINDOW.push(window) unless SCROLL_WINDOW.include?(window)
