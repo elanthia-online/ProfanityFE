@@ -1,10 +1,20 @@
 # frozen_string_literal: true
 
-# Tests TagHandlers module dispatch and individual tag handlers: prompt,
-# spell, hand, roundtime, casttime, compass, progressBar, arbProgress,
-# bold, preset, color, style, stream open/close, links, indicator, image,
-# LaunchURL, streamWindow. Uses a minimal host class with event recording.
+# Tests TagHandlers, the tag parser GameTextProcessor includes: what each
+# server tag does to the line being parsed (the color runs it records, the
+# spans it leaves open, the text it flushes and the stream that text goes
+# to) and the events it emits for the windows.
+#
+# TagHandlerHost (below) includes the module with the real collaborators
+# GameTextProcessor gives it (SpanTracker, StreamRouter, RoomAssembler,
+# PromptTracker) and records each chunk of text the parser flushes instead
+# of routing it, so the examples read the parse state through those
+# collaborators' public readers. Entity decoding, which happens between
+# tags, goes through the real GameTextProcessor into a window on the
+# virtual screen.
 
+require 'rexml/document'
+require 'stringio'
 require_relative '../../lib/event_bus'
 require_relative '../../lib/xml_tokenizer'
 require_relative '../../lib/tag_handlers'
@@ -15,119 +25,98 @@ require_relative '../../lib/pending_render'
 require_relative '../../lib/prompt_tracker'
 require_relative '../../lib/room_assembler'
 require_relative '../../lib/stream_router'
-require 'stringio'
+require_relative '../../lib/window_manager'
+require_relative '../../lib/game_text_processor'
+require_relative '../../lib/kill_ring'
+require_relative '../../lib/string_classification'
+require_relative '../../lib/command_buffer'
 
-# Minimal host class that includes TagHandlers, providing the instance
-# variables and helper methods the module expects.
+# Includes TagHandlers the way GameTextProcessor does, with the same real
+# collaborators, but keeps each flushed chunk of text (see #flushed_texts)
+# instead of routing it to a window. Its readers delegate to the public
+# readers of its own collaborators.
 class TagHandlerHost
   include TagHandlers
 
-  attr_reader :flushed_texts, :wm, :state, :event_bus, :pending_render
+  # @return [Array<Hash>] each chunk of text flushed mid-line, in order:
+  #   its +:text+, the color runs handed off with it (+:colors+) and the
+  #   stream it was on (+:stream+, nil for main)
+  attr_reader :flushed_texts
 
-  def initialize(wm:, state:, event_bus:, clock: Clock.new)
-    @wm = wm
+  # @return [SharedState] the state the handlers update
+  attr_reader :state
+
+  # @return [EventBus] the bus the handlers emit on
+  attr_reader :event_bus
+
+  # @param window_mgr [WindowManager] asked which windows the layout has
+  # @param state [SharedState] the state the handlers update
+  # @param event_bus [EventBus] the bus the handlers emit on
+  # @param clock [Clock] read for the server time offset at a prompt
+  def initialize(window_mgr:, state:, event_bus:, clock: Clock.new)
     @state = state
     @event_bus = event_bus
-    @xml_escapes = { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' }
     @spans = SpanTracker.new
     @pending_render = PendingRender.new
     @prompts = PromptTracker.new(shared_state: state, event_bus: event_bus, pending_render: @pending_render,
-                                 window_mgr: wm, clock: clock)
+                                 window_mgr: window_mgr, clock: clock)
     @prompts.server = StringIO.new
-    @room = RoomAssembler.new(window_mgr: wm, event_bus: event_bus, pending_render: @pending_render, shared_state: state)
-    @router = StreamRouter.new(window_mgr: wm, event_bus: event_bus, pending_render: @pending_render,
+    @room = RoomAssembler.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
+                              shared_state: state)
+    @router = StreamRouter.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
                                prompts: @prompts, room: @room)
     @flushed_texts = []
   end
 
-  # Capture flushed text instead of processing it
+  # Keep the flushed text (the parser's hand-off to GameTextProcessor).
   def handle_game_text(text, runs)
     @flushed_texts << { text: text.dup, colors: runs.dup, stream: current_stream }
-    @spans.end_line
   end
 
-  # No line is gagged here (see LineFilter#gagged?)
+  # No line is gagged here (see LineFilter#gagged?).
   def line_gagged? = false
 
-  # The color runs recorded since the last flush
+  # The color runs recorded since the last flush (SpanTracker#runs).
   def line_colors = @spans.runs
 
-  # The innermost open span of a kind (see SpanTracker#open_span)
+  # The innermost open span of a kind (SpanTracker#open_span).
   def open_span(kind) = @spans.open_span(kind)
 
-  # What room styled text is being captured (see RoomAssembler#capture_mode)
+  # What room text is being captured (RoomAssembler#capture_mode).
   def room_capture_mode = @room.capture_mode
 
-  # The router's stream state, read and set directly
+  # The stream text goes to, nil for main (StreamRouter#current_stream).
   def current_stream = @router.current_stream
 
-  def current_stream=(stream)
-    @router.instance_variable_set(:@current_stream, stream)
-  end
-
-  def combat_next_line = @router.instance_variable_get(:@combat_next_line)
-
-  def combat_next_line=(value)
-    @router.instance_variable_set(:@combat_next_line, value)
-  end
-
-  def stream_stack = @router.instance_variable_get(:@stream_stack)
-
-  def new_stun(_seconds) = nil
-end
-
-# Mock window that records route_string / add_string calls
-class SpyWindow
-  attr_reader :calls
-
-  def initialize
-    @calls = []
-  end
-
-  def route_string(text, colors, stream, **_opts)
-    @calls << { method: :route_string, text: text, colors: colors, stream: stream }
-  end
-
-  def add_string(text, colors = [])
-    @calls << { method: :add_string, text: text, colors: colors }
-  end
-end
-
-# Mock indicator with label and update tracking
-class SpyIndicator
-  attr_accessor :label, :label_colors, :active, :end_time, :secondary_end_time
-  attr_reader :updates
-
-  def initialize
-    @label = nil
-    @updates = []
-  end
-
-  def update(*args)
-    @updates << args
-    true
-  end
-
-  def value = 0
-  def secondary_value = 0
-  def layout = WindowLayout.new(height: '1', width: '10', top: '0', left: '0')
-  def resize(*) = nil
-  def move(*) = nil
+  # Whether an unrecognized tag switches to combat (StreamRouter#combat_routing?).
+  def combat_routing? = @router.combat_routing?
 end
 
 RSpec.describe TagHandlers do
-  let(:main_window) { SpyWindow.new }
   let(:event_bus) { EventBus.new }
-  let(:wm) do
-    Struct.new(:stream, :indicator, :progress, :countdown, :room,
-               :command_window, :command_window_layout).new(
-                 { 'main' => main_window }, {}, {}, {}, {}, nil, nil
-               )
-  end
+  let(:window_manager) { WindowManager.new }
   let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
-  let(:host) { TagHandlerHost.new(wm: wm, state: state, event_bus: event_bus) }
+  let(:host) { build_host }
 
-  # Helper to collect events of a given type
+  # A host with its own state and bus, reading +clock+.
+  def build_host(clock: Clock.new, state: self.state, event_bus: self.event_bus)
+    TagHandlerHost.new(window_mgr: window_manager, state: state, event_bus: event_bus, clock: clock)
+  end
+
+  # Give the layout a room window (the room description is captured only
+  # with one).
+  def load_layout_with_room_window
+    LAYOUT['tags'] = REXML::Document.new(<<~XML).root
+      <layout>
+        <window class='text' top='0' left='0' height='4' width='40' value='main'/>
+        <window class='room' top='4' left='0' height='4' width='40'/>
+      </layout>
+    XML
+    window_manager.load_layout('tags')
+  end
+
+  # @return [Array<Hash>] every event of +types+ emitted from now on, each
+  #   with its +:type+
   def collect_events(*types)
     events = []
     types.each do |type|
@@ -136,541 +125,103 @@ RSpec.describe TagHandlers do
     events
   end
 
-  # ---- dispatch_tag ----
+  # Send bare <popStream/> tags until text goes to main.
+  #
+  # @return [Array<String>] the streams text went to in between: the
+  #   pushStreams still open below the current stream, innermost first
+  def streams_popped_back_to(tag_host = host)
+    streams = []
+    10.times do
+      tag_host.dispatch_tag('<popStream/>', String.new)
+      break unless tag_host.current_stream
+
+      streams << tag_host.current_stream
+    end
+    streams
+  end
 
   describe '#dispatch_tag' do
-    it 'dispatches to the correct handler based on tag name' do
-      buf = String.new
-      expect(host).to receive(:handle_push_bold).with('<pushBold/>', buf)
-      host.dispatch_tag('<pushBold/>', buf)
-    end
-
     it 'has a handler for every paired tag but inv, whose content is only swallowed' do
       expect(XmlTokenizer::PAIRED_TAGS - described_class::TAG_DISPATCH.keys).to eq ['inv']
     end
 
-    it 'dispatches closing tags to CLOSING_TAG_DISPATCH' do
-      buf = String.new
-      expect(host).to receive(:handle_close_preset).with('</preset>', buf)
-      host.dispatch_tag('</preset>', buf)
-    end
+    describe 'combat routing' do
+      # A combat stream turns combat routing on; the component then sends
+      # the text to +stream+ while routing stays on.
+      def start_combat_routing_in(stream)
+        host.dispatch_tag('<pushStream id="combat"/>', String.new)
+        host.dispatch_tag("<component id='#{stream}'>", String.new)
+      end
 
-    it 'resets combat_next_line on popStream combat tag' do
-      host.combat_next_line = true
-      host.dispatch_tag('<popStream id="combat" />', String.new)
-      expect(host.combat_next_line).to be false
-    end
+      it 'flushes the text so far to its stream and switches to combat at an unrecognized tag' do
+        start_combat_routing_in('room players')
 
-    it 'activates combat stream on unrecognized tag when combat_next_line is true' do
-      host.combat_next_line = true
-      buf = +'some text'
-      host.dispatch_tag('<unknownTag/>', buf)
-      expect(host.current_stream).to eq 'combat'
-    end
+        host.dispatch_tag('<unknownTag/>', +'Also here: Fidon.')
 
-    it 'ignores dialogdata tags without activating combat' do
-      host.combat_next_line = true
-      host.dispatch_tag('<dialogdata id="foo"/>', String.new)
-      expect(host.current_stream).to be_nil
+        expect(host.flushed_texts.map { |f| f.values_at(:text, :stream) }).to eq [['Also here: Fidon.', 'room players']]
+        expect(host.current_stream).to eq 'combat'
+      end
+
+      it 'switches to combat without flushing anything when no text was collected' do
+        start_combat_routing_in('room players')
+
+        host.dispatch_tag('<unknownTag/>', String.new)
+
+        expect(host.current_stream).to eq 'combat'
+        expect(host.flushed_texts).to be_empty
+      end
+
+      it 'does not switch to combat at a tag it ignores on purpose, such as dialogdata' do
+        start_combat_routing_in('room players')
+
+        host.dispatch_tag('<dialogdata id="foo"/>', String.new)
+
+        expect(host.current_stream).to eq 'room players'
+      end
+
+      it 'ends at a popStream naming combat, so a later unrecognized tag stays on main' do
+        host.dispatch_tag('<pushStream id="combat"/>', String.new)
+
+        host.dispatch_tag('<popStream id="combat" />', String.new)
+        host.dispatch_tag('<unknownTag/>', String.new)
+
+        expect(host.combat_routing?).to be false
+        expect(host.current_stream).to be_nil
+      end
+
+      it 'ends at a popStream naming combat even while another stream is current' do
+        start_combat_routing_in('thoughts')
+
+        host.dispatch_tag('<popStream id="combat" />', String.new)
+
+        expect(host.combat_routing?).to be false
+        expect(host.current_stream).to be_nil
+      end
     end
   end
 
-  # ---- Bold handlers ----
+  describe 'bold: <pushBold/> and <popBold/>, <b> and </b>' do
+    before { PRESET['monsterbold'] = ['ff0000', nil] }
 
-  describe '#handle_push_bold / #handle_pop_bold' do
-    it 'creates a color region for bold text' do
-      PRESET['monsterbold'] = ['ff0000', nil]
+    it 'colors the text between them with the monsterbold preset' do
       buf = +'Hello '
       host.dispatch_tag('<pushBold/>', buf)
       buf << 'goblin'
       host.dispatch_tag('<popBold/>', buf)
 
-      expect(host.line_colors).to include(
-        a_hash_including(start: 6, end: 12, fg: 'ff0000')
-      )
+      expect(host.line_colors).to eq [{ start: 6, fg: 'ff0000', bg: nil, end: 12 }]
     end
 
-    it 'handles <b> and </b> tags the same way' do
-      PRESET['monsterbold'] = ['ff0000', nil]
+    it 'treats <b> and </b> the same way' do
       buf = +''
       host.dispatch_tag('<b>', buf)
       buf << 'bold'
       host.dispatch_tag('</b>', buf)
 
-      expect(host.line_colors).to include(
-        a_hash_including(start: 0, end: 4, fg: 'ff0000')
-      )
-    end
-  end
-
-  # ---- Prompt handler ----
-
-  describe '#handle_prompt_tag' do
-    it 'updates shared state prompt_text' do
-      state.skip_server_time_offset = false
-      state.prompt_text = '>'
-      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
-      expect(state.prompt_text).to eq 'H>'
+      expect(host.line_colors).to eq [{ start: 0, fg: 'ff0000', bg: nil, end: 4 }]
     end
 
-    it 'syncs server time offset on first prompt' do
-      clock = Clock.new(now: -> { Time.at(1_679_000_010.5) })
-      host = TagHandlerHost.new(wm: wm, state: state, event_bus: event_bus, clock: clock)
-      state.skip_server_time_offset = false
-      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
-      expect(state.skip_server_time_offset).to be true
-      expect(clock.server_time_offset).to eq 10.5
-    end
-
-    it 'keeps the offset until a resync' do
-      readings = [Time.at(1_679_000_010.5), Time.at(1_679_000_099.0)]
-      clock = Clock.new(now: -> { readings.shift })
-      host = TagHandlerHost.new(wm: wm, state: state, event_bus: event_bus, clock: clock)
-      state.skip_server_time_offset = false
-      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
-      host.dispatch_tag('<prompt time="1679000001">H&gt;</prompt>', String.new)
-      expect(clock.server_time_offset).to eq 10.5
-    end
-
-    it 'sets need_prompt to true on repeated same prompt' do
-      state.prompt_text = 'H>'
-      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
-      expect(state.need_prompt).to be true
-    end
-
-    it 'emits :add_prompt and :prompt_changed events on new prompt' do
-      events = collect_events(:add_prompt, :prompt_changed)
-      state.prompt_text = '>'
-      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
-
-      prompt_event = events.find { |e| e[:type] == :add_prompt }
-      expect(prompt_event).to include(stream: 'main', text: 'H>')
-
-      changed_event = events.find { |e| e[:type] == :prompt_changed }
-      expect(changed_event).to include(text: 'H>')
-    end
-
-    it 'emits nothing and leaves the prompt pending on a repeated prompt' do
-      state.prompt_text = 'H>'
-      events = collect_events(:add_prompt, :prompt_changed)
-      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
-      expect(events).to be_empty
-      expect(state.consume_prompt!).to be true
-    end
-
-    it 'puts a new prompt in the terminal title' do
-      allow(Process).to receive(:setproctitle)
-      allow($stdout).to receive(:write)
-      state.char_name = 'Mahtra'
-      host.dispatch_tag('<prompt time="1679000000">H&gt;</prompt>', String.new)
-      state.update_terminal_title
-      expect(Process).to have_received(:setproctitle).with('Mahtra [H]')
-    end
-  end
-
-  # ---- Spell handler ----
-
-  describe '#handle_spell_tag' do
-    it 'emits indicator_update for spell' do
-      events = collect_events(:indicator_update)
-      host.dispatch_tag('<spell>Fire Ball</spell>', String.new)
-      expect(events.last).to include(id: 'spell', label: 'Fire Ball', value: 1)
-    end
-
-    it 'emits value 0 when spell is None' do
-      events = collect_events(:indicator_update)
-      host.dispatch_tag('<spell>None</spell>', String.new)
-      expect(events.last).to include(id: 'spell', value: 0)
-    end
-  end
-
-  # ---- Hand handler ----
-
-  describe '#handle_hand_tag' do
-    it 'emits indicator_update for right hand' do
-      events = collect_events(:indicator_update)
-      host.dispatch_tag('<right>a steel sword</right>', String.new)
-      expect(events.last).to include(id: 'right', label: 'a steel sword', value: 1)
-    end
-
-    it 'emits value 0 for Empty hand' do
-      events = collect_events(:indicator_update)
-      host.dispatch_tag('<left>Empty</left>', String.new)
-      expect(events.last).to include(id: 'left', label: 'Empty', value: 0)
-    end
-  end
-
-  # ---- Compass handler ----
-
-  describe '#handle_compass_tag' do
-    it 'emits compass_update with active directions' do
-      events = collect_events(:compass_update)
-      host.dispatch_tag('<compass><dir value="n"/><dir value="e"/></compass>', String.new)
-      expect(events.last[:dirs]).to contain_exactly('n', 'e')
-    end
-  end
-
-  # ---- Roundtime/Casttime handlers ----
-
-  describe '#handle_roundtime_tag' do
-    it 'emits countdown_update with end_time' do
-      events = collect_events(:countdown_update)
-      host.dispatch_tag("<roundTime value='1679000010'/>", String.new)
-      expect(events.last).to include(id: 'roundtime', end_time: 1_679_000_010)
-    end
-  end
-
-  describe '#handle_casttime_tag' do
-    it 'emits countdown_update with secondary_end_time' do
-      events = collect_events(:countdown_update)
-      host.dispatch_tag("<castTime value='1679000020'/>", String.new)
-      expect(events.last).to include(id: 'roundtime', secondary_end_time: 1_679_000_020)
-    end
-  end
-
-  # ---- Stream handlers ----
-
-  describe '#handle_stream_open' do
-    it 'flushes text buffer and sets current_stream' do
-      buf = +'text before stream'
-      host.dispatch_tag('<pushStream id="combat" />', buf)
-
-      expect(host.flushed_texts.last[:text]).to eq 'text before stream'
-      expect(host.current_stream).to eq 'combat'
-      expect(buf).to eq ''
-    end
-
-    it 'sets combat_next_line for combat streams' do
-      host.dispatch_tag('<pushStream id="combat" />', String.new)
-      expect(host.combat_next_line).to be true
-    end
-
-    it 'handles exp stream with skill name' do
-      events = collect_events(:exp_set_current)
-      host.dispatch_tag('<pushStream id="exp Athletics" />', String.new)
-      expect(host.current_stream).to eq 'exp'
-      expect(events.last).to include(skill: 'Athletics')
-    end
-
-    it 'emits room_title for room stream with subtitle' do
-      events = collect_events(:room_title)
-      host.dispatch_tag(%q{<component id="room" subtitle=" - [Town Square]">}, String.new)
-      expect(events.last).to include(text: 'Town Square')
-      expect(state.room_title).to eq 'Town Square'
-    end
-  end
-
-  describe '#handle_stream_close' do
-    it 'flushes text buffer and clears current_stream' do
-      host.current_stream = 'combat'
-      buf = +'combat text'
-      host.dispatch_tag('<popStream id="combat" />', buf)
-
-      expect(host.flushed_texts.last[:text]).to eq 'combat text'
-      expect(host.current_stream).to be_nil
-    end
-
-    it 'emits exp_delete_skill when closing exp stream' do
-      events = collect_events(:exp_delete_skill)
-      host.current_stream = 'exp'
-      host.dispatch_tag('<popStream/>', String.new)
-      expect(events.length).to eq 1
-    end
-  end
-
-  # ---- Color handlers ----
-
-  describe '#handle_open_color / #handle_close_color' do
-    it 'creates a color region with fg and bg' do
-      buf = +''
-      host.dispatch_tag('<color fg="ff0000" bg="000000">', buf)
-      buf << 'red on black'
-      host.dispatch_tag('</color>', buf)
-
-      expect(host.line_colors).to include(
-        a_hash_including(start: 0, end: 12, fg: 'ff0000', bg: '000000')
-      )
-    end
-
-    it 'handles underline attribute' do
-      buf = +''
-      host.dispatch_tag('<color ul="true">', buf)
-      buf << 'underlined'
-      host.dispatch_tag('</color>', buf)
-
-      expect(host.line_colors).to include(
-        a_hash_including(ul: 'true')
-      )
-    end
-  end
-
-  # ---- Preset handlers ----
-
-  describe '#handle_open_preset / #handle_close_preset' do
-    it 'creates a color region from the preset lookup' do
-      PRESET['speech'] = ['00ff00', '000000']
-      buf = +''
-      host.dispatch_tag('<preset id="speech">', buf)
-      buf << 'Someone says hello'
-      host.dispatch_tag('</preset>', buf)
-
-      expect(host.line_colors).to include(
-        a_hash_including(start: 0, end: 18, fg: '00ff00', bg: '000000')
-      )
-    end
-
-    it 'flushes text buffer when entering roomDesc preset' do
-      wm.room['room'] = SpyWindow.new
-      buf = +'text before desc'
-      host.dispatch_tag('<preset id="roomDesc">', buf)
-
-      expect(host.flushed_texts.last[:text]).to eq 'text before desc'
-      expect(host.room_capture_mode).to eq :desc
-    end
-  end
-
-  # ---- Style handler ----
-
-  describe '#handle_style_tag' do
-    it 'opens a style with non-empty id' do
-      PRESET['roomName'] = ['00ff00', nil]
-      host.dispatch_tag('<style id="roomName"/>', String.new)
-      expect(host.open_span(:style)).to include(start: 0, fg: '00ff00')
-      expect(host.room_capture_mode).to eq :title
-    end
-
-    it 'closes a style with empty id and flushes when in room capture' do
-      PRESET['roomName'] = ['00ff00', nil]
-      buf = +''
-      host.dispatch_tag('<style id="roomName"/>', buf)
-      buf << 'Town Square'
-      host.dispatch_tag('<style id=""/>', buf)
-
-      expect(host.open_span(:style)).to be_nil
-      flushed = host.flushed_texts.find { |f| f[:text] == 'Town Square' }
-      expect(flushed).not_to be_nil
-    end
-  end
-
-  # ---- Link handlers ----
-
-  describe '#handle_open_link / #handle_close_link' do
-    before { state.blue_links = true }
-
-    it 'creates a link color region with cmd from attribute' do
-      buf = +'Go through '
-      host.dispatch_tag("<d cmd='go door'>", buf)
-      buf << 'the door'
-      host.dispatch_tag('</d>', buf)
-
-      link = host.line_colors.find { |c| c[:cmd] }
-      expect(link).to include(start: 11, end: 19, cmd: 'go door')
-    end
-
-    it 'uses link text as cmd when no cmd attribute' do
-      buf = +'Exit: '
-      host.dispatch_tag('<d>', buf)
-      buf << 'north'
-      host.dispatch_tag('</d>', buf)
-
-      link = host.line_colors.find { |c| c[:cmd] }
-      expect(link[:cmd]).to eq 'north'
-    end
-
-    it 'handles GS <a> tags with exist/noun attributes' do
-      buf = +''
-      host.dispatch_tag('<a exist="12345" noun="sword">', buf)
-      buf << 'a sword'
-      host.dispatch_tag('</a>', buf)
-
-      link = host.line_colors.find { |c| c[:cmd] }
-      expect(link[:cmd]).to eq 'look #12345'
-    end
-
-    it 'does nothing when blue_links is false' do
-      state.blue_links = false
-      buf = +''
-      host.dispatch_tag("<d cmd='go'>", buf)
-      buf << 'door'
-      host.dispatch_tag('</d>', buf)
-
-      expect(host.line_colors).to be_empty
-    end
-  end
-
-  # ---- Indicator handler ----
-
-  describe '#handle_indicator_tag' do
-    it 'emits indicator_update for visible icon' do
-      events = collect_events(:indicator_update)
-      host.dispatch_tag("<indicator id='IconSTUNNED' visible='y'/>", String.new)
-      expect(events).to include(a_hash_including(id: 'stunned', value: true))
-    end
-
-    it 'emits countdown_active event' do
-      events = collect_events(:countdown_active)
-      host.dispatch_tag("<indicator id='IconSTUNNED' visible='y'/>", String.new)
-      expect(events.last).to include(id: 'stunned', active: true)
-    end
-  end
-
-  # ---- Image handler ----
-
-  describe '#handle_image_tag' do
-    it 'emits indicator_update for nsys with rank' do
-      events = collect_events(:indicator_update)
-      host.dispatch_tag("<image id='nsys' name='nsys3'/>", String.new)
-      expect(events.last).to include(id: 'nsys', value: 3)
-    end
-
-    it 'emits indicator_update for body part injury' do
-      events = collect_events(:indicator_update)
-      host.dispatch_tag("<image id='chest' name='Injury2'/>", String.new)
-      expect(events.last).to include(id: 'chest', value: 2)
-    end
-  end
-
-  # ---- Launch URL handler ----
-
-  describe '#handle_launch_url' do
-    it 'emits launch_url event' do
-      events = collect_events(:launch_url)
-      host.dispatch_tag('<LaunchURL src="/path/to/page"/>', String.new)
-      expect(events.last).to include(url: 'https://www.play.net/path/to/page')
-    end
-
-    it 'ignores a src that turns play.net into userinfo for another host' do
-      events = collect_events(:launch_url)
-      host.dispatch_tag('<LaunchURL src="@evil.example/x"/>', String.new)
-      expect(events).to be_empty
-    end
-
-    it 'ignores a src that extends the play.net host name' do
-      events = collect_events(:launch_url)
-      host.dispatch_tag('<LaunchURL src=".evil.example/x"/>', String.new)
-      expect(events).to be_empty
-    end
-  end
-
-  # ---- Stream window handler ----
-
-  describe '#handle_stream_window' do
-    it 'updates room title from subtitle attribute' do
-      events = collect_events(:indicator_update, :room_title)
-      host.dispatch_tag(%q{<streamWindow id='room' subtitle=" - [Town Square]"/>}, String.new)
-
-      expect(state.room_title).to eq 'Town Square'
-      expect(events).to include(a_hash_including(type: :room_title, text: 'Town Square'))
-      expect(events).to include(a_hash_including(type: :indicator_update, id: 'room', label: 'Town Square'))
-    end
-
-    it 'handles DR subtitle with room number' do
-      host.dispatch_tag(%q{<streamWindow id='room' subtitle=" - [Bosque Deriel] (230008)"/>}, String.new)
-      expect(state.room_title).to eq 'Bosque Deriel (230008)'
-    end
-  end
-
-  # ---- Clear stream handler ----
-
-  describe '#handle_clear_stream' do
-    it 'emits clear_spells for percWindow' do
-      events = collect_events(:clear_spells)
-      host.dispatch_tag('<clearStream id="percWindow"/>', String.new)
-      expect(events.length).to eq 1
-    end
-
-    it 'does not emit for non-percWindow' do
-      events = collect_events(:clear_spells)
-      host.dispatch_tag('<clearStream id="other"/>', String.new)
-      expect(events).to be_empty
-    end
-  end
-
-  # ---- Entity unescaping ----
-
-  describe '#unescape_entities' do
-    it 'converts &lt; to <' do
-      expect(host.send(:unescape_entities, '&lt;')).to eq '<'
-    end
-
-    it 'converts &gt; to >' do
-      expect(host.send(:unescape_entities, '&gt;')).to eq '>'
-    end
-
-    it 'converts &amp; to &' do
-      expect(host.send(:unescape_entities, '&amp;')).to eq '&'
-    end
-
-    it 'converts &quot; to "' do
-      expect(host.send(:unescape_entities, '&quot;')).to eq '"'
-    end
-
-    it 'handles multiple entities in one string' do
-      expect(host.send(:unescape_entities, '&lt;tag&gt; &amp; more')).to eq '<tag> & more'
-    end
-
-    it 'returns unchanged text when no entities present' do
-      expect(host.send(:unescape_entities, 'plain text')).to eq 'plain text'
-    end
-
-    it 'handles empty string' do
-      expect(host.send(:unescape_entities, '')).to eq ''
-    end
-
-    it 'handles &amp;amp; (double-encoded) — only decodes one layer' do
-      expect(host.send(:unescape_entities, '&amp;amp;')).to eq '&amp;'
-    end
-
-    it 'handles entity at start of string' do
-      expect(host.send(:unescape_entities, '&lt;start')).to eq '<start'
-    end
-
-    it 'handles entity at end of string' do
-      expect(host.send(:unescape_entities, 'end&gt;')).to eq 'end>'
-    end
-
-    it 'handles adjacent entities' do
-      expect(host.send(:unescape_entities, '&lt;&gt;')).to eq '<>'
-    end
-  end
-
-  # ==================================================================
-  # Adversarial edge cases
-  # ==================================================================
-
-  describe 'adversarial: unmatched tags' do
-    it 'popBold without pushBold does not crash' do
-      expect { host.dispatch_tag('<popBold/>', String.new) }.not_to raise_error
-      expect(host.line_colors).to be_empty
-    end
-
-    it '</preset> without <preset> does not crash' do
-      expect { host.dispatch_tag('</preset>', String.new) }.not_to raise_error
-    end
-
-    it '</color> without <color> does not crash' do
-      expect { host.dispatch_tag('</color>', String.new) }.not_to raise_error
-    end
-
-    it '</d> without <d> does not crash' do
-      state.blue_links = true
-      expect { host.dispatch_tag('</d>', String.new) }.not_to raise_error
-    end
-
-    it '</a> without <a> does not crash' do
-      state.blue_links = true
-      expect { host.dispatch_tag('</a>', String.new) }.not_to raise_error
-    end
-
-    it 'popStream without pushStream does not crash' do
-      expect { host.dispatch_tag('<popStream id="combat" />', String.new) }.not_to raise_error
-      expect(host.current_stream).to be_nil
-    end
-  end
-
-  describe 'adversarial: nested tags' do
-    it 'nested pushBold tags create stacked color regions' do
-      PRESET['monsterbold'] = ['ff0000', nil]
+    it 'records an inner and an outer run for nested bold, the inner one first' do
       buf = +''
       host.dispatch_tag('<pushBold/>', buf)
       buf << 'outer '
@@ -680,125 +231,277 @@ RSpec.describe TagHandlers do
       buf << ' outer'
       host.dispatch_tag('<popBold/>', buf)
 
-      # Should have two color regions, inner one is 6..11
-      expect(host.line_colors.length).to eq 2
+      expect(host.line_colors.map { |run| run.values_at(:start, :end) }).to eq [[6, 11], [0, 17]]
     end
 
-    it 'nested presets stack correctly' do
-      PRESET['speech'] = ['00ff00', nil]
-      PRESET['roomDesc'] = ['0000ff', nil]
+    it 'records an empty run for bold around no text' do
       buf = +''
-      host.dispatch_tag('<preset id="speech">', buf)
-      buf << 'outer '
-      host.dispatch_tag('<preset id="speech">', buf)
-      buf << 'inner'
-      host.dispatch_tag('</preset>', buf)
-      host.dispatch_tag('</preset>', buf)
+      host.dispatch_tag('<pushBold/>', buf)
+      host.dispatch_tag('<popBold/>', buf)
 
-      # Two color regions
-      expect(host.line_colors.length).to eq 2
+      expect(host.line_colors).to eq [{ start: 0, fg: 'ff0000', bg: nil, end: 0 }]
+    end
+
+    it 'records nothing for a popBold with no bold open' do
+      host.dispatch_tag('<popBold/>', +'text')
+
+      expect(host.line_colors).to be_empty
     end
   end
 
-  describe 'adversarial: malformed tag attributes' do
-    it 'prompt without time attribute does not crash' do
-      expect { host.dispatch_tag('<prompt>H&gt;</prompt>', String.new) }.not_to raise_error
+  # A closing tag with nothing of its kind open changes nothing: the text
+  # stays in the line and a span of another kind stays open.
+  describe 'a stray closing tag' do
+    before { PRESET['monsterbold'] = ['ff0000', nil] }
+
+    # A line with 'goblin' in an open bold span.
+    let(:buf) do
+      (+'Hello ').tap do |text|
+        host.dispatch_tag('<pushBold/>', text)
+        text << 'goblin'
+      end
     end
 
-    it 'spell with empty content' do
+    it 'leaves the line whole and the bold open at a stray </preset>' do
+      host.dispatch_tag('</preset>', buf)
+
+      expect([buf, host.flushed_texts]).to eq ['Hello goblin', []]
+      expect(host.open_span(:bold)).to eq(start: 6, fg: 'ff0000', bg: nil)
+    end
+
+    it 'leaves the bold open at a stray </color>' do
+      host.dispatch_tag('</color>', buf)
+
+      expect(host.open_span(:bold)).to eq(start: 6, fg: 'ff0000', bg: nil)
+      expect(host.line_colors).to be_empty
+    end
+
+    it 'leaves the bold open at a stray </d>' do
+      state.blue_links = true
+
+      host.dispatch_tag('</d>', buf)
+
+      expect(host.open_span(:bold)).to eq(start: 6, fg: 'ff0000', bg: nil)
+      expect(host.line_colors).to be_empty
+    end
+
+    it 'leaves the bold open at a stray </a>' do
+      state.blue_links = true
+
+      host.dispatch_tag('</a>', buf)
+
+      expect(host.open_span(:bold)).to eq(start: 6, fg: 'ff0000', bg: nil)
+      expect(host.line_colors).to be_empty
+    end
+  end
+
+  describe '<prompt>' do
+    let(:prompt) { '<prompt time="1679000000">H&gt;</prompt>' }
+
+    it 'sets the prompt text' do
+      state.prompt_text = '>'
+
+      host.dispatch_tag(prompt, String.new)
+
+      expect(state.prompt_text).to eq 'H>'
+    end
+
+    it 'sets the server time offset from the first prompt' do
+      clock = Clock.new(now: -> { Time.at(1_679_000_010.5) })
+      state.skip_server_time_offset = false
+
+      build_host(clock: clock).dispatch_tag(prompt, String.new)
+
+      expect(state.skip_server_time_offset).to be true
+      expect(clock.server_time_offset).to eq 10.5
+    end
+
+    it 'keeps the offset until a resync' do
+      readings = [Time.at(1_679_000_010.5), Time.at(1_679_000_099.0)]
+      clock = Clock.new(now: -> { readings.shift })
+      state.skip_server_time_offset = false
+      clocked_host = build_host(clock: clock)
+
+      clocked_host.dispatch_tag(prompt, String.new)
+      clocked_host.dispatch_tag('<prompt time="1679000001">H&gt;</prompt>', String.new)
+
+      expect(clock.server_time_offset).to eq 10.5
+    end
+
+    it 'shows a new prompt in main and fits the prompt window to it' do
+      events = collect_events(:add_prompt, :prompt_changed)
+      state.prompt_text = '>'
+
+      host.dispatch_tag(prompt, String.new)
+
+      expect(events).to eq [{ type: :add_prompt, stream: 'main', text: 'H>' }, { type: :prompt_changed, text: 'H>' }]
+    end
+
+    it 'emits nothing and leaves the prompt pending on a repeated prompt' do
+      state.prompt_text = 'H>'
+      events = collect_events(:add_prompt, :prompt_changed)
+
+      host.dispatch_tag(prompt, String.new)
+
+      expect(events).to be_empty
+      expect(state.consume_prompt!).to be true
+    end
+
+    it 'puts a new prompt in the terminal title' do
+      allow(Process).to receive(:setproctitle)
+      allow($stdout).to receive(:write)
+      state.char_name = 'Mahtra'
+
+      host.dispatch_tag(prompt, String.new)
+      state.update_terminal_title
+
+      expect(Process).to have_received(:setproctitle).with('Mahtra [H]')
+    end
+  end
+
+  describe '<spell>' do
+    it 'shows the spell being prepared on the spell indicator' do
       events = collect_events(:indicator_update)
+
+      host.dispatch_tag('<spell>Fire Ball</spell>', String.new)
+
+      expect(events).to eq [{ type: :indicator_update, id: 'spell', label: 'Fire Ball', value: 1 }]
+    end
+
+    it 'turns the spell indicator off for None' do
+      events = collect_events(:indicator_update)
+
+      host.dispatch_tag('<spell>None</spell>', String.new)
+
+      expect(events.last).to include(id: 'spell', value: 0)
+    end
+
+    it 'passes an empty spell name through as the label' do
+      events = collect_events(:indicator_update)
+
       host.dispatch_tag('<spell></spell>', String.new)
+
       expect(events.last).to include(id: 'spell', label: '')
     end
+  end
 
-    it 'preset with unknown id does not crash' do
-      expect { host.dispatch_tag('<preset id="nonexistent">', String.new) }.not_to raise_error
+  describe '<right> and <left>' do
+    it 'shows what the hand holds on its indicator' do
+      events = collect_events(:indicator_update)
+
+      host.dispatch_tag('<right>a steel sword</right>', String.new)
+
+      expect(events.last).to include(id: 'right', label: 'a steel sword', value: 1)
     end
 
-    it 'progressBar with missing value attribute does not crash' do
-      expect { host.dispatch_tag('<progressBar id="health"/>', String.new) }.not_to raise_error
-    end
+    it 'turns the hand indicator off for Empty' do
+      events = collect_events(:indicator_update)
 
-    it 'style with no id attribute does not crash' do
-      expect { host.dispatch_tag('<style/>', String.new) }.not_to raise_error
-    end
+      host.dispatch_tag('<left>Empty</left>', String.new)
 
-    it 'streamWindow for non-room id is ignored' do
-      host.dispatch_tag(%q{<streamWindow id='main' subtitle="test"/>}, String.new)
-      expect(state.room_title).to eq ''
-    end
-
-    it 'indicator with malformed id does not crash' do
-      expect { host.dispatch_tag("<indicator id='BadFormat' visible='y'/>", String.new) }.not_to raise_error
-    end
-
-    it 'image with unknown body part does not crash' do
-      expect { host.dispatch_tag("<image id='unknown' name='test'/>", String.new) }.not_to raise_error
+      expect(events.last).to include(id: 'left', label: 'Empty', value: 0)
     end
   end
 
-  describe 'adversarial: color position tracking' do
-    it 'bold region with zero-length text has start == end' do
-      PRESET['monsterbold'] = ['ff0000', nil]
-      buf = +''
-      host.dispatch_tag('<pushBold/>', buf)
-      host.dispatch_tag('<popBold/>', buf)
-      expect(host.line_colors).to contain_exactly(a_hash_including(start: 0, end: 0, fg: 'ff0000'))
-    end
+  describe '<compass>' do
+    it 'lists the directions of the room exits' do
+      events = collect_events(:compass_update)
 
-    it 'color region positions are correct after entity unescaping in text' do
-      PRESET['monsterbold'] = ['ff0000', nil]
-      buf = +''
-      host.dispatch_tag('<pushBold/>', buf)
-      buf << host.send(:unescape_entities, 'a&lt;b')
-      host.dispatch_tag('<popBold/>', buf)
+      host.dispatch_tag('<compass><dir value="n"/><dir value="e"/></compass>', String.new)
 
-      region = host.line_colors.find { |c| c[:fg] == 'ff0000' }
-      expect(region[:start]).to eq 0
-      expect(region[:end]).to eq 3 # "a<b" is 3 chars after unescape
-    end
-
-    it 'multiple color regions do not overlap incorrectly' do
-      buf = +''
-      host.dispatch_tag('<color fg="ff0000">', buf)
-      buf << 'red'
-      host.dispatch_tag('</color>', buf)
-      host.dispatch_tag('<color fg="00ff00">', buf)
-      buf << 'green'
-      host.dispatch_tag('</color>', buf)
-
-      red = host.line_colors.find { |c| c[:fg] == 'ff0000' }
-      green = host.line_colors.find { |c| c[:fg] == '00ff00' }
-      expect(red[:end]).to be <= green[:start]
+      expect(events.last[:dirs]).to contain_exactly('n', 'e')
     end
   end
 
-  describe 'adversarial: stream handling' do
-    it 'stream open without id attribute does not crash' do
-      expect { host.dispatch_tag('<pushStream/>', String.new) }.not_to raise_error
+  describe '<roundTime> and <castTime>' do
+    it 'sets the roundtime end time from <roundTime>' do
+      events = collect_events(:countdown_update)
+
+      host.dispatch_tag("<roundTime value='1679000010'/>", String.new)
+
+      expect(events.last).to eq(type: :countdown_update, id: 'roundtime', end_time: 1_679_000_010)
+    end
+
+    it 'sets the secondary end time from <castTime>' do
+      events = collect_events(:countdown_update)
+
+      host.dispatch_tag("<castTime value='1679000020'/>", String.new)
+
+      expect(events.last).to eq(type: :countdown_update, id: 'roundtime', secondary_end_time: 1_679_000_020)
+    end
+  end
+
+  describe 'opening a stream: <pushStream>, <component>, <compDef>' do
+    it 'flushes the text before it to the stream it was on, then switches' do
+      buf = +'text before stream'
+
+      host.dispatch_tag('<pushStream id="combat" />', buf)
+
+      expect(host.flushed_texts.map { |f| f.values_at(:text, :stream) }).to eq [['text before stream', nil]]
+      expect(host.current_stream).to eq 'combat'
+      expect(buf).to eq ''
+    end
+
+    it 'turns combat routing on for the combat stream' do
+      host.dispatch_tag('<pushStream id="combat" />', String.new)
+
+      expect(host.combat_routing?).to be true
+    end
+
+    it 'routes an exp stream to the exp window and names its skill' do
+      events = collect_events(:exp_set_current)
+
+      host.dispatch_tag('<pushStream id="exp Athletics" />', String.new)
+
+      expect(host.current_stream).to eq 'exp'
+      expect(events.last).to include(skill: 'Athletics')
+    end
+
+    it 'takes the room title from the subtitle of a room component' do
+      events = collect_events(:room_title)
+
+      host.dispatch_tag(%q{<component id="room" subtitle=" - [Town Square]">}, String.new)
+
+      expect(events.last).to include(text: 'Town Square')
+      expect(state.room_title).to eq 'Town Square'
+    end
+
+    it 'ignores a pushStream or component without an id, keeping the text before it in the line' do
+      buf = +'Hello '
+
+      host.dispatch_tag('<component/>', buf)
+      host.dispatch_tag('<pushStream/>', buf)
+
+      expect([buf, host.flushed_texts, host.current_stream]).to eq ['Hello ', [], nil]
+    end
+
+    it 'switches to each stream opened, even without a close between them' do
+      host.dispatch_tag('<pushStream id="combat" />', String.new)
+      expect(host.current_stream).to eq 'combat'
+
+      host.dispatch_tag('<pushStream id="thoughts" />', String.new)
+      expect(host.current_stream).to eq 'thoughts'
+    end
+  end
+
+  describe 'closing a stream: <popStream>, </component>, </compDef>' do
+    it 'flushes the text before it to the stream, then returns to main' do
+      host.dispatch_tag('<pushStream id="combat" />', String.new)
+      buf = +'combat text'
+
+      host.dispatch_tag('<popStream id="combat" />', buf)
+
+      expect(host.flushed_texts.map { |f| f.values_at(:text, :stream) }).to eq [['combat text', 'combat']]
       expect(host.current_stream).to be_nil
     end
 
-    it 'component without id attribute does not crash' do
-      expect { host.dispatch_tag('<component/>', String.new) }.not_to raise_error
-    end
+    it 'closes the current exp skill when an exp component closes' do
+      events = collect_events(:exp_delete_skill)
+      host.dispatch_tag("<component id='exp Athletics'>", String.new)
 
-    it 'multiple stream opens without close accumulate correctly' do
-      host.dispatch_tag('<pushStream id="combat" />', String.new)
-      expect(host.current_stream).to eq 'combat'
-      host.dispatch_tag('<pushStream id="thoughts" />', String.new)
-      expect(host.current_stream).to eq 'thoughts'
-    end
+      host.dispatch_tag('</component>', String.new)
 
-    it 'returns to the outer stream when a nested stream closes' do
-      host.dispatch_tag('<pushStream id="thoughts" />', String.new)
-      host.dispatch_tag('<pushStream id="familiar" />', String.new)
-      host.dispatch_tag('<popStream/>', String.new)
-      expect(host.current_stream).to eq 'thoughts'
-    end
-
-    it 'clearStream for non-percWindow id does not crash' do
-      expect { host.dispatch_tag('<clearStream id="other"/>', String.new) }.not_to raise_error
+      expect(events.length).to eq 1
     end
   end
 
@@ -826,11 +529,7 @@ RSpec.describe TagHandlers do
     it 'unwinds three levels one bare pop at a time' do
       receive_tags('<pushStream id="thoughts"/>', '<pushStream id="familiar"/>', '<pushStream id="moonWindow"/>')
 
-      streams = 3.times.map do
-        host.dispatch_tag('<popStream/>', String.new)
-        host.current_stream
-      end
-      expect(streams).to eq ['familiar', 'thoughts', nil]
+      expect(streams_popped_back_to).to eq %w[familiar thoughts]
     end
 
     it 'closes the named stream and anything opened after it on popStream id=' do
@@ -839,7 +538,7 @@ RSpec.describe TagHandlers do
       host.dispatch_tag('<popStream id="combat" />', String.new)
 
       expect(host.current_stream).to eq 'thoughts'
-      expect(host.stream_stack).to eq ['thoughts']
+      expect(streams_popped_back_to).to be_empty
     end
 
     it 'closes the innermost stream with that id when the id is open twice' do
@@ -859,10 +558,9 @@ RSpec.describe TagHandlers do
     end
 
     it 'stays on main when a pop arrives with nothing open' do
-      receive_tags('<popStream id="combat" />', '<popStream/>')
+      receive_tags('<popStream/>', '<popStream id="combat" />')
 
       expect(host.current_stream).to be_nil
-      expect(host.stream_stack).to be_empty
     end
 
     it 'handles the empath-touch double familiar push and double pop from a real log' do
@@ -873,7 +571,6 @@ RSpec.describe TagHandlers do
       expect(host.current_stream).to eq 'familiar'
       host.dispatch_tag('<popStream/>', String.new)
       expect(host.current_stream).to be_nil
-      expect(host.stream_stack).to be_empty
     end
 
     context 'with components' do
@@ -884,25 +581,23 @@ RSpec.describe TagHandlers do
         expect(host.current_stream).to eq 'familiar'
       end
 
-      it 'leaves the stack alone for a component pair' do
+      it 'leaves the open pushStreams alone for a component pair' do
         receive_tags('<pushStream id="thoughts"/>', "<component id='room objs'>", '</component>', '<popStream/>')
 
         expect(host.current_stream).to be_nil
-        expect(host.stream_stack).to be_empty
       end
 
-      it 'pushes nothing for a self-closing component that a later pop could restore' do
+      it 'records nothing a later pop could return to for a self-closing component' do
         receive_tags("<component id='x'/>", '<pushStream id="thoughts"/>', '<popStream/>')
 
         expect(host.current_stream).to be_nil
-        expect(host.stream_stack).to be_empty
       end
 
-      it 'pushes nothing for a compDef pair' do
+      it 'records nothing a later pop could return to for a compDef pair' do
         receive_tags('<pushStream id="thoughts"/>', "<compDef id='exp Bow'>", '</compDef>')
 
-        expect(host.stream_stack).to eq ['thoughts']
         expect(host.current_stream).to eq 'thoughts'
+        expect(streams_popped_back_to).to be_empty
       end
     end
 
@@ -911,7 +606,6 @@ RSpec.describe TagHandlers do
         receive_tags('<pushStream id="moonWindow"/>', prompt)
 
         expect(host.current_stream).to be_nil
-        expect(host.stream_stack).to be_empty
         expect(flush_before('<popStream/>', 'You sense nothing wrong with Fidon.')).to eq ['You sense nothing wrong with Fidon.', nil]
       end
 
@@ -927,15 +621,16 @@ RSpec.describe TagHandlers do
         expect(host.current_stream).to be_nil
       end
 
-      it 'clears a combat flag left by an unclosed combat push' do
+      it 'ends combat routing left on by an unclosed combat push' do
         receive_tags('<pushStream id="combat" />', prompt, '<unknownTag/>')
 
-        expect(host.combat_next_line).to be false
+        expect(host.combat_routing?).to be false
         expect(host.current_stream).to be_nil
       end
 
       it 'changes nothing and flushes nothing when no stream is open' do
         buf = +'text before the prompt'
+
         host.dispatch_tag(prompt, buf)
 
         expect(buf).to eq 'text before the prompt'
@@ -947,67 +642,339 @@ RSpec.describe TagHandlers do
                      '<pushStream id="familiar"/>', '<popStream/>')
 
         expect(host.current_stream).to eq 'thoughts'
-        expect(host.stream_stack).to eq ['thoughts']
+        expect(streams_popped_back_to).to be_empty
       end
     end
 
     it 'keeps only the 8 most recent unmatched pushes' do
-      ids = (1..11).map { |n| "s#{n}" }
-      receive_tags(*ids.map { |id| %(<pushStream id="#{id}"/>) })
+      receive_tags(*(1..11).map { |n| %(<pushStream id="s#{n}"/>) })
 
-      expect(host.stream_stack).to eq ids.last(8)
-      8.times { host.dispatch_tag('<popStream/>', String.new) }
-      expect(host.current_stream).to be_nil
+      # s11 is current; s1, s2 and s3 were dropped.
+      expect(streams_popped_back_to).to eq %w[s10 s9 s8 s7 s6 s5 s4]
     end
   end
 
-  describe 'adversarial: combat_next_line edge cases' do
-    it 'combat_next_line with empty text buffer does not flush' do
-      host.combat_next_line = true
-      host.dispatch_tag('<unknownTag/>', String.new)
-      expect(host.current_stream).to eq 'combat'
-      expect(host.flushed_texts).to be_empty
+  describe '<color> and </color>' do
+    it 'colors the text between them with the fg and bg it names' do
+      buf = +''
+      host.dispatch_tag('<color fg="ff0000" bg="000000">', buf)
+      buf << 'red on black'
+      host.dispatch_tag('</color>', buf)
+
+      expect(host.line_colors).to eq [{ start: 0, fg: 'ff0000', bg: '000000', end: 12 }]
     end
 
-    it 'popStream combat resets flag even when current_stream is different' do
-      host.combat_next_line = true
-      host.current_stream = 'thoughts'
-      host.dispatch_tag('<popStream id="combat" />', String.new)
-      expect(host.combat_next_line).to be false
-      expect(host.current_stream).to be_nil
+    it 'passes the underline attribute on' do
+      buf = +''
+      host.dispatch_tag('<color ul="true">', buf)
+      buf << 'underlined'
+      host.dispatch_tag('</color>', buf)
+
+      expect(host.line_colors).to eq [{ start: 0, ul: 'true', end: 10 }]
+    end
+
+    it 'records back-to-back colors as adjacent runs' do
+      buf = +''
+      host.dispatch_tag('<color fg="ff0000">', buf)
+      buf << 'red'
+      host.dispatch_tag('</color>', buf)
+      host.dispatch_tag('<color fg="00ff00">', buf)
+      buf << 'green'
+      host.dispatch_tag('</color>', buf)
+
+      expect(host.line_colors).to eq [{ start: 0, fg: 'ff0000', end: 3 }, { start: 3, fg: '00ff00', end: 8 }]
     end
   end
 
-  describe 'adversarial: link edge cases' do
+  describe '<preset> and </preset>' do
+    it 'colors the text between them with the preset' do
+      PRESET['speech'] = ['00ff00', '000000']
+      buf = +''
+      host.dispatch_tag('<preset id="speech">', buf)
+      buf << 'Someone says hello'
+      host.dispatch_tag('</preset>', buf)
+
+      expect(host.line_colors).to eq [{ start: 0, fg: '00ff00', bg: '000000', end: 18 }]
+    end
+
+    it 'records an inner and an outer run for nested presets, each in its own color' do
+      PRESET['speech'] = ['00ff00', nil]
+      PRESET['whisper'] = ['0000ff', nil]
+      buf = +''
+      host.dispatch_tag('<preset id="speech">', buf)
+      buf << 'outer '
+      host.dispatch_tag('<preset id="whisper">', buf)
+      buf << 'inner'
+      host.dispatch_tag('</preset>', buf)
+      host.dispatch_tag('</preset>', buf)
+
+      expect(host.line_colors).to eq [{ start: 6, fg: '0000ff', bg: nil, end: 11 },
+                                      { start: 0, fg: '00ff00', bg: nil, end: 11 }]
+    end
+
+    it 'colors nothing for a preset id the settings do not define' do
+      buf = +''
+      host.dispatch_tag('<preset id="nonexistent">', buf)
+      buf << 'plain'
+      host.dispatch_tag('</preset>', buf)
+
+      expect(host.line_colors).to be_empty
+    end
+
+    it 'flushes the text before a roomDesc preset and captures the description, with a room window' do
+      load_layout_with_room_window
+      buf = +'text before desc'
+
+      host.dispatch_tag('<preset id="roomDesc">', buf)
+
+      expect(host.flushed_texts.map { |f| f[:text] }).to eq ['text before desc']
+      expect(host.room_capture_mode).to eq :desc
+    end
+  end
+
+  describe '<style>' do
+    before { PRESET['roomName'] = ['00ff00', nil] }
+
+    it 'opens a style span and captures the room title at a roomName style' do
+      host.dispatch_tag('<style id="roomName"/>', String.new)
+
+      expect(host.open_span(:style)).to eq(start: 0, fg: '00ff00', bg: nil)
+      expect(host.room_capture_mode).to eq :title
+    end
+
+    it 'closes the style and flushes the captured title at a style with an empty id' do
+      buf = +''
+      host.dispatch_tag('<style id="roomName"/>', buf)
+      buf << 'Town Square'
+
+      host.dispatch_tag('<style id=""/>', buf)
+
+      expect(host.open_span(:style)).to be_nil
+      expect(host.flushed_texts.map { |f| f[:text] }).to eq ['Town Square']
+    end
+
+    it 'leaves an open style and its room capture alone at a style without an id' do
+      buf = +''
+      host.dispatch_tag('<style id="roomName"/>', buf)
+      buf << 'Town Square'
+
+      host.dispatch_tag('<style/>', buf)
+
+      expect(host.open_span(:style)).to eq(start: 0, fg: '00ff00', bg: nil)
+      expect([host.room_capture_mode, host.flushed_texts]).to eq [:title, []]
+    end
+  end
+
+  describe 'links: <d> and <a>' do
     before { state.blue_links = true }
 
-    it 'creates no link for a link with no text' do
-      buf = +''
-      host.dispatch_tag('<d>', buf)
+    it 'records the cmd attribute as the link command' do
+      buf = +'Go through '
+      host.dispatch_tag("<d cmd='go door'>", buf)
+      buf << 'the door'
       host.dispatch_tag('</d>', buf)
 
-      link = host.line_colors.find { |c| c[:cmd] }
-      expect(link).to be_nil
+      expect(host.line_colors.find { |c| c[:cmd] }).to include(start: 11, end: 19, cmd: 'go door')
     end
 
-    it 'GS link with exist but no noun uses _drag prefix' do
+    it 'uses the link text as the command when there is no cmd attribute' do
+      buf = +'Exit: '
+      host.dispatch_tag('<d>', buf)
+      buf << 'north'
+      host.dispatch_tag('</d>', buf)
+
+      expect(host.line_colors.find { |c| c[:cmd] }).to include(cmd: 'north')
+    end
+
+    it 'looks at a GemStone <a> item by its exist id' do
+      buf = +''
+      host.dispatch_tag('<a exist="12345" noun="sword">', buf)
+      buf << 'a sword'
+      host.dispatch_tag('</a>', buf)
+
+      expect(host.line_colors.find { |c| c[:cmd] }).to include(cmd: 'look #12345')
+    end
+
+    it 'drags a GemStone <a> item with an exist id but no noun' do
       buf = +''
       host.dispatch_tag('<a exist="99999">', buf)
       buf << 'an item'
       host.dispatch_tag('</a>', buf)
 
-      link = host.line_colors.find { |c| c[:cmd] }
-      expect(link[:cmd]).to eq '_drag #99999'
+      expect(host.line_colors.find { |c| c[:cmd] }).to include(cmd: '_drag #99999')
     end
 
-    it 'link cmd with special characters is preserved verbatim' do
+    it 'keeps a cmd with special characters as sent' do
       buf = +''
       host.dispatch_tag("<d cmd='go #12345 door'>", buf)
       buf << 'the door'
       host.dispatch_tag('</d>', buf)
 
-      link = host.line_colors.find { |c| c[:cmd] }
-      expect(link[:cmd]).to eq 'go #12345 door'
+      expect(host.line_colors.find { |c| c[:cmd] }).to include(cmd: 'go #12345 door')
+    end
+
+    it 'records no link command around no text' do
+      buf = +''
+      host.dispatch_tag('<d>', buf)
+      host.dispatch_tag('</d>', buf)
+
+      expect(host.line_colors.filter_map { |c| c[:cmd] }).to be_empty
+    end
+
+    it 'records nothing while links are off' do
+      state.blue_links = false
+      buf = +''
+      host.dispatch_tag("<d cmd='go'>", buf)
+      buf << 'door'
+      host.dispatch_tag('</d>', buf)
+
+      expect(host.line_colors).to be_empty
+    end
+  end
+
+  describe '<indicator>' do
+    it 'turns the icon indicator on for a visible icon' do
+      events = collect_events(:indicator_update)
+
+      host.dispatch_tag("<indicator id='IconSTUNNED' visible='y'/>", String.new)
+
+      expect(events).to eq [{ type: :indicator_update, id: 'stunned', value: true }]
+    end
+
+    it 'turns the countdown of the same name on' do
+      events = collect_events(:countdown_active)
+
+      host.dispatch_tag("<indicator id='IconSTUNNED' visible='y'/>", String.new)
+
+      expect(events).to eq [{ type: :countdown_active, id: 'stunned', active: true }]
+    end
+  end
+
+  describe '<image>' do
+    it 'sets the nerve damage rank from an nsys image' do
+      events = collect_events(:indicator_update)
+
+      host.dispatch_tag("<image id='nsys' name='nsys3'/>", String.new)
+
+      expect(events.last).to include(id: 'nsys', value: 3)
+    end
+
+    it 'sets the injury level of a body part' do
+      events = collect_events(:indicator_update)
+
+      host.dispatch_tag("<image id='chest' name='Injury2'/>", String.new)
+
+      expect(events.last).to include(id: 'chest', value: 2)
+    end
+  end
+
+  describe '<LaunchURL>' do
+    it 'opens the src as a path on www.play.net' do
+      events = collect_events(:launch_url)
+
+      host.dispatch_tag('<LaunchURL src="/path/to/page"/>', String.new)
+
+      expect(events.last).to include(url: 'https://www.play.net/path/to/page')
+    end
+
+    it 'ignores a src that turns play.net into userinfo for another host' do
+      events = collect_events(:launch_url)
+
+      host.dispatch_tag('<LaunchURL src="@evil.example/x"/>', String.new)
+
+      expect(events).to be_empty
+    end
+
+    it 'ignores a src that extends the play.net host name' do
+      events = collect_events(:launch_url)
+
+      host.dispatch_tag('<LaunchURL src=".evil.example/x"/>', String.new)
+
+      expect(events).to be_empty
+    end
+  end
+
+  describe '<streamWindow>' do
+    it 'takes the room title from the subtitle of the room streamWindow' do
+      events = collect_events(:indicator_update, :room_title)
+
+      host.dispatch_tag(%q{<streamWindow id='room' subtitle=" - [Town Square]"/>}, String.new)
+
+      expect(state.room_title).to eq 'Town Square'
+      expect(events).to include(a_hash_including(type: :room_title, text: 'Town Square'))
+      expect(events).to include(a_hash_including(type: :indicator_update, id: 'room', label: 'Town Square'))
+    end
+
+    it 'keeps the DragonRealms room number after the title' do
+      host.dispatch_tag(%q{<streamWindow id='room' subtitle=" - [Bosque Deriel] (230008)"/>}, String.new)
+
+      expect(state.room_title).to eq 'Bosque Deriel (230008)'
+    end
+
+    it 'ignores a streamWindow other than room' do
+      host.dispatch_tag(%q{<streamWindow id='main' subtitle="test"/>}, String.new)
+
+      expect(state.room_title).to eq ''
+    end
+  end
+
+  describe '<clearStream>' do
+    it 'clears the spell window for percWindow' do
+      events = collect_events(:clear_spells)
+
+      host.dispatch_tag('<clearStream id="percWindow"/>', String.new)
+
+      expect(events.length).to eq 1
+    end
+
+    it 'clears nothing for another stream' do
+      events = collect_events(:clear_spells)
+
+      host.dispatch_tag('<clearStream id="other"/>', String.new)
+
+      expect(events).to be_empty
+    end
+  end
+
+  describe '<progressBar>' do
+    it 'shows DragonRealms health at 0%' do
+      events = collect_events(:progress_update)
+
+      host.dispatch_tag("<progressBar id='health' value='0' text='health 0%'/>", String.new)
+
+      expect(events.last).to include(id: 'health', value: 0, max: 100)
+    end
+
+    it 'fills the encumbrance bar past full for Overloaded' do
+      events = collect_events(:progress_update)
+
+      host.dispatch_tag("<progressBar id='encumlevel' value='100' text='Overloaded'/>", String.new)
+
+      expect(events.last).to include(id: 'encumbrance', value: 110, max: 110)
+    end
+
+    it 'fills the mind bar past full for saturated' do
+      events = collect_events(:progress_update)
+
+      host.dispatch_tag("<progressBar id='mindState' value='100' text='saturated'/>", String.new)
+
+      expect(events.last).to include(id: 'mind', value: 110, max: 110)
+    end
+
+    it 'shows a negative current GemStone vital' do
+      events = collect_events(:progress_update)
+
+      host.dispatch_tag("<progressBar id='health' value='0' text='health -5/100'/>", String.new)
+
+      expect(events.last).to include(id: 'health', value: -5, max: 100)
+    end
+
+    it 'ignores a progressBar without a value, even when its text has numbers' do
+      events = collect_events(:progress_update)
+
+      host.dispatch_tag("<progressBar id='health' text='health 456/456'/>", String.new)
+
+      expect(events).to be_empty
     end
   end
 
@@ -1021,7 +988,7 @@ RSpec.describe TagHandlers do
     # @yieldreturn [Object] what the handler did
     def expect_each(tags)
       tags.each do |tag, expected|
-        fresh = TagHandlerHost.new(wm: wm, state: SharedState.new.tap { |s| s.skip_server_time_offset = true }, event_bus: EventBus.new)
+        fresh = build_host(state: SharedState.new.tap { |s| s.skip_server_time_offset = true }, event_bus: EventBus.new)
         actual = yield(fresh, tag)
         expect(actual).to eq(expected), "#{tag} gave #{actual.inspect}, expected #{expected.inspect}"
       end
@@ -1104,6 +1071,7 @@ RSpec.describe TagHandlers do
         "<indicator id='IconSTUNNED'  visible='y'/>"      => ['stunned', true],
         "<indicator x='1' id='IconSTUNNED' visible='y'/>" => ['stunned', true],
         "<indicator id='Iconstunned' visible='y'/>"       => nil,
+        "<indicator id='BadFormat' visible='y'/>"         => nil,
         "<indicator id='IconSTUNNED' visible='yes'/>"     => nil
       ) { |h, tag| events_of(h, tag, :countdown_active).last&.values_at(:id, :active) }
     end
@@ -1248,7 +1216,7 @@ RSpec.describe TagHandlers do
       ) { |h, tag| events_of(h, tag, :compass_update).last[:dirs] }
     end
 
-    it 'resets the combat flag on a tag named popStream' do
+    it 'ends combat routing at a tag named popStream' do
       expect_each(
         '<popStream/>'              => false,
         "<popStream id='x'/>"       => false,
@@ -1256,36 +1224,47 @@ RSpec.describe TagHandlers do
         '<popStreams id="combat"/>' => true,
         '</popStream>'              => true,
         '<pushStream/>'             => true
-      ) { |h, tag| h.combat_next_line = true; h.dispatch_tag(tag, String.new); h.combat_next_line }
-    end
-
-    it 'resyncs streams at a tag named prompt, not at its end tag' do
-      expect_each(
-        "<prompt time='1'>&gt;</prompt>" => [nil, []],
-        '<prompt>'                       => [nil, []],
-        '<prompt-x>'                     => [nil, []],
-        '<promptX>'                      => ['combat', ['combat']],
-        '</prompt>'                      => ['combat', ['combat']]
       ) do |h, tag|
         h.dispatch_tag("<pushStream id='combat'/>", String.new)
         h.dispatch_tag(tag, String.new)
-        [h.current_stream, h.stream_stack]
+        h.combat_routing?
       end
     end
 
+    # Each row: the stream after the tag, then the stream a later push and
+    # pop returns to (the combat push, if the tag left it open).
+    it 'resyncs streams at a tag named prompt, not at its end tag' do
+      expect_each(
+        "<prompt time='1'>&gt;</prompt>" => [nil, nil],
+        '<prompt>'                       => [nil, nil],
+        '<prompt-x>'                     => [nil, nil],
+        '<promptX>'                      => %w[combat combat],
+        '</prompt>'                      => %w[combat combat]
+      ) do |h, tag|
+        h.dispatch_tag("<pushStream id='combat'/>", String.new)
+        h.dispatch_tag(tag, String.new)
+        after_tag = h.current_stream
+        h.dispatch_tag("<pushStream id='thoughts'/>", String.new)
+        h.dispatch_tag('<popStream/>', String.new)
+        [after_tag, h.current_stream]
+      end
+    end
+
+    # Each row: the stream after the tag, then the streams bare pops return
+    # to on the way back to main (the pushStreams still open below it).
     it 'records only a pushStream as open, and closes one only at a popStream' do
       expect_each(
-        "<pushStream id='a'/>"  => ['a', %w[x a]],
-        "<component id='a'/>"   => ['a', %w[x]],
-        "<compDef id='a'/>"     => ['a', %w[x]],
+        "<pushStream id='a'/>"  => ['a', %w[x]],
+        "<component id='a'/>"   => ['a', []],
+        "<compDef id='a'/>"     => ['a', []],
         "<popStream id='x'/>"   => [nil, []],
         "<popStream-x id='x'/>" => [nil, []],
-        '</component>'          => ['x', %w[x]],
-        '</compDef>'            => ['x', %w[x]]
+        '</component>'          => ['x', []],
+        '</compDef>'            => ['x', []]
       ) do |h, tag|
         h.dispatch_tag("<pushStream id='x'/>", String.new)
         h.dispatch_tag(tag, String.new)
-        [h.current_stream, h.stream_stack]
+        [h.current_stream, streams_popped_back_to(h)]
       end
     end
 
@@ -1301,29 +1280,55 @@ RSpec.describe TagHandlers do
     end
   end
 
-  describe 'adversarial: progress bar edge cases' do
-    it 'emits health at 0%' do
-      events = collect_events(:progress_update)
-      host.dispatch_tag("<progressBar id='health' value='0' text='health 0%'/>", String.new)
-      expect(events.last).to include(id: 'health', value: 0, max: 100)
+  # The text between tags is decoded before the tags that follow it take
+  # their positions, so these go through GameTextProcessor#process_line into
+  # the main window.
+  describe 'entities in the text between tags' do
+    # The map Application hands GameTextProcessor.
+    let(:xml_escapes) { { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' } }
+    # Color pair number per foreground color, so a cell's color can be read
+    # back from its attributes.
+    let(:pairs) { { 'ff0000' => 1 } }
+    let(:main) { window_manager.stream['main'] }
+    let(:processor) do
+      GameTextProcessor.new(window_mgr: window_manager, shared_state: state, cmd_buffer: instance_double(CommandBuffer),
+                            xml_escapes: xml_escapes, event_bus: event_bus)
     end
 
-    it 'emits encumbrance Overloaded as 110' do
-      events = collect_events(:progress_update)
-      host.dispatch_tag("<progressBar id='encumlevel' value='100' text='Overloaded'/>", String.new)
-      expect(events.last).to include(id: 'encumbrance', value: 110, max: 110)
+    before do
+      LAYOUT['entities'] = REXML::Document.new(<<~XML).root
+        <layout><window class='text' top='0' left='0' height='3' width='60' value='main'/></layout>
+      XML
+      window_manager.load_layout('entities')
+      window_manager.subscribe_to_events(event_bus)
+      allow(HighlightProcessor).to receive(:get_color_pair_id) { |fg, _bg| pairs.fetch(fg, 0) }
     end
 
-    it 'emits mind saturated as 110' do
-      events = collect_events(:progress_update)
-      host.dispatch_tag("<progressBar id='mindState' value='100' text='saturated'/>", String.new)
-      expect(events.last).to include(id: 'mind', value: 110, max: 110)
+    # @return [Array<String, nil>] the foreground color of each cell of row +y+
+    #   from column 0 up to +width+, nil where uncolored
+    def colors_in_row(y, width)
+      (0...width).map { |x| pairs.key(main.attrs_at(y, x) >> 8) }
     end
 
-    it 'emits GS vitals with negative current' do
-      events = collect_events(:progress_update)
-      host.dispatch_tag("<progressBar id='health' value='0' text='health -5/100'/>", String.new)
-      expect(events.last).to include(id: 'health', value: -5, max: 100)
+    it 'shows each entity as the character it stands for, wherever it is in the line' do
+      processor.process_line('&lt;&gt; &lt;tag&gt; &amp; &quot;q&quot; &apos;a&apos; end&gt;')
+
+      expect(main.rows.first).to eq %(<> <tag> & "q" 'a' end>)
+    end
+
+    it 'decodes one layer only, so &amp;lt; shows as &lt;' do
+      processor.process_line('Type &amp;lt; or &amp;amp;.')
+
+      expect(main.rows.first).to eq 'Type &lt; or &amp;.'
+    end
+
+    it 'colors the decoded text, not the length of its entities' do
+      PRESET['monsterbold'] = ['ff0000', nil]
+
+      processor.process_line('<pushBold/>a&lt;b<popBold/> cd')
+
+      expect(main.rows.first).to eq 'a<b cd'
+      expect(colors_in_row(0, 6)).to eq ['ff0000', 'ff0000', 'ff0000', nil, nil, nil]
     end
   end
 end
