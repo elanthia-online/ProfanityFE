@@ -76,8 +76,9 @@ class ExpWindow < BaseWindow
   #
   # @param text [String] the skill text to parse
   # @param _line_colors [Array<Hash>] color regions (unused; highlights are recomputed)
+  # @param indent [Boolean, nil] unused; accepted like every stream window's +add_string+
   # @return [void]
-  def add_string(text, _line_colors, indent: nil) # rubocop:disable Lint/UnusedMethodArgument
+  def add_string(text, _line_colors = [], indent: nil) # rubocop:disable Lint/UnusedMethodArgument
     skill = parse_skill(text)
     return unless skill
 

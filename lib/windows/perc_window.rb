@@ -54,15 +54,6 @@ class PercWindow < BaseWindow
     display_lines
   end
 
-  # Render a spell line with a trailing newline and immediate refresh.
-  #
-  # @param line [String] the spell/effect text
-  # @param line_colors [Array<Hash>] color region descriptors
-  # @return [void]
-  def add_line(line, line_colors = [])
-    super(line, line_colors, newline: true, refresh: true)
-  end
-
   # Add a spell/effect line to the current batch and redraw the window.
   #
   # The line is stored unwrapped; wrapping happens when drawing. A line
@@ -94,7 +85,7 @@ class PercWindow < BaseWindow
     erase
     display_lines.first(maxy).each_with_index do |(line, line_colors), row|
       setpos(row, 0)
-      add_line(line, line_colors)
+      add_line(line, line_colors, newline: true, refresh: true)
     end
     noutrefresh
   rescue StandardError => e
