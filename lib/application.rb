@@ -7,6 +7,7 @@ require_relative 'boot_profiler'
 require_relative 'clock'
 require_relative 'games'
 require_relative 'server_connection'
+require_relative 'key_action_registry'
 
 # Core application class for ProfanityFE.
 #
@@ -14,11 +15,9 @@ require_relative 'server_connection'
 # profanity.rb: the command buffer, window manager, shared state,
 # key bindings, mouse scroll handler, and the {ServerConnection}.
 #
-# Converts closure-captured local variables to instance variables and
-# the 30+ proc definitions to named methods. The key_action hash still
-# contains Proc objects (SettingsLoader requires this), but each proc
-# now delegates to an instance method rather than closing over 10+
-# local variables.
+# Converts closure-captured local variables to instance variables. The
+# key actions are Procs by name (SettingsLoader requires this), built by
+# {KeyActionRegistry}.
 #
 # @example
 #   app = Application.new(cli_options, settings_file: '/home/user/.profanity/mahtra.xml',
@@ -145,10 +144,12 @@ class Application
     @clock = Clock.new
     @window_mgr = WindowManager.new(clock: @clock)
     @key_binding = {}
-    @key_action = {}
     @selection_enabled = false
 
-    setup_key_actions
+    @key_action = KeyActionRegistry.new(cmd_buffer: @cmd_buffer, window_mgr: @window_mgr,
+                                        key_binding: @key_binding,
+                                        send_command: method(:send_command),
+                                        send_history_command: method(:send_history_command)).actions
 
     @mouse_scroll = MouseScroll.new(@key_action, method(:write_to_client))
     @mouse_scroll.enable_click_events if cli_options[:links]
@@ -490,6 +491,11 @@ class Application
 
   # ---- Command sending ----
 
+  # Send the command line: clear it, echo it after the prompt in the main
+  # window, add it to the history and run it (see {#execute_command}).
+  # Bound to the +send_command+ key action and run by a macro's +\r+.
+  #
+  # @return [void]
   def send_command
     cmd = @cmd_buffer.clear_and_get
     @shared_state.need_prompt = false
@@ -502,6 +508,12 @@ class Application
     execute_command(cmd)
   end
 
+  # Resend a command from the history, echoing it first when there is a
+  # main window. Bound to the +send_last_command+ (1) and
+  # +send_second_last_command+ (2) key actions.
+  #
+  # @param index [Integer] history index, 1 = the last command sent
+  # @return [void]
   def send_history_command(index)
     if (cmd = @cmd_buffer.history[index])
       if (window = @window_mgr.stream[MAIN_STREAM])
@@ -511,129 +523,6 @@ class Application
       end
       execute_command(cmd)
     end
-  end
-
-  # ---- Key action setup ----
-
-  # Register every named key action as a Proc in {#key_action}.
-  #
-  # Each cursor/edit action delegates to {CommandBuffer}, which only stages
-  # its changes to the curses virtual screen via +noutrefresh+. The physical
-  # terminal is not repainted until +doupdate+ is called, so *every* action
-  # that mutates the visible command line must end with
-  # {CursesRenderer.doupdate}. Omitting it leaves the edit invisible until
-  # the next keystroke happens to trigger a flush -- the class of bug that
-  # previously affected +cursor_backspace_word+, +cursor_delete_word+, and
-  # +cursor_yank+.
-  #
-  # @return [void]
-  # @see CommandBuffer#backspace_word
-  # @see CursesRenderer.doupdate
-  def setup_key_actions
-    @key_action['resize'] = proc {
-      @window_mgr.resize(@cmd_buffer)
-      CursesRenderer.doupdate
-    }
-
-    @key_action['cursor_left']           = proc { @cmd_buffer.cursor_left; CursesRenderer.doupdate }
-    @key_action['cursor_right']          = proc { @cmd_buffer.cursor_right; CursesRenderer.doupdate }
-    @key_action['cursor_word_left']      = proc { @cmd_buffer.cursor_word_left; CursesRenderer.doupdate }
-    @key_action['cursor_word_right']     = proc { @cmd_buffer.cursor_word_right; CursesRenderer.doupdate }
-    @key_action['cursor_home']           = proc { @cmd_buffer.cursor_home; CursesRenderer.doupdate }
-    @key_action['cursor_end']            = proc { @cmd_buffer.cursor_end; CursesRenderer.doupdate }
-    @key_action['cursor_backspace']      = proc { @cmd_buffer.backspace; CursesRenderer.doupdate }
-    @key_action['cursor_delete']         = proc { @cmd_buffer.delete_char; CursesRenderer.doupdate }
-    @key_action['cursor_backspace_word'] = proc { @cmd_buffer.backspace_word; CursesRenderer.doupdate }
-    @key_action['cursor_delete_word']    = proc { @cmd_buffer.delete_word; CursesRenderer.doupdate }
-    @key_action['cursor_kill_forward']   = proc { @cmd_buffer.kill_forward; CursesRenderer.doupdate }
-    @key_action['cursor_kill_line']      = proc { @cmd_buffer.kill_line; CursesRenderer.doupdate }
-    @key_action['cursor_yank']           = proc { @cmd_buffer.yank; CursesRenderer.doupdate }
-
-    @key_action['switch_current_window'] = proc {
-      SCROLL_WINDOW[0]&.set_active(false)
-      SCROLL_WINDOW.push(SCROLL_WINDOW.shift)
-      SCROLL_WINDOW[0]&.set_active(true)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['next_tab'] = proc {
-      TabbedTextWindow.list.each(&:next_tab)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-    @key_action['switch_tab'] = @key_action['next_tab']
-
-    @key_action['prev_tab'] = proc {
-      TabbedTextWindow.list.each(&:prev_tab)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-    @key_action['switch_tab_reverse'] = @key_action['prev_tab']
-
-    (1..5).each do |n|
-      @key_action["switch_tab_#{n}"] = proc {
-        TabbedTextWindow.list.each { |w| w.switch_tab_by_index(n) }
-        @cmd_buffer.refresh
-        CursesRenderer.doupdate
-      }
-    end
-
-    @key_action['scroll_current_window_up_one'] = proc {
-      SCROLL_WINDOW[0]&.scroll_lines(-1)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['scroll_current_window_down_one'] = proc {
-      SCROLL_WINDOW[0]&.scroll_lines(1)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['scroll_current_window_up_page'] = proc {
-      if (w = SCROLL_WINDOW[0])
-        w.scroll_lines(0 - w.maxy + 1)
-      end
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['scroll_current_window_down_page'] = proc {
-      if (w = SCROLL_WINDOW[0])
-        w.scroll_lines(w.maxy - 1)
-      end
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['scroll_current_window_bottom'] = proc {
-      # buffer_pos counts rows; the buffer size counts (wrapped) lines
-      SCROLL_WINDOW[0]&.scroll_lines(SCROLL_WINDOW[0]&.buffer_pos)
-      @cmd_buffer.refresh
-      CursesRenderer.doupdate
-    }
-
-    @key_action['previous_command'] = proc { @cmd_buffer.previous_command; CursesRenderer.doupdate }
-    @key_action['next_command']     = proc { @cmd_buffer.next_command; CursesRenderer.doupdate }
-
-    @key_action['switch_arrow_mode'] = proc {
-      if @key_binding[Curses::KEY_UP] == @key_action['previous_command']
-        @key_binding[Curses::KEY_UP] = @key_action['scroll_current_window_up_page']
-        @key_binding[Curses::KEY_DOWN] = @key_action['scroll_current_window_down_page']
-      elsif @key_binding[Curses::KEY_UP] == @key_action['scroll_current_window_up_page']
-        @key_binding[Curses::KEY_UP] = @key_action['scroll_current_window_up_one']
-        @key_binding[Curses::KEY_DOWN] = @key_action['scroll_current_window_down_one']
-      else
-        @key_binding[Curses::KEY_UP] = @key_action['previous_command']
-        @key_binding[Curses::KEY_DOWN] = @key_action['next_command']
-      end
-    }
-
-    @key_action['send_command']             = proc { send_command }
-    @key_action['send_last_command']        = proc { send_history_command(1) }
-    @key_action['send_second_last_command'] = proc { send_history_command(2) }
-    @key_action['autocomplete']             = proc { Autocomplete.complete(@cmd_buffer, @window_mgr.stream[MAIN_STREAM]) }
   end
 
   # ---- Initialization ----
