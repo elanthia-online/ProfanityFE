@@ -45,6 +45,9 @@ module XmlTokenizer
   # unquoted values.
   ATTRIBUTE = /\s+([\w.:-]+)=(?:"([^"]*)"|'([^']*)')/
 
+  # A tag at the start of a string, read as {SINGLE_TAG_REGEX} reads one.
+  LEADING_TAG = /\A(?:#{SINGLE_TAG_REGEX.source})/
+
   # Tokenize a line into ordered [:text, str] and [:tag, str] segments.
   #
   # The segments joined give back the line.
@@ -104,6 +107,32 @@ module XmlTokenizer
       attributes[scanner[1]] = scanner[2] || scanner[3] unless attributes.key?(scanner[1])
     end
     attributes
+  end
+
+  # The content of a paired segment: the text between its start tag and
+  # its end tag.
+  #
+  # The start tag ends where {SINGLE_TAG_REGEX} ends it, at the first >
+  # outside a quoted value, so a > inside an attribute value is not
+  # content. The content runs to the first end tag of the same name, as
+  # {TAG_REGEX} pairs them: elements don't nest. It is returned as sent,
+  # tags and entities included.
+  #
+  # @example
+  #   XmlTokenizer.content(%q{<right noun="a>b">sword</right>}) # => "sword"
+  #   XmlTokenizer.content('<spell></spell>')                    # => ""
+  #   XmlTokenizer.content('<left>sword')                        # => nil
+  #
+  # @param xml [String] a paired segment from {.tokenize}
+  # @return [String, nil] the content, or nil when +xml+ doesn't start with
+  #   a start tag (an end tag, a self-closing tag, or no tag), or has no end
+  #   tag for it
+  def self.content(xml)
+    return unless (name = xml[/\A<(\w+)(?=[\s>])/, 1])
+    return unless (start = LEADING_TAG.match(xml)) && !start[0].end_with?('/>')
+    return unless (finish = xml.index("</#{name}>", start.end(0)))
+
+    xml[start.end(0)...finish]
   end
 
   # The tags of a line, in order: the tag segments of {.tokenize}.

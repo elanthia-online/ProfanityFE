@@ -63,9 +63,9 @@ class PromptTracker
   # @return [void]
   def prompt_tag(xml)
     @last_stream_text = nil
-    # The text starts after the first >.
     return unless (time = XmlTokenizer.attrs(xml)['time'])&.match?(/\A[0-9]+\z/)
-    return unless (m = xml.match(%r{\A.*?>(?<text>.*?)&gt;</prompt>$}))
+    # The text must end with an escaped >, the only part decoded.
+    return unless (text = XmlTokenizer.content(xml))&.end_with?('&gt;')
 
     unless @state.skip_server_time_offset
       @clock.server_time_offset = @clock.now.to_f - time.to_f
@@ -83,7 +83,7 @@ class PromptTracker
       @boot_profiler.log_elapsed('first prompt (sent look)')
     end
 
-    new_prompt_text = "#{m[:text]}>"
+    new_prompt_text = "#{text.delete_suffix('&gt;')}>"
     return unless @state.update_prompt(new_prompt_text)
 
     @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: new_prompt_text)

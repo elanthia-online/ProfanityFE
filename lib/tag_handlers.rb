@@ -167,19 +167,19 @@ module TagHandlers
 
   # Handle <spell>name</spell> paired tag.
   def handle_spell_tag(xml, _text_buffer)
-    return unless (m = xml.match(%r{^<spell(?:>|\s.*?>)(?<spell>.*?)</spell>$}))
+    return unless (spell = XmlTokenizer.content(xml))
 
-    @event_bus.emit(:indicator_update, id: 'spell', label: m[:spell],
-                                       value: m[:spell] == 'None' ? 0 : 1)
+    @event_bus.emit(:indicator_update, id: 'spell', label: spell,
+                                       value: spell == 'None' ? 0 : 1)
     @pending_render.request_update
   end
 
   # Handle <right>item</right> or <left>item</left> paired tag.
   def handle_hand_tag(xml, _text_buffer)
-    return unless (m = xml.match(%r{^<(?<hand>right|left)(?:>|\s.*?>)(?<item>.*?\S*?)</\k<hand>>}))
+    return unless (item = XmlTokenizer.content(xml))
 
-    @event_bus.emit(:indicator_update, id: m[:hand], label: m[:item],
-                                       value: m[:item] == 'Empty' ? 0 : 1)
+    @event_bus.emit(:indicator_update, id: XmlTokenizer.tag_name(xml), label: item,
+                                       value: item == 'Empty' ? 0 : 1)
     @pending_render.request_update
   end
 
