@@ -70,7 +70,7 @@ RSpec.describe 'Dot-commands typed on the command line' do
     XML
     app.window_mgr.load_layout('dotcmd')
     app.cmd_buffer.window = app.window_mgr.command_window
-    app.instance_variable_set(:@server, server)
+    app.connection.attach(server)
     HIGHLIGHT.clear
   end
 

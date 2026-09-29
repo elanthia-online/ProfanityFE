@@ -6,12 +6,13 @@ require_relative 'feedback'
 require_relative 'boot_profiler'
 require_relative 'clock'
 require_relative 'games'
+require_relative 'server_connection'
 
 # Core application class for ProfanityFE.
 #
 # Owns all runtime state that was previously captured by closures in
 # profanity.rb: the command buffer, window manager, shared state,
-# key bindings, mouse scroll handler, and game server connection.
+# key bindings, mouse scroll handler, and the {ServerConnection}.
 #
 # Converts closure-captured local variables to instance variables and
 # the 30+ proc definitions to named methods. The key_action hash still
@@ -26,6 +27,9 @@ require_relative 'games'
 class Application
   attr_reader :key_binding, :key_action, :cmd_buffer, :window_mgr,
               :shared_state, :mouse_scroll
+
+  # @return [ServerConnection] the connection to the game server
+  attr_reader :connection
 
   # The dot-commands, in the order {#execute_command} tries them (the first
   # match wins) and +.help+ lists them. Each handler runs with
@@ -95,8 +99,8 @@ class Application
   DOT_KEY_TIMEOUT_MS = 5000
 
   # Seconds to wait for the TCP connection to the game server before giving
-  # up, so an unreachable --host fails instead of hanging.
-  CONNECT_TIMEOUT = 10
+  # up (see {ServerConnection::CONNECT_TIMEOUT}).
+  CONNECT_TIMEOUT = ServerConnection::CONNECT_TIMEOUT
 
   # Color of the highlights added with +.highlight+ (cyan).
   INLINE_HIGHLIGHT_COLOR = '00ffff'
@@ -116,13 +120,9 @@ class Application
                  game_rules: Games::BOTH_GAMES)
     @cli_options = cli_options
     @settings_file = settings_file
-    @host = host
-    @port = port
     @boot_profiler = boot_profiler
     @game_rules = game_rules
-    @server = nil
-    # Receives the server thread's outcome (see #start_server_thread)
-    @session_end = Queue.new
+    @connection = ServerConnection.new(host: host, port: port)
 
     @xml_escapes = {
       '&lt;'   => '<',
@@ -189,7 +189,7 @@ class Application
 
       return instance_exec(*args, &command.handler)
     end
-    send_to_server(cmd.sub(/^\./, ';'))
+    @connection.send_line(cmd.sub(/^\./, ';'))
   end
 
   # Interpret and execute a macro string.
@@ -502,20 +502,6 @@ class Application
     execute_command(cmd)
   end
 
-  # Write one line to the game server, never while holding the render lock.
-  #
-  # Key handlers run inside {CursesRenderer.synchronize}. If the server
-  # stops reading and the socket's send buffer fills, the write blocks; with
-  # the lock held that would also stop the server thread from drawing. So
-  # the write waits until the lock is released (see
-  # {CursesRenderer.outside_lock}); lines keep the order they were sent in.
-  #
-  # @param line [String] the command to send
-  # @return [void]
-  def send_to_server(line)
-    CursesRenderer.outside_lock { @server.puts line }
-  end
-
   def send_history_command(index)
     if (cmd = @cmd_buffer.history[index])
       if (window = @window_mgr.stream[MAIN_STREAM])
@@ -680,10 +666,13 @@ class Application
     TextWindow.list.each { |w| w.maxy.times { w.add_string "\n".dup } }
   end
 
+  # Connect to the game server (see {ServerConnection#connect}), forget the
+  # server time offset of the last connection and start the time sync
+  # thread. Exits with an error if the connection fails.
+  #
+  # @return [void]
   def connect_server
-    @server = Socket.tcp(@host, @port, connect_timeout: CONNECT_TIMEOUT)
-    @server.puts "SET_FRONTEND_PID #{Process.pid}"
-    @server.flush
+    @connection.connect
 
     @clock.server_time_offset = 0.0
 
@@ -692,12 +681,8 @@ class Application
       sleep TIME_SYNC_DELAY
       @shared_state.skip_server_time_offset = false
     end
-  # SystemCallError covers refused, unreachable, timed out, and bad
-  # address; SocketError covers name lookup. IO::TimeoutError is what
-  # TCPSocket's connect_timeout raises, should the socket class change.
-  rescue SystemCallError, SocketError, IO::TimeoutError => e
-    fatal_error("Failed to connect to game server at #{@host}:#{@port}: #{e.message}",
-                'Is the game server running?')
+  rescue ServerConnection::ConnectError => e
+    fatal_error(e.message, 'Is the game server running?')
   end
 
   # Print an error and exit with status 1, closing the curses screen first.
@@ -714,6 +699,10 @@ class Application
     exit 1
   end
 
+  # Build the event bus and the {GameTextProcessor}, and start the server
+  # thread that feeds the processor from the connection.
+  #
+  # @return [Thread] the server thread
   def start_server_thread
     @event_bus = EventBus.new
     @window_mgr.subscribe_to_events(@event_bus)
@@ -734,12 +723,7 @@ class Application
     )
     # The server thread only reports how the connection ended; the input
     # loop picks that up and ends the session on the main thread.
-    Thread.new do
-      outcome = :crashed
-      outcome = @processor.run(@server)
-    ensure
-      @session_end << outcome
-    end
+    @connection.start_reader { |socket| @processor.run(socket) }
   end
 
   # End the session once the server thread reports that the connection is
@@ -797,7 +781,7 @@ class Application
 
     loop do
       IO.select([$stdin], nil, nil, 0.1)
-      end_session(@session_end.pop) unless @session_end.empty?
+      end_session(@connection.take_outcome) if @connection.ended?
 
       CursesRenderer.synchronize do
         # Tick countdowns on every iteration (~100ms), regardless of input
@@ -822,11 +806,7 @@ class Application
   rescue StandardError => e
     ProfanityLog.write('main', e.to_s, backtrace: e.backtrace)
   ensure
-    begin
-      @server&.close
-    rescue StandardError
-      # ignore
-    end
+    @connection.close
     Curses.close_screen
   end
 
@@ -1008,7 +988,7 @@ class Application
         CursesRenderer.doupdate
       end
       @cmd_buffer.add_to_history(link_cmd)
-      send_to_server(link_cmd)
+      @connection.send_line(link_cmd)
       true
     end
   end

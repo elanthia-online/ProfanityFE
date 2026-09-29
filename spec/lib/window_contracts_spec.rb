@@ -100,7 +100,7 @@ RSpec.describe 'Window contracts' do
     allow_any_instance_of(BaseWindow).to receive(:get_color_pair_id) { |_window, fg, bg| pairs[[fg, bg]] }
     SelectionManager.clear_selection
     LAYOUT['contracts'] = REXML::Document.new(layout).root
-    app.instance_variable_set(:@server, server)
+    app.connection.attach(server)
     wm.load_layout('contracts')
     app.cmd_buffer.window = wm.command_window
     event_bus

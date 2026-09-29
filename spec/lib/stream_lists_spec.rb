@@ -175,7 +175,7 @@ RSpec.describe 'Stream fallback and timestamp lists' do
       it "passes speech_ts: #{flag} from the command-line options to the GameTextProcessor" do
         app = Application.new({ char: nil, no_status: true, links: false, room_window_only: false, speech_ts: flag },
                               settings_file: File.join(SPEC_HOME, 'settings.xml'), host: '127.0.0.1', port: 8000)
-        app.instance_variable_set(:@server, StringIO.new)
+        app.connection.attach(StringIO.new)
         allow(GameTextProcessor).to receive(:new).and_call_original
 
         app.send(:start_server_thread).join
