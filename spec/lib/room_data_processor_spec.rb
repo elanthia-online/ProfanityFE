@@ -142,12 +142,13 @@ RSpec.describe RoomDataProcessor do
         "You also see a box.</component><component id='x'>"         => 'You also see a box.',
         'You also see <pushBold/>a goblin<popBold/>.</component>'   => 'You also see <pushBold/>a goblin<popBold/>.',
         'You also see <compass>x</compass>'                         => 'You also see <compass>x</compass>',
-        # any tag whose name starts with component or compDef
-        'You also see a <componentX>box</componentX>.'              => 'You also see a box.',
-        'You also see a </compDef >box<compDefs/>.'                 => 'You also see a box.',
-        # a tag ends at its first >, even inside a quoted value
-        %(You also see <component id="a>b">box</component>)         => %(You also see b">box),
-        %(You also see <b t="<component id='x'>">box)               => %(You also see <b t="">box)
+        'You also see a </compDef >box<compDefs/>.'                 => 'You also see a box<compDefs/>.',
+        # only tags named exactly component or compDef
+        'You also see a <componentX>box</componentX>.'              => 'You also see a <componentX>box</componentX>.',
+        # a > inside a quoted value stays inside its tag, and a tag's quoted
+        # value is part of the tag
+        %(You also see <component id="a>b">box</component>)         => 'You also see box',
+        %(You also see <b t="<component id='x'>">box)               => %(You also see <b t="<component id='x'>">box)
       }.each do |raw, expected|
         expect(objects(raw)).to eq(expected), raw
       end
@@ -167,14 +168,14 @@ RSpec.describe RoomDataProcessor do
         '<pushBold/><right>x</right><popBold/>'                        => ['x'],
         '<pushBold/>a'                                                 => [],
         '<popBold/>a<pushBold/><popBold/>'                             => [],
-        # only <pushBold>, <pushBold/> and <pushBold /> (same for popBold)
-        "<pushBold x='1'/>a goblin<popBold/>"                          => [],
-        '<pushBold/ >a<popBold/>'                                      => [],
-        '<pushBold-x/>a<popBold/>'                                     => [],
-        # a tag ends at its first >, even inside a quoted value; <> is text
-        "<pushBold/>a <b t='>'>b<popBold/>"                            => ["a '>b"],
-        %(<pushBold/>a<b t="<popBold/>">b<popBold/>)                   => ['a<b t="'],
-        '<pushBold/>a <> b<popBold/>'                                  => ['a <> b']
+        # any tag the dispatcher reads as pushBold or popBold
+        "<pushBold x='1'/>a goblin<popBold/>"                          => ['a goblin'],
+        '<pushBold/ >a<popBold/>'                                      => ['a'],
+        '<pushBold-x/>a<popBold/>'                                     => ['a'],
+        # a > inside a quoted value stays inside its tag; <> is a tag
+        "<pushBold/>a <b t='>'>b<popBold/>"                            => ['a b'],
+        %(<pushBold/>a<b t="<popBold/>">b<popBold/>)                   => ['a">b'],
+        '<pushBold/>a <> b<popBold/>'                                  => ['a  b']
       }.each do |raw, expected|
         expect(host.send(:extract_inline_creatures, raw)).to eq(expected), raw
       end

@@ -32,6 +32,9 @@ from game server XML component streams and inline text patterns.
 #
 # @api private
 module RoomDataProcessor
+  # Element names of the tags stripped from inline "You also see" text.
+  COMPONENT_TAGS = %w[component compDef].freeze
+
   # Process room-related text from inline game text and update RoomWindow
   # data if applicable.
   #
@@ -106,7 +109,7 @@ module RoomDataProcessor
       # Extract from raw line to preserve <pushBold/> tags for RoomWindow creature highlighting.
       # Use regex here (not REXML) since inline text isn't inside a component element.
       @room_pending_objects = if @current_raw_line && (match = @current_raw_line.match(/You also see\b.*/))
-                                match[0].gsub(%r{</?(?:component|compDef)[^>]*>}, '').strip
+                                strip_component_tags(match[0]).strip
                               else
                                 text.strip
                               end
@@ -340,14 +343,37 @@ module RoomDataProcessor
   # Extract creature names from pushBold regions in raw XML text.
   # Used by the inline path where SAX bold tracking isn't available.
   #
+  # A region runs from a <pushBold/> to the next <popBold/>; its text, with
+  # any tags inside it removed, is a creature name.
+  #
   # @param raw_text [String] raw objects text with XML bold tags
-  # @return [Array<String>] creature names
+  # @return [Array<String>] creature names, each once, in order
   def extract_inline_creatures(raw_text)
-    raw_text.scan(%r{<pushBold\s*/?>(.*?)<popBold\s*/?>})
-            .flatten
-            .map { |c| c.gsub(%r{<[^>]+>}, '').strip }
-            .reject(&:empty?)
-            .uniq
+    creatures = []
+    name = nil
+    XmlTokenizer.tokenize(raw_text, paired: false).each do |type, segment|
+      if type == :text
+        name&.<<(segment)
+      elsif (tag = XmlTokenizer.start_tag_name(segment)) == 'pushBold'
+        name ||= String.new(encoding: raw_text.encoding)
+      elsif tag == 'popBold' && name
+        creatures << name.strip
+        name = nil
+      end
+    end
+    creatures.reject(&:empty?).uniq
+  end
+
+  # Remove component and compDef start and end tags from raw text, keeping
+  # every other tag and all the text.
+  #
+  # @param raw_text [String] raw text with XML tags
+  # @return [String] the text without component/compDef tags
+  def strip_component_tags(raw_text)
+    XmlTokenizer.tokenize(raw_text, paired: false)
+                .reject { |type, segment| type == :tag && COMPONENT_TAGS.include?(XmlTokenizer.tag_name(segment)) }
+                .map(&:last)
+                .join
   end
 
   # Commit all pending room data to the RoomWindow and clear the staging area.
