@@ -165,6 +165,17 @@ RSpec.describe LayoutLoader do
       expect(geometry(kneeling)).to eq [20, 0, 1, 10]
     end
 
+    it 'draws a kept countdown at its new place and width, with its new label and current value' do
+      roundtime = wm.countdown['roundtime']
+
+      load("<window class='countdown' top='21' left='0' height='1' width='30' value='roundtime' label='Roundtime'/>",
+           id: 'roundtime')
+
+      expect(wm.countdown['roundtime']).to be roundtime
+      expect(roundtime.rows).to eq ["Roundtime#{'0'.rjust(21)}"]
+      expect(geometry(roundtime)).to eq [21, 0, 1, 30]
+    end
+
     it 'keeps the command window and takes the new layout for it' do
       command = wm.command_window
 
@@ -340,6 +351,15 @@ RSpec.describe LayoutLoader do
       app.execute_command('.layout hp')
 
       expect(app.window_mgr.progress['health'].rows).to eq ["hp#{'75'.rjust(28)}"]
+    end
+
+    it 'shows a kept countdown\'s new label and current value at its new width' do
+      define("<window class='countdown' top='21' left='0' height='1' width='30' value='roundtime' label='Roundtime'/>",
+             'roundtime')
+
+      app.execute_command('.layout roundtime')
+
+      expect(app.window_mgr.countdown['roundtime'].rows).to eq ["Roundtime#{'0'.rjust(21)}"]
     end
   end
 end

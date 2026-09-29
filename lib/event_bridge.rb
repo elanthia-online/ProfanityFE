@@ -99,7 +99,7 @@ class EventBridge
       window = @wm.countdown['stunned']
       next unless window
 
-      window.end_time = @wm.clock.now.to_f - @wm.clock.server_time_offset.to_f + data[:seconds].to_f
+      window.end_time = @wm.clock.server_now + data[:seconds].to_f
       window.tick
     end
 

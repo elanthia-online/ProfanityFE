@@ -112,9 +112,12 @@ class WindowManager
   # that thread starts or inside {CursesRenderer.synchronize}, which the
   # server thread holds while it processes a line. Text, indicator,
   # progress, and countdown windows whose keys appear in the new layout are
-  # reused rather than recreated, preserving their content buffers. Every
-  # other window from the previous layout, of any window class, is closed
-  # and removed from its class list and from SCROLL_WINDOW.
+  # reused rather than recreated, preserving their content buffers. A
+  # reused indicator, progress bar or countdown is placed where the new
+  # layout puts it and drawn again there at once; a reused text window
+  # keeps its place until the next {#resize}. Every other window from the
+  # previous layout, of any window class, is closed and removed from its
+  # class list and from SCROLL_WINDOW.
   #
   # Each window built from a BaseWindow subclass gets the element's
   # {WindowLayout} as its +layout+, which {#resize} places it by.

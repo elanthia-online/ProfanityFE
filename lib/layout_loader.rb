@@ -14,7 +14,8 @@ require_relative 'window_layout'
 # layout loads, the loader holds the previous layout's hashes and windows;
 # builders reach them through the manager ({WindowManager#previous_stream}
 # and friends) to reuse a window, and delete what they reuse from
-# {#old_windows}.
+# {#old_windows}. The loader then places each reused window where the new
+# layout puts it and draws it again there ({BaseWindow#place_after_reuse}).
 #
 # @example
 #   loader = LayoutLoader.new(window_manager)
@@ -74,6 +75,7 @@ class LayoutLoader
     end
 
     @old_windows = BaseWindow.all_windows
+    @previous_windows = @old_windows.dup
     @previous_indicator = @wm.indicator
     @previous_stream = @wm.stream
     @previous_progress = @wm.progress
@@ -95,7 +97,8 @@ class LayoutLoader
   # Build the window one +<window>+ element describes. A +sink+ window
   # swallows the streams in its +value+. Any other class is built by its
   # registered builder, if it has one, when its geometry is on screen;
-  # a BaseWindow gets the element's {WindowLayout} as its +layout+.
+  # a BaseWindow gets the element's {WindowLayout} as its +layout+, and
+  # one reused from the previous layout is placed and drawn again there.
   #
   # @param element [REXML::Element] a +<window>+ element of the layout
   # @return [void]
@@ -116,7 +119,10 @@ class LayoutLoader
 
     builder = BaseWindow.type_registry[element.attributes['class']]
     window = builder&.call(size.height, size.width, size.top, size.left, element, @wm)
-    window.layout = layout if window.is_a?(BaseWindow)
+    return unless window.is_a?(BaseWindow)
+
+    window.layout = layout
+    window.place_after_reuse if @previous_windows.any? { |previous| previous.equal?(window) }
   end
 
   # Close a window the new layout did not reuse, and remove it from every
@@ -139,6 +145,7 @@ class LayoutLoader
   # @return [void]
   def forget_previous_layout
     @old_windows = []
+    @previous_windows = []
     @previous_indicator = {}
     @previous_stream = {}
     @previous_progress = {}

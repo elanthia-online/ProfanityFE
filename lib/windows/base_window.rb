@@ -53,9 +53,10 @@ class BaseWindow < Curses::Window
   # +Curses::Window#redraw+: it only marks the window for a full
   # terminal refresh and repaints nothing from the buffer.
   #
-  # Default: nothing, for a window drawn only as its state changes: a
-  # countdown draws itself on every {CountdownWindow#tick} that changes
-  # what it shows.
+  # Moving, resizing or reconfiguring a window ends with a repaint (see
+  # {#redraw_after_resize} and {#place_after_reuse}), so every class that
+  # shows something answers it. Default: nothing, for a class with
+  # nothing to draw.
   #
   # @return [void]
   def repaint; end
@@ -296,12 +297,24 @@ class BaseWindow < Curses::Window
   end
 
   # Show the window again after {#move_to_layout} moved it. Default:
-  # copy it to the screen as it is, without redrawing its contents.
+  # {#repaint} it at its new size and copy it to the screen.
   #
   # @return [void]
   # @api private
   def redraw_after_resize
+    repaint
     noutrefresh
+  end
+
+  # Show a window that {LayoutLoader} reused for a new layout: place it
+  # where that layout puts it and draw it again there, from its state and
+  # whatever the builder changed (label, colors), as after a terminal
+  # resize.
+  #
+  # @return [void]
+  # @api private
+  def place_after_reuse
+    redraw_after_resize if move_to_layout
   end
 
   # Find the window instance whose screen bounds contain the given coordinates.

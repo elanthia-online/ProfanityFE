@@ -51,6 +51,23 @@ RSpec.describe Clock do
     end
   end
 
+  describe '#server_now' do
+    it 'is the time now less the offset, in seconds' do
+      clock = clock_at(Time.at(1_000_000.5))
+      clock.server_time_offset = 2.25
+
+      expect(clock.server_now).to eq 999_998.25
+    end
+
+    it 'reads the clock once' do
+      readings = [Time.at(100), Time.at(200)]
+      clock = described_class.new(now: -> { readings.shift })
+
+      expect(clock.server_now).to eq 100.0
+      expect(readings).to eq [Time.at(200)]
+    end
+  end
+
   describe '#hh_mm' do
     {
       Time.new(2026, 9, 29, 9, 5, 7)    => '09:05',

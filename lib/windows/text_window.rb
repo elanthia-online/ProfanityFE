@@ -103,6 +103,14 @@ class TextWindow < BaseWindow
     noutrefresh
   end
 
+  # A text window a new layout reuses keeps its place and lines until the
+  # next resize (+.layout+ runs one), which re-wraps them to the new
+  # width once.
+  #
+  # @return [void]
+  # @api private
+  def place_after_reuse; end
+
   # The window's one buffer, always shown.
   #
   # @return [LineBuffer]

@@ -164,16 +164,6 @@ class RoomWindow < BaseWindow
     redraw
   end
 
-  # Show the window again after {#move_to_layout} moved it: redraw its
-  # contents at the new size.
-  #
-  # @return [void]
-  # @api private
-  def redraw_after_resize
-    redraw
-    noutrefresh
-  end
-
   # Render the complete room display.
   # Clears the window and draws each section (title, description, objects,
   # players, exits, room number, stringprocs) with appropriate presets and
