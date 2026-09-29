@@ -73,15 +73,27 @@ class TabbedTextWindow < BaseWindow
     @tab_buffers.transform_values(&:lines)
   end
 
-  # Add a new named tab to this window.
-  # The first tab added becomes the active tab.
+  # Give the window exactly these tabs, in this order. A tab it already
+  # has keeps its lines, scroll position and unread mark; a new one starts
+  # empty; a tab not listed is dropped with its lines. The active tab
+  # stays active while it is listed; otherwise the first tab becomes
+  # active, and the selection, anchored to the rows the window showed, is
+  # dropped (see {SelectionManager.forget_window}).
   #
-  # @param name [String] unique tab name (e.g. "main", "combat")
+  # @param names [Array<String>] tab names (e.g. "main", "combat"); a
+  #   repeated name counts once
   # @return [void]
-  def add_tab(name)
-    @tab_buffers[name] = LineBuffer.new(cap: @max_buffer_size, width: wrap_width)
-    @tab_activity[name] = false
-    @active_tab ||= name
+  def keep_tabs(names)
+    names = names.uniq
+    @tab_buffers = names.to_h { |name| [name, @tab_buffers[name] || LineBuffer.new(cap: @max_buffer_size, width: wrap_width)] }
+    @tab_activity = names.to_h { |name| [name, @tab_activity.fetch(name, false)] }
+    unless @tab_buffers.key?(@active_tab)
+      @active_tab = names.first
+      @tab_activity[@active_tab] = false if @active_tab
+      @selection_start = nil
+      @selection_end = nil
+      SelectionManager.forget_window(self)
+    end
     draw_tab_bar
   end
 
@@ -342,19 +354,22 @@ end
 BaseWindow.register_type('tabbed') do |height, width, top, left, element, wm|
   next nil unless width > 1
 
-  window = TabbedTextWindow.new(height, width - TabbedTextWindow.right_margin, top, left)
-  window.add_scrollbar
+  tab_names = (element.attributes['tabs'] || element.attributes['value'] || MAIN_STREAM).split(',').map(&:strip)
+  # Reuse the previous layout's tabbed window that has any of these tabs
+  unless (window = wm.claim_window(:stream, tab_names, TabbedTextWindow))
+    window = TabbedTextWindow.new(height, width - TabbedTextWindow.right_margin, top, left)
+    window.add_scrollbar
+  end
   window.scrollok(true)
   window.setscrreg(1, window.maxy - 1)
   window.max_buffer_size = element.attributes['buffer-size'] || 1000
   window.time_stamp = BaseWindow.parse_flag_attr(element, 'timestamp')
   window.clock = wm.clock
-  tab_names = (element.attributes['tabs'] || element.attributes['value'] || MAIN_STREAM).split(',')
+  window.keep_tabs(tab_names)
   tab_names.each do |tab_name|
-    window.add_tab(tab_name.strip)
-    wm.stream[tab_name.strip] = window
+    wm.stream[tab_name] = window
   end
   window.redraw
-  SCROLL_WINDOW.push(window)
+  SCROLL_WINDOW.push(window) unless SCROLL_WINDOW.include?(window)
   window
 end

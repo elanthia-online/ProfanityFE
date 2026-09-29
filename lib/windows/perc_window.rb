@@ -180,7 +180,9 @@ class PercWindow < BaseWindow
 end
 
 BaseWindow.register_type('percWindow') do |height, width, top, left, _element, wm|
-  window = PercWindow.new(height, width - PercWindow.right_margin, top, left)
+  # The previous layout's spell window keeps its spells
+  window = wm.claim_window(:stream, Streams::PERC, PercWindow) ||
+           PercWindow.new(height, width - PercWindow.right_margin, top, left)
   wm.stream[Streams::PERC] = window
   window
 end

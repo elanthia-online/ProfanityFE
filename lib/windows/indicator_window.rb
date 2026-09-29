@@ -136,10 +136,7 @@ class IndicatorWindow < BaseWindow
 end
 
 BaseWindow.register_type('indicator') do |height, width, top, left, element, wm|
-  if element.attributes['value'] && (window = wm.previous_indicator[element.attributes['value']])
-    wm.previous_indicator[element.attributes['value']] = nil
-    wm.old_windows.delete(window)
-  else
+  unless (window = wm.claim_window(:indicator, element.attributes['value'], IndicatorWindow))
     window = IndicatorWindow.new(height, width, top, left)
   end
   window.scrollok(false)

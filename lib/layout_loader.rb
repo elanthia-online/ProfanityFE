@@ -11,46 +11,20 @@ require_relative 'window_layout'
 # closes every window of the previous layout that no builder reused.
 #
 # The {WindowManager} keeps the handler hashes the builders fill. While a
-# layout loads, the loader holds the previous layout's hashes and windows;
-# builders reach them through the manager ({WindowManager#previous_stream}
-# and friends) to reuse a window, and delete what they reuse from
-# {#old_windows}. The loader then places each reused window where the new
-# layout puts it and draws it again there ({BaseWindow#place_after_reuse}).
+# layout loads, the loader holds the previous layout's hashes and windows,
+# and a builder takes the previous window it can reuse with {#claim}
+# (through {WindowManager#claim_window}), so no other builder reuses it
+# and it isn't closed. The loader then places each reused window where
+# the new layout puts it and draws it again there
+# ({BaseWindow#place_after_reuse}).
 #
 # @example
 #   loader = LayoutLoader.new(window_manager)
 #   loader.load('default')
 class LayoutLoader
-  # The previous layout's indicator windows keyed by value, during {#load};
-  # empty otherwise.
-  #
-  # @return [Hash]
-  attr_reader :previous_indicator
-
-  # The previous layout's stream windows keyed by stream name, during
-  # {#load}; empty otherwise.
-  #
-  # @return [Hash]
-  attr_reader :previous_stream
-
-  # The previous layout's progress windows keyed by value, during {#load};
-  # empty otherwise.
-  #
-  # @return [Hash]
-  attr_reader :previous_progress
-
-  # The previous layout's countdown windows keyed by value, during {#load};
-  # empty otherwise.
-  #
-  # @return [Hash]
-  attr_reader :previous_countdown
-
-  # Windows from the previous layout that have not been reused. Builders
-  # delete reused windows from this list; the rest are closed after the
-  # layout loop.
-  #
-  # @return [Array<BaseWindow>]
-  attr_reader :old_windows
+  # The handler hashes of {WindowManager} a builder can {#claim} a window
+  # from.
+  REGISTRIES = %i[stream indicator progress countdown room].freeze
 
   # @param window_manager [WindowManager] owns the handler hashes, and is
   #   handed to every builder
@@ -76,10 +50,7 @@ class LayoutLoader
 
     @old_windows = BaseWindow.all_windows
     @previous_windows = @old_windows.dup
-    @previous_indicator = @wm.indicator
-    @previous_stream = @wm.stream
-    @previous_progress = @wm.progress
-    @previous_countdown = @wm.countdown
+    @previous = REGISTRIES.to_h { |registry| [registry, @wm.public_send(registry)] }
     @wm.reset_registries
 
     xml.elements.each { |element| build(element) if element.name == 'window' }
@@ -90,6 +61,29 @@ class LayoutLoader
     SCROLL_WINDOW[0]&.set_active(true)
 
     CursesRenderer.doupdate
+  end
+
+  # Take a window of the previous layout for a builder to reuse: trying
+  # +keys+ in order, the first window of the previous layout's +registry+
+  # hash that one of them maps to and that is a +window_class+ (not a
+  # subclass). Every key of that hash that maps to it is dropped, so no
+  # later builder reuses it too, and it isn't closed after the layout
+  # loads. Outside {#load}, and when no key maps to such a window, there
+  # is nothing to take.
+  #
+  # @param registry [Symbol] one of {REGISTRIES}
+  # @param keys [String, Array<String>, nil] the keys (streams, values)
+  #   the new window serves, in the order to try them
+  # @param window_class [Class] the class the window must be
+  # @return [BaseWindow, nil] the window to reuse, or nil to build one
+  def claim(registry, keys, window_class)
+    previous = @previous.fetch(registry)
+    window = Array(keys).map { |key| previous[key] }.find { |old| old.instance_of?(window_class) }
+    return unless window
+
+    previous.delete_if { |_key, old| old.equal?(window) }
+    @old_windows.delete(window)
+    window
   end
 
   private
@@ -146,9 +140,6 @@ class LayoutLoader
   def forget_previous_layout
     @old_windows = []
     @previous_windows = []
-    @previous_indicator = {}
-    @previous_stream = {}
-    @previous_progress = {}
-    @previous_countdown = {}
+    @previous = REGISTRIES.to_h { |registry| [registry, {}] }
   end
 end

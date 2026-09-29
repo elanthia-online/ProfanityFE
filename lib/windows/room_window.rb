@@ -411,7 +411,8 @@ class RoomWindow < BaseWindow
 end
 
 BaseWindow.register_type('room') do |height, width, top, left, element, wm|
-  window = RoomWindow.new(height, width, top, left)
+  # The previous layout's room window keeps the room it shows
+  window = wm.claim_window(:room, Streams::ROOM, RoomWindow) || RoomWindow.new(height, width, top, left)
   window.scrollok(false)
   window.title_preset = element.attributes['title-preset'] || Presets::ROOM_NAME
   window.desc_preset = element.attributes['desc-preset']

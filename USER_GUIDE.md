@@ -1387,8 +1387,13 @@ patterns, perc-transforms, and the history size without restarting.
 
 ### .layout
 
-Switch to a named layout defined in the settings file. Reloads all windows and
-triggers a resize.
+Switch to a named layout defined in the settings file, then resize. A window
+the new layout still has keeps what it shows: a text window for any of its
+streams, a tabbed window for any of its tabs (tabs the new layout drops lose
+their text, new tabs start empty), and the exp, spell, room, indicator,
+progress and countdown windows. The new layout's sizes, buffer size,
+timestamps, labels, colors and presets apply to the kept windows. Every other
+window starts empty.
 
 ```
 .layout default
