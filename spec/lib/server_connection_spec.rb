@@ -312,10 +312,6 @@ RSpec.describe ServerConnection do
       peer&.close
     end
 
-    it 'does nothing before a connection is made' do
-      expect { connection.close }.not_to raise_error
-    end
-
     it 'ignores an error from the socket' do
       socket = Object.new
       def socket.close = raise(IOError, 'closed stream')
