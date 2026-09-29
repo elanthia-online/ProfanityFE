@@ -178,18 +178,16 @@ module LineBuffered
   # @return [Curses::Window, nil] companion 1-column curses window for the scrollbar
   attr_accessor :scrollbar
 
-  # Set whether this window is the active (focused) window.
-  # Updates the scrollbar appearance accordingly.
+  # Set whether this window is the active (focused) window, and show it:
+  # the scrollbar is cleared, then drawn again in full as the active one
+  # if the window is now active.
   #
   # @param is_active [Boolean] true to mark this window active
   # @return [void]
   def set_active(is_active)
     @active = is_active
-    if @active
-      update_scrollbar
-    else
-      clear_scrollbar
-    end
+    clear_scrollbar
+    update_scrollbar if @active
   end
 
   # Whether this window is currently the active (focused) window.
@@ -248,12 +246,12 @@ module LineBuffered
     end
   end
 
-  # Reset the scrollbar to its default (cleared) state.
-  # Marks the window as inactive and erases the scrollbar column.
+  # Reset the scrollbar to its default (cleared) state: erase the
+  # scrollbar column, so that the next {#render_scrollbar} draws every
+  # cell. Whether the window is active is kept.
   #
   # @return [void]
   def reset_scrollbar
-    @active = false
     @scrollbar_pos = nil
     return unless @scrollbar
 
