@@ -316,14 +316,21 @@ RSpec.describe WindowManager, '#resize geometry' do
       fill_windows
     end
 
-    it 'keeps the reused windows where they were until the terminal is resized' do
+    it 'keeps the reused text and command windows where they were until the terminal is resized' do
       main = wm.stream['main']
+
+      load(second_layout, id: 'second')
+
+      expect([geometry(main), geometry(wm.command_window)]).to eq [[0, 0, 12, 39], [23, 2, 1, 78]]
+    end
+
+    it 'moves a reused indicator to its new place at once, to draw its label there' do
       kneeling = wm.indicator['kneeling']
 
       load(second_layout, id: 'second')
 
-      expect([geometry(main), geometry(kneeling), geometry(wm.command_window)])
-        .to eq [[0, 0, 12, 39], [18, 70, 1, 10], [23, 2, 1, 78]]
+      expect(geometry(kneeling)).to eq [0, 0, 1, 40]
+      expect(kneeling.rows).to eq ['Kneel']
     end
 
     it 'moves the reused windows to their new places on the next resize' do

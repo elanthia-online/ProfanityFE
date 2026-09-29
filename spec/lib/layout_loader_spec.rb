@@ -146,13 +146,23 @@ RSpec.describe LayoutLoader do
     it 'keeps progress, countdown and indicator windows by value, with what they show' do
       kept = [wm.progress['health'], wm.countdown['roundtime'], wm.indicator['prompt']]
       wm.progress['health'].update(40, 100)
-      shown = wm.progress['health'].rows
 
       load(second_layout, id: 'second')
 
       expect([wm.progress['health'], wm.countdown['roundtime'], wm.indicator['prompt']]).to eq kept
       expect(kept.map { |window| closed?(window) }).to all(be false)
-      expect(wm.progress['health'].rows).to eq shown
+      expect(wm.progress['health'].rows).to eq ["HP#{'40'.rjust(28)}"] # the new width, 30
+    end
+
+    it 'draws a kept indicator at its new place and width, with all of its new label' do
+      kneeling = wm.indicator['kneeling']
+
+      load("<window class='indicator' top='20' left='0' height='1' width='10' value='kneeling' label='Kneeling'/>",
+           id: 'kneeling')
+
+      expect(wm.indicator['kneeling']).to be kneeling
+      expect(kneeling.rows).to eq ['Kneeling']
+      expect(geometry(kneeling)).to eq [20, 0, 1, 10]
     end
 
     it 'keeps the command window and takes the new layout for it' do
@@ -219,6 +229,20 @@ RSpec.describe LayoutLoader do
       expect(rebuilt.map { |window| closed?(window) }).to all(be true)
       expect([wm.stream['thoughts'], wm.room['room']]).to all(be_a(BaseWindow))
       expect(BaseWindow.all_windows).not_to include(*rebuilt)
+    end
+  end
+
+  describe 'switching from a bar too narrow for its label and value' do
+    it 'draws the kept bar at its new place and width, with its new label and current value' do
+      load("<window class='progress' top='16' left='0' height='1' width='3' value='health'/>", id: 'narrow')
+      health = wm.progress['health']
+      health.update(75, 100)
+
+      load("<window class='progress' top='20' left='0' height='1' width='20' value='health' label='hp'/>", id: 'wide')
+
+      expect(wm.progress['health']).to be health
+      expect(health.rows).to eq ["hp#{'75'.rjust(18)}"]
+      expect(geometry(health)).to eq [20, 0, 1, 20]
     end
   end
 
@@ -307,6 +331,15 @@ RSpec.describe LayoutLoader do
       # .layout resizes afterwards, which places the kept main window at
       # its new layout.
       expect(geometry(main)).to eq [2, 0, 12, 59]
+    end
+
+    it 'shows a kept progress bar\'s new label and current value at its new width' do
+      define("<window class='progress' top='20' left='0' height='1' width='30' value='health' label='hp'/>", 'hp')
+      app.window_mgr.progress['health'].update(75, 100)
+
+      app.execute_command('.layout hp')
+
+      expect(app.window_mgr.progress['health'].rows).to eq ["hp#{'75'.rjust(28)}"]
     end
   end
 end

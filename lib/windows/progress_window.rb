@@ -102,6 +102,9 @@ BaseWindow.register_type('progress') do |height, width, top, left, element, wm|
   if element.attributes['value'] && (window = wm.previous_progress[element.attributes['value']])
     wm.previous_progress[element.attributes['value']] = nil
     wm.old_windows.delete(window)
+    # Draw it at its new place and size, not the old layout's.
+    window.resize(height, width)
+    window.move(top, left)
   else
     window = ProgressWindow.new(height, width, top, left)
   end
