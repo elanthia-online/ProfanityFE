@@ -15,8 +15,8 @@ require_relative '../../lib/window_manager'
 require_relative '../../lib/windows/sink_window' # real SinkWindow (spec_helper only declares the class)
 
 RSpec.describe WindowManager, '#subscribe_to_events' do
-  let(:now) { [1_000_000.0] }
-  let(:window_manager) { described_class.new(clock: Clock.new(now: -> { Time.at(now[0]) })) }
+  let(:now) { 1_000_000.0 }
+  let(:window_manager) { described_class.new(clock: Clock.new(now: -> { Time.at(now) })) }
   let(:event_bus) { EventBus.new }
 
   def load(windows_xml)
@@ -55,9 +55,9 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
     end
 
     it 'keeps counting down the roundtime when only a cast time arrives' do
-      event_bus.emit(:countdown_update, id: 'roundtime', end_time: now[0] + 5)
+      event_bus.emit(:countdown_update, id: 'roundtime', end_time: now + 5)
 
-      event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: now[0] + 3)
+      event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: now + 3)
 
       expect(roundtime.rows).to eq ["RT#{'5'.rjust(18)}"]
     end

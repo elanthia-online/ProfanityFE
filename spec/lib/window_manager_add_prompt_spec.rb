@@ -92,16 +92,17 @@ RSpec.describe WindowManager, '#add_prompt' do
     end
   end
 
-  it 'shows a prompt for a stream sent to a sink nowhere' do
+  # The thoughts window is only a bystander (any text window would do): it
+  # is where a prompt leaking out of the sink would show up.
+  it 'draws a prompt for a sunk stream in no window at all' do
     load(<<~XML)
       <window class='sink' value='main'/>
-      <window class='text' top='0' left='0' height='4' width='21' value='death'/>
+      <window class='text' top='0' left='0' height='4' width='21' value='thoughts'/>
     XML
 
     wm.add_prompt(wm.stream['main'], 'H>')
 
-    expect(wm.stream['main']).to be_a SinkWindow
-    expect(wm.stream['death'].rows).to eq ['', '', '', '']
+    expect(wm.stream['thoughts'].rows).to eq ['', '', '', '']
   end
 
   it 'shows nothing in a window without a line buffer' do
