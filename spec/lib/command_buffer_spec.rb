@@ -204,6 +204,63 @@ RSpec.describe CommandBuffer do
       buf.cursor_word_left
       expect(buf.pos).to eq 0
     end
+
+    # Lands on the start of the word (or punctuation run) the cursor is
+    # in or just after; from the start of a word, on the previous one.
+    # [text, cursor before, cursor after]
+    [
+      # one-letter words
+      ['a b', 3, 2],
+      ['a b', 2, 0],
+      ['a b', 1, 0],
+      ['a b c', 5, 4],
+      ['a b c', 3, 2],
+      ['go n', 4, 3],
+      ['   a', 4, 3],
+      ['a', 1, 0],
+      # longer words
+      ['hello world', 11, 6],
+      ['hello world', 8, 6],
+      ['hello world', 6, 0],
+      ['hello world', 3, 0],
+      [' ab', 3, 1],
+      # a run of spaces
+      ['hello   world', 13, 8],
+      ['hello   world', 7, 0],
+      ['hello   world', 5, 0],
+      ['a   ', 4, 0],
+      ['   a', 2, 0],
+      # punctuation
+      ['hello.world', 11, 6],
+      ['hello.world', 6, 5],
+      ['hello.world', 5, 0],
+      ['go north.', 9, 8],
+      ['go north.', 8, 3],
+      ['x -- y', 6, 5],
+      ['x -- y', 5, 2],
+      ['x -- y', 4, 2],
+      ['foo_bar', 7, 0],
+      ['a_b c', 5, 4],
+      # start of line
+      ['abc', 0, 0],
+      ['abc', 1, 0],
+      # non-ASCII
+      ['café é', 6, 5],
+      ['café latte', 10, 5],
+      ['naïve', 5, 0],
+      ["ab\u00A0c", 4, 3],
+      ['日本 語', 4, 3]
+    ].each do |str, from, to|
+      it "moves from #{from} to #{to} in #{str.inspect}" do
+        type(str)
+        buf.cursor_home
+        from.times { buf.cursor_right }
+        buf.cursor_word_left
+        expect(buf.pos).to eq to
+        expect(window.curx).to eq to
+        expect(buf.text).to eq str
+      end
+    end
   end
 
   describe '#cursor_word_right' do
@@ -235,7 +292,8 @@ RSpec.describe CommandBuffer do
 
   # Every cursor column visited by repeated Ctrl+left from the end, or
   # repeated Ctrl+right from the start, checking pos and the screen
-  # cursor agree at each stop.
+  # cursor agree at each stop. Both directions stop at the same columns,
+  # including before a one-character word or punctuation run.
   describe 'word motion stops' do
     def stops(str, motion)
       type(str)
@@ -255,10 +313,10 @@ RSpec.describe CommandBuffer do
     # Pins the ASCII boundaries: punctuation stops, runs of spaces, and
     # `_` inside a word (delete_word treats `_` as punctuation instead).
     {
-      'hello.world'   => [[11, 6, 0], [0, 5, 6, 11]],
-      'hello, world!' => [[13, 7, 5, 0], [0, 5, 7, 12, 13]],
+      'hello.world'   => [[11, 6, 5, 0], [0, 5, 6, 11]],
+      'hello, world!' => [[13, 12, 7, 5, 0], [0, 5, 7, 12, 13]],
       'hello   world' => [[13, 8, 0], [0, 8, 13]],
-      'x -- y'        => [[6, 2, 0], [0, 2, 5, 6]],
+      'x -- y'        => [[6, 5, 2, 0], [0, 2, 5, 6]],
       "tab\there"     => [[8, 4, 0], [0, 4, 8]],
       'foo_bar baz'   => [[11, 8, 0], [0, 8, 11]]
     }.each do |str, (left, right)|
@@ -276,7 +334,7 @@ RSpec.describe CommandBuffer do
     {
       'café latte' => [[10, 5, 0], [0, 5, 10]],
       'naïve'      => [[5, 0], [0, 5]],
-      'über.alles' => [[10, 5, 0], [0, 4, 5, 10]],
+      'über.alles' => [[10, 5, 4, 0], [0, 4, 5, 10]],
       "ab\u00A0cd" => [[5, 3, 0], [0, 3, 5]]
     }.each do |str, (left, right)|
       it "stops at #{left.inspect} going left through #{str.inspect}" do

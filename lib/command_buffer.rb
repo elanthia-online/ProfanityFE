@@ -159,7 +159,9 @@ class CommandBuffer
     @window.noutrefresh
   end
 
-  # Move cursor left to the beginning of the previous word.
+  # Move cursor left to the beginning of the word the cursor is in or
+  # just after (the previous word when already at a word start), so it
+  # stops at the same places as {#cursor_word_right}.
   # Scrolls the view so the target position is at the left edge when it
   # is before the current visible offset.
   #
@@ -168,7 +170,9 @@ class CommandBuffer
     @kill.end_sequence
     return unless @window && @pos > 0
 
-    new_pos = if (m = @text[0...(@pos - 1)].match(/.*(#{WORD_START})/o))
+    # The last word start before the cursor; a match in text[0...pos]
+    # ends at or before pos - 1, so the start is at most pos - 1.
+    new_pos = if (m = @text[0...@pos].match(/.*(#{WORD_START})/o))
                 m.begin(1) + 1
               else
                 0
