@@ -343,8 +343,7 @@ RSpec.describe StyledText do
     it 'wraps at word boundary' do
       st = described_class.new('Hello world')
       lines = st.wrap(8)
-      expect(lines.first.text).to match(/^Hello/)
-      expect(lines.length).to be >= 2
+      expect(lines.map(&:text)).to eq ['Hello ', '  world']
     end
 
     it 'splits a run across two lines' do
@@ -361,27 +360,24 @@ RSpec.describe StyledText do
                                  { start: 5, end: 10, fg: '00ff00' },
                                ])
       lines = st.wrap(5, indent: false)
-      expect(lines[0].runs.first[:fg]).to eq 'ff0000'
-      expect(lines[1].runs.first[:fg]).to eq '00ff00'
+      expect(lines.map(&:text)).to eq %w[AAAAA BBBBB]
+      expect(lines[0].runs).to eq [{ start: 0, end: 5, fg: 'ff0000' }]
+      expect(lines[1].runs).to eq [{ start: 0, end: 5, fg: '00ff00' }]
     end
 
-    it 'run positions are valid indices into the line text' do
+    it 'moves each run to its word on the line the word wraps to' do
       st = described_class.new('The quick brown fox jumps over the lazy dog', [
                                  { start: 4, end: 9, fg: 'ff0000' }, # "quick"
                                  { start: 20, end: 25, fg: '00ff00' }, # "jumps"
                                ])
       lines = st.wrap(15, indent: false)
-      lines.each do |line|
-        line.runs.each do |run|
-          expect(run[:start]).to be >= 0
-          expect(run[:end]).to be <= line.text.length
-          expect(run[:start]).to be < run[:end]
-          # The text at the run position should exist
-          segment = line.text[run[:start]...run[:end]]
-          expect(segment).not_to be_nil
-          expect(segment.length).to be > 0
-        end
-      end
+      expect(lines.map(&:text)).to eq ['The quick ', 'brown fox ', 'jumps over the ', 'lazy dog']
+      expect(lines.map(&:runs)).to eq [
+        [{ start: 4, end: 9, fg: 'ff0000' }],
+        [],
+        [{ start: 0, end: 5, fg: '00ff00' }],
+        [],
+      ]
     end
 
     it 'handles text that must break mid-word (no spaces)' do
@@ -397,8 +393,11 @@ RSpec.describe StyledText do
                                  { start: 0, end: 16, fg: '0000ff', cmd: 'go north' }
                                ])
       lines = st.wrap(10, indent: false)
-      all_cmds = lines.flat_map { |l| l.runs.select { |r| r[:cmd] }.map { |r| r[:cmd] } }
-      expect(all_cmds).to all(eq 'go north')
+      expect(lines.map(&:text)).to eq ['Click ', 'here to go']
+      expect(lines.map(&:runs)).to eq [
+        [{ start: 0, end: 6, fg: '0000ff', cmd: 'go north' }],
+        [{ start: 0, end: 10, fg: '0000ff', cmd: 'go north' }],
+      ]
     end
 
     # Adversarial
@@ -424,11 +423,10 @@ RSpec.describe StyledText do
       expect(lines.first.text).to eq '12345'
     end
 
-    it 'handles text with trailing space at width boundary' do
+    it 'breaks after a run of spaces that fills the width' do
       st = described_class.new('Hello     world')
       lines = st.wrap(10, indent: false)
-      # Should break at a space, not leave trailing spaces
-      expect(lines.first.text.length).to be <= 10
+      expect(lines.map(&:text)).to eq ['Hello     ', 'world']
     end
 
     it 'does not modify the original text or runs' do
@@ -443,7 +441,7 @@ RSpec.describe StyledText do
     it 'handles runs with no fg/bg (structural only)' do
       st = described_class.new('Hello world', [{ start: 0, end: 11, cmd: 'test' }])
       lines = st.wrap(8, indent: false)
-      expect(lines.flat_map(&:runs).any? { |r| r[:cmd] == 'test' }).to be true
+      expect(lines.map(&:runs)).to eq [[{ start: 0, end: 6, cmd: 'test' }], [{ start: 0, end: 5, cmd: 'test' }]]
     end
 
     it 'indent: true adds leading spaces to continuation lines' do
@@ -465,9 +463,9 @@ RSpec.describe StyledText do
                                  { start: 6, end: 11, fg: '00ff00' }
                                ])
       lines = st.wrap(6, indent: false)
-      expect(lines[0].text.strip).to eq 'Hello'
-      expect(lines[0].runs.first[:fg]).to eq 'ff0000'
-      expect(lines[1].runs.first[:fg]).to eq '00ff00'
+      expect(lines.map(&:text)).to eq ['Hello ', 'world']
+      expect(lines[0].runs).to eq [{ start: 0, end: 5, fg: 'ff0000' }]
+      expect(lines[1].runs).to eq [{ start: 0, end: 5, fg: '00ff00' }]
     end
 
     it 'handles a run that spans exactly the wrap width' do
@@ -475,12 +473,15 @@ RSpec.describe StyledText do
                                  { start: 0, end: 9, fg: 'ff0000' }
                                ])
       lines = st.wrap(4, indent: false)
-      lines.each do |line|
-        line.runs.each do |run|
-          expect(run[:start]).to be >= 0
-          expect(run[:end]).to be <= line.text.length
-        end
-      end
+      expect(lines.map(&:text)).to eq %w[AAAA BBBB]
+      expect(lines.map(&:runs)).to eq [[{ start: 0, end: 4, fg: 'ff0000' }], [{ start: 0, end: 4, fg: 'ff0000' }]]
+    end
+
+    it 'keeps a run on its word when the space before the word is dropped from the next line' do
+      st = described_class.new('AAAA BBBB', [{ start: 5, end: 9, fg: '00ff00' }]) # "BBBB"
+      lines = st.wrap(4, indent: false)
+      expect(lines.map(&:text)).to eq %w[AAAA BBBB]
+      expect(lines.map(&:runs)).to eq [[], [{ start: 0, end: 4, fg: '00ff00' }]]
     end
 
     it 'handles UTF-8 multi-byte characters in text' do
@@ -489,19 +490,17 @@ RSpec.describe StyledText do
                                  { start: 5, end: 11, fg: '00ff00' }
                                ])
       lines = st.wrap(6, indent: false)
-      all_text = lines.map(&:text).join
-      expect(all_text.gsub(/\s+/, ' ').strip).to include('café')
-      expect(all_text.gsub(/\s+/, ' ').strip).to include('résumé')
+      expect(lines.map(&:text)).to eq ['café ', 'résumé']
+      expect(lines.map(&:runs)).to eq [[{ start: 0, end: 4, fg: 'ff0000' }], [{ start: 0, end: 6, fg: '00ff00' }]]
     end
 
-    it 'handles CJK characters without crashing' do
+    it 'wraps CJK text by characters, splitting its run' do
       st = described_class.new('日本語テスト', [
                                  { start: 0, end: 6, fg: 'ff0000' }
                                ])
       lines = st.wrap(3, indent: false)
-      expect(lines.flat_map { |l| l.runs }).to all(
-        satisfy { |r| r[:start] >= 0 && r[:end] <= lines.find { |l| l.runs.include?(r) }.text.length }
-      )
+      expect(lines.map(&:text)).to eq %w[日本語 テスト]
+      expect(lines.map(&:runs)).to eq [[{ start: 0, end: 3, fg: 'ff0000' }], [{ start: 0, end: 3, fg: 'ff0000' }]]
     end
   end
 
@@ -530,13 +529,9 @@ RSpec.describe StyledText do
       st.add_run(start: 28, end: 33, fg: 'ff0000')  # "troll"
 
       lines = st.wrap(20, indent: false)
-      # Verify bold runs point at the right text in each line
-      lines.each do |line|
-        line.runs.each do |run|
-          segment = line.text[run[:start]...run[:end]]
-          expect(%w[goblin troll]).to include(segment), "Expected creature name, got #{segment.inspect}"
-        end
-      end
+      bold_words = lines.flat_map { |line| line.runs.map { |run| line.text[run[:start]...run[:end]] } }
+      expect(lines.map(&:text)).to eq ['You also see a ', 'goblin and a troll.']
+      expect(bold_words).to eq %w[goblin troll]
     end
 
     it 'lstrip room text preserves color regions' do
