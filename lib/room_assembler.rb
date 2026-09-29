@@ -64,6 +64,9 @@ class RoomAssembler
     @room_pending_objects = nil
     @room_pending_players = nil
     @room_pending_exits = nil
+    # The room (its SharedState#room_title) the room desc component last
+    # described
+    @component_desc_room = nil
     # Raw line with XML tags preserved for room object extraction
     @current_raw_line = nil
   end
@@ -243,6 +246,7 @@ class RoomAssembler
       @event_bus.emit(:room_title, text: clean)
     when Streams::ROOM_DESC, Streams::ROOM_DESC_ALT
       @room_pending_desc = clean
+      @component_desc_room = @state.room_title
       @event_bus.emit(:room_desc, text: clean, links: links)
     when Streams::ROOM_OBJS
       creatures = extract_sax_creatures(line_colors, text, left_offset)
@@ -516,8 +520,14 @@ class RoomAssembler
       @event_bus.emit(:room_title, text: @room_pending_title || '')
 
       # Inline path stores raw XML — convert to structured data at emission time.
-      desc_clean, desc_links = structurize_text(@room_pending_desc || '')
-      @event_bus.emit(:room_desc, text: desc_clean, links: desc_links)
+      # Without a roomDesc (DR leaves it out when room descriptions are off,
+      # and so does a brief LOOK) the lines keep the description the room
+      # desc component, sent with every room change, gave this room. A room
+      # the component didn't describe gets none, not the last room's.
+      if @room_pending_desc || @component_desc_room != @state.room_title
+        desc_clean, desc_links = structurize_text(@room_pending_desc || '')
+        @event_bus.emit(:room_desc, text: desc_clean, links: desc_links)
+      end
 
       obj_raw = @room_pending_objects || ''
       obj_clean, obj_links = structurize_text(obj_raw)
