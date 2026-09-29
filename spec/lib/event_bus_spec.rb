@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
 # Tests EventBus pub/sub: on/emit delivery, off removal, clear, subscriber
-# counting, and adversarial edge cases (no subscribers, mutation, exceptions,
-# reentrant emit, symbol vs string types).
+# counting, and emit edge cases (shared data, exceptions, subscribers added
+# or removed during an emit, reentrant emit, symbol vs string types).
 
 require_relative '../../lib/event_bus'
 
@@ -116,37 +116,26 @@ RSpec.describe EventBus do
     end
   end
 
-  # ---- Adversarial edge cases ----
-
-  describe 'adversarial: emit with no subscribers' do
-    it 'does not raise when emitting to an event with no subscribers' do
-      expect { bus.emit(:nobody_listening, data: 123) }.not_to raise_error
-    end
-  end
-
-  describe 'adversarial: subscriber modifies data' do
-    it 'does not affect other subscribers when one mutates data' do
+  # Edge cases of #emit. Emitting to an event nobody subscribed to is
+  # covered by 'does not cross-deliver between event types' above.
+  describe '#emit edge cases' do
+    it 'gives every subscriber the same data hash, so a change made by one is seen by the next' do
       received = []
       bus.on(:test) { |data| data[:key] = 'mutated'; received << data[:key] }
       bus.on(:test) { |data| received << data[:key] }
       bus.emit(:test, key: 'original')
 
-      # Both see 'mutated' because they share the same hash — this is
-      # expected for a synchronous bus (no defensive copying)
+      # A synchronous bus without defensive copying.
       expect(received).to eq %w[mutated mutated]
     end
-  end
 
-  describe 'adversarial: subscriber raises' do
-    it 'propagates exceptions (no swallowing)' do
+    it 'propagates an exception raised by a subscriber' do
       bus.on(:test) { |_| raise 'boom' }
 
       expect { bus.emit(:test) }.to raise_error(RuntimeError, 'boom')
     end
-  end
 
-  describe 'adversarial: adding subscriber during emit' do
-    it 'does not call the newly added subscriber in the current emit' do
+    it 'does not call a subscriber added during the emit until the next emit' do
       calls = []
       bus.on(:test) do |_|
         calls << :original
@@ -157,15 +146,6 @@ RSpec.describe EventBus do
 
       bus.emit(:test)
       expect(calls).to eq %i[original original new]
-    end
-  end
-
-  describe 'adversarial: off during emit' do
-    it 'does not crash when removing a handler during emit' do
-      handler = proc { |_| bus.off(:test, handler) }
-      bus.on(:test, &handler)
-
-      expect { bus.emit(:test) }.not_to raise_error
     end
 
     it 'still calls the next handler when an earlier one removes itself' do
@@ -178,10 +158,8 @@ RSpec.describe EventBus do
 
       expect(calls).to eq %i[first second]
     end
-  end
 
-  describe 'adversarial: reentrant emit' do
-    it 'handles emit called from within a handler' do
+    it 'delivers an event emitted from within a handler' do
       calls = []
       bus.on(:outer) do |_|
         calls << :outer
@@ -192,9 +170,7 @@ RSpec.describe EventBus do
 
       expect(calls).to eq %i[outer inner]
     end
-  end
 
-  describe 'adversarial: symbol vs string event types' do
     it 'treats symbols and strings as different event types' do
       sym_called = false
       str_called = false
