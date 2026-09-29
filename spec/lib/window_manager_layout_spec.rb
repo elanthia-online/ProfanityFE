@@ -257,5 +257,25 @@ RSpec.describe WindowManager, '#load_layout' do
 
       expect([main.maxy, main.maxx]).to eq [10, 39]
     end
+
+    # Nesting past SafeArithmetic::MAX_DEPTH evaluates to 0, like any other
+    # invalid expression, so the window is left out and the rest of the
+    # layout loads. It used to raise SystemStackError, which ended the
+    # client at startup or on `.layout`.
+    it 'leaves out a window whose expression nests too deep and loads the rest' do
+      deep = "#{'(' * 100_000}10#{')' * 100_000}"
+
+      expect do
+        load(<<~XML)
+          <window class='text' top='0' left='0' height='#{deep}' width='40' value='main'/>
+          <window class='text' top='0' left='40' height='10' width='40' value='thoughts'/>
+          <window class='command' top='23' left='0' height='1' width='80'/>
+        XML
+      end.to output(/Layout expression error: nested more than 100 levels deep/).to_stderr
+
+      expect(window_manager.stream.keys).to eq ['thoughts']
+      expect(window_manager.stream['thoughts'].maxy).to eq 10
+      expect(window_manager.command_window.begy).to eq 23
+    end
   end
 end

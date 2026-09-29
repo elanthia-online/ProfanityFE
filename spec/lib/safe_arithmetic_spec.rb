@@ -76,6 +76,34 @@ RSpec.describe SafeArithmetic do
     end
   end
 
+  describe '.evaluate with deeply nested expressions' do
+    it 'evaluates parentheses and unary minus signs nested MAX_DEPTH deep' do
+      expect(evaluate("#{'(' * 100}7#{')' * 100}")).to eq 7
+      expect(evaluate("#{'-' * 100}7")).to eq 7
+      expect(evaluate("#{'-(' * 50}7#{')' * 50}")).to eq 7
+    end
+
+    it 'returns 0 and warns one level past MAX_DEPTH' do
+      expect { expect(evaluate("#{'(' * 101}7#{')' * 101}")).to eq 0 }
+        .to output(/Layout expression error: nested more than 100 levels deep/).to_stderr
+      expect { expect(evaluate("#{'-' * 101}7")).to eq 0 }.to output(/nested more than 100/).to_stderr
+      expect { expect(evaluate("#{'-(' * 50}-7#{')' * 50}")).to eq 0 }.to output(/nested more than 100/).to_stderr
+    end
+
+    # These used to overflow the stack: SystemStackError is not a
+    # StandardError, so it escaped the rescue and ended the client.
+    it 'returns 0 and warns instead of overflowing the stack' do
+      expect { expect(evaluate("#{'(' * 100_000}1#{')' * 100_000}")).to eq 0 }
+        .to output(/nested more than 100 levels deep/).to_stderr
+      expect { expect(evaluate("#{'(' * 100_000}1")).to eq 0 }.to output(/nested more than 100/).to_stderr
+      expect { expect(evaluate("#{'-' * 100_000}1")).to eq 0 }.to output(/nested more than 100/).to_stderr
+    end
+
+    it 'does not count parentheses that have closed' do
+      expect(evaluate(Array.new(1000, '(1)').join('+'))).to eq 1000
+    end
+  end
+
   describe '.evaluate with unsafe characters' do
     it 'returns 0 and warns instead of evaluating' do
       expect { expect(evaluate('lines-2')).to eq 0 }
