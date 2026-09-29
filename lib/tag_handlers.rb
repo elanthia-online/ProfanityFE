@@ -139,6 +139,17 @@ module TagHandlers
     end
   end
 
+  # End a roomName/roomDesc capture: flush its text, and disarm the capture
+  # even if there was none (an empty room name or description), or the next
+  # line would be taken as the room text.
+  #
+  # @param buf [String] mutable text buffer to flush and clear
+  # @return [void]
+  def end_room_capture(buf)
+    flush_text_buffer(buf)
+    @room.capture_mode = nil
+  end
+
   # Unescape XML entities in a text segment.
   #
   # @param text [String] text with XML entities (&lt;, &gt;, etc.)
@@ -308,7 +319,7 @@ module TagHandlers
   # Handle </preset> closing tag.
   def handle_close_preset(_xml, text_buffer)
     if @room.capture_mode == :desc
-      flush_text_buffer(text_buffer)
+      end_room_capture(text_buffer)
     end
     if (h = @open_preset.pop)
       h[:end] = text_buffer.length
@@ -340,7 +351,7 @@ module TagHandlers
     if style_id.empty?
       # Empty id = closing style
       if @room.capture_mode == :title || @room.capture_mode == :desc
-        flush_text_buffer(text_buffer)
+        end_room_capture(text_buffer)
       end
       if @open_style
         @open_style[:end] = text_buffer.length
