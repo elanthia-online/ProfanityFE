@@ -14,9 +14,10 @@ RSpec.describe RoomWindow do
 
   # A room window 5 rows high and 10 columns wide; room text wraps at the
   # full width.
+  let(:height) { 5 }
   let(:window) do
     LAYOUT['test'] = REXML::Document.new(<<~XML).root
-      <layout><window class='room' top='0' left='0' height='5' width='10'/></layout>
+      <layout><window class='room' top='0' left='0' height='#{height}' width='10'/></layout>
     XML
     window_manager = WindowManager.new(shared_state: SharedState.new.tap { |state| state.blue_links = true })
     window_manager.load_layout('test')
@@ -79,6 +80,13 @@ RSpec.describe RoomWindow do
   end
 
   describe 'links' do
+    it 'sends the link shown on the row after a run of spaces wider than the window, which takes no row' do
+      show_room("ab#{' ' * 22}cd", desc_links: [{ start: 24, end: 26, cmd: 'look cd' }])
+
+      expect(window.rows).to eq ['ab', '  cd', 'Go: north.', '', '']
+      expect(clicks_on('cd')).to eq ['look cd']
+    end
+
     it 'sends the link shown under the pointer on the row after a word that ends at the right edge' do
       show_room('abcdefghij klm nop', desc_links: [{ start: 15, end: 18, cmd: 'look nop' }])
 
@@ -103,6 +111,112 @@ RSpec.describe RoomWindow do
 
       y, x = screen_position('nop')
       expect((x...(x + 3)).map { |col| window.attrs_at(y, col) >> 8 }.uniq).to eq [1]
+    end
+  end
+
+  # What clicking each cell of row +y+ would send.
+  def clicks_on_row(y)
+    (0...10).map { |x| window.link_cmd_at(y, x) }
+  end
+
+  # The cells of row +y+ drawn in the link color.
+  def link_colored_on_row(y)
+    (0...10).select { |x| window.attrs_at(y, x) >> 8 == 1 }
+  end
+
+  describe 'a room longer than the window' do
+    # The room needs 4 rows (description 3, exits 1) and the window has 3.
+    context 'with room for the exits' do
+      let(:height) { 3 }
+
+      before { show_room('abcdefghij klmnopqrst e', desc_links: [{ start: 22, end: 23, cmd: 'look e' }]) }
+
+      it 'shows the exits on the bottom row below the first rows of the description' do
+        expect(window.rows).to eq ['abcdefghij', 'klmnopqrst', 'Go: north.']
+      end
+
+      it 'sends the exit link shown under the pointer on the bottom row, and nothing beside it' do
+        expect(clicks_on_row(2)).to eq [nil, nil, nil, nil, 'north', 'north', 'north', 'north', 'north', nil]
+      end
+
+      it 'sends a link from exactly the cells drawn in the link color' do
+        expect((0...3).map { |y| (0...10).select { |x| window.link_cmd_at(y, x) } })
+          .to eq((0...3).map { |y| link_colored_on_row(y) })
+        expect(link_colored_on_row(2)).to eq [4, 5, 6, 7, 8]
+      end
+    end
+
+    # Description 3 rows, exits 1, Lich's exits 1, room number 1 and
+    # stringprocs 1, in a window 4 rows high.
+    context 'with Lich exits and the sections below the exits' do
+      let(:height) { 4 }
+
+      before do
+        window.update_desc('abcdefghij klmnopqrst e')
+        window.update_room_number('Room: 12')
+        window.update_stringprocs('proc')
+        window.update_lich_exits('Also: <d cmd="go gate">gate</d>')
+        window.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
+      end
+
+      it 'shows the game exits, then Lich exits, on the bottom rows, and cuts the sections below them' do
+        expect(window.rows).to eq ['abcdefghij', 'klmnopqrst', 'Go: north.', 'Also: gate']
+      end
+
+      it 'sends the links of both exits where they are shown' do
+        expect(clicks_on_row(2)).to eq [nil, nil, nil, nil, 'north', 'north', 'north', 'north', 'north', nil]
+        expect(clicks_on_row(3)).to eq [nil, nil, nil, nil, nil, nil, 'go gate', 'go gate', 'go gate', 'go gate']
+      end
+    end
+
+    # Description 2 rows, exits 1, room number 1 and stringprocs 1, in a
+    # window 4 rows high.
+    context 'only because of the sections below the exits' do
+      let(:height) { 4 }
+
+      before do
+        window.update_desc('abcdefghij klm')
+        window.update_room_number('Room: 12')
+        window.update_stringprocs('proc')
+        window.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
+      end
+
+      it 'cuts the sections below the exits first' do
+        expect(window.rows).to eq ['abcdefghij', 'klm', 'Go: north.', 'Room: 12']
+      end
+    end
+
+    # The exits need 4 rows ('Go:', 'north,', 'south,', 'east.') and the
+    # window has 2.
+    context 'with exits longer than the window' do
+      let(:height) { 2 }
+
+      before do
+        show_room('abc def', exits: 'Go: north, south, east.',
+                             exit_links: [{ start: 4, end: 9, cmd: 'north' }, { start: 11, end: 16, cmd: 'south' },
+                                          { start: 18, end: 22, cmd: 'east' }])
+      end
+
+      it 'shows the first rows of the exits' do
+        expect(window.rows).to eq ['Go:', 'north,']
+      end
+
+      it 'sends the exit links where they are shown' do
+        expect(clicks_on_row(0)).to eq [nil] * 10
+        expect(clicks_on_row(1)).to eq ['north'] * 5 + [nil] * 5
+      end
+    end
+  end
+
+  describe 'a room that fits the window' do
+    # Description 2 rows, exits 1, Lich's exits 1 and room number 1.
+    it 'shows every section in order' do
+      window.update_desc('abcdefghij klm')
+      window.update_room_number('Room: 12')
+      window.update_lich_exits('Also: <d cmd="go gate">gate</d>')
+      window.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
+
+      expect(window.rows).to eq ['abcdefghij', 'klm', 'Go: north.', 'Also: gate', 'Room: 12']
     end
   end
 end

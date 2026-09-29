@@ -218,7 +218,7 @@ RSpec.describe WindowManager, '#resize geometry' do
         atmo: [' 1:atmo'],
         exp: ['Parry Abi', 'lity: 170', '9 59% [34', '/34]', ''],
         spells: ['Shadows', '  (2', '  roisae', '  n)', ''],
-        room: ['[[Town Square]]', 'A wide square paved'],
+        room: ['Obvious paths:', 'north, south.'],
         # A label wider than the window: each drawn part that doesn't fit
         # ends in the last column, as in ncurses, so the countdown shows
         # the last part it draws.
@@ -244,7 +244,7 @@ RSpec.describe WindowManager, '#resize geometry' do
       )
       expect(screens).to eq(
         main: ['dow'], thoughts: [''], combat: [''], atmo: [''],
-        exp: ['P', 'a', 'r', 'r', ''], spells: ['S', 'h', 'a', 'd', ''], room: ['[[To'],
+        exp: ['P', 'a', 'r', 'r', ''], spells: ['S', 'h', 'a', 'd', ''], room: ['Obvio'],
         health: ['H5'], roundtime: ['T'], kneeling: ['Kneeling'],
         prompt: ['H>'], command: [' stones']
       )

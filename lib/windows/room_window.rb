@@ -178,67 +178,53 @@ class RoomWindow < BaseWindow
   end
 
   # Render the complete room display.
-  # Clears the window and draws each section (title, description, objects,
-  # players, exits, room number, stringprocs) with appropriate presets and
-  # highlight processing.
+  # Wraps each section (title, description, objects, players, exits, room
+  # number, stringprocs) into rows with appropriate presets and highlight
+  # processing, each section starting on a new row, then clears the window
+  # and draws the rows that fit, one per window row (see {#fit_rows} for a
+  # room longer than the window). The rows drawn are the rows
+  # {#link_cmd_at} answers clicks from.
   #
   # @return [void]
   def render
-    erase
-    setpos(0, 0)
-    @rendered_lines = []
+    rows = []
 
     # Room title with preset
     unless @title.empty?
       if (match = @title.match(/^(?<room_name>.+?)\s+\((?<room_id>\d+)\)$/))
         formatted_title = "[#{match[:room_name]}] (#{match[:room_id]})"
-        render_section(formatted_title, @title_preset)
+        rows.concat(section_rows(formatted_title, @title_preset))
       else
-        render_section("[#{@title}]", @title_preset)
+        rows.concat(section_rows("[#{@title}]", @title_preset))
       end
-      section_break
     end
 
     # Room description
-    unless @description.empty?
-      render_section_with_links(@description, @desc_links, @desc_preset)
-      section_break
-    end
+    rows.concat(section_rows_with_links(@description, @desc_links, @desc_preset)) unless @description.empty?
 
     # Objects (with creature highlighting and clickable links)
-    unless @objects.empty?
-      render_objects_section
-      section_break
-    end
+    rows.concat(objects_rows) unless @objects.empty?
 
     # Players
-    unless @players.empty?
-      render_section_with_links(@players, @players_links, nil)
-      section_break
-    end
+    rows.concat(section_rows_with_links(@players, @players_links, nil)) unless @players.empty?
+
+    exits = []
 
     # Exits (with clickable direction links when links are enabled)
-    unless @exits.empty?
-      render_exits_section(@exits, @exits_links)
-      section_break
-    end
+    exits.concat(exits_rows(@exits, @exits_links)) unless @exits.empty?
 
     # Lich supplemental exits (non-cardinal "Room Exits:")
-    unless @lich_exits.empty?
-      render_lich_exits_section(@lich_exits)
-      section_break
-    end
+    exits.concat(lich_exits_rows(@lich_exits)) unless @lich_exits.empty?
+
+    below = []
 
     # Room number
-    unless @room_number.empty?
-      render_section(@room_number, nil)
-      section_break
-    end
+    below.concat(section_rows(@room_number, nil)) unless @room_number.empty?
 
     # StringProcs
-    render_section(@stringprocs, nil) unless @stringprocs.empty?
+    below.concat(section_rows(@stringprocs, nil)) unless @stringprocs.empty?
 
-    noutrefresh
+    draw_rows(fit_rows(rows, exits, below))
   end
 
   # Find a clickable link command at the given window-relative coordinates.
@@ -261,26 +247,47 @@ class RoomWindow < BaseWindow
 
   private
 
-  # Advance to the next line after a section or a wrapped row. When the
-  # last rendered line exactly fills the window width, curses auto-wraps
-  # the cursor to column 0 of the next line. An unconditional
-  # addstr("\n") would then produce a spurious blank line. This checks the
-  # cursor column first.
+  # The rows to draw, at most one per window row. A room that fits shows
+  # every row. A room longer than the window keeps its exits: the rows
+  # below the exits (room number, stringprocs) are cut first, from the
+  # end, then the rows above them, from the end, so the exits end on the
+  # bottom row. Exits longer than the window show their first rows.
   #
-  # @return [void]
+  # @param above [Array<Hash>] rows of the sections above the exits
+  # @param exits [Array<Hash>] rows of the game's exits, then Lich's
+  # @param below [Array<Hash>] rows of the sections below the exits
+  # @return [Array<Hash>] `{text:, colors:}` per row, at most +maxy+
   # @api private
-  def section_break
-    addstr("\n") unless curx == 0
+  def fit_rows(above, exits, below)
+    exits = exits.first(maxy)
+    above = above.first(maxy - exits.length)
+    above + exits + below.first(maxy - above.length - exits.length)
   end
 
-  # Render a text section with an optional preset color.
+  # Clear the window and draw +rows+ one per window row from the top,
+  # keeping them for {#link_cmd_at}.
+  #
+  # @param rows [Array<Hash>] `{text:, colors:}` per row, at most +maxy+
+  # @return [void]
+  # @api private
+  def draw_rows(rows)
+    erase
+    rows.each_with_index do |row, y|
+      setpos(y, 0)
+      add_line(row[:text], row[:colors])
+    end
+    @rendered_lines = rows
+    noutrefresh
+  end
+
+  # Wrap a text section with an optional preset color.
   # No link processing — used for title, room number, stringprocs.
   #
   # @param text [String] clean section text
   # @param preset_name [String, nil] preset color key from the PRESET hash
-  # @return [void]
+  # @return [Array<Hash>] the section's rows (see {#wrap_rows})
   # @api private
-  def render_section(text, preset_name)
+  def section_rows(text, preset_name)
     line_colors = []
 
     if preset_name && (colors = Presets.colors(preset_name))
@@ -288,17 +295,17 @@ class RoomWindow < BaseWindow
     end
 
     HighlightProcessor.apply_highlights(text, line_colors)
-    add_line_wrapped_with_links(text, line_colors)
+    wrap_rows(text, line_colors)
   end
 
-  # Render a text section with pre-computed links and optional preset color.
+  # Wrap a text section with pre-computed links and optional preset color.
   #
   # @param text [String] clean section text
   # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
   # @param preset_name [String, nil] preset color key from the PRESET hash
-  # @return [void]
+  # @return [Array<Hash>] the section's rows (see {#wrap_rows})
   # @api private
-  def render_section_with_links(text, links, preset_name)
+  def section_rows_with_links(text, links, preset_name)
     line_colors = build_link_colors(links)
 
     if preset_name && (colors = Presets.colors(preset_name))
@@ -306,14 +313,14 @@ class RoomWindow < BaseWindow
     end
 
     HighlightProcessor.apply_highlights(text, line_colors)
-    add_line_wrapped_with_links(text, line_colors)
+    wrap_rows(text, line_colors)
   end
 
-  # Render the objects section with creature bold highlighting and clickable links.
+  # Wrap the objects section with creature bold highlighting and clickable links.
   #
-  # @return [void]
+  # @return [Array<Hash>] the section's rows (see {#wrap_rows})
   # @api private
-  def render_objects_section
+  def objects_rows
     line_colors = build_link_colors(@objects_links)
 
     # Highlight creatures with monsterbold preset
@@ -332,35 +339,35 @@ class RoomWindow < BaseWindow
     end
 
     HighlightProcessor.apply_highlights(@objects, line_colors)
-    add_line_wrapped_with_links(@objects, line_colors)
+    wrap_rows(@objects, line_colors)
   end
 
-  # Render the exits section with pre-computed clickable direction links.
+  # Wrap the exits section with pre-computed clickable direction links.
   #
   # @param text [String] clean exits text
   # @param links [Array<Hash>] pre-computed link regions
-  # @return [void]
+  # @return [Array<Hash>] the section's rows (see {#wrap_rows})
   # @api private
-  def render_exits_section(text, links)
+  def exits_rows(text, links)
     clean_text = text.rstrip.end_with?(':') ? "#{text} none." : text
 
     line_colors = build_link_colors(links)
     HighlightProcessor.apply_highlights(clean_text, line_colors)
-    add_line_wrapped_with_links(clean_text, line_colors)
+    wrap_rows(clean_text, line_colors)
   end
 
-  # Render Lich-injected exits (may still contain raw XML from Lich injection).
+  # Wrap Lich-injected exits (may still contain raw XML from Lich injection).
   # Uses extract_links as these come from inline text, not SAX-processed components.
   #
   # @param text [String] raw Lich exits text
-  # @return [void]
+  # @return [Array<Hash>] the section's rows (see {#wrap_rows})
   # @api private
-  def render_lich_exits_section(text)
+  def lich_exits_rows(text)
     clean_text, line_colors = LinkExtractor.extract_links(text, links_enabled: links_enabled)
     clean_text = "#{clean_text} none." if clean_text.rstrip.end_with?(':')
 
     HighlightProcessor.apply_highlights(clean_text, line_colors)
-    add_line_wrapped_with_links(clean_text, line_colors)
+    wrap_rows(clean_text, line_colors)
   end
 
   # Build color regions from pre-computed link data when links are enabled.
@@ -383,29 +390,24 @@ class RoomWindow < BaseWindow
     end
   end
 
-  # Word-wrap text to the window width and draw one wrapped row per window
-  # row, recording each row's colors (including :cmd) under the window row
-  # it is drawn on, for {#link_cmd_at}.
+  # Word-wrap text to the window width, one row per window row, each with
+  # its colors (including :cmd) for {#link_cmd_at}.
   #
   # Rows are wrapped by {StyledText#wrap} at the full width, without
-  # indenting continuation rows (a space starting one is dropped). A row that fills the width leaves the
-  # cursor at the start of the next row, so rows are separated by
-  # {#section_break}, which only moves down when the cursor hasn't. Past
-  # the bottom row curses keeps the cursor there; only the first row drawn
-  # on a window row is recorded for it.
+  # indenting continuation rows (a space starting one is dropped), and
+  # lose trailing spaces. A row of only spaces (from a run of spaces wider
+  # than the window) is left out, as it has always been on screen.
   #
   # @param text [String] clean section text
   # @param line_colors [Array<Hash>] color regions for +text+
-  # @return [void]
+  # @return [Array<Hash>] `{text:, colors:}` per row
   # @api private
-  def add_line_wrapped_with_links(text, line_colors)
-    return if text.empty?
+  def wrap_rows(text, line_colors)
+    return [] if text.empty?
 
-    StyledText.new(text, line_colors).wrap(maxx, indent: false).each_with_index do |row, index|
-      section_break if index.positive?
+    StyledText.new(text, line_colors).wrap(maxx, indent: false).filter_map do |row|
       line = row.text.rstrip
-      @rendered_lines[cury] ||= { text: line, colors: row.runs }
-      add_line(line, row.runs)
+      { text: line, colors: row.runs } unless line.empty?
     end
   end
 end
