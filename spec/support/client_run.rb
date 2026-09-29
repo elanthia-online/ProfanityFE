@@ -108,8 +108,9 @@ module ClientRun
   # - A String is typed, one character per read. A control character
   #   ("\n", "\e", "\x01") is read as itself, as curses returns it.
   # - An Integer is a function key's code (Curses::KEY_RESIZE, ...).
-  # - A Proc runs at that read, and the read returns what it returns: a
-  #   key, or nil for no key.
+  # - A Proc runs at that read, which returns no key.
+  # - A {#press_after} step runs its block, then returns its key, in the
+  #   same read.
   # - A {#wait_until} step returns no key until its condition holds.
   #
   # When the keys run out, the next read raises Interrupt (Ctrl+C), which
@@ -120,7 +121,7 @@ module ClientRun
   # each of +exit_keys+ in turn (a Proc is called for the key), then nil,
   # as a read that timed out does.
   #
-  # @param keys [Array<String, Integer, Proc, WaitUntil>]
+  # @param keys [Array<String, Integer, Proc, PressAfter, WaitUntil>]
   # @param idle [Boolean] wait for the session to end once the keys run out
   # @param exit_keys [Array<String, Integer, Proc>] keys for the exit wait;
   #   keys not read are left in the Array
@@ -146,13 +147,34 @@ module ClientRun
         end
 
         reads.shift
-        key.is_a?(Proc) ? key.call : key
+        case key
+        when Proc
+          key.call
+          nil
+        when PressAfter
+          key.action.call
+          key.key
+        else key
+        end
       end
       window.define_singleton_method(:getch) do
         key = exit_keys.shift
         key.is_a?(Proc) ? key.call : key
       end
     end
+  end
+
+  # A keyboard step (see {#keyboard}) that runs an action, then presses a
+  # key, in the same read of the input loop.
+  PressAfter = Struct.new(:key, :action)
+
+  # A keyboard step that runs the block, then presses +key+ in the same
+  # read (see {PressAfter}).
+  #
+  # @param key [String, Integer]
+  # @return [PressAfter]
+  def press_after(key, &action)
+    PressAfter.new(key, action)
   end
 
   # A keyboard step that returns no key until the block returns true (see

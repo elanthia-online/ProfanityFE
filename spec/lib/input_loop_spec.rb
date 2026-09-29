@@ -168,10 +168,9 @@ RSpec.describe 'The input loop' do
 
     # Shrink the terminal to 40x150, then deliver the key ncurses sends for it
     def resize_terminal
-      lambda do
+      press_after(Curses::KEY_RESIZE) do
         main_size_before_resize.push(main.maxy, main.maxx)
         terminal.merge!(lines: 40, cols: 150)
-        Curses::KEY_RESIZE
       end
     end
 
@@ -236,7 +235,6 @@ RSpec.describe 'The input loop' do
         self.roundtime.end_time = Time.now.to_f + roundtime if roundtime
         self.stunned.end_time = Time.now.to_f + stunned if stunned
         flushes.clear
-        nil
       end
     end
 
@@ -247,7 +245,6 @@ RSpec.describe 'The input loop' do
       shown_at_next_poll = nil
       next_poll = lambda do
         shown_at_next_poll = roundtime.rows + stunned.rows
-        nil
       end
 
       run_client(keyboard(countdowns_ending_in(roundtime: 3, stunned: 5), next_poll))
@@ -372,7 +369,6 @@ RSpec.describe 'The input loop' do
       it 'exits 1 the same way when the error is raised with the render lock held' do
         roundtime_tick_fails = lambda do
           allow(app.window_mgr.countdown['roundtime']).to receive(:tick).and_raise(RuntimeError, 'tick failed')
-          nil
         end
 
         status, stderr = run_client(keyboard(wait_until { lines_drawn > 20 }, roundtime_tick_fails, idle: true),

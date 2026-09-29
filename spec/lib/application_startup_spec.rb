@@ -101,7 +101,6 @@ RSpec.describe 'Starting the client' do
       edit_the_file = lambda do
         highlights_at_startup = HIGHLIGHT.keys
         File.write(settings_path, settings_highlighting('troll'))
-        nil
       end
 
       run_client(keyboard(edit_the_file, ".reload\n"))

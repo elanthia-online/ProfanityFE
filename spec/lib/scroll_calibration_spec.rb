@@ -67,7 +67,6 @@ RSpec.describe 'Calibrating the scroll wheel with .scrollcfg' do
     show_thoughts = lambda do
       %w[l1 l2 l3 l4 l5].each { |line| thoughts.add_string(line) }
       thoughts.scroll_lines(-1)
-      nil
     end
     [show_thoughts, ".scrollcfg\n"]
   end
@@ -76,10 +75,7 @@ RSpec.describe 'Calibrating the scroll wheel with .scrollcfg' do
   # thoughts window.
   def mouse(bstate, times: 1)
     Array.new(times) do
-      lambda do
-        mouse_events << Struct.new(:bstate, :y, :x).new(bstate, 1, 2)
-        Curses::KEY_MOUSE
-      end
+      press_after(Curses::KEY_MOUSE) { mouse_events << Struct.new(:bstate, :y, :x).new(bstate, 1, 2) }
     end
   end
 

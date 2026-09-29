@@ -197,10 +197,9 @@ RSpec.describe 'The end of a session' do
     # the command already typed is written to the closed connection (EPIPE).
     it 'shows the notice once when the server thread has already reported the disconnect' do
       client_end, game_end = UNIXSocket.pair
-      enter_after_the_disconnect = lambda do
+      enter_after_the_disconnect = press_after("\n") do
         game_end.close
         sleep 0.001 until app.connection.ended?
-        "\n"
       end
 
       status, stderr = run_client(keyboard('look', enter_after_the_disconnect, idle: true, exit_keys: ['q']),
