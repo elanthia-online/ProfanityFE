@@ -230,6 +230,21 @@ RSpec.describe 'The terminal cursor after an input-path flush' do
       expect(countdown.rows).to eq ["RT#{'5'.rjust(8)}"]
       expect(cursor).to eq [9, 1 + 2]
     end
+
+    # The loop polls ten times a second; a tick that changes no countdown
+    # (and scrolls no drag) must not flush the screen.
+    it 'stays in main when the input loop ticks within the second the countdown already shows' do
+      countdown.end_time = now.to_f + 5
+      countdown.tick
+      type('ab')
+      main.noutrefresh
+      Curses.doupdate
+
+      run_input_loop_for_one_tick
+
+      expect(countdown.rows).to eq ["RT#{'5'.rjust(8)}"]
+      expect(cursor).to eq [main.cury, main.curx]
+    end
   end
 
   describe 'after a key action' do
