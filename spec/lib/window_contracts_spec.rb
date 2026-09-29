@@ -511,6 +511,34 @@ RSpec.describe 'Window contracts' do
     end
   end
 
+  # Not a characterization: before BaseWindow#repaint became the repaint
+  # every class answers, it did nothing on indicator, progress, exp, spell
+  # and room windows.
+  describe 'repaint' do
+    before do
+      (1..6).each { |n| stream_text('main', "line #{n}") }
+      stream_text('chat', 'chat 1')
+      event_bus.emit(:indicator_update, id: 'kneeling', value: true)
+      event_bus.emit(:progress_update, id: 'health', value: 40, max: 100)
+      event_bus.emit(:exp_set_current, skill: 'Evasion')
+      stream_text('exp', '         Evasion:  800 12%  [ 5/34]')
+      stream_text('percWindow', 'Shadows (2 roisaen)')
+      event_bus.emit(:room_title, text: '[Town Square]')
+      event_bus.emit(:room_exits, text: 'Obvious paths: north.')
+    end
+
+    it 'draws every window with contents again from what it holds' do
+      [main, tabbed, indicator, compass, progress, exp, perc, room].each do |window|
+        shown = window.instance_variable_get(:@cells).map(&:dup)
+        window.erase
+
+        window.repaint
+
+        expect(window.instance_variable_get(:@cells)).to eq(shown), "#{window.class} was not repainted"
+      end
+    end
+  end
+
   describe 'routing' do
     it 'sends stream text to the window of its stream' do
       stream_text('main', 'to main')

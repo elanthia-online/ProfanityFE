@@ -40,10 +40,17 @@ class BaseWindow < Curses::Window
     HighlightProcessor.render_colored_text(self, line, line_colors, options)
   end
 
-  # Repaint the visible text from the window's buffer.
-  # Subclasses with line buffers (TextWindow, TabbedTextWindow) override
-  # this. The default is a no-op for window types without a buffer to
-  # repaint from.
+  # Draw the window's contents again from what it holds (its buffer,
+  # skills, spells, room, label or value). This is the repaint every
+  # window class answers; call it rather than +redraw+ on a window of
+  # unknown class. Most classes' +redraw+ means the same, but a text
+  # window (or a countdown) has none of its own, so +redraw+ there is
+  # +Curses::Window#redraw+: it only marks the window for a full
+  # terminal refresh and repaints nothing from the buffer.
+  #
+  # Default: nothing, for a window drawn only as its state changes: a
+  # countdown draws itself on every {CountdownWindow#tick} that changes
+  # what it shows.
   #
   # @return [void]
   def repaint; end

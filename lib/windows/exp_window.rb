@@ -107,6 +107,14 @@ class ExpWindow < BaseWindow
     noutrefresh
   end
 
+  # Draw the window again from its current state: the same as {#redraw}
+  # (see {BaseWindow#repaint}).
+  #
+  # @return [void]
+  def repaint
+    redraw
+  end
+
   # Show the window again after {#move_to_layout} moved it: redraw its
   # contents at the new size.
   #

@@ -304,7 +304,8 @@ class TabbedTextWindow < BaseWindow
     noutrefresh
   end
 
-  # Repaint the tab bar and the active tab's visible text from its buffer.
+  # Repaint the tab bar and the active tab's visible text from its buffer
+  # (see {BaseWindow#repaint}).
   #
   # @return [void]
   def repaint

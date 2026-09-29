@@ -319,7 +319,7 @@ module LineBuffered
   end
 
   # Repaint every row of the text area from the shown buffer, drawing the
-  # selected region, if any, in reverse video.
+  # selected region, if any, in reverse video (see {BaseWindow#repaint}).
   #
   # @return [void]
   def repaint
