@@ -131,6 +131,29 @@ RSpec.describe MouseController do
         expect(sent).to be_empty
       end
 
+      # A release up to 3 columns from the press on the same row is still
+      # a click; the link is the one under the press.
+      describe 'with the release a few columns from the press' do
+        # A second apart: no click counts as a double click
+        before do
+          now = 100.0
+          allow(SelectionManager).to receive(:monotonic_now) { now += 1 }
+        end
+
+        it 'sends the link under the press for a release 1 to 3 columns off it' do
+          (1..3).each { |dx| drag([0, 7], [0, 7 + dx]) }
+
+          expect(sent).to eq %w[north north north]
+        end
+
+        it 'sends nothing for a press beside the link released on it' do
+          drag([0, 1], [0, 3])
+          drag([0, 2], [0, 5])
+
+          expect(sent).to be_empty
+        end
+      end
+
       it 'sends nothing while .scrollcfg is learning the wheel' do
         stub_const('Curses::ALL_MOUSE_EVENTS', Curses::REPORT_MOUSE_POSITION - 1)
         allow(ProfanitySettings).to receive(:save_mouse_settings)
@@ -440,6 +463,18 @@ RSpec.describe MouseController do
 
         expect(cells).to eq [['G', []], ['o', []], [':', []], [' ', []]] +
                             'north'.chars.map { |c| [c, ['north']] } + [['.', []]]
+      end
+
+      it 'sends the link under the press, not the one under the release' do
+        now = 100.0
+        allow(SelectionManager).to receive(:monotonic_now) { now += 1 }
+
+        drag([12, 8], [12, 9])
+        expect(sent).to eq ['north']
+
+        sent.clear
+        drag([12, 2], [12, 4])
+        expect(sent).to be_empty
       end
     end
 
