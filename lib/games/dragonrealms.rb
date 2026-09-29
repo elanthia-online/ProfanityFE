@@ -28,7 +28,8 @@ module Games
 
     # DR logon/logoff message patterns mapped to display colors.
     # Green (007700) = login, yellow (777700) = logout, orange (aa7733) = disconnect.
-    # Message suffix => hex color code.
+    #
+    # @return [Hash<String, String>] message suffix => hex color code
     LOGON_PATTERNS = {
       'joins the adventure with little fanfare.'                             => '007700',
       'just sauntered into the adventure with an annoying tune on his lips.' => '007700',
@@ -61,12 +62,18 @@ module Games
     LOGON_REGEXP = Rules.logon_regexp(LOGON_PATTERNS.keys)
 
     # DR death message pattern (phoenix, struck down, disintegrated, etc.)
+    #
+    # @return [Regexp]
     DEATH_PATTERN = /^\s\*\s(?:A fiery phoenix soars into the heavens as\s)?(?<name>[A-Z][a-z]+)(?: was just struck down.*| just disintegrated!| was lost to the Plane of Exile!|'s spirit arises from the ashes of death.| was smote by \w+!| failed within .*!| was just sacrificed to \w+!)/.freeze
 
     # DR Raise Dead stun pattern (cleric deity-specific messaging variants)
+    #
+    # @return [Regexp]
     RAISE_DEAD_PATTERN = /^Deep and resonating, you feel the chant that falls from your lips|^Moisture beads upon your skin and you feel your eyes cloud over|^Lifting your finger, you begin to chant and draw a series of conjoined circles|^Crouching beside the prone form of|^Murmuring softly, you call upon your connection with the Destroyer|^Rich and lively, the scent of wild flowers suddenly fills the air|^Breathing slowly, you extend your senses towards the world around you|^Your surroundings grow dim\.\.\.you lapse into a state of awareness only|^Murmuring softly, a mournful chant slips from your lips|^Emptying all breathe from your body, you slowly still yourself|^Thin at first, a fine layer of rime tickles your hands|^As you begin to chant,? you notice the scent of dry, dusty parchment|^Wrapped in an aura of chill, you close your eyes and softly begin to chant|^As .*? begins to chant, your spirit is drawn closer to your body/.freeze
 
     # DR Shadow Valley exit stun message
+    #
+    # @return [Regexp]
     SHADOW_VALLEY_PATTERN = /^Just as you think the falling will never end, you crash through an ethereal barrier which bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness and you feel unusually heavy for a moment\.  Everything seems to stop for a prolonged second and then WHUMP!!!/.freeze
 
     # Seconds of stun for a Raise Dead chant.

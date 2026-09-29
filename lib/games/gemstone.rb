@@ -31,6 +31,8 @@ module Games
     # name, starting at its first word (DEATH_PATTERN anchors it right after
     # the name). resolve_death_area checks the keys in order and the first
     # match wins, so a key must not also match an earlier key's messages.
+    #
+    # @return [Hash<Regexp, String>]
     DEATH_AREA_CODES = {
       /(?:is off to a rough start!\s+(?:He|She) )?just bit the dust!/            => 'WL',
       /echoes in your mind!/                                                     => 'RIFT',
@@ -61,6 +63,8 @@ module Games
     # GS death message pattern — matches the full death cry line and captures
     # the optional prefix, character name, and area-specific death message.
     # The area alternatives are the keys of DEATH_AREA_CODES.
+    #
+    # @return [Regexp]
     DEATH_PATTERN = /^\s\*\s(?<prefix>The death cry of )?(?<name>[A-Z][a-z]+)(?:['s]*) (?<area>#{Regexp.union(DEATH_AREA_CODES.keys)})/
 
     # GS death messages that should be suppressed (no area code)
@@ -79,7 +83,8 @@ module Games
 
     # GS logon/logoff/disconnect message patterns mapped to display colors.
     # Green (007700) = login, yellow (777700) = logout, orange (aa7733) = disconnect.
-    # Message suffix => hex color code.
+    #
+    # @return [Hash<String, String>] message suffix => hex color code
     LOGON_PATTERNS = {
       'joins the adventure.'                         => '007700',
       'returns home from a hard day of adventuring.' => '777700',

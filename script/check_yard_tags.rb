@@ -20,8 +20,10 @@
 # - an attribute with only the placeholder docstring YARD writes
 #   ("Returns the value of attribute x.").
 #
-# It also reports method-only tags (@param, @return, @yield, @raise, ...)
-# and section banners on constants, classes and modules.
+# It also reports method-only tags (@param, @yield, @raise, ...) and
+# section banners on constants, classes and modules, and an untyped @return
+# on a constant. @return is the one method tag a constant may carry: YARD
+# shows it as the constant's type ("Returns: (Integer)").
 #
 # Only the tags written in the comment count, not those YARD infers. The
 # body checks skip nested def/class/module bodies. A yield in a lambda or
@@ -172,11 +174,15 @@ module YardTagCheck
               .map { |tag| "@#{tag.tag_name} #{tag.name} has no type".squeeze(' ') }
   end
 
-  # Method-only tags on a constant, class or module, and a section banner
-  # taken as the docstring.
+  # Method-only tags on a constant, class or module (except a constant's
+  # @return, which gives its type and so must have one), and a section
+  # banner taken as the docstring.
   def misplaced_tag_gaps(object)
-    messages = written_tags(object).select { |tag| METHOD_ONLY_TAGS.include?(tag.tag_name.to_sym) }
-                                   .map { |tag| "@#{tag.tag_name} on a #{object.type} (YARD ignores it)" }
+    tags = written_tags(object)
+    type_tags, misplaced = tags.partition { |tag| object.type == :constant && tag.tag_name == 'return' }
+    messages = misplaced.select { |tag| METHOD_ONLY_TAGS.include?(tag.tag_name.to_sym) }
+                        .map { |tag| "@#{tag.tag_name} on a #{object.type} (a method-only tag)" }
+    messages.concat(untyped_tag_gaps(Hash.new([]).merge(return: type_tags)))
     messages << BANNER_GAP if banner?(object)
     messages.map { |message| Gap.new(object.file, object.line, object.path, message) }
   end
@@ -304,9 +310,23 @@ module YardTagCheck
   SELF_TEST_SOURCE = <<~RUBY
     # Fixture.
     module Fixture
-      # Tagged on a constant.
-      # @return [Integer] ignored by YARD
+      # Clean: a constant typed with @return.
+      # @return [Integer]
       LIMIT = 3
+
+      # Method tags on a constant.
+      # @param size [Integer] no parameters here
+      # @yield [Integer] nothing to yield
+      # @raise [IOError] nothing raises
+      SIZES = [1].freeze
+
+      # An untyped @return on a constant.
+      # @return the limit
+      UNTYPED_LIMIT = 4
+
+      # A @return on a class.
+      # @return [Integer]
+      class Returning; end
 
       # No @param for b.
       # @param a [Integer] first
@@ -477,7 +497,11 @@ module YardTagCheck
 
   # The gaps the checker must report for {SELF_TEST_SOURCE}, by object path.
   SELF_TEST_EXPECTED = {
-    'Fixture::LIMIT'                       => ['@return on a constant (YARD ignores it)'],
+    'Fixture::SIZES'                       => ['@param on a constant (a method-only tag)',
+                                               '@yield on a constant (a method-only tag)',
+                                               '@raise on a constant (a method-only tag)'],
+    'Fixture::UNTYPED_LIMIT'               => ['@return has no type'],
+    'Fixture::Returning'                   => ['@return on a class (a method-only tag)'],
     'Fixture.missing_param'                => ['missing @param b'],
     'Fixture.stale_param'                  => ['stale @param gone'],
     'Fixture.missing_return'               => ['missing @return'],

@@ -28,7 +28,7 @@ module ProfanitySettings
   # message is what profanity.rb prints to stderr before it exits 1.
   class NotFoundError < StandardError; end
 
-  # The application data directory, +~/.profanity+.
+  # @return [String] the application data directory
   APP_DIR = File.join(Dir.home, '.profanity')
 
   # Create {APP_DIR} if it doesn't exist. profanity.rb calls this at

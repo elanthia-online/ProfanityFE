@@ -58,7 +58,9 @@ jobs:
 
       # Every method's tags must match its code: a @param for each
       # parameter and none for a parameter it doesn't have, a @return, a
-      # @yield if it yields, a @raise if it raises, typed tags, and no
-      # method tags on constants. Each gap is listed as file:line.
+      # @yield if it yields, a @raise if it raises, and typed tags. A
+      # constant, class or module may not carry method tags, except a
+      # typed @return on a constant (YARD shows it as the constant's type).
+      # Each gap is listed as file:line.
       - name: YARD tags match the code
         run: bundle exec ruby script/check_yard_tags.rb
