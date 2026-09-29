@@ -194,6 +194,77 @@ RSpec.describe MouseController do
       end
     end
 
+    # The terminal sends a press, then a release: ncurses decodes each one
+    # when it's read, the release after the press was handled. Measured in
+    # a PTY (ncurses 6.0 on macOS and 6.6 on Linux, X10 and SGR reports):
+    # every mousemask call forgets the pressed button, so a release read
+    # after one comes back as pointer motion, or not at all when the mask
+    # has no motion bit.
+    describe 'as ncurses reports a press and a release' do
+      let(:ncurses) do
+        Class.new do
+          def initialize
+            @mask = 0
+            @held = false
+          end
+
+          def mousemask(mask)
+            @mask = mask
+            @held = false
+          end
+
+          # @return [Struct, nil] the event getmouse returns for a report,
+          #   or nil when the mask drops it
+          def read(kind, y, x)
+            bstate = if kind == :press
+                       @held = true
+                       Curses::BUTTON1_PRESSED
+                     elsif @held
+                       @held = false
+                       Curses::BUTTON1_RELEASED
+                     else
+                       Curses::REPORT_MOUSE_POSITION
+                     end
+            Struct.new(:bstate, :y, :x).new(bstate, y, x) if bstate.anybits?(@mask)
+          end
+        end.new
+      end
+      let(:now) { [100.0] }
+
+      before do
+        allow(Curses).to receive(:mousemask) { |mask| ncurses.mousemask(mask) }
+        # A second apart: no click counts as a double click
+        allow(SelectionManager).to receive(:monotonic_now) { now[0] += 1 }
+        controller # turns click events on, as at startup
+      end
+
+      def deliver_reports(*reports)
+        reports.each do |kind, y, x|
+          next unless (event = ncurses.read(kind, y, x))
+
+          allow(Curses).to receive(:getmouse).and_return(event)
+          controller.handle_event
+        end
+      end
+
+      # In thoughts (screen row 5), so the echoes in main don't move it
+      it 'follows a link from a click on any of its cells' do
+        thoughts.add_string('go north', [{ start: 3, end: 8, fg: '5555ff', cmd: 'north' }])
+
+        (3...8).each { |x| deliver_reports([:press, 5, x], [:release, 5, x]) }
+
+        expect(sent).to eq %w[north north north north north]
+      end
+
+      it 'copies a drag' do
+        %w[alpha bravo charlie delta].each { |line| main.add_string(line) }
+
+        deliver_reports([:press, 1, 0], [:release, 2, 3])
+
+        expect(copied).to eq ["bravo\ncha"]
+      end
+    end
+
     # Main wraps 'one two three four five six seven eight nine ten' at 40
     # columns, so 'nine ten' goes on an indented continuation row. Rows 2
     # and 3 are empty.
