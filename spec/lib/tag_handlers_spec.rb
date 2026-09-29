@@ -8,6 +8,7 @@
 require_relative '../../lib/event_bus'
 require_relative '../../lib/xml_tokenizer'
 require_relative '../../lib/tag_handlers'
+require_relative '../../lib/span_tracker'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/clock'
 require_relative '../../lib/pending_render'
@@ -21,9 +22,6 @@ require 'stringio'
 class TagHandlerHost
   include TagHandlers
 
-  attr_accessor :line_colors, :open_monsterbold, :open_preset, :open_style,
-                :open_color, :open_link
-
   attr_reader :flushed_texts, :wm, :state, :event_bus, :pending_render
 
   def initialize(wm:, state:, event_bus:, clock: Clock.new)
@@ -31,12 +29,7 @@ class TagHandlerHost
     @state = state
     @event_bus = event_bus
     @xml_escapes = { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' }
-    @line_colors = []
-    @open_monsterbold = []
-    @open_preset = []
-    @open_style = nil
-    @open_color = []
-    @open_link = []
+    @spans = SpanTracker.new
     @pending_render = PendingRender.new
     @prompts = PromptTracker.new(shared_state: state, event_bus: event_bus, pending_render: @pending_render,
                                  window_mgr: wm, clock: clock)
@@ -48,14 +41,16 @@ class TagHandlerHost
   end
 
   # Capture flushed text instead of processing it
-  def handle_game_text(text)
-    @flushed_texts << { text: text.dup, colors: @line_colors.dup, stream: current_stream }
-    @line_colors = []
-    @open_monsterbold.clear
-    @open_preset.clear
-    @open_color.clear
-    @open_link.clear
+  def handle_game_text(text, runs)
+    @flushed_texts << { text: text.dup, colors: runs.dup, stream: current_stream }
+    @spans.end_line
   end
+
+  # The color runs recorded since the last flush
+  def line_colors = @spans.runs
+
+  # The innermost open span of a kind (see SpanTracker#open_span)
+  def open_span(kind) = @spans.open_span(kind)
 
   # What room styled text is being captured (see RoomAssembler#capture_mode)
   def room_capture_mode = @room.capture_mode
@@ -437,7 +432,7 @@ RSpec.describe TagHandlers do
     it 'opens a style with non-empty id' do
       PRESET['roomName'] = ['00ff00', nil]
       host.dispatch_tag('<style id="roomName"/>', String.new)
-      expect(host.open_style).to include(start: 0, fg: '00ff00')
+      expect(host.open_span(:style)).to include(start: 0, fg: '00ff00')
       expect(host.room_capture_mode).to eq :title
     end
 
@@ -448,7 +443,7 @@ RSpec.describe TagHandlers do
       buf << 'Town Square'
       host.dispatch_tag('<style id=""/>', buf)
 
-      expect(host.open_style).to be_nil
+      expect(host.open_span(:style)).to be_nil
       flushed = host.flushed_texts.find { |f| f[:text] == 'Town Square' }
       expect(flushed).not_to be_nil
     end
@@ -1162,7 +1157,7 @@ RSpec.describe TagHandlers do
         "<preset x='1' id='speech'>" => { start: 0, fg: 'aa', bg: nil },
         "<preset id='speech'/>"      => nil,
         "<preset id='a'b'>"          => { start: 0 }
-      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_preset.last } }
+      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_span(:preset) } }
     end
 
     it 'reads a stream id only from an attribute named id' do
@@ -1233,7 +1228,7 @@ RSpec.describe TagHandlers do
         "<color junk fg='a'>"                        => { start: 0 },
         %(<color title=" fg='a' ">)                  => { start: 0 },
         "<color-x fg='a'>"                           => { start: 0 }
-      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_color.last } }
+      ) { |h, tag| h.dispatch_tag(tag, String.new).then { h.open_span(:color) } }
     end
 
     it 'reads compass dirs from the dir tags inside the compass' do

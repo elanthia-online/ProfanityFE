@@ -50,9 +50,10 @@ RSpec.describe 'GameTextProcessor event emissions' do
   # The screen updates the processor asked for
   def pending_render = processor.send(:instance_variable_get, :@pending_render)
 
-  # Send text through handle_game_text via the private method
+  # Send text through handle_game_text via the private method, with no
+  # color runs
   def process(text)
-    processor.send(:handle_game_text, text)
+    processor.send(:handle_game_text, text, [])
   end
 
   # ---- Empty hands indicator ----
