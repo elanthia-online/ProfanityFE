@@ -3,7 +3,7 @@
 require_relative 'streams'
 require_relative 'feedback'
 require_relative 'window_layout'
-require_relative 'platform'
+require_relative 'url_launcher'
 require_relative 'clock'
 
 # Manages Curses window creation, layout loading, and handler hash access
@@ -285,7 +285,7 @@ class WindowManager
         window.add_string(' *'.dup)
       else
         # Default: open URL in system browser
-        open_in_browser(data[:url])
+        UrlLauncher.open(data[:url])
       end
     end
 
@@ -476,27 +476,6 @@ class WindowManager
     @previous_stream = {}
     @previous_progress = {}
     @previous_countdown = {}
-  end
-
-  # Open a URL in the system browser without blocking the caller.
-  #
-  # The command is spawned as an argument list, so the URL is never parsed
-  # by a shell: characters such as +$(...)+ or backticks in a server-supplied
-  # URL stay literal.
-  #
-  # @param url [String] the URL to open
-  # @return [void]
-  def open_in_browser(url)
-    command = case Platform.os
-              when :macos then ['open', url]
-              when :unix then ['xdg-open', url]
-              when :windows then ['rundll32', 'url.dll,FileProtocolHandler', url]
-              end
-    return unless command
-
-    Process.detach(Process.spawn(*command, out: File::NULL, err: File::NULL))
-  rescue SystemCallError => e
-    ProfanityLog.write('launch_url', "could not open #{url}: #{e.message}")
   end
 end
 
