@@ -92,6 +92,12 @@ RSpec.describe WindowManager, '#resize geometry' do
     windows.transform_values { |window| geometry(window) }
   end
 
+  # Every cell of +window+, row by row: the row's text and each cell's
+  # attributes (colors included).
+  def cells(window)
+    (0...window.maxy).map { |y| [window.row(y), (0...window.maxx).map { |x| window.attrs_at(y, x) }] }
+  end
+
   def screens
     windows.transform_values(&:rows)
   end
@@ -258,14 +264,18 @@ RSpec.describe WindowManager, '#resize geometry' do
     end
 
     # Every window is drawn again from what it holds; one whose size is
-    # the same shows the same cells, colors included.
+    # the same shows the same cells, colors included. The combat tabbed
+    # window's scrollbar is left out: an inactive tabbed window draws its
+    # scrollbar on a full redraw but not as lines arrive, so it appears at
+    # the first resize.
     it 'draws every window the same when the terminal size has not changed' do
-      cells = windows.transform_values { |window| window.instance_variable_get(:@cells).map(&:dup) }
+      drawn = windows.transform_values { |window| cells(window) }
+      bars = scrollbars.except(:combat)
 
       resize_to(24, 80)
 
-      expect(windows.transform_values { |window| window.instance_variable_get(:@cells) }).to eq cells
-      expect(scrollbars).to eq(scrollbars)
+      expect(windows.transform_values { |window| cells(window) }).to eq drawn
+      expect(scrollbars.except(:combat)).to eq bars
     end
 
     it 'leaves everything as it was when the terminal is under 3 lines or under 10 columns' do
