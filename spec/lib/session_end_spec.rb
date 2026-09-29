@@ -79,7 +79,7 @@ RSpec.describe 'The end of a session' do
     end
 
     [IOError.new('stream closed'), Errno::ECONNRESET.new, Errno::EPIPE.new, Errno::ECONNABORTED.new].each do |error|
-      it "does the same when the read fails with #{error.class}" do
+      it "also shows the notice, waits for a key on the main thread, and exits 0 when the read fails with #{error.class}" do
         game_server.hang_up(error)
         exit_keys = ['q']
 
@@ -113,6 +113,12 @@ RSpec.describe 'The end of a session' do
     # BUG FOUND (fixed here): "Press any key to exit..." waited forever, so an
     # unattended client never exited after a disconnect.
     it 'stops waiting after 30 seconds without a key, and exits 0' do
+      # Time passes between setting the deadline and the read (0.4 ms at
+      # each reading of the clock); the wait is rounded up to the whole
+      # millisecond, so it is still 30 seconds, not 29.999.
+      now = 100.0
+      allow(Process).to receive(:clock_gettime).and_call_original
+      allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { now += 0.0004 }
       command_window = keyboard(idle: true, exit_keys: [])
 
       status, = run_client(command_window)
@@ -199,7 +205,8 @@ RSpec.describe 'The end of a session' do
       client_end, game_end = UNIXSocket.pair
       enter_after_the_disconnect = press_after("\n") do
         game_end.close
-        sleep 0.001 until app.connection.ended?
+        gives_up_at = Time.now + ClientRun::DEADLINE
+        sleep 0.001 until app.connection.ended? || Time.now > gives_up_at
       end
 
       status, stderr = run_client(keyboard('look', enter_after_the_disconnect, idle: true, exit_keys: ['q']),
