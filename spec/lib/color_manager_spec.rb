@@ -88,6 +88,112 @@ RSpec.describe ColorManager do
     end
   end
 
+  describe 'recycle log' do
+    let(:color_pairs) { 4 } # pool of pairs 1..3
+
+    let(:logged) { [] }
+
+    before { allow(ProfanityLog).to receive(:write) { |context, message| logged << [context, message] } }
+
+    def pair_log_lines
+      log_lines.select { |line| line.start_with?('color pairs') }
+    end
+
+    def slot_log_lines
+      log_lines.select { |line| line.start_with?('custom color slots') }
+    end
+
+    def log_lines
+      logged.select { |context, _| context == 'color' }.map { |_, message| message }
+    end
+
+    it 'logs nothing while the pair pool has free pairs' do
+      allocate_distinct(3)
+
+      expect(ProfanityLog).not_to have_received(:write)
+    end
+
+    it 'logs one line naming the pool size, the reused pair and the new colors at the first recycle' do
+      ColorManager.get_color_pair_id('ff0000', '000000') # pair 1
+      ColorManager.get_color_pair_id('00ff00', '000000') # pair 2
+      ColorManager.get_color_pair_id('0000ff', '000000') # pair 3
+      ColorManager.get_color_pair_id('ff0000', '000000') # cached, not a recycle
+      ColorManager.get_color_pair_id('ffffff', nil)      # takes pair 1 from ff0000/000000
+
+      expect(pair_log_lines).to eq(['color pairs exhausted (3 in use): reusing pair 1 for ffffff/default; ' \
+                                    'colors already on screen may change'])
+    end
+
+    it 'logs only the first recycle' do
+      allocate_distinct(10)
+
+      expect(pair_log_lines.size).to eq(1)
+      expect(slot_log_lines).to be_empty
+    end
+
+    it 'does not change the pair ids handed out or the pairs initialized' do
+      ids = allocate_distinct(7)
+
+      expect(ids).to eq([1, 2, 3, 1, 2, 3, 1])
+      expect(init_pair_calls.map(&:first)).to eq([1, 2, 3, 1, 2, 3, 1])
+    end
+
+    it 'logs again after configure rebuilds the pool' do
+      allocate_distinct(4)
+      ColorManager.configure(default_color_id: 7, default_background_color_id: 0, custom_colors: false)
+      allocate_distinct(4)
+
+      expect(pair_log_lines.size).to eq(2)
+    end
+
+    it 'does not reset on reinitialize_colors (.fixcolor)' do
+      allocate_distinct(4)
+      ColorManager.reinitialize_colors
+      allocate_distinct(10)
+
+      expect(pair_log_lines.size).to eq(1)
+    end
+
+    context 'with custom colors' do
+      let(:color_pairs) { 32_767 } # 255 pairs: only the color slots run out here
+      let(:init_color_calls) { [] }
+
+      before do
+        allow(Curses).to receive(:colors).and_return(4)
+        allow(Curses).to receive(:init_color) { |*args| init_color_calls << args }
+        # Slots 3 (fg) and 0 (bg) are the defaults, so the pool is slots 1 and 2.
+        ColorManager.configure(default_color_id: 3, default_background_color_id: 0, custom_colors: true)
+      end
+
+      it 'logs nothing while the slot pool has free slots' do
+        ColorManager.get_color_id('ff0000')
+        ColorManager.get_color_id('00ff00')
+        ColorManager.get_color_id('ff0000')
+
+        expect(ProfanityLog).not_to have_received(:write)
+      end
+
+      it 'logs one line at the first slot recycle, and no pair line' do
+        ColorManager.get_color_id('ff0000') # slot 1
+        ColorManager.get_color_id('00ff00') # slot 2
+        ColorManager.get_color_id('0000ff') # takes slot 1 from ff0000
+        ColorManager.get_color_id('ffffff') # takes slot 2 from 00ff00
+        ColorManager.get_color_id('ff0000') # takes slot 1 from 0000ff
+
+        expect(slot_log_lines).to eq(['custom color slots exhausted (2 in use): reusing color 1 for 0000ff; ' \
+                                      'colors already on screen may change'])
+        expect(pair_log_lines).to be_empty
+      end
+
+      it 'does not change the slots handed out or the colors initialized' do
+        ids = %w[ff0000 00ff00 0000ff ffffff ff0000].map { |code| ColorManager.get_color_id(code) }
+
+        expect(ids).to eq([1, 2, 1, 2, 1])
+        expect(init_color_calls.map(&:first)).to eq([1, 2, 1, 2, 1])
+      end
+    end
+  end
+
   describe 'default color codes' do
     before do
       allow(Curses).to receive(:color_content).with(1).and_return([1000, 0, 0])

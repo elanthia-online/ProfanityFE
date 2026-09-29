@@ -30,6 +30,8 @@ module ColorManager
   @color_pair_history = []
   @color_code = nil
   @color_mutex = Mutex.new
+  @color_id_recycle_logged = false
+  @color_pair_recycle_logged = false
 
   class << self
     attr_accessor :default_color_id, :default_background_color_id,
@@ -37,8 +39,8 @@ module ColorManager
                   :custom_colors
 
     # Initialize the color system. Must be called after Curses.init_screen and CLI parsing.
-    # Resets all color and pair caches. The pair pool holds pairs
-    # 1...min(Curses.color_pairs, {MAX_RENDERABLE_COLOR_PAIRS}).
+    # Resets all color and pair caches (and the once-per-pool recycle log).
+    # The pair pool holds pairs 1...min(Curses.color_pairs, {MAX_RENDERABLE_COLOR_PAIRS}).
     #
     # @param default_color_id [Integer] curses color ID for default foreground
     # @param default_background_color_id [Integer] curses color ID for default background
@@ -56,6 +58,7 @@ module ColorManager
       # Initialize color ID lookup
       @color_id_lookup = {}
       @color_id_history = []
+      @color_id_recycle_logged = false
 
       if @custom_colors
         @color_id_lookup[@default_color_code] = @default_color_id
@@ -74,6 +77,7 @@ module ColorManager
       # FIFO by {.get_color_pair_id}.
       @color_pair_id_lookup = {}
       @color_pair_history = (1...[Curses.color_pairs, MAX_RENDERABLE_COLOR_PAIRS].min).to_a
+      @color_pair_recycle_logged = false
     end
 
     # Re-initialize all custom colors from the lookup table.
@@ -89,7 +93,9 @@ module ColorManager
     end
 
     # Get or allocate a curses color ID for a hex color code.
-    # In custom mode, reprograms a color slot via Curses.init_color.
+    # In custom mode, reprograms a color slot via Curses.init_color; once every
+    # slot is in use, the least recently allocated one is recycled (logged the
+    # first time only).
     # In fixed mode, finds the nearest match in the 256-color palette.
     #
     # @param code [String] 6-digit hex color code (e.g., "ff0000"); callers must
@@ -99,11 +105,18 @@ module ColorManager
       if (color_id = @color_id_lookup[code])
         color_id
       elsif @custom_colors
+        log_recycle = false
         @color_mutex.synchronize do
           color_id = @color_id_history.shift
-          @color_id_lookup.delete_if { |_k, v| v == color_id }
+          recycled = @color_id_lookup.reject! { |_k, v| v == color_id }
           @color_id_lookup[code] = color_id
           @color_id_history.push(color_id)
+          if recycled && !@color_id_recycle_logged
+            @color_id_recycle_logged = log_recycle = true
+          end
+        end
+        if log_recycle
+          log_recycled('custom color slots', @color_id_history.size, "color #{color_id}", code)
         end
         # ncurses needs a small delay between init_color/init_pair calls
         # on some terminal emulators to properly apply color changes.
@@ -131,7 +144,8 @@ module ColorManager
     # Get or allocate a curses color pair ID for a foreground/background combination.
     # Caches pair IDs to avoid redundant Curses.init_pair calls. When every pair
     # in the pool is in use, the least recently allocated pair is recycled
-    # (its old fg/bg mapping is evicted and it is re-initialized).
+    # (its old fg/bg mapping is evicted and it is re-initialized); the first
+    # recycle is logged.
     #
     # Codes come from user settings XML and server/script +<color>+ tags, so
     # they are normalized first: a leading "#" is stripped, and anything that
@@ -149,12 +163,21 @@ module ColorManager
       if @color_pair_id_lookup[fg_id] && (color_pair_id = @color_pair_id_lookup[fg_id][bg_id])
         color_pair_id
       else
+        log_recycle = false
         @color_mutex.synchronize do
           color_pair_id = @color_pair_history.shift
-          @color_pair_id_lookup.each { |_w, x| x.delete_if { |_y, z| z == color_pair_id } }
+          recycled = false
+          @color_pair_id_lookup.each { |_w, x| recycled = true if x.reject! { |_y, z| z == color_pair_id } }
           @color_pair_id_lookup[fg_id] ||= {}
           @color_pair_id_lookup[fg_id][bg_id] = color_pair_id
           @color_pair_history.push(color_pair_id)
+          if recycled && !@color_pair_recycle_logged
+            @color_pair_recycle_logged = log_recycle = true
+          end
+        end
+        if log_recycle
+          log_recycled('color pairs', @color_pair_history.size, "pair #{color_pair_id}",
+                       "#{fg_code || 'default'}/#{bg_code || 'default'}")
         end
         sleep 0.01
         Curses.init_pair(color_pair_id, fg_id, bg_id)
@@ -163,6 +186,20 @@ module ColorManager
     end
 
     private
+
+    # Log that a pool ran out and an id still in use was reassigned. Cells
+    # already drawn with that id take on its new color. Called outside
+    # @color_mutex, since ProfanityLog does file IO.
+    #
+    # @param pool [String] which pool ran out (e.g. "color pairs")
+    # @param size [Integer] number of ids in the pool
+    # @param reused [String] the id that was reassigned (e.g. "pair 1")
+    # @param colors [String] the hex code(s) it now stands for
+    # @return [void]
+    def log_recycled(pool, size, reused, colors)
+      ProfanityLog.write('color', "#{pool} exhausted (#{size} in use): reusing #{reused} for #{colors}; " \
+                                  'colors already on screen may change')
+    end
 
     # Normalize a color code to 6 lower-case hex digits, so each color has
     # one cache entry (and, in custom mode, one color slot).
