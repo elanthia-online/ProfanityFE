@@ -66,20 +66,6 @@ class SpyIndicatorWindow
   end
 end
 
-class SpyProgressWindow
-  attr_accessor :label, :fg, :bg
-  attr_reader :calls
-
-  def initialize
-    @calls = []
-  end
-
-  def update(value, max)
-    @calls << { method: :update, value: value, max: max }
-    true
-  end
-end
-
 class SpyCountdownWindow
   attr_accessor :end_time, :secondary_end_time, :active
   attr_reader :calls
@@ -221,21 +207,23 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
   # ---- :progress_update ----
 
   describe ':progress_update' do
-    let(:progress) { SpyProgressWindow.new }
+    # A real progress bar on the virtual screen; when it redraws is covered
+    # in spec/lib/arb_progress_spec.rb.
+    let(:progress) { ProgressWindow.new(1, 10, 0, 0).tap { |bar| bar.label = 'hp' } }
 
     before { wm.instance_variable_set(:@progress, { 'health' => progress }) }
 
-    it 'calls update with value and max' do
-      event_bus.emit(:progress_update, id: 'health', value: 75, max: 100)
-      expect(progress.calls.last).to include(value: 75, max: 100)
+    it 'sets value and max and shows the value' do
+      event_bus.emit(:progress_update, id: 'health', value: 75, max: 150)
+      expect([progress.value, progress.max_value]).to eq [75, 150]
+      expect(progress.rows).to eq ['hp      75']
     end
 
     it 'sets label, fg, bg when provided' do
       event_bus.emit(:progress_update, id: 'health', value: 50, max: 100,
                                        label: 'HP', fg: ['00ff00'], bg: ['ff0000'])
-      expect(progress.label).to eq 'HP'
-      expect(progress.fg).to eq ['00ff00']
-      expect(progress.bg).to eq ['ff0000']
+      expect([progress.label, progress.fg, progress.bg]).to eq ['HP', ['00ff00'], ['ff0000']]
+      expect(progress.rows).to eq ['HP      50']
     end
 
     it 'ignores events for nonexistent progress bars' do

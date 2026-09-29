@@ -70,10 +70,9 @@ class EventBridge
       window = @wm.progress[data[:id]]
       next unless window
 
-      window.label = data[:label] if data.key?(:label)
-      window.fg = data[:fg] if data.key?(:fg)
-      window.bg = data[:bg] if data.key?(:bg)
-      window.update(data[:value], data[:max])
+      # Label and colors count as changes too (a script bar may change
+      # only those), with one redraw after all of them are set.
+      window.apply_changes(data.slice(:label, :fg, :bg, :value, :max))
     end
 
     # ---- Countdown events ----

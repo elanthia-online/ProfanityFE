@@ -53,14 +53,35 @@ class ProgressWindow < BaseWindow
   # @param new_max_value [Integer, nil] the new maximum (kept unchanged when nil)
   # @return [Boolean] true if the display was redrawn, false if unchanged
   def update(new_value, new_max_value = nil)
-    new_max_value ||= @max_value
-    if (new_value == @value) and (new_max_value == @max_value)
-      false
-    else
+    apply_changes(value: new_value, max: new_max_value)
+  end
+
+  # Apply a progress update: set whichever of the label, colors, value
+  # and maximum it gives, then redraw once if anything changed, so a new
+  # label or new colors show even when the value stays the same. A label,
+  # color list or number equal to the current one is no change.
+  #
+  # @param changes [Hash] any of +:label+ (String), +:fg+ and +:bg+
+  #   (Array<String, nil>), +:value+ (Integer) and +:max+ (Integer; nil
+  #   keeps the current maximum)
+  # @return [Boolean] true if the bar was redrawn
+  def apply_changes(changes)
+    changed = false
+    %i[label fg bg].each do |attr|
+      next unless changes.key?(attr) && changes[attr] != public_send(attr)
+
+      public_send(:"#{attr}=", changes[attr])
+      changed = true
+    end
+    new_value = changes.fetch(:value, @value)
+    new_max_value = changes[:max] || @max_value
+    if (new_value != @value) or (new_max_value != @max_value)
       @value = new_value
       @max_value = [new_max_value, 1].max
-      redraw
+      changed = true
     end
+    redraw if changed
+    changed
   end
 
   # Redraw the progress bar using the current value, max, and color palette.
