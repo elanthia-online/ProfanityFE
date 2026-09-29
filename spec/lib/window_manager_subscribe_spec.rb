@@ -88,8 +88,8 @@ class SpyCountdownWindow
     @calls = []
   end
 
-  def update
-    @calls << { method: :update }
+  def tick
+    @calls << { method: :tick }
     true
   end
 end
@@ -253,13 +253,13 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
     it 'sets end_time and triggers a redraw' do
       event_bus.emit(:countdown_update, id: 'roundtime', end_time: 12345)
       expect(countdown.end_time).to eq 12345
-      expect(countdown.calls).to include(a_hash_including(method: :update))
+      expect(countdown.calls).to include(a_hash_including(method: :tick))
     end
 
     it 'sets secondary_end_time and triggers a redraw' do
       event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: 99999)
       expect(countdown.secondary_end_time).to eq 99999
-      expect(countdown.calls).to include(a_hash_including(method: :update))
+      expect(countdown.calls).to include(a_hash_including(method: :tick))
     end
 
     it 'ignores events for nonexistent countdowns' do
@@ -277,7 +277,7 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
     it 'sets active flag and triggers a redraw' do
       event_bus.emit(:countdown_active, id: 'stunned', active: true)
       expect(countdown.active).to be true
-      expect(countdown.calls).to include(a_hash_including(method: :update))
+      expect(countdown.calls).to include(a_hash_including(method: :tick))
     end
   end
 
@@ -295,7 +295,7 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
       before_time = Time.now.to_f
       event_bus.emit(:stun, seconds: 10)
       expect(countdown.end_time).to be >= before_time + 10 - 1
-      expect(countdown.calls).to include(a_hash_including(method: :update))
+      expect(countdown.calls).to include(a_hash_including(method: :tick))
     end
 
     it 'ignores when no stunned countdown exists' do

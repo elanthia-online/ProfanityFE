@@ -776,7 +776,7 @@ class Application
   def tick_countdowns
     any_updated = false
     @window_mgr.countdown.each_value do |window|
-      any_updated = true if window.update
+      any_updated = true if window.tick
     end
     @cmd_buffer.window&.noutrefresh if any_updated
     any_updated

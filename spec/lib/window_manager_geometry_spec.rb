@@ -140,7 +140,7 @@ RSpec.describe WindowManager, '#resize geometry' do
     wm.room['room'].render
     wm.progress['health'].update(50, 100)
     wm.countdown['roundtime'].active = true
-    wm.countdown['roundtime'].update
+    wm.countdown['roundtime'].tick
     wm.indicator['kneeling'].update(true)
     event_bus.emit(:prompt_changed, text: 'H>')
     command.window = wm.command_window
