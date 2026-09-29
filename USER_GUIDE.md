@@ -985,8 +985,8 @@ Actions are predefined behaviors that can be bound to keys:
 | Action | Description |
 |--------|-------------|
 | `send_command` | Send the current command buffer to the game |
-| `send_last_command` | Resend the most recent command from history |
-| `send_second_last_command` | Resend the second-most-recent command |
+| `send_last_command` | Resend the most recent command sent |
+| `send_second_last_command` | Resend the second-most-recent command sent |
 | `previous_command` | Navigate to the previous (older) command in history |
 | `next_command` | Navigate to the next (newer) command in history |
 
@@ -1907,8 +1907,8 @@ Bind it to a key (typically Tab) in your settings file:
 <key id='tab' action='autocomplete'/>
 ```
 
-When you press the bound key, ProfanityFE searches your command history for
-entries that start with the whole command line (wherever the cursor is):
+When you press the bound key, ProfanityFE searches the commands you sent for
+ones that start with the whole command line (wherever the cursor is):
 
 - **Single match:** the command line is auto-filled with the matched command.
 - **Multiple matches:** a numbered list of candidates is displayed in the main
@@ -2073,6 +2073,10 @@ standard Lich script command prefix. For example, typing `.e echo hello` sends
 - Use Up/Down arrows to navigate history.
 - Pressing Down when at the newest entry clears the command line and saves the
   current text to history.
+- Up/Down also show what you left behind while browsing: a line saved with
+  Down, and your edits to a recalled command. `send_last_command`,
+  `send_second_last_command` and autocomplete use only the commands you sent,
+  never those.
 - History keeps the newest 1000 commands; older ones are dropped. To keep a
   different number, set it in the settings file (0 keeps none):
 

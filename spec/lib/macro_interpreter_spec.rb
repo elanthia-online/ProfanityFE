@@ -158,7 +158,7 @@ RSpec.describe MacroInterpreter do
       expect(main.rows).to eq ['>look', '>.links',
                                '* Links: ON (clickable links + drag-to-select; Shift+drag for native selection)', '']
       expect(app.shared_state.blue_links).to be true
-      expect(app.cmd_buffer.history[1]).to eq '.links'
+      expect(app.cmd_buffer.history.first).to eq '.links'
       expect([screen.visible, screen.curx]).to eq ['say  there', 4]
     end
 

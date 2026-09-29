@@ -42,7 +42,6 @@ class MacroInterpreter
         when '\\'
           @cmd_buffer.put_ch('\\')
         when 'x'
-          @cmd_buffer.text.clear
           @cmd_buffer.clear_and_get
         when 'r'
           at_pos = nil
