@@ -1,10 +1,16 @@
 # frozen_string_literal: true
 
-# Tests Application's initialization, dot-command dispatch (.quit, .help,
-# .links, .arrow, .layout, .key), macro engine (\\r, \\x, @), key action
-# bindings, and countdown tick polling.
+# Tests Application on a layout on the virtual screen, outside the input
+# loop: the state it starts with from the command-line options, what it
+# sends for a command that is not a dot-command, sending and resending
+# commands with the key actions, the key actions with no command window,
+# and .key.
+#
+# Elsewhere: dot-command dispatch in dot_commands_spec.rb, .reload in
+# reload_command_spec.rb, .scrollcfg in scroll_calibration_spec.rb,
+# startup and connecting in application_startup_spec.rb, the input loop
+# in input_loop_spec.rb and the end of a session in session_end_spec.rb.
 
-require 'socket'
 require 'rexml/document'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/kill_ring'
@@ -18,447 +24,126 @@ require_relative '../../lib/game_text_processor'
 require_relative '../../lib/application'
 require_relative '../../lib/key_codes'
 require_relative '../../lib/settings_loader'
-require_relative '../../lib/event_bus'
-require_relative '../support/screen_line_window'
-
-# Stub ColorManager for .fixcolor tests
-module ColorManager
-  def self.reinitialize_colors = nil
-  def self.configure(**) = nil
-end unless defined?(ColorManager)
 
 RSpec.describe Application do
-  # Stub MouseScroll to avoid Curses.mousemask calls
+  let(:links) { false }
+  let(:app) { new_app(links: links) }
+  let(:server) { StringIO.new }
+  let(:main) { app.window_mgr.stream['main'] }
+  let(:command_line) { app.cmd_buffer.window }
+  # A main window of 4 rows and a command line of 20 columns
+  let(:layout) do
+    <<~XML
+      <layout>
+        <window class='text' top='0' left='0' height='4' width='60' value='main'/>
+        <window class='command' top='5' left='0' height='1' width='20'/>
+      </layout>
+    XML
+  end
+
+  # An Application with these command-line options
+  def new_app(char: nil, links: false)
+    described_class.new({ char: char, no_status: true, links: links, room_window_only: false },
+                        settings_file: File.join(SPEC_HOME, 'settings.xml'), host: '127.0.0.1', port: 8000)
+  end
+
   before do
-    allow(MouseScroll).to receive(:new).and_return(mock_mouse_scroll)
+    allow(ProfanitySettings).to receive(:load_mouse_settings).and_return(nil)
+    stub_const('Curses::ALL_MOUSE_EVENTS', Curses::REPORT_MOUSE_POSITION - 1)
+    LAYOUT['app'] = REXML::Document.new(layout).root
+    app.execute_command('.layout app')
+    app.connection.attach(server)
   end
 
-  let(:mock_mouse_scroll) do
-    obj = Object.new
-    def obj.enable_click_events = nil
-    def obj.disable_click_events = nil
-    def obj.configuring? = false
-    def obj.process(*) = nil
-    def obj.start_configuration = nil
-    obj
-  end
+  def type(text) = text.each_char { |ch| app.cmd_buffer.put_ch(ch) }
 
-  let(:cli_options) do
-    {
-      port: 8000, char: nil, config: nil, template: nil,
-      default_color_id: 7, default_background_color_id: 0,
-      use_default_colors: false, custom_colors: nil,
-      settings_file: nil, no_status: true, links: false,
-      speech_ts: false, room_window_only: false,
-      remote_url: false, log_file: nil, log_dir: nil,
-    }
-  end
+  def press(action) = app.key_action.fetch(action).call
 
-  # The settings file, game host and port handed to Application. Groups that
-  # load settings or connect override them.
-  let(:settings_path) { File.join(SPEC_HOME, 'settings.xml') }
-  let(:host) { '127.0.0.1' }
-  let(:port) { 8000 }
-  let(:app) { new_app }
-
-  # Build an Application with the given CLI options and the settings file,
-  # host and port above.
-  def new_app(options = cli_options)
-    described_class.new(options, settings_file: settings_path, host: host, port: port)
-  end
-
-  # Mock window for recording calls
-  let(:main_window) do
-    obj = Object.new
-    def obj.calls = @calls ||= []
-    def obj.add_string(text, colors = []) = calls << { text: text, colors: colors }
-    def obj.route_string(text, _colors, stream, **_opts) = calls << { text: text, stream: stream }
-    def obj.respond_to?(m, *) = m == :buffer ? false : super
-    obj
-  end
-
-  # Wire up the main window
-  before do
-    app.window_mgr.instance_variable_set(:@stream, { 'main' => main_window })
-  end
-
-  # ---- Initialization ----
-
-  describe '#initialize' do
-    it 'creates shared_state with defaults' do
-      expect(app.shared_state).to be_a(SharedState)
-      expect(app.shared_state.prompt_text).to eq '>'
+  describe 'the command-line options' do
+    it 'names the session after --char, capitalized' do
+      expect(new_app(char: 'mahtra').shared_state.char_name).to eq 'Mahtra'
     end
 
-    it 'creates command_buffer' do
-      expect(app.cmd_buffer).to be_a(CommandBuffer)
+    it 'names the session ProfanityFE without --char' do
+      expect(new_app(char: nil).shared_state.char_name).to eq 'ProfanityFE'
     end
 
-    it 'creates window_mgr' do
-      expect(app.window_mgr).to be_a(WindowManager)
-    end
+    context 'with --links' do
+      let(:links) { true }
 
-    it 'populates key_action hash with all expected actions' do
-      expected_actions = %w[
-        resize cursor_left cursor_right cursor_word_left cursor_word_right
-        cursor_home cursor_end cursor_backspace cursor_delete
-        cursor_backspace_word cursor_delete_word cursor_kill_forward
-        cursor_kill_line cursor_yank switch_current_window next_tab prev_tab
-        scroll_current_window_up_one scroll_current_window_down_one
-        scroll_current_window_up_page scroll_current_window_down_page
-        scroll_current_window_bottom previous_command next_command
-        switch_arrow_mode send_command send_last_command
-        send_second_last_command autocomplete
-      ]
-      expected_actions.each do |action|
-        expect(app.key_action[action]).to be_a(Proc), "missing key_action '#{action}'"
-      end
-    end
-
-    it 'populates tab switching actions 1-5' do
-      (1..5).each do |n|
-        expect(app.key_action["switch_tab_#{n}"]).to be_a(Proc)
-      end
-    end
-
-    it 'aliases switch_tab to next_tab' do
-      expect(app.key_action['switch_tab']).to equal(app.key_action['next_tab'])
-    end
-
-    it 'aliases switch_tab_reverse to prev_tab' do
-      expect(app.key_action['switch_tab_reverse']).to equal(app.key_action['prev_tab'])
-    end
-
-    it 'sets blue_links from cli_options' do
-      app_with_links = new_app(cli_options.merge(links: true))
-      expect(app_with_links.shared_state.blue_links).to be true
-    end
-  end
-
-  # ---- Dot-command dispatch ----
-
-  describe '#execute_command' do
-    it '.quit exits' do
-      expect { app.execute_command('.quit') }.to raise_error(SystemExit)
-    end
-
-    it '.quit is case-insensitive' do
-      expect { app.execute_command('.QUIT') }.to raise_error(SystemExit)
-    end
-
-    it '.fixcolor calls ColorManager.reinitialize_colors' do
-      expect(ColorManager).to receive(:reinitialize_colors)
-      app.execute_command('.fixcolor')
-    end
-
-    it '.resync resets skip_server_time_offset' do
-      app.shared_state.skip_server_time_offset = true
-      app.execute_command('.resync')
-      expect(app.shared_state.skip_server_time_offset).to be false
-    end
-
-    it '.help displays help text to main window' do
-      app.execute_command('.help')
-      help_texts = main_window.calls.select { |c| c[:text]&.include?('.quit') }
-      expect(help_texts).not_to be_empty
-    end
-
-    it '.links toggles blue_links state' do
-      expect(app.shared_state.blue_links).to be false
-      app.execute_command('.links')
-      expect(app.shared_state.blue_links).to be true
-      app.execute_command('.links')
-      expect(app.shared_state.blue_links).to be false
-    end
-
-    it '.arrow cycles through modes' do
-      # Set up initial arrow binding
-      app.key_binding[Curses::KEY_UP] = app.key_action['previous_command']
-      app.execute_command('.arrow')
-      expect(app.key_binding[Curses::KEY_UP]).to eq app.key_action['scroll_current_window_up_page']
-    end
-
-    it 'forwards unknown dot-commands to server with . replaced by ;' do
-      server = StringIO.new
-      app.connection.attach(server)
-      app.execute_command('.script start')
-      expect(server.string).to eq ";script start\n"
-    end
-
-    it 'forwards non-dot commands to server' do
-      server = StringIO.new
-      app.connection.attach(server)
-      app.execute_command('go north')
-      # Non-dot commands don't match any dot-command, so they go to the
-      # else branch which does server.puts cmd.sub(/^\./, ';')
-      # But 'go north' doesn't start with '.', so sub is a no-op
-      expect(server.string).to eq "go north\n"
-    end
-
-    # Adversarial
-    it 'does not crash on empty command' do
-      server = StringIO.new
-      app.connection.attach(server)
-      expect { app.execute_command('') }.not_to raise_error
-    end
-
-    it '.tab with no tabbed windows shows message' do
-      app.execute_command('.tab')
-      msg = main_window.calls.find { |c| c[:text]&.include?('No tabbed') }
-      expect(msg).not_to be_nil
-    end
-
-    it '.layout with unknown layout does not crash' do
-      expect { app.execute_command('.layout nonexistent') }.not_to raise_error
-    end
-
-    # ---- Whole-word matching ----
-    #
-    # BUG FOUND (fixed here): dot-commands matched by prefix, so a Lich
-    # script whose name merely started with a dot-command name was
-    # swallowed locally instead of being forwarded, and `.quitter` exited
-    # the client. A dot-command now matches only when its name is followed
-    # by whitespace or the end of the input.
-    describe 'whole-word matching' do
-      let(:server) { StringIO.new }
-
-      before { app.connection.attach(server) }
-
-      {
-        '.quitter'         => ";quitter\n",
-        '.arrows'          => ";arrows\n",
-        '.arrows 5'        => ";arrows 5\n",
-        '.linkstat'        => ";linkstat\n",
-        '.help-me'         => ";help-me\n",
-        '.keymaster'       => ";keymaster\n",
-        '.tabulate'        => ";tabulate\n",
-        '.tabulate skills' => ";tabulate skills\n",
-        '.selectgem'       => ";selectgem\n",
-        '.highlighter'     => ";highlighter\n",
-        '.reloadall'       => ";reloadall\n",
-        '.resizer'         => ";resizer\n",
-        '.ARROWS'          => ";ARROWS\n",
-      }.each do |typed, forwarded|
-        it "forwards the look-alike script command #{typed.inspect} to the server as #{forwarded.chomp.inspect}" do
-          expect { app.execute_command(typed) }.not_to raise_error
-          expect(server.string).to eq forwarded
-        end
-      end
-
-      it 'handles .arrow typed exactly as the local arrow-mode toggle' do
-        expect(app).to receive(:handle_dot_arrow)
-        app.execute_command('.arrow')
-        expect(server.string).to be_empty
-      end
-
-      it 'handles .links typed exactly as the local link toggle, not the links script' do
-        expect(app).to receive(:handle_dot_links)
+      it 'starts with links on, so .links turns them off' do
         app.execute_command('.links')
-        expect(server.string).to be_empty
-      end
 
-      it 'handles .help followed by trailing whitespace as the local help command' do
-        expect(app).to receive(:handle_dot_help)
-        app.execute_command('.help ')
-        expect(server.string).to be_empty
-      end
-
-      it 'handles .layout default locally by loading the named layout' do
-        expect(app.window_mgr).to receive(:load_layout).with('default')
-        app.execute_command('.layout default')
-        expect(server.string).to be_empty
-      end
-
-      it 'handles .tab thoughts locally by switching to the named tab' do
-        expect(app).to receive(:handle_dot_tab).with('thoughts')
-        app.execute_command('.tab thoughts')
-        expect(server.string).to be_empty
-      end
-
-      it 'handles .highlight goblin locally by adding an inline highlight' do
-        expect(app).to receive(:handle_dot_highlight).with('goblin')
-        app.execute_command('.highlight goblin')
-        expect(server.string).to be_empty
-      end
-
-      it 'handles .unhighlight goblin locally by removing an inline highlight' do
-        expect(app).to receive(:handle_dot_unhighlight).with('goblin')
-        app.execute_command('.unhighlight goblin')
-        expect(server.string).to be_empty
-      end
-
-      it 'handles .LAYOUT default case-insensitively like every other dot-command' do
-        expect(app.window_mgr).to receive(:load_layout).with('default')
-        app.execute_command('.LAYOUT default')
-        expect(server.string).to be_empty
-      end
-
-      it 'handles .TAB thoughts case-insensitively and keeps the argument as typed' do
-        expect(app).to receive(:handle_dot_tab).with('thoughts')
-        app.execute_command('.TAB thoughts')
-        expect(server.string).to be_empty
-      end
-
-      it 'handles .Arrow case-insensitively as the local arrow-mode toggle' do
-        expect(app).to receive(:handle_dot_arrow)
-        app.execute_command('.Arrow')
-        expect(server.string).to be_empty
+        expect(main.rows.last).to eq '* Links: OFF (native terminal selection)'
       end
     end
   end
 
-  # ---- Macro engine ----
+  describe 'a command that is not a dot-command' do
+    it 'sends an empty command to the game as an empty line' do
+      app.execute_command('')
 
-  describe '#do_macro' do
-    before do
-      app.cmd_buffer.window = Curses::Window.new(1, 80, 0, 0)
+      expect(server.string).to eq "\n"
     end
 
-    it 'types characters into the command buffer' do
-      app.do_macro('hello')
-      expect(app.cmd_buffer.text).to eq 'hello'
-    end
+    it 'sends a macro of only \\x\\r as an empty line, clearing what was typed' do
+      type('draft')
 
-    it 'handles \\\\ as literal backslash' do
-      app.do_macro('a\\\\b')
-      expect(app.cmd_buffer.text).to eq 'a\\b'
-    end
+      app.do_macro('\\x\\r')
 
-    it 'handles \\x to clear the buffer' do
-      app.do_macro('hello\\xworld')
-      expect(app.cmd_buffer.text).to eq 'world'
-    end
-
-    it 'handles \\@ as literal @' do
-      app.do_macro('email\\@test')
-      expect(app.cmd_buffer.text).to eq 'email@test'
-    end
-
-    it 'handles @ to mark cursor position' do
-      app.do_macro('hello@world')
-      # Cursor should be at position 5 (between 'hello' and 'world')
-      expect(app.cmd_buffer.pos).to eq 5
-      expect(app.cmd_buffer.text).to eq 'helloworld'
-    end
-
-    it 'handles \\r to send command' do
-      server = StringIO.new
-      app.connection.attach(server)
-      app.do_macro('go north\\r')
-      # The command should have been sent
-      expect(server.string).to include('go north')
-      # Buffer should be cleared after send
-      expect(app.cmd_buffer.text).to eq ''
-    end
-
-    # Adversarial
-    it 'handles empty macro' do
-      expect { app.do_macro('') }.not_to raise_error
-    end
-
-    it 'handles macro with only escape sequences' do
-      server = StringIO.new
-      app.connection.attach(server)
-      expect { app.do_macro('\\x\\r') }.not_to raise_error
-    end
-
-    it 'handles trailing backslash (incomplete escape)' do
-      app.do_macro('hello\\')
-      # Trailing backslash sets backslash=true but loop ends
-      expect(app.cmd_buffer.text).to eq 'hello'
-    end
-
-    it 'handles multiple @ markers (last one wins)' do
-      app.do_macro('a@b@c')
-      # Second @ overwrites at_pos
-      expect(app.cmd_buffer.pos).to eq 2
-      expect(app.cmd_buffer.text).to eq 'abc'
+      expect(server.string).to eq "\n"
+      expect(command_line.row(0)).to eq ''
+      expect(main.rows.last).to eq '>'
     end
   end
 
-  # ---- Key actions ----
+  describe 'sending commands' do
+    it 'send_command sends the command line, clears it, and echoes it in main after the > prompt' do
+      type('go')
 
-  describe 'key actions' do
-    before do
-      app.cmd_buffer.window = Curses::Window.new(1, 80, 0, 0)
-    end
+      press('send_command')
 
-    it 'send_command clears buffer, echoes prompt, and dispatches' do
-      server = StringIO.new
-      app.connection.attach(server)
-      app.cmd_buffer.put_ch('g')
-      app.cmd_buffer.put_ch('o')
-      app.key_action['send_command'].call
-      expect(server.string).to include('go')
-      expect(app.cmd_buffer.text).to eq ''
-    end
-
-    it 'send_last_command resends from history' do
-      server = StringIO.new
-      app.connection.attach(server)
-      app.cmd_buffer.add_to_history('look')
-      app.key_action['send_last_command'].call
-      expect(server.string).to include('look')
-    end
-
-    it 'scroll_current_window_bottom returns to the newest rows when scrolled back more rows than the buffer size' do
-      # Keeps 2 lines, wrapped at 10 columns: 9 rows.
-      LAYOUT['test'] = REXML::Document.new(<<~XML).root
-        <layout><window class='text' top='0' left='0' height='3' width='12' value='main' buffer-size='2'/></layout>
-      XML
-      app.window_mgr.load_layout('test')
-      window = app.window_mgr.stream['main']
-      ['one two three four five six seven', 'one two three four'].each { |line| window.add_string(line) }
-      window.scroll_lines(-window.maxy)
-      expect(window.buffer_pos).to be > window.max_buffer_size
-
-      app.key_action['scroll_current_window_bottom'].call
-
-      expect(window.rows).to eq ['one two', '  three', '  four']
-      expect(window.buffer_pos).to eq 0
+      expect(server.string).to eq "go\n"
+      expect(command_line.row(0)).to eq ''
+      expect(main.rows.last).to eq '>go'
     end
 
     context 'with an unsent draft stashed by the up arrow' do
-      let(:server) { StringIO.new }
-      let(:screen) { ScreenLineWindow.new(20) }
-
-      before do
-        app.connection.attach(server)
-        app.cmd_buffer.window = screen
-      end
-
-      def type_and_send(str)
-        str.each_char { |ch| app.cmd_buffer.put_ch(ch) }
-        app.key_action['send_command'].call
+      def type_and_send(text)
+        type(text)
+        press('send_command')
       end
 
       # Type "draft", press up (the line shows "look"), press enter to
       # resend "look", then send "exp1". The draft was never sent.
       before do
         type_and_send('look')
-        'draft'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
-        app.key_action['previous_command'].call
-        app.key_action['send_command'].call
+        type('draft')
+        press('previous_command')
+        press('send_command')
         type_and_send('exp1')
         server.truncate(0)
         server.rewind
       end
 
       it 'send_second_last_command sends the second-last sent line, not the draft' do
-        app.key_action['send_second_last_command'].call
+        press('send_second_last_command')
+
         expect(server.string).to eq "look\n"
       end
 
       it 'send_last_command sends the last sent line' do
-        app.key_action['send_last_command'].call
+        press('send_last_command')
+
         expect(server.string).to eq "exp1\n"
       end
 
       it 'the up arrow recalls only sent lines' do
         recalled = Array.new(3) do
-          app.key_action['previous_command'].call
-          screen.visible
+          press('previous_command')
+          command_line.row(0)
         end
+
         expect(recalled).to eq %w[exp1 look look]
       end
     end
@@ -466,30 +151,15 @@ RSpec.describe Application do
     # The resend keys send only lines that were sent: an edit of a recalled
     # entry and a line saved by the down arrow stay out of them.
     context 'with lines that were never sent' do
-      let(:server) { StringIO.new }
-      let(:screen) { ScreenLineWindow.new(20) }
-
-      before do
-        app.connection.attach(server)
-        app.cmd_buffer.window = screen
-      end
-
-      def type(str)
-        str.each_char { |ch| app.cmd_buffer.put_ch(ch) }
-      end
-
-      def press(action)
-        app.key_action[action].call
-      end
-
-      # What the command line shows after each of +count+ up-arrow presses.
+      # What the command line shows after each of +count+ up-arrow presses
       def up_arrow_lines(count)
         Array.new(count) do
           press('previous_command')
-          screen.visible
+          command_line.row(0)
         end
       end
 
+      # What the game receives when the key action is pressed
       def resent_by(action)
         server.truncate(0)
         server.rewind
@@ -555,140 +225,49 @@ RSpec.describe Application do
     end
 
     it 'autocomplete does not complete from an unsent draft' do
-      screen = ScreenLineWindow.new(20)
-      app.cmd_buffer.window = screen
       app.cmd_buffer.add_to_history('look')
-      'draft'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
-      app.key_action['previous_command'].call
-      app.key_action['next_command'].call
-      app.cmd_buffer.kill_line
-      'dr'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
-      app.key_action['autocomplete'].call
-      expect(screen.visible).to eq 'dr'
-    end
+      type('draft')
+      press('previous_command')
+      press('next_command')
+      press('cursor_kill_line')
+      type('dr')
 
-    it 'cursor actions delegate to cmd_buffer' do
-      app.cmd_buffer.put_ch('a')
-      app.cmd_buffer.put_ch('b')
-      app.key_action['cursor_left'].call
-      expect(app.cmd_buffer.pos).to eq 1
-      app.key_action['cursor_home'].call
-      expect(app.cmd_buffer.pos).to eq 0
-      app.key_action['cursor_end'].call
-      expect(app.cmd_buffer.pos).to eq 2
-    end
+      press('autocomplete')
 
-    it 'switch_arrow_mode cycles through three modes' do
-      app.key_binding[Curses::KEY_UP] = app.key_action['previous_command']
-
-      app.key_action['switch_arrow_mode'].call
-      expect(app.key_binding[Curses::KEY_UP]).to eq app.key_action['scroll_current_window_up_page']
-
-      app.key_action['switch_arrow_mode'].call
-      expect(app.key_binding[Curses::KEY_UP]).to eq app.key_action['scroll_current_window_up_one']
-
-      app.key_action['switch_arrow_mode'].call
-      expect(app.key_binding[Curses::KEY_UP]).to eq app.key_action['previous_command']
-    end
-
-    it 'autocomplete calls Autocomplete.complete' do
-      expect(Autocomplete).to receive(:complete).with(app.cmd_buffer, main_window)
-      app.key_action['autocomplete'].call
+      expect(command_line.row(0)).to eq 'dr'
     end
   end
 
-  # ---- Regression: editing key actions must flush the physical screen ----
-  #
-  # CommandBuffer edits only stage changes to the curses virtual screen
-  # (via noutrefresh). Nothing appears on the terminal until doupdate is
-  # called. Every key action that mutates the visible command line must
-  # therefore end with CursesRenderer.doupdate, otherwise the edit stays
-  # invisible until the next keystroke happens to trigger a flush.
-  #
-  # BUG FOUND (fixed here): cursor_backspace_word, cursor_delete_word, and
-  # cursor_yank omitted the doupdate call, so word-delete and yank appeared
-  # to "do nothing" until the user typed the next character.
-  describe 'editing key actions flush with doupdate' do
-    before do
-      app.cmd_buffer.window = Curses::Window.new(1, 80, 0, 0)
+  context 'with a main window that keeps 2 lines' do
+    # 2 lines wrapped at 10 columns fill 9 rows of 3
+    let(:layout) do
+      <<~XML
+        <layout>
+          <window class='text' top='0' left='0' height='3' width='12' value='main' buffer-size='2'/>
+          <window class='command' top='5' left='0' height='1' width='20'/>
+        </layout>
+      XML
     end
 
-    # Every action listed here mutates the visible line and MUST repaint.
-    editing_actions = %w[
-      cursor_left cursor_right cursor_word_left cursor_word_right
-      cursor_home cursor_end cursor_backspace cursor_delete
-      cursor_backspace_word cursor_delete_word cursor_kill_forward
-      cursor_kill_line cursor_yank
-    ]
+    it 'scroll_current_window_bottom returns to the newest rows when scrolled back more rows than the buffer size' do
+      ['one two three four five six seven', 'one two three four'].each { |line| main.add_string(line) }
+      main.scroll_lines(-main.maxy)
+      expect(main.buffer_pos).to be > main.max_buffer_size
 
-    editing_actions.each do |action|
-      it "#{action} calls CursesRenderer.doupdate" do
-        expect(CursesRenderer).to receive(:doupdate)
-        app.key_action[action].call
-      end
-    end
+      press('scroll_current_window_bottom')
 
-    # ---- The three previously-broken actions, tested behaviorally ----
-
-    it 'cursor_backspace_word deletes the previous word and repaints' do
-      app.do_macro('hello world')
-      expect(CursesRenderer).to receive(:doupdate)
-      app.key_action['cursor_backspace_word'].call
-      expect(app.cmd_buffer.text).to eq 'hello '
-    end
-
-    it 'cursor_delete_word deletes the next word and repaints' do
-      app.do_macro('hello world')
-      app.cmd_buffer.cursor_home
-      expect(CursesRenderer).to receive(:doupdate)
-      app.key_action['cursor_delete_word'].call
-      expect(app.cmd_buffer.text).to eq ' world'
-    end
-
-    it 'cursor_yank restores killed text and repaints' do
-      app.do_macro('hello')
-      app.key_action['cursor_kill_line'].call # fills the kill ring, clears line
-      expect(app.cmd_buffer.text).to eq ''
-      expect(CursesRenderer).to receive(:doupdate)
-      app.key_action['cursor_yank'].call
-      expect(app.cmd_buffer.text).to eq 'hello'
-    end
-
-    # ---- Adversarial: no-op edits must still flush ----
-    #
-    # A word-delete on an empty buffer changes nothing, but the action must
-    # not silently skip doupdate -- the invariant is "always repaint after an
-    # edit action", regardless of whether the buffer actually changed.
-
-    it 'cursor_backspace_word on an empty buffer still calls doupdate' do
-      expect(app.cmd_buffer.text).to eq ''
-      expect(CursesRenderer).to receive(:doupdate)
-      app.key_action['cursor_backspace_word'].call
-    end
-
-    it 'cursor_yank with an empty kill ring still calls doupdate' do
-      expect(app.cmd_buffer.text).to eq ''
-      expect(CursesRenderer).to receive(:doupdate)
-      app.key_action['cursor_yank'].call
-      expect(app.cmd_buffer.text).to eq ''
+      expect(main.rows).to eq ['one two', '  three', '  four']
     end
   end
 
-  # ---- Adversarial: initialization edge cases ----
+  describe 'the key actions with no command window' do
+    it 'leave the command line as it was' do
+      type('ab')
+      app.cmd_buffer.window = nil
 
-  describe 'adversarial initialization' do
-    it 'handles nil char_name' do
-      app_nil = new_app(cli_options.merge(char: nil))
-      expect(app_nil.shared_state.char_name).to eq 'ProfanityFE'
-    end
+      press('cursor_left')
 
-    it 'capitalizes char_name' do
-      app_char = new_app(cli_options.merge(char: 'mahtra'))
-      expect(app_char.shared_state.char_name).to eq 'Mahtra'
-    end
-
-    it 'key_action cursor procs are safe without window' do
-      expect { app.key_action['cursor_left'].call }.not_to raise_error
+      expect([app.cmd_buffer.text, app.cmd_buffer.pos]).to eq ['ab', 2]
     end
   end
 
@@ -696,90 +275,59 @@ RSpec.describe Application do
   # mode, and .key called getch on that same window, so getch returned nil
   # at once and .key printed "Detected keycode: " with no key.
   describe '.key' do
-    # A command window that acts like curses: nodelay and timeout share one
-    # delay setting. get_char returns nil in nodelay mode and the given key
-    # (or the result of the block) when waiting is allowed.
-    def key_window(key = nil, &on_wait)
-      window = Object.new
-      delays = []
-      window.define_singleton_method(:delays) { delays }
-      window.define_singleton_method(:nodelay=) { |on| delays << (on ? :nodelay : :blocking) }
-      window.define_singleton_method(:timeout=) { |ms| delays << ms }
-      window.define_singleton_method(:noutrefresh) { nil }
-      window.define_singleton_method(:get_char) do
-        next nil if delays.last == :nodelay
+    # Make the command window read keys as curses does: nothing at once in
+    # nodelay mode (as the input loop leaves it), and +key+ (or what the
+    # block returns) when the read may wait (after timeout=).
+    def key_waiting(key = nil, &on_wait)
+      command_line.nodelay = true
+      command_line.define_singleton_method(:get_char) do
+        delay = call_log.reverse.find { |name, _| %i[timeout= nodelay=].include?(name) }
+        next nil if delay == [:nodelay=, [true]]
 
         on_wait ? on_wait.call : key
       end
-      window.nodelay = true # as input_loop leaves it
-      window
     end
 
-    def feedback_texts = main_window.calls.map { |c| c[:text] }
+    # The delay settings of the command window, oldest first
+    def delays = command_line.call_log.select { |name, _| %i[timeout= nodelay=].include?(name) }
 
-    it 'waits for a key and prints its keycode' do
-      app.cmd_buffer.window = key_window(Curses::KEY_UP)
+    it 'waits for a key and shows its keycode' do
+      key_waiting(Curses::KEY_UP)
+
       app.execute_command('.key')
-      expect(feedback_texts).to include("* Detected keycode: #{Curses::KEY_UP}")
+
+      expect(main.rows).to eq ['*', '* Waiting for key press...', "* Detected keycode: #{Curses::KEY_UP}", '*']
     end
 
-    it 'bounds the wait with a timeout rather than blocking forever' do
-      window = key_window(65)
-      app.cmd_buffer.window = window
+    it 'bounds the wait with a 5 second timeout rather than blocking forever' do
+      key_waiting('a')
+
       app.execute_command('.key')
-      expect(window.delays).to include(Application::DOT_KEY_TIMEOUT_MS)
+
+      expect(delays).to include([:timeout=, [5000]])
     end
 
-    it 'restores nodelay after reading the key' do
-      window = key_window(65)
-      app.cmd_buffer.window = window
+    it 'puts the command window back in nodelay mode after reading the key' do
+      key_waiting('a')
+
       app.execute_command('.key')
-      expect(window.delays.last(2)).to eq [Application::DOT_KEY_TIMEOUT_MS, :nodelay]
+
+      expect(delays.last(2)).to eq [[:timeout=, [5000]], [:nodelay=, [true]]]
     end
 
-    it 'reports that no key was pressed when the wait times out' do
-      app.cmd_buffer.window = key_window(nil)
+    it 'says no key was pressed when the wait times out' do
+      key_waiting(nil)
+
       app.execute_command('.key')
-      expect(feedback_texts).to include(a_string_including('No key pressed'))
-      expect(feedback_texts).not_to include(a_string_including('Detected keycode'))
+
+      expect(main.rows.last(2)).to eq ['* No key pressed within 5 seconds', '*']
     end
 
-    it 'restores nodelay when the read raises' do
-      window = key_window { raise IOError, 'terminal gone' }
-      app.cmd_buffer.window = window
-      expect { app.execute_command('.key') }.to raise_error(IOError)
-      expect(window.delays.last).to eq :nodelay
-    end
-  end
+    it 'puts the command window back in nodelay mode when the read raises' do
+      key_waiting { raise IOError, 'terminal gone' }
 
-  describe 'prompt width changes' do
-    # The prompt indicator grows from 1 to 11 columns, so WindowManager's
-    # :prompt_changed handler shrinks the 20-column command window to 10.
-    let(:prompt_window) do
-      obj = Object.new
-      def obj.layout = WindowLayout.new(height: '1', width: '1', top: '23', left: '0')
-      def obj.resize(*) = nil
-      def obj.label=(_text); end
-      obj
-    end
-    let(:screen) { ScreenLineWindow.new(20) }
-
-    before do
-      stub_const('GameTextProcessor', Class.new { def initialize(**) = nil })
-      allow(Thread).to receive(:new)
-      app.window_mgr.instance_variable_set(:@indicator, { 'prompt' => prompt_window })
-      app.window_mgr.install_command_window(WindowLayout.new(height: '1', width: '20', top: '23', left: '1')) { screen }
-      app.cmd_buffer.window = screen
-      'abcdefghijklmnopqr'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
-      app.send(:start_server_thread)
-    end
-
-    it 'refits the command line to the resized command window' do
-      app.instance_variable_get(:@event_bus).emit(:prompt_changed, text: 'H 100 [RT]>')
-      expect(screen.maxx).to eq 10
-      expect(screen.errors).to be_empty
-      expect(screen.line).to eq 'jklmnopqr '
-      expect(screen.curx).to eq 9
+      expect { app.execute_command('.key') }.to raise_error(IOError, 'terminal gone')
+      expect(delays.last).to eq [:nodelay=, [true]]
     end
   end
 end

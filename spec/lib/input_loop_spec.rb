@@ -207,6 +207,33 @@ RSpec.describe 'The input loop' do
     end
   end
 
+  describe 'the command line when the game prompt grows' do
+    before do
+      File.write(settings_path, <<~XML)
+        <settings>
+          <layout id='default'>
+            <window class='text' top='0' left='0' height='6' width='60' value='main'/>
+            <window class='indicator' top='9' left='0' height='1' width='1' value='prompt' label='&gt;'/>
+            <window class='command' top='9' left='1' height='1' width='20'/>
+          </layout>
+        </settings>
+      XML
+    end
+
+    # The prompt indicator grows from 1 to 11 columns, so the window manager
+    # shrinks the 20-column command window to 10.
+    it 'refits the typed command to the narrower command window' do
+      prompt = '<prompt time="1">H 100 [RT]&gt;</prompt>'
+
+      run_client(keyboard('abcdefghijklmnopqr', -> { game_server.say(prompt) },
+                          wait_until { command_line.maxx == 10 && command_line.row(0) == 'jklmnopqr' }))
+
+      expect(command_line.maxx).to eq 10
+      expect(command_line.row(0)).to eq 'jklmnopqr'
+      expect(command_line.curx).to eq 9
+    end
+  end
+
   # The input loop ticks every countdown on each poll (~100ms) and flushes
   # the screen when one changed and no key was pressed.
   describe 'countdowns' do
