@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 
-# Tests GameTextProcessor#handle_game_text event emissions: indicator
-# updates (empty hands, nsys), stream routing (main, dedicated, fallback),
-# prompt handling (emit/suppress after movement), stun detection, combat
-# gag, and highlight application. (Multi-line gags are in
-# multiline_gags_spec.rb, room component lines in
-# room_component_lines_spec.rb.)
+# What the game-text checks and the routing of GameTextProcessor show:
+# the nerve damage (nsys) indicator, the stun countdown, the hand
+# indicators, main and stream windows, highlights, and when the pending
+# prompt shows (not after movement, not after a bracket prompt line).
+#
+# Lines are fed through the real server loop (GameTextProcessor#run) into
+# real windows built from layout XML; the assertions are on what those
+# windows show on the virtual screen (spec/support/virtual_screen.rb).
+# Multi-line gags are in multiline_gags_spec.rb and room component lines
+# in room_component_lines_spec.rb.
 
 require_relative '../spec_helper'
 require 'rexml/document'
@@ -13,292 +17,250 @@ require_relative '../../lib/game_text_processor'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/window_manager'
 
-RSpec.describe 'GameTextProcessor event emissions' do
-  before { GagPatterns.load_defaults }
+RSpec.describe 'GameTextProcessor game text on screen' do
+  # The countdown windows count down from this fixed time.
+  let(:clock) { Clock.new(now: -> { Time.at(1_800_000_000) }) }
+  # Color pair number per foreground color, so a cell's color can be read
+  # back from its attributes.
+  let(:pairs) { { 'ff0000' => 1, '00ff00' => 2, 'ff9900' => 3, 'ffff00' => 4, '444444' => 5 } }
+  # The game repeats an unchanged prompt; that marks a prompt as pending,
+  # shown before the next line of main text.
+  let(:same_prompt) { '<prompt time="1800000000">&gt;</prompt>' }
 
-  let(:main_window) do
-    obj = Object.new
-    def obj.route_string(*) = nil
-    def obj.add_string(*) = nil
-    def obj.respond_to?(m, *) = m == :buffer ? false : super
-    obj
-  end
-  let(:event_bus) { EventBus.new }
-  let(:wm) do
-    Struct.new(:stream, :indicator, :progress, :countdown, :room,
-               :command_window, :command_window_layout).new(
-                 { 'main' => main_window }, {}, {}, {}, {}, nil, nil
-               )
-  end
-  let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
-  let(:cmd_buffer) { Struct.new(:window).new(nil) }
-  let(:xml_escapes) { { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' } }
-  let(:processor) do
-    GameTextProcessor.new(
-      window_mgr: wm,
-      shared_state: state,
-      cmd_buffer: cmd_buffer,
-      xml_escapes: xml_escapes,
+  before { allow(HighlightProcessor).to receive(:get_color_pair_id) { |fg, _bg| pairs.fetch(fg, 0) } }
+
+  # Start a client: the windows of a layout, and a processor (with its own
+  # event bus and shared state) that feeds them.
+  #
+  # @param windows_xml [String] the layout's <window> elements
+  # @return [void]
+  def load_layout(windows_xml)
+    LAYOUT['events'] = REXML::Document.new("<layout>#{windows_xml}</layout>").root
+    event_bus = EventBus.new
+    @window_manager = WindowManager.new(clock: clock)
+    @window_manager.load_layout('events')
+    @window_manager.subscribe_to_events(event_bus)
+    @processor = GameTextProcessor.new(
+      window_mgr: @window_manager, shared_state: SharedState.new.tap { |s| s.skip_server_time_offset = true },
+      cmd_buffer: Struct.new(:window).new(nil),
+      xml_escapes: { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' },
       event_bus: event_bus
     )
   end
 
-  # The processor's stream router
-  def router = processor.send(:instance_variable_get, :@router)
-
-  # The processor's prompt tracker
-  def prompts = processor.send(:instance_variable_get, :@prompts)
-
-  # The screen updates the processor asked for
-  def pending_render = processor.send(:instance_variable_get, :@pending_render)
-
-  # Send text through handle_game_text via the private method, with no
-  # color runs
-  def process(text)
-    processor.send(:handle_game_text, text, [])
+  # Feed raw server lines through GameTextProcessor#run, as the socket
+  # would (Lich ends every line with CRLF). The first prompt makes the
+  # client send 'look', which this server accepts.
+  def receive_from_server(*lines)
+    queue = lines.map { |line| "#{line}\r\n" }
+    server = Object.new
+    server.define_singleton_method(:gets) { queue.shift&.dup }
+    server.define_singleton_method(:puts) { |*| nil }
+    server.define_singleton_method(:flush) { nil }
+    allow(IO).to receive(:select).and_return(nil)
+    @processor.run(server)
   end
 
-  # ---- Empty hands indicator ----
-
-  describe 'empty hands text emits indicator events' do
-    it 'emits indicator_update for both right and left when glancing at empty hands' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
-
-      process('You glance down at your empty hands.')
-
-      right_event = events.find { |e| e[:id] == 'right' }
-      left_event = events.find { |e| e[:id] == 'left' }
-      expect(right_event).to include(label: 'Empty')
-      expect(left_event).to include(label: 'Empty')
-    end
-
-    it 'asks for a screen update after emitting empty hands events' do
-      process('You glance down at your empty hands.')
-      expect(pending_render.update_requested?).to be true
-    end
+  # The lines a stream's text window shows, blank rows left out.
+  def shown_in(stream)
+    @window_manager.stream[stream].rows.reject(&:empty?)
   end
 
-  # ---- Nerve system indicator ----
+  # The color of each character of +text+ where main shows it: a
+  # foreground color, nil when uncolored, or an Array when mixed.
+  def color_in_main(text)
+    window = @window_manager.stream['main']
+    y = window.rows.index { |row| row.include?(text) }
+    raise "#{text.inspect} not in main: #{shown_in('main').inspect}" unless y
 
-  describe 'nerve system text emits nsys indicator events' do
-    it 'emits nsys value 3 for severe muscle control issues' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
+    x = window.row(y).index(text)
+    colors = (x...(x + text.length)).map { |col| pairs.key(window.attrs_at(y, col) >> 8) }.uniq
+    colors.size == 1 ? colors.first : colors
+  end
 
-      process('You have a very difficult time with muscle control in your left arm.')
-
-      nsys_event = events.find { |e| e[:id] == 'nsys' }
-      expect(nsys_event).to include(value: 3)
+  describe 'the nerve damage indicator' do
+    # Its colors by damage rank: none, slurred speech, muscle spasms,
+    # trouble with muscle control.
+    before do
+      allow_any_instance_of(BaseWindow).to receive(:get_color_pair_id) { |_window, fg, _bg| pairs.fetch(fg, 0) }
+      load_layout(<<~XML)
+        <window class='text' top='0' left='0' height='8' width='80' value='main'/>
+        <window class='indicator' top='20' left='0' height='1' width='4' label='nsys' value='nsys'
+                fg='444444,ffff00,ff9900,ff0000'/>
+      XML
     end
 
-    it 'emits nsys value 2 for constant muscle spasms' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
-
-      process('You have constant muscle spasms in your right leg.')
-
-      nsys_event = events.find { |e| e[:id] == 'nsys' }
-      expect(nsys_event).to include(value: 2)
+    # The foreground color the nsys indicator is drawn in.
+    def nsys_color
+      pairs.key(@window_manager.indicator['nsys'].attrs_at(0, 0) >> 8)
     end
 
-    it 'emits nsys value 1 for slurred speech' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
+    it 'shows the worst rank (red) for trouble with muscle control' do
+      receive_from_server('You have a very difficult time with muscle control in your left arm.')
 
-      process('You have developed slurred speech.')
-
-      nsys_event = events.find { |e| e[:id] == 'nsys' }
-      expect(nsys_event).to include(value: 1)
+      expect(nsys_color).to eq 'ff0000'
     end
 
-    it 'does not emit nsys for unrelated text' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
+    it 'shows the middle rank (orange) for constant muscle spasms' do
+      receive_from_server('You have constant muscle spasms in your right leg.')
 
-      process('You swing your sword at a goblin.')
+      expect(nsys_color).to eq 'ff9900'
+    end
 
-      nsys_events = events.select { |e| e[:id] == 'nsys' }
-      expect(nsys_events).to be_empty
+    it 'shows the lowest rank (yellow) for slurred speech' do
+      receive_from_server('You have developed slurred speech.')
+
+      expect(nsys_color).to eq 'ffff00'
+    end
+
+    it 'stays in its no-damage color for other text' do
+      receive_from_server('You swing your sword at a goblin.')
+
+      expect(nsys_color).to eq '444444'
     end
   end
 
-  # ---- Stream text routing ----
-
-  describe 'text routing emits stream_text events' do
-    it 'emits stream_text to main stream for regular game text' do
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('A goblin attacks you!')
-
-      expect(events.last).to include(stream: 'main', text: 'A goblin attacks you!')
+  describe 'the stun countdown' do
+    before do
+      load_layout(<<~XML)
+        <window class='text' top='0' left='0' height='8' width='80' value='main'/>
+        <window class='countdown' top='20' left='0' height='1' width='12' label='Stunned' value='stunned'/>
+      XML
     end
 
-    it 'emits stream_text to the current stream when a dedicated window exists' do
-      wm.stream['combat'] = main_window
-      router.send(:instance_variable_set, :@current_stream, 'combat')
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('A goblin swings at you.')
-
-      expect(events.last).to include(stream: 'combat')
+    # What the stun countdown window shows: its label and the seconds left.
+    def stun_countdown
+      @window_manager.countdown['stunned'].rows.first
     end
 
-    it 'falls back to main stream when no dedicated window exists for a known stream' do
-      router.send(:instance_variable_set, :@current_stream, 'thoughts')
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
+    it 'counts down five seconds per round of stun' do
+      receive_from_server('You are stunned for 5 rounds!')
 
-      process('Someone thinks out loud.')
-
-      expect(events.last).to include(stream: 'main')
+      expect(stun_countdown).to eq 'Stunned   25'
     end
 
-    it 'does not emit stream_text for whitespace-only text' do
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
+    it 'counts down five seconds for a single round' do
+      receive_from_server('You are stunned for 1 round!')
 
-      process('   ')
-
-      expect(events).to be_empty
+      expect(stun_countdown).to eq 'Stunned    5'
     end
 
-    it 'skips duplicate text already sent to a stream window' do
-      wm.stream['combat'] = main_window
-      router.send(:instance_variable_set, :@current_stream, 'combat')
-      process('A goblin attacks!')
-      router.send(:instance_variable_set, :@current_stream, nil)
+    it 'recognizes the stun message indented by spaces' do
+      receive_from_server('  You are stunned for 12 rounds!')
 
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-      process('A goblin attacks!')
+      expect(stun_countdown).to eq 'Stunned   60'
+    end
 
-      stream_texts = events.select { |e| e[:stream] == 'main' }
-      expect(stream_texts).to be_empty
+    it 'does not start on a line that only mentions a stun' do
+      receive_from_server('The goblin looks stunned.',
+                          'Bob says, "You are stunned for 3 rounds!"')
+
+      expect(stun_countdown).to eq 'Stunned    0'
     end
   end
 
-  # ---- Prompt emission ----
+  describe 'the hand indicators after a glance at empty hands' do
+    # (What each hand shows after a glance is in glance_hands_spec.rb.)
+    it 'are drawn to the terminal even when no window shows the glance text' do
+      load_layout(<<~XML)
+        <window class='indicator' top='23' left='20' height='1' width='20' label=' ' value='left'/>
+        <window class='indicator' top='23' left='45' height='1' width='20' label=' ' value='right'/>
+      XML
+      allow(Curses).to receive(:doupdate).and_call_original
 
-  describe 'prompt handling emits add_prompt events' do
-    it 'emits add_prompt when need_prompt is true before regular text' do
-      state.need_prompt = true
-      events = []
-      event_bus.on(:add_prompt) { |data| events << data }
+      receive_from_server('You glance down at your empty hands.')
 
-      process('Hello world.')
+      expect(Curses).to have_received(:doupdate)
+    end
+  end
 
-      expect(events.last).to include(stream: 'main', text: '>')
+  describe 'which window shows a line' do
+    it 'shows regular game text in main' do
+      load_layout("<window class='text' top='0' left='0' height='8' width='80' value='main'/>")
+
+      receive_from_server('A goblin attacks you!')
+
+      expect(shown_in('main')).to eq ['A goblin attacks you!']
     end
 
-    it 'suppresses prompt after movement text' do
-      state.need_prompt = true
-      prompts.movement_seen
-      events = []
-      event_bus.on(:add_prompt) { |data| events << data }
+    it "shows a stream's text in its own window, not in main" do
+      load_layout(<<~XML)
+        <window class='text' top='0' left='0' height='8' width='80' value='main'/>
+        <window class='text' top='10' left='0' height='8' width='80' value='combat'/>
+      XML
 
-      process('Some text after walking.')
+      receive_from_server('<pushStream id="combat"/>A goblin swings at you.<popStream/>')
 
-      expect(events).to be_empty
+      expect(shown_in('combat')).to eq ['A goblin swings at you.']
+      expect(shown_in('main')).to be_empty
     end
 
-    it 'detects movement text and sets last_was_movement flag' do
-      process('You walk north.')
-      expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be true
+    it "shows the text of a stream without a window in main, in the stream's preset color" do
+      load_layout("<window class='text' top='0' left='0' height='8' width='80' value='main'/>")
+      PRESET['thoughts'] = ['00ff00', nil]
+
+      receive_from_server('<pushStream id="thoughts"/>Someone thinks out loud.<popStream/>')
+
+      expect(shown_in('main')).to eq ['Someone thinks out loud.']
+      expect(color_in_main('Someone thinks out loud.')).to eq '00ff00'
     end
 
-    %w[run go swim climb crawl drag stride sneak stalk].each do |verb|
-      it "detects '#{verb}' as a movement verb" do
-        process("You #{verb} through the archway.")
-        expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be true
+    it 'shows no row for a line of only spaces' do
+      load_layout("<window class='text' top='0' left='0' height='8' width='80' value='main'/>")
+
+      receive_from_server('A goblin arrives.', '   ', 'A goblin leaves.')
+
+      expect(@window_manager.stream['main'].rows.first(2)).to eq ['A goblin arrives.', 'A goblin leaves.']
+    end
+
+    it 'colors the words a highlight matches' do
+      load_layout("<window class='text' top='0' left='0' height='8' width='80' value='main'/>")
+      HIGHLIGHT[/goblin/] = ['ff0000', nil, nil]
+
+      receive_from_server('A goblin attacks you!')
+
+      expect(color_in_main('goblin')).to eq 'ff0000'
+      expect(color_in_main('attacks you!')).to be_nil
+    end
+  end
+
+  describe 'the pending prompt' do
+    before { load_layout("<window class='text' top='0' left='0' height='12' width='80' value='main'/>") }
+
+    it 'shows before the next line of game text' do
+      receive_from_server(same_prompt, 'Hello world.')
+
+      expect(shown_in('main')).to eq ['>', 'Hello world.']
+    end
+
+    it 'shows after a line that is not movement' do
+      receive_from_server('You attack the goblin.', same_prompt, 'The goblin dodges.')
+
+      expect(shown_in('main')).to eq ['You attack the goblin.', '>', 'The goblin dodges.']
+    end
+
+    it 'is skipped after a movement line' do
+      receive_from_server('You walk north.', same_prompt, 'A breeze blows.')
+
+      expect(shown_in('main')).to eq ['You walk north.', 'A breeze blows.']
+    end
+
+    it 'is skipped after each movement verb the game uses' do
+      movement_verbs = %w[run walk go swim climb crawl drag stride sneak stalk]
+
+      main_after = movement_verbs.to_h do |verb|
+        load_layout("<window class='text' top='0' left='0' height='12' width='80' value='main'/>")
+        receive_from_server("You #{verb} through the archway.", same_prompt, 'A breeze blows.')
+        [verb, shown_in('main')]
       end
+
+      expect(main_after).to eq(movement_verbs.to_h { |verb| [verb, ["You #{verb} through the archway.", 'A breeze blows.']] })
     end
 
-    it 'does not detect non-movement verbs as movement' do
-      process('You attack the goblin.')
-      expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be false
-    end
-  end
+    it 'is used up by a bracket prompt line, which shows in its place' do
+      receive_from_server(same_prompt, '[Cleric]>', 'Hello world.')
 
-  # ---- Stun detection ----
-
-  describe 'stun text emits stun event' do
-    it 'emits stun event with correct seconds for standard stun text' do
-      events = []
-      event_bus.on(:stun) { |data| events << data }
-
-      process('You are stunned for 5 rounds!')
-
-      expect(events.last).to include(seconds: 25)
-    end
-
-    it 'emits stun for multi-round stun' do
-      events = []
-      event_bus.on(:stun) { |data| events << data }
-
-      process('  You are stunned for 12 rounds!')
-
-      expect(events.last).to include(seconds: 60)
-    end
-
-    it 'emits stun for single round (1 round = 5 seconds)' do
-      events = []
-      event_bus.on(:stun) { |data| events << data }
-
-      process('You are stunned for 1 round!')
-
-      expect(events.last).to include(seconds: 5)
-    end
-
-    it 'does not emit stun for non-stun text containing "stunned"' do
-      events = []
-      event_bus.on(:stun) { |data| events << data }
-
-      process('The goblin looks stunned.')
-
-      expect(events).to be_empty
-    end
-  end
-
-  # ---- Bracket prompt lines ----
-
-  describe 'bracket prompt lines consume need_prompt' do
-    it 'clears need_prompt on [prompt]> lines' do
-      state.need_prompt = true
-      process('[Cleric]>')
-      expect(state.need_prompt).to be false
-    end
-  end
-
-  # ---- Highlight application ----
-
-  describe 'highlights are applied to routable streams' do
-    it 'applies highlights and provides colors array with stream_text event' do
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('Hello world.')
-
-      expect(events.last[:colors]).to be_an(Array)
-    end
-  end
-
-  # ---- Stream fallback with preset colors ----
-
-  describe 'stream fallback applies preset colors' do
-    it 'applies preset color when falling back to main for a known stream' do
-      PRESET['thoughts'] = ['00ff00', '000000']
-      router.send(:instance_variable_set, :@current_stream, 'thoughts')
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('Someone thinks something.')
-
-      colors = events.last[:colors]
-      preset_color = colors.find { |c| c[:fg] == '00ff00' }
-      expect(preset_color).not_to be_nil
+      expect(shown_in('main')).to eq ['[Cleric]>', 'Hello world.']
     end
   end
 end
