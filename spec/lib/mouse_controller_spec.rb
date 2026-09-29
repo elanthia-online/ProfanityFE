@@ -273,6 +273,71 @@ RSpec.describe MouseController do
         expect(reversed_text_columns).to be_empty
         expect(copied).to be_empty
       end
+
+      # Each tab fills the three text rows; the selection's line IDs name
+      # rows of the tab it started in.
+      describe 'switching tabs with a key' do
+        before do
+          %w[alpha1 alpha2 alpha3].each { |line| main.route_string(line, [], 'main') }
+          %w[bravo1 bravo2 bravo3].each { |line| main.route_string(line, [], 'thoughts') }
+        end
+
+        it 'copies a drag within one tab' do
+          drag([1, 0], [2, 3])
+
+          expect(copied).to eq ["alpha1\nalp"]
+        end
+
+        it 'cancels a drag in progress: the release copies nothing and neither tab shows a highlight' do
+          mouse(Curses::BUTTON1_PRESSED, 1, 0)
+          mouse(Curses::REPORT_MOUSE_POSITION, 3, 3)
+          key_action['next_tab'].call
+          expect(main.rows.drop(1)).to eq %w[bravo1 bravo2 bravo3]
+
+          mouse(Curses::REPORT_MOUSE_POSITION, 3, 5)
+          mouse(Curses::BUTTON1_RELEASED, 3, 6)
+
+          expect(copied).to be_empty
+          expect(SelectionManager.selecting).to be_falsey
+          expect(main.rows.drop(1)).to eq %w[bravo1 bravo2 bravo3]
+          expect(reversed_text_columns).to be_empty
+
+          key_action['prev_tab'].call
+          expect(main.rows.drop(1)).to eq %w[alpha1 alpha2 alpha3]
+          expect(reversed_text_columns).to be_empty
+        end
+
+        it 'copies nothing for a release right after the switch' do
+          mouse(Curses::BUTTON1_PRESSED, 1, 0)
+          key_action['next_tab'].call
+          mouse(Curses::BUTTON1_RELEASED, 3, 6)
+
+          expect(copied).to be_empty
+          expect(reversed_text_columns).to be_empty
+        end
+
+        # The copy notice scrolls alpha1 off, leaving 'alp' of alpha2 lit.
+        it 'drops a finished highlight, which stays gone on switching back' do
+          drag([1, 0], [2, 3])
+          expect(main.rows.drop(1)).to eq %w[alpha2 alpha3] + ['* [copied 10 chars]']
+          expect(reversed_text_columns).to eq [0, 1, 2]
+
+          key_action['next_tab'].call
+          expect(reversed_text_columns).to be_empty
+          key_action['prev_tab'].call
+
+          expect(main.rows.drop(1)).to eq %w[alpha2 alpha3] + ['* [copied 10 chars]']
+          expect(reversed_text_columns).to be_empty
+        end
+
+        it 'copies a drag started in the tab switched to' do
+          mouse(Curses::BUTTON1_PRESSED, 1, 0)
+          key_action['next_tab'].call
+          drag([2, 0], [3, 3])
+
+          expect(copied).to eq ["bravo2\nbra"]
+        end
+      end
     end
 
     describe 'pressing outside every window' do

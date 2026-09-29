@@ -373,11 +373,7 @@ module LineBuffered
     end
     return unless rewrapping
 
-    @selection_start = nil
-    @selection_end = nil
-    # A drag in progress, or the highlight kept after one, is anchored to
-    # the old rows too
-    SelectionManager.clear_selection if SelectionManager.active_window.equal?(self)
+    drop_selection
   end
 
   # Find a clickable link command at the given window-relative coordinates.
@@ -405,6 +401,19 @@ module LineBuffered
       return h[:cmd] if h[:cmd] && rel_x >= h[:start] && rel_x < h[:end]
     end
     nil
+  end
+
+  # Drop the selection in this window when the rows its line IDs name
+  # are no longer the ones shown (a re-wrap, a tab switch): the highlight,
+  # and {SelectionManager}'s selection here, a drag in progress or the
+  # highlight kept after one. Both go together, so a drag can't carry on
+  # and copy other text under the old IDs.
+  #
+  # @return [void]
+  private def drop_selection
+    @selection_start = nil
+    @selection_end = nil
+    SelectionManager.clear_selection if SelectionManager.active_window.equal?(self)
   end
 
   # The buffer whose lines the text area shows.
