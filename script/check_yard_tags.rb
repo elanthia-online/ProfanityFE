@@ -41,6 +41,7 @@
 #   ruby script/check_yard_tags.rb --self-test # check the checker
 
 require 'prism'
+require 'stringio'
 require 'tmpdir'
 require 'yard'
 
@@ -396,6 +397,7 @@ module YardTagCheck
       attr_reader :placeholder, :documented, :untyped_attribute
       # @!attribute [r] documented
       #   @return [Integer] documented after the attr_reader
+
       # @!attribute [r] untyped_attribute
       #   @return an untyped attribute
 
@@ -522,20 +524,74 @@ module YardTagCheck
     'Fixture#untyped_attribute'            => ['@return has no type']
   }.freeze
 
+  # A file with no gap, for the self-test's exit status check.
+  SELF_TEST_CLEAN_SOURCE = <<~RUBY
+    # Clean fixture.
+    module CleanFixture
+      # Doubles a number.
+      # @param a [Integer] the number
+      # @return [Integer]
+      def self.double(a) = a * 2
+    end
+  RUBY
+
   # Check the checker against {SELF_TEST_SOURCE}: it must report exactly
-  # {SELF_TEST_EXPECTED}.
+  # {SELF_TEST_EXPECTED}, each gap at the line of its object, and {run}
+  # must print each gap as "file:line Path: gap" and exit 1, and exit 0
+  # for {SELF_TEST_CLEAN_SOURCE}.
   def self_test(out: $stdout)
     Dir.mktmpdir do |dir|
       file = File.join(dir, 'fixture.rb')
       File.write(file, SELF_TEST_SOURCE)
+      clean = File.join(dir, 'clean.rb')
+      File.write(clean, SELF_TEST_CLEAN_SOURCE)
       expected = SELF_TEST_EXPECTED.flat_map { |path, messages| messages.map { |message| [path, message] } }
-      actual = check([file]).map { |gap| [gap.path, gap.message] }
-      (expected - actual).each { |path, message| out.puts "self-test: not reported: #{path}: #{message}" }
-      (actual - expected).each { |path, message| out.puts "self-test: false positive: #{path}: #{message}" }
-      ok = expected.sort == actual.sort
-      out.puts "self-test: #{ok ? 'ok' : 'FAILED'} (#{expected.size} expected gaps)"
-      ok ? 0 : 1
+      problems = gap_problems(expected, check([file])) + run_problems(file, clean)
+      problems.each { |problem| out.puts "self-test: #{problem}" }
+      out.puts "self-test: #{problems.empty? ? 'ok' : 'FAILED'} (#{expected.size} expected gaps)"
+      problems.empty? ? 0 : 1
     end
+  end
+
+  # How the gaps {check} found differ from the expected [path, message]
+  # pairs, and any gap not at the line of its object in the fixture.
+  def gap_problems(expected, gaps)
+    actual = gaps.map { |gap| [gap.path, gap.message] }
+    (expected - actual).map { |path, message| "not reported: #{path}: #{message}" } +
+      (actual - expected).map { |path, message| "false positive: #{path}: #{message}" } +
+      gaps.reject { |gap| gap.line == fixture_line(gap.path) }
+          .map { |gap| "wrong line #{gap.line} (not #{fixture_line(gap.path)}): #{gap.path}: #{gap.message}" }
+  end
+
+  # The fixture line that defines the object at path: its @!attribute
+  # directive if it has one (YARD gives such an attribute the line of the
+  # directive's comment), else the def, constant, class or attr_reader
+  # line that names it.
+  def fixture_line(path)
+    name = Regexp.escape(path[/[^:#.]+\z/])
+    lines = SELF_TEST_SOURCE.lines
+    index = lines.index { |line| line.match?(/# @!attribute \[\w+\] #{name}$/) } ||
+            lines.index do |line|
+              !line.lstrip.start_with?('#') && line.match?(/(?:def self\.|class |:|^\s*)#{name}(?![\w?])/)
+            end
+    index && (index + 1)
+  end
+
+  # How {run}'s output and exit status differ from what CI relies on: one
+  # "file:line Path: gap" line per gap, a count, and exit 1 when there is
+  # a gap, 0 when there is none.
+  def run_problems(file, clean)
+    printed = StringIO.new
+    status = run([file], out: printed)
+    gaps = check([file])
+    expected_lines = gaps.map { |gap| "#{file}:#{gap.line} #{gap.path}: #{gap.message}" } +
+                     ["#{gaps.size} YARD tag gap(s) in 1 file(s)."]
+    problems = []
+    problems << "run exited #{status} for a file with gaps, not 1" unless status == 1
+    problems << "run printed:\n#{printed.string}" unless printed.string.lines(chomp: true) == expected_lines
+    clean_status = run([clean], out: StringIO.new)
+    problems << "run exited #{clean_status} for a file with no gap, not 0" unless clean_status.zero?
+    problems
   end
 end
 

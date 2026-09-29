@@ -52,7 +52,8 @@ jobs:
 
       # The checker's self-test: it must still report each kind of gap in
       # its fixture (missing or stale @param, missing @return, yield without
-      # @yield, raise without @raise, ...) and nothing else.
+      # @yield, raise without @raise, ...) and nothing else, print each gap
+      # as file:line, and exit 1 when there is a gap (0 when there is none).
       - name: YARD tag checker self-test
         run: bundle exec ruby script/check_yard_tags.rb --self-test
 
