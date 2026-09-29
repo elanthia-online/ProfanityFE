@@ -24,15 +24,24 @@ class MouseScroll
 
   # Bitmask for mouse events when .links is active.
   # BUTTON1 press/release/click for link detection and drag-to-select.
-  # Does NOT include REPORT_MOUSE_POSITION in the steady state — a
-  # constant motion-event stream corrupts the display. Motion reporting
-  # is added only while button 1 is held (see {#begin_drag_capture}).
+  # With the drag highlight on, {MOTION_EVENTS} is requested too, for as
+  # long as click events are (see {#base_mask}).
   CLICK_EVENTS = Curses::BUTTON1_PRESSED | Curses::BUTTON1_RELEASED |
                  (defined?(Curses::BUTTON1_CLICKED) ? Curses::BUTTON1_CLICKED : 0)
 
   # Bitmask for pointer motion reports, used for live drag highlight.
   # Zero when the curses build doesn't expose it (feature degrades to
   # highlight-on-release).
+  #
+  # The mask doesn't turn motion tracking on in the terminal: ncurses
+  # (6.0 and 6.6 checked) sends the terminfo entry's mouse mode whatever
+  # the mask. It only decides whether ncurses passes on the motion
+  # reports the terminal sends, so it is requested with click events;
+  # where the terminal sends none it changes nothing. Requesting it only
+  # while button 1 is held doesn't work: every mousemask call makes
+  # ncurses forget the pressed button, and the release that follows comes
+  # back as pointer motion (or not at all), so a click on a link sent
+  # nothing and a drag never copied.
   MOTION_EVENTS = defined?(Curses::REPORT_MOUSE_POSITION) ? Curses::REPORT_MOUSE_POSITION : 0
 
   # Bitmask for every event of buttons 1 to 3 (left, middle and right).
@@ -137,7 +146,8 @@ class MouseScroll
   # With drag highlight on, click resolution is also disabled
   # (mouseinterval 0) so presses and releases arrive raw — the
   # application's own click-vs-drag heuristic takes over, and no events
-  # are buffered waiting to synthesize BUTTON1_CLICKED.
+  # are buffered waiting to synthesize BUTTON1_CLICKED — and pointer
+  # motion is requested too ({MOTION_EVENTS}).
   #
   # @return [void]
   def enable_click_events
@@ -156,8 +166,9 @@ class MouseScroll
     apply_mouse_mask
   end
 
-  # Toggle the live drag highlight. Adjusts click resolution to match
-  # if mouse capture is currently active, and persists the choice.
+  # Toggle the live drag highlight. Adjusts click resolution and the
+  # mouse mask to match if mouse capture is currently active, and
+  # persists the choice.
   #
   # @param value [Boolean] true to highlight while dragging
   # @return [void]
@@ -165,38 +176,24 @@ class MouseScroll
     @drag_highlight = value
     if @click_events_enabled
       value ? suppress_click_resolution : restore_click_resolution
+      apply_mouse_mask
     end
     ProfanitySettings.save_setting('DRAG_HIGHLIGHT', value)
   end
 
-  # Add pointer-motion reporting to the mouse mask for the duration of
-  # a button-1 drag. Called on press; {#end_drag_capture} restores the
-  # steady-state mask on release. Keeping motion reporting scoped to
-  # the drag avoids the constant event stream that corrupts the display.
-  #
-  # @return [void]
-  def begin_drag_capture
-    return unless @click_events_enabled && @drag_highlight && MOTION_EVENTS.nonzero?
-
-    Curses.mousemask(base_mask | MOTION_EVENTS)
-  end
-
-  # Restore the steady-state mouse mask after a drag ends.
-  #
-  # @return [void]
-  def end_drag_capture
-    apply_mouse_mask if @click_events_enabled
-  end
-
   private
 
-  # Compute the steady-state mouse mask from scroll and click event bits.
+  # Compute the steady-state mouse mask from scroll and click event bits,
+  # plus pointer motion with click events while the drag highlight is on.
+  # It stays the same through a press and its release (see
+  # {MOTION_EVENTS}).
   #
   # @return [Integer]
   def base_mask
     mask = 0
     mask |= @button4_mask | @button5_mask if @button4_mask && @button5_mask
     mask |= CLICK_EVENTS if @click_events_enabled
+    mask |= MOTION_EVENTS if @click_events_enabled && @drag_highlight
     mask
   end
 

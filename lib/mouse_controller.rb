@@ -109,9 +109,6 @@ class MouseController
     rel_y = screen_y - window.begy
     rel_x = screen_x - window.begx
     multi_click = SelectionManager.start_selection(window, rel_y, rel_x)
-    # Motion reporting only while the button is held — a permanent
-    # motion stream corrupts the display
-    @mouse_scroll.begin_drag_capture
     @cmd_buffer.flush_screen if multi_click
   end
 
@@ -129,7 +126,6 @@ class MouseController
   # Button 1 released: a click follows a link, a double or triple click or
   # a drag copies the selection.
   def handle_release(screen_y, screen_x)
-    @mouse_scroll.end_drag_capture
     return unless SelectionManager.selecting
 
     window = SelectionManager.active_window

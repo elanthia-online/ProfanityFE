@@ -52,11 +52,11 @@ RSpec.describe MouseScroll do
       mouse.start_configuration
     end
 
-    it 'goes back to reporting only clicks when links are on' do
+    it 'goes back to reporting clicks and pointer motion when links are on' do
       mouse.enable_click_events
       calibrate_then_cancel
 
-      expect(masks.last).to eq MouseScroll::CLICK_EVENTS
+      expect(masks.last).to eq MouseScroll::CLICK_EVENTS | MouseScroll::MOTION_EVENTS
     end
 
     it 'goes back to reporting only the saved wheel buttons' do
@@ -91,6 +91,43 @@ RSpec.describe MouseScroll do
 
       expect(masks.last).to eq 0x210000
       expect(scrolled).to eq [:up]
+    end
+  end
+
+  # A press and its release must see the same mask: every mousemask call
+  # makes ncurses forget the pressed button (see MOTION_EVENTS), so the
+  # mask with pointer motion for the drag highlight is set when click
+  # events go on, and changes only when a setting does.
+  describe 'the mouse mask with click events on' do
+    let(:masks) { [] }
+
+    before { allow(Curses).to receive(:mousemask) { |mask| masks << mask } }
+
+    it 'reports clicks and pointer motion while the drag highlight is on' do
+      mouse.enable_click_events
+
+      expect(masks).to eq [MouseScroll::CLICK_EVENTS | MouseScroll::MOTION_EVENTS]
+    end
+
+    it 'reports only clicks while the drag highlight is off' do
+      allow(ProfanitySettings).to receive(:load_setting).and_return(false)
+      mouse.enable_click_events
+
+      expect(masks).to eq [MouseScroll::CLICK_EVENTS]
+    end
+
+    it 'follows the drag highlight when it is toggled' do
+      mouse.enable_click_events
+      mouse.drag_highlight = false
+      mouse.drag_highlight = true
+
+      expect(masks.drop(1)).to eq [MouseScroll::CLICK_EVENTS, MouseScroll::CLICK_EVENTS | MouseScroll::MOTION_EVENTS]
+    end
+
+    it 'stays off when the drag highlight is toggled with click events off' do
+      mouse.drag_highlight = false
+
+      expect(masks).to be_empty
     end
   end
 
