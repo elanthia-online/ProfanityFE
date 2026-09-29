@@ -8,7 +8,7 @@ require_relative '../../lib/selection_manager'
 # delegation the real windows use. Lets us drive press/drag/release
 # against a mutating buffer without curses.
 class FakeBufferWindow
-  attr_reader :buffer, :lines_appended, :highlights
+  attr_reader :buffer, :lines_appended, :buffer_pos, :highlights
 
   def initialize(height:)
     @height = height
@@ -26,6 +26,10 @@ class FakeBufferWindow
   def buffer_content
     @buffer
   end
+
+  def content_top = 0
+
+  def content_height = @height
 
   def evict_to(count)
     @buffer.pop while @buffer.length > count
@@ -175,6 +179,13 @@ RSpec.describe SelectionManager do
       expect(described_class.multi_click_selected?).to be(true)
       described_class.end_selection
       expect(copied).to eq(['#40872332'])
+    end
+
+    it 'does not expand a double-click on a row below the text' do
+      window.add_line('get #40872332 from pack') # row 0; rows 1..9 empty
+      described_class.start_selection(window, 3, 7, now: 0.0)
+      expect(described_class.start_selection(window, 3, 7, now: 0.2)).to be(false)
+      expect(described_class.multi_click_selected?).to be(false)
     end
 
     it 'triple-click selects the whole logical (unwrapped) line' do

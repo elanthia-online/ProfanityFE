@@ -155,12 +155,12 @@ module AnchoredSelection
   #
   # @param text [String] the line text
   # @param x [Integer] column within the line
-  # @return [Array<Integer>, nil] [from, to) span, or nil if the line is
-  #   empty or the column is on whitespace
+  # @return [Array<Integer>, nil] [from, to) span, or nil if the column
+  #   is on whitespace or past the end of the line
   def word_span(text, x)
-    return nil if text.nil? || text.empty?
+    return nil if text.nil? || x >= text.length
 
-    x = x.clamp(0, text.length - 1)
+    x = [x, 0].max
     return nil if text[x].match?(/\s/)
 
     from = x

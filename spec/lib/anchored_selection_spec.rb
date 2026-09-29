@@ -227,8 +227,13 @@ RSpec.describe AnchoredSelection do
       expect(described_class.word_span(nil, 0)).to be_nil
     end
 
-    it 'clamps a column past the end of the line to the last word' do
-      expect(described_class.word_span(line, 500)).to eq([19, 23])
+    it 'returns nil past the end of the line' do
+      expect(described_class.word_span(line, 23)).to be_nil
+      expect(described_class.word_span(line, 500)).to be_nil
+    end
+
+    it 'spans the last word from its last character' do
+      expect(described_class.word_span(line, 22)).to eq([19, 23])
     end
   end
 
