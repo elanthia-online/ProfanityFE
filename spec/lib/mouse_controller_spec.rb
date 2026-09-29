@@ -340,6 +340,38 @@ RSpec.describe MouseController do
       end
     end
 
+    # A room window 3 rows high below the command line, showing a room that
+    # needs 4 rows (description 3, exits 1).
+    context 'in a room window too short for the room' do
+      let(:layout) do
+        <<~XML
+          <layout>
+            <window class='text' top='0' left='0' height='4' width='42' value='main'/>
+            <window class='command' top='9' left='0' height='1' width='42'/>
+            <window class='room' top='10' left='0' height='3' width='10'/>
+          </layout>
+        XML
+      end
+      let(:window_mgr) { WindowManager.new(shared_state: shared_state) }
+      let(:room) { window_mgr.room['room'] }
+
+      before do
+        room.update_desc('abcdefghij klmnopqrst e', links: [{ start: 22, end: 23, cmd: 'look e' }])
+        room.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
+      end
+
+      it 'sends, for a click on each cell of the bottom row, the link shown there' do
+        cells = (0...10).map do |x|
+          sent.clear
+          click(12, x)
+          [room.rows[2][x] || ' ', sent.dup]
+        end
+
+        expect(cells).to eq [['G', []], ['o', []], [':', []], [' ', []]] +
+                            'north'.chars.map { |c| [c, ['north']] } + [['.', []]]
+      end
+    end
+
     describe 'pressing outside every window' do
       before { %w[alpha bravo charlie delta].each { |line| main.add_string(line) } }
 
