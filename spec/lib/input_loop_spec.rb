@@ -63,8 +63,10 @@ RSpec.describe 'The input loop' do
         <key id='ctrl+l' macro='look\\r'/>
       XML
       allow(Autocomplete).to receive(:complete).and_raise('broken key action')
+      tab = "\t"
+      ctrl_l = "\x0c"
 
-      status, = run_client(keyboard("\t", "\x0c"))
+      status, = run_client(keyboard(tab, ctrl_l))
 
       expect(status).to be_nil
       expect(game_server.commands).to eq ['look']
@@ -77,7 +79,7 @@ RSpec.describe 'The input loop' do
     it 'fires the alt+2 binding from the settings file when ESC then the digit arrive' do
       File.write(settings_path, settings_binding("<key id='alt+2' action='switch_tab_2'/>"))
 
-      run_client(keyboard("\e2"))
+      run_client(keyboard("\e", '2'))
 
       expect(tabbed.active_tab).to eq 'logons'
     end

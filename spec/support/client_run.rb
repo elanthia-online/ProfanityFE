@@ -101,6 +101,10 @@ module ClientRun
     end
   end
 
+  # A keyboard step (see {#keyboard}) that runs an action, then presses a
+  # key, in the same read of the input loop.
+  PressAfter = Struct.new(:key, :action)
+
   # A command window (a virtual screen, one row of 80 columns) that is
   # also the keyboard: each read the input loop makes (+get_char+) takes
   # the next key.
@@ -163,10 +167,6 @@ module ClientRun
       end
     end
   end
-
-  # A keyboard step (see {#keyboard}) that runs an action, then presses a
-  # key, in the same read of the input loop.
-  PressAfter = Struct.new(:key, :action)
 
   # A keyboard step that runs the block, then presses +key+ in the same
   # read (see {PressAfter}).
