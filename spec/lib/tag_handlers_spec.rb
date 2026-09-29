@@ -10,6 +10,7 @@ require_relative '../../lib/xml_tokenizer'
 require_relative '../../lib/tag_handlers'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/clock'
+require_relative '../../lib/pending_render'
 
 # Minimal host class that includes TagHandlers, providing the instance
 # variables and helper methods the module expects.
@@ -18,16 +19,15 @@ class TagHandlerHost
 
   attr_accessor :line_colors, :open_monsterbold, :open_preset, :open_style,
                 :open_color, :open_link, :current_stream, :combat_next_line,
-                :need_update, :need_room_render, :room_capture_mode
+                :room_capture_mode
 
-  attr_reader :flushed_texts, :wm, :state, :cmd_buffer, :event_bus, :stream_stack
+  attr_reader :flushed_texts, :wm, :state, :event_bus, :stream_stack, :pending_render
 
   def initialize(wm:, state:, event_bus:, clock: Clock.new)
     @wm = wm
     @state = state
     @event_bus = event_bus
     @clock = clock
-    @cmd_buffer = Struct.new(:window).new(nil)
     @xml_escapes = { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' }
     @line_colors = []
     @open_monsterbold = []
@@ -38,8 +38,7 @@ class TagHandlerHost
     @current_stream = nil
     @stream_stack = []
     @combat_next_line = nil
-    @need_update = false
-    @need_room_render = false
+    @pending_render = PendingRender.new
     @room_capture_mode = nil
     @flushed_texts = []
   end

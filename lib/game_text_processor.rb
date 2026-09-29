@@ -11,13 +11,17 @@ require_relative 'streams'
 require_relative 'presets'
 require_relative 'boot_profiler'
 require_relative 'clock'
+require_relative 'pending_render'
+require_relative 'server_reader'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
 
 # Processes all game text received from the server read thread.
 #
-# Handles the full pipeline from raw server output to rendered UI:
+# {ServerReader} reads the socket and flushes the screen; this class is its
+# line handler, and covers the rest of the pipeline from raw server output
+# to UI events:
 # XML tag parsing, stream routing (combat, death, logons, etc.),
 # room data assembly (title, description, objects, players, exits),
 # spell name abbreviation for percWindow, indicator/progress/countdown
@@ -74,7 +78,7 @@ class GameTextProcessor
   #
   # @param window_mgr [WindowManager] provides handler hashes for stream/indicator/progress/countdown/room windows
   # @param shared_state [OpenStruct] mutable state shared with the input thread (need_prompt, prompt_text, skip_server_time_offset)
-  # @param cmd_buffer [CommandBuffer] the command-line input buffer (used for Curses refresh coordination)
+  # @param cmd_buffer [CommandBuffer] the command-line input buffer (its window is refreshed with each screen flush)
   # @param xml_escapes [Hash<String, String>] XML entity to character mappings (e.g. +"&gt;"+ => +">"+)
   # @param event_bus [EventBus] event bus for decoupled UI updates
   # @param boot_profiler [BootProfiler] logs when the first server data,
@@ -91,13 +95,17 @@ class GameTextProcessor
                  game_rules: Games::BOTH_GAMES)
     @wm = window_mgr
     @state = shared_state
-    @cmd_buffer = cmd_buffer
     @xml_escapes = xml_escapes
     @event_bus = event_bus
     @boot_profiler = boot_profiler
     @speech_timestamps = speech_timestamps
     @clock = clock
     @game_rules = game_rules
+
+    # Screen updates asked for while parsing; the reader flushes them.
+    @pending_render = PendingRender.new
+    @reader = ServerReader.new(line_handler: self, pending_render: @pending_render, event_bus: event_bus,
+                               cmd_buffer: cmd_buffer, shared_state: shared_state, boot_profiler: boot_profiler)
 
     # Line color/style tracking
     @line_colors = []
@@ -115,9 +123,6 @@ class GameTextProcessor
     @bold_next_line = false
     @emptycount = 0
     @combat_next_line = nil
-    @need_update = false
-    @need_room_render = false
-    @first_render = true
     @first_prompt = true
 
     # The last line sent to a stream window, stripped. The game sends some
@@ -145,45 +150,14 @@ class GameTextProcessor
     @current_raw_line = nil # Raw line with XML tags preserved for room object extraction
   end
 
-  # Socket errors that mean the connection closed normally rather than
-  # that ProfanityFE failed: the socket was closed by another thread
-  # (IOError), or Lich closed it (ECONNRESET when Lich closes with client
-  # data still unread, EPIPE, ECONNABORTED).
-  DISCONNECT_ERRORS = [IOError, Errno::ECONNRESET, Errno::EPIPE, Errno::ECONNABORTED].freeze
-
-  # Main processing loop. Blocks on +server.gets+ reading lines from the
-  # game server socket and processes each through XML tag extraction,
-  # stream routing, bold/color tracking, room data assembly, and window
-  # updates, until the connection ends.
-  #
-  # It does not show the disconnect message or exit: it reports how the
-  # connection ended, and {Application} ends the session on the main
-  # thread, which owns keyboard input.
+  # Main processing loop: reads lines from the game server socket until
+  # the connection ends, processing each (see {ServerReader#run}).
   #
   # @param server [IO] TCP socket (or socket-like) connected to the game server
-  # @return [Symbol] +:disconnected+ when the connection closed (EOF or one
-  #   of {DISCONNECT_ERRORS}); +:crashed+ when any other error ended the
-  #   loop (logged with its backtrace)
+  # @return [Symbol] +:disconnected+ or +:crashed+ (see {ServerReader#run})
   def run(server)
     @server = server
-    line = nil
-    first_line = true
-
-    while (line = server.gets)
-      if first_line && @boot_profiler.enabled?
-        @boot_profiler.log_elapsed('first server data received')
-        first_line = false
-      end
-
-      process_server_line(line)
-    end
-    :disconnected
-  rescue *DISCONNECT_ERRORS => e
-    ProfanityLog.write('game_text_processor', "disconnected: #{e.class}: #{e.message}")
-    :disconnected
-  rescue StandardError => e
-    ProfanityLog.write('game_text_processor', e.to_s, backtrace: e.backtrace)
-    :crashed
+    @reader.run(server)
   end
 
   # Show the "Connection closed / Press any key to exit" notice in the
@@ -191,30 +165,15 @@ class GameTextProcessor
   #
   # @return [void]
   def show_disconnect_message
-    CursesRenderer.render do
-      @event_bus.emit(:disconnect)
-      @cmd_buffer.window&.noutrefresh
-    end
+    @reader.show_disconnect_message
   end
 
-  private
-
-  # Process one line from the server: bold carry-over, gags, blank-line
-  # collapsing, tag parsing and routing, and batched screen flushes.
+  # First step for one server line, before the render lock is taken:
+  # bold carry-over, gags and blank-line collapsing (see {ServerReader}).
   #
-  # An error in one line is logged and the line is skipped, so a bad line
-  # (or a failing window handler) cannot end the session. Connection errors
-  # propagate to {#run}, which handles the disconnect.
-  #
-  # @param line [String] raw line read from the server
-  # @return [void]
-  # @api private
-  def process_server_line(line)
-    # Socket reads are BINARY. Treat them as UTF-8 (replacing invalid bytes)
-    # so a non-ASCII byte can't raise Encoding::CompatibilityError against
-    # the UTF-8 gag and highlight patterns loaded from settings.
-    line.force_encoding(Encoding::UTF_8).scrub!
-    line.chomp!
+  # @param line [String] raw server line, UTF-8, line ending removed
+  # @return [String, nil] the line to process, or nil to drop it
+  def prepare_line(line)
     line = carry_bold(line)
 
     gagged = multiline_gag?(line)
@@ -234,73 +193,53 @@ class GameTextProcessor
     else
       @emptycount = 0
     end
-
-    # Synchronize all curses operations (noutrefresh calls from indicator,
-    # text, countdown, and room window updates) with the final doupdate so
-    # that timer and input threads cannot flush a half-updated virtual screen. # -- flat indent avoids re-indent
-    CursesRenderer.synchronize do
-      if line.empty?
-        if @current_stream.nil?
-          # Check if last line in ANY tab was movement (backup check)
-          main_window = @wm.stream[MAIN_STREAM]
-          last_line_was_movement = false
-          if main_window.is_a?(TabbedTextWindow)
-            # Check all tabs for recent movement (movement could be in main, combat, etc.)
-            main_window.tabs.each_value do |tab_buffer|
-              last_entry = tab_buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-              if last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-                last_line_was_movement = true
-                break
-              end
-            end
-          elsif main_window.respond_to?(:buffer) && !main_window.buffer.empty?
-            last_entry = main_window.buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-            last_line_was_movement = last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-          end
-
-          # Blank lines from the game are not displayed; a blank line is
-          # where a pending prompt is shown, except after movement (use
-          # flag OR buffer check), where the prompt is skipped too. The
-          # pending flag is consumed either way.
-          pending = @state.consume_prompt!
-          if @last_was_movement || last_line_was_movement
-            @last_was_movement = false
-          elsif pending
-            @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
-            @need_update = true
-          end
-        end
-      else
-        @current_raw_line = line.dup
-        process_line_tags(line)
-      end
-      #
-      # Flush screen update unless more game lines are waiting (batch rendering).
-      # IO.select returns nil (no data waiting) when we should flush now.
-      #
-      if @need_update && !IO.select([@server], nil, nil, 0.001)
-        @need_update = false
-        if @need_room_render
-          @event_bus.emit(:room_render)
-          @need_room_render = false
-        end
-        @cmd_buffer.window&.noutrefresh
-        Curses.doupdate
-        if @first_render && @boot_profiler.enabled?
-          @boot_profiler.log_elapsed('first screen render')
-          @first_render = false
-        end
-      end
-    end # CursesRenderer.synchronize
-    # Flush terminal title AFTER curses operations complete.
-    # Writing escape sequences to $stdout inside the synchronize block
-    # interleaves with curses output, causing visible artifacts.
-    @state.update_terminal_title
-  rescue IOError, SystemCallError
-    raise
-  rescue StandardError => e
-    ProfanityLog.write('game_text_processor', "error processing line #{line.inspect}: #{e.message}", backtrace: e.backtrace)
+    line
   end
+
+  # Second step for one server line, inside the render lock: a blank line
+  # shows a pending prompt; any other line is parsed and routed.
+  #
+  # @param line [String] a line returned by {#prepare_line}
+  # @return [void]
+  def process_line(line)
+    if line.empty?
+      if @current_stream.nil?
+        # Check if last line in ANY tab was movement (backup check)
+        main_window = @wm.stream[MAIN_STREAM]
+        last_line_was_movement = false
+        if main_window.is_a?(TabbedTextWindow)
+          # Check all tabs for recent movement (movement could be in main, combat, etc.)
+          main_window.tabs.each_value do |tab_buffer|
+            last_entry = tab_buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
+            if last_entry && last_entry[0] =~ MOVEMENT_PATTERN
+              last_line_was_movement = true
+              break
+            end
+          end
+        elsif main_window.respond_to?(:buffer) && !main_window.buffer.empty?
+          last_entry = main_window.buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
+          last_line_was_movement = last_entry && last_entry[0] =~ MOVEMENT_PATTERN
+        end
+
+        # Blank lines from the game are not displayed; a blank line is
+        # where a pending prompt is shown, except after movement (use
+        # flag OR buffer check), where the prompt is skipped too. The
+        # pending flag is consumed either way.
+        pending = @state.consume_prompt!
+        if @last_was_movement || last_line_was_movement
+          @last_was_movement = false
+        elsif pending
+          @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
+          @pending_render.request_update
+        end
+      end
+    else
+      @current_raw_line = line.dup
+      process_line_tags(line)
+    end
+  end
+
+  private
 
   # Carry bold across line ends. The game can open bold on one line and
   # close it on a later one, but the tag parser drops any bold region still
@@ -474,7 +413,7 @@ class GameTextProcessor
   # @api private
   def new_stun(seconds)
     @event_bus.emit(:stun, seconds: seconds)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Process a line from the game server by tokenizing it into text and
@@ -535,28 +474,28 @@ class GameTextProcessor
     elsif text =~ /^You glance down at your empty hands\./
       @event_bus.emit(:indicator_update, id: 'right', label: 'Empty')
       @event_bus.emit(:indicator_update, id: 'left', label: 'Empty')
-      @need_update = true
+      @pending_render.request_update
     elsif text =~ /^You glance down to see .+ in your right hand and nothing in your left hand\./
       # DR sends a hand tag only when the hand's contents change, so a hand
       # empty since login has never had one; the glance is the only word
       # that it's empty. The held hand keeps the name from its tag.
       @event_bus.emit(:indicator_update, id: 'left', label: 'Empty', value: 0)
-      @need_update = true
+      @pending_render.request_update
     elsif text =~ /^You glance down to see (?!.* in your right hand ).+ in your left hand\./
       # Only the left hand holds something: the glance doesn't mention the
       # right hand at all ("You glance down to see <item> in your left hand.").
       @event_bus.emit(:indicator_update, id: 'right', label: 'Empty', value: 0)
-      @need_update = true
+      @pending_render.request_update
     else
       if text =~ /^You have.*? very difficult time with muscle control/
         @event_bus.emit(:indicator_update, id: 'nsys', value: 3)
-        @need_update = true
+        @pending_render.request_update
       elsif text =~ /^You have.*? constant muscle spasms/
         @event_bus.emit(:indicator_update, id: 'nsys', value: 2)
-        @need_update = true
+        @pending_render.request_update
       elsif text =~ /^You have.*? developed slurred speech/
         @event_bus.emit(:indicator_update, id: 'nsys', value: 1)
-        @need_update = true
+        @pending_render.request_update
       end
     end
 
@@ -655,7 +594,7 @@ class GameTextProcessor
           end
           unless text =~ /^\[server\]: "(?:kill|connect)/
             @event_bus.emit(:stream_text, stream: @current_stream, text: text, colors: @line_colors)
-            @need_update = true
+            @pending_render.request_update
             # Remembered so the game's main copy of it, if next, is dropped
             @last_stream_text = text.strip
           end
@@ -673,7 +612,7 @@ class GameTextProcessor
             @last_was_movement = true if text =~ MOVEMENT_PATTERN
             emit_prompt_if_needed
             @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: text, colors: @line_colors)
-            @need_update = true
+            @pending_render.request_update
             # Shown in main, so it is the next main-bound line: the stored
             # stream-window text expires. Not compared: this is stream text
             # itself, never the game's main copy of a stream line.
@@ -699,7 +638,7 @@ class GameTextProcessor
             @line_colors = styled.runs
           end
           @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: text, colors: @line_colors, indent: room_captured ? false : nil)
-          @need_update = true
+          @pending_render.request_update
           @last_was_movement = true if is_movement
         end
       end

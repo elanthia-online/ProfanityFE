@@ -14,10 +14,11 @@ require_relative 'presets'
 # understand, test, and modify independently.
 #
 # Expects the including class to provide:
-# - @wm, @state, @cmd_buffer, @xml_escapes, @event_bus, @clock
+# - @wm, @state, @xml_escapes, @event_bus, @clock
 # - @line_colors, @open_monsterbold, @open_preset, @open_style,
 #   @open_color, @open_link
-# - @current_stream, @combat_next_line, @need_update, @need_room_render
+# - @current_stream, @combat_next_line
+# - @pending_render (a PendingRender: screen updates to flush)
 # - @stream_stack (an empty Array: the open pushStreams, innermost last)
 # - @room_capture_mode
 # - @boot_profiler (a BootProfiler)
@@ -181,7 +182,7 @@ module TagHandlers
     if @state.update_prompt(new_prompt_text)
       @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: new_prompt_text)
       @event_bus.emit(:prompt_changed, text: new_prompt_text)
-      @need_update = true
+      @pending_render.request_update
     end
   end
 
@@ -191,7 +192,7 @@ module TagHandlers
 
     @event_bus.emit(:indicator_update, id: 'spell', label: m[:spell],
                                        value: m[:spell] == 'None' ? 0 : 1)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Handle <right>item</right> or <left>item</left> paired tag.
@@ -200,7 +201,7 @@ module TagHandlers
 
     @event_bus.emit(:indicator_update, id: m[:hand], label: m[:item],
                                        value: m[:item] == 'Empty' ? 0 : 1)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Handle <roundTime value='N'/> tag. Sets the countdown end time.
@@ -210,7 +211,7 @@ module TagHandlers
     return unless (value = countdown_value(xml))
 
     @event_bus.emit(:countdown_update, id: 'roundtime', end_time: value)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Handle <castTime value='N'/> tag. Sets the secondary countdown end time.
@@ -220,7 +221,7 @@ module TagHandlers
     return unless (value = countdown_value(xml))
 
     @event_bus.emit(:countdown_update, id: 'roundtime', secondary_end_time: value)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # The end time a <roundTime> or <castTime> tag carries.
@@ -238,7 +239,7 @@ module TagHandlers
       XmlTokenizer.attrs(tag)['value'] if XmlTokenizer.start_tag_name(tag) == 'dir'
     end
     @event_bus.emit(:compass_update, dirs: current_dirs)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Handle <progressBar .../> tags for vitals, stance, encumbrance, mind.
@@ -251,22 +252,22 @@ module TagHandlers
     if id == 'encumlevel' && number && text
       value = text == 'Overloaded' ? 110 : value.to_i
       @event_bus.emit(:progress_update, id: 'encumbrance', value: value, max: 110)
-      @need_update = true
+      @pending_render.request_update
     elsif id == 'pbarStance' && number
       @event_bus.emit(:progress_update, id: 'stance', value: value.to_i, max: 100)
-      @need_update = true
+      @pending_render.request_update
     elsif id == 'mindState' && text
       value = text == 'saturated' ? 110 : value.to_i
       @event_bus.emit(:progress_update, id: 'mind', value: value, max: 110)
-      @need_update = true
+      @pending_render.request_update
     elsif number && (m = text&.match(%r{\s(?<cur>-?[0-9]+)/(?<max>[0-9]+)\z}))
       # GemStone vitals: text contains current/max (e.g., "health 456/456")
       @event_bus.emit(:progress_update, id: id, value: m[:cur].to_i, max: m[:max].to_i)
-      @need_update = true
+      @pending_render.request_update
     elsif number && DR_VITALS.include?(id) && text&.match?(/\A(?:health|mana|spirit|fatigue|concentration|inner fire) [0-9]+%\z/)
       # DragonRealms vitals: text contains percentage (e.g., "health 75%")
       @event_bus.emit(:progress_update, id: id, value: value.to_i, max: 100)
-      @need_update = true
+      @pending_render.request_update
     end
   end
 
@@ -284,7 +285,7 @@ module TagHandlers
       data[:fg] = [fg] if fg
     end
     @event_bus.emit(:progress_update, **data)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Handle <pushBold/> or <b> tag. Opens a monster bold color region.
@@ -517,7 +518,7 @@ module TagHandlers
     active = visible == 'y'
     @event_bus.emit(:countdown_active, id: icon, active: active)
     @event_bus.emit(:indicator_update, id: icon, value: active)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Handle <image id='...' name='...'/> body part/injury tag.
@@ -532,7 +533,7 @@ module TagHandlers
       fix_value = { 'Injury1' => 1, 'Injury2' => 2, 'Injury3' => 3, 'Scar1' => 4, 'Scar2' => 5, 'Scar3' => 6 }
       @event_bus.emit(:indicator_update, id: id, value: fix_value[name] || 0)
     end
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Handle <LaunchURL src="..."/> tag.
@@ -552,7 +553,7 @@ module TagHandlers
     end
 
     @event_bus.emit(:launch_url, url: url, remote: @state.remote_url)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Whether a URL is an https URL on www.play.net with no userinfo or
@@ -578,7 +579,7 @@ module TagHandlers
     @state.room_title = room
     @event_bus.emit(:indicator_update, id: 'room', label: room, value: 1)
     @event_bus.emit(:room_title, text: room)
-    @need_update = true
-    @need_room_render = true
+    @pending_render.request_update
+    @pending_render.request_room_render
   end
 end

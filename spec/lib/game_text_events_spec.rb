@@ -41,6 +41,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
     )
   end
 
+  # The screen updates the processor asked for
+  def pending_render = processor.send(:instance_variable_get, :@pending_render)
+
   # Send text through handle_game_text via the private method
   def process(text)
     processor.send(:handle_game_text, text)
@@ -61,9 +64,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
       expect(left_event).to include(label: 'Empty')
     end
 
-    it 'sets need_update after emitting empty hands events' do
+    it 'asks for a screen update after emitting empty hands events' do
       process('You glance down at your empty hands.')
-      expect(processor.send(:instance_variable_get, :@need_update)).to be true
+      expect(pending_render.update_requested?).to be true
     end
   end
 
@@ -378,16 +381,16 @@ RSpec.describe 'GameTextProcessor event emissions' do
       expect(events.last).to include(text: a_string_matching(/goblin/))
     end
 
-    it 'sets need_room_render for non-exit room components' do
+    it 'asks for a room render for non-exit room components' do
       process_line("<component id='room players'>Also here: Mahtra.</component>")
 
-      expect(processor.send(:instance_variable_get, :@need_room_render)).to be true
+      expect(pending_render.room_render_requested?).to be true
     end
 
-    it 'sets need_update for room components' do
+    it 'asks for a screen update for room components' do
       process_line("<component id='room players'>Also here: Mahtra.</component>")
 
-      expect(processor.send(:instance_variable_get, :@need_update)).to be true
+      expect(pending_render.update_requested?).to be true
     end
 
     it 'subscriber receives room_players event and calls update_players on window' do
@@ -441,10 +444,10 @@ RSpec.describe 'GameTextProcessor event emissions' do
       expect(indicator_events.last).to include(id: 'room players', value: false)
     end
 
-    it 'sets need_room_render for empty room components' do
+    it 'asks for a room render for empty room components' do
       process_line("<component id='room players'></component>")
 
-      expect(processor.send(:instance_variable_get, :@need_room_render)).to be true
+      expect(pending_render.room_render_requested?).to be true
     end
 
     it 'room_render event triggers render on the room window' do

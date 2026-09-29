@@ -28,7 +28,7 @@ from game server XML component streams and inline text patterns.
 #   @room_pending_objects_colors, @room_pending_players, @room_pending_exits,
 #   @room_pending_number, @current_raw_line, @current_stream
 # - @line_colors   [Array<Hash>]
-# - @need_update   [Boolean]
+# - @pending_render [PendingRender]
 #
 # @api private
 module RoomDataProcessor
@@ -145,15 +145,15 @@ module RoomDataProcessor
             end
       @event_bus.emit(:room_lich_exits, text: raw)
       room_data_captured = true
-      @need_update = true
+      @pending_render.request_update
     elsif text =~ /^Room Number:\s*\d+/
       @event_bus.emit(:room_number, text: text.strip)
       room_data_captured = true
-      @need_update = true
+      @pending_render.request_update
     elsif text =~ /^StringProcs:/
       @event_bus.emit(:room_stringprocs, text: text.strip)
       room_data_captured = true
-      @need_update = true
+      @pending_render.request_update
     end
 
     room_data_captured
@@ -211,9 +211,9 @@ module RoomDataProcessor
 
     # Defer room window render to the IO.select flush point to reduce
     # curses operation frequency (update_exits already renders internally)
-    @need_room_render = true unless @current_stream == Streams::ROOM_EXITS
+    @pending_render.request_room_render unless @current_stream == Streams::ROOM_EXITS
 
-    @need_update = true
+    @pending_render.request_update
     # Don't skip for room players - let the indicator handler also process it
     @current_stream == Streams::ROOM_PLAYERS ? :continue : :consumed
   end
@@ -418,7 +418,7 @@ module RoomDataProcessor
     # update_exits triggers render internally.
     exits_clean, exits_links = structurize_text(exits_raw)
     @event_bus.emit(:room_exits, text: exits_clean, links: exits_links)
-    @need_update = true
+    @pending_render.request_update
   end
 
   # Update the 'room players' indicator window with parsed player names.

@@ -15,7 +15,7 @@ Detects notable game events and sends summary notifications to the configured no
 #
 # Expects the including class to provide:
 # - @event_bus   [EventBus]
-# - @need_update [Boolean]
+# - @pending_render [PendingRender]
 #
 # @api private
 module FamiliarNotifier
@@ -42,7 +42,7 @@ module FamiliarNotifier
     # the triggering game line and is left alone so that line keeps its
     # tag colors (bold, presets, links) and highlights in main.
     @event_bus.emit(:stream_text, stream: CONFIG.notification_stream, text: note, colors: colors)
-    @need_update = true
+    @pending_render.request_update
   end
 
   private
