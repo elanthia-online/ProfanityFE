@@ -75,6 +75,54 @@ RSpec.describe IndicatorWindow do
     end
   end
 
+  describe 'the base color with label colors' do
+    # A three-state indicator whose label colors highlight only its last
+    # letter, so the first letter shows the base color.
+    let(:window_manager) do
+      LAYOUT['test'] = REXML::Document.new(<<~XML).root
+        <layout><window class='indicator' top='0' left='0' height='1' width='12' value='room players' label='Mahtra'
+                        fg='444444,ffff00,ff0000' bg='000000,111111,222222'/></layout>
+      XML
+      WindowManager.new.tap { |wm| wm.load_layout('test') }
+    end
+    let(:window) { window_manager.indicator['room players'] }
+    let(:highlight) { [{ start: 5, end: 6, fg: 'abcdef' }] }
+
+    # [fg, bg] of every color pair handed out; pair id n is colors[n - 1].
+    let(:colors) { [] }
+
+    # The label colors path draws through HighlightProcessor, the plain one
+    # through the window.
+    before do
+      [HighlightProcessor, window].each do |drawer|
+        allow(drawer).to receive(:get_color_pair_id) do |fg, bg|
+          colors << [fg, bg] unless colors.include?([fg, bg])
+          colors.index([fg, bg]) + 1
+        end
+      end
+    end
+
+    # The [fg, bg] letter +x+ is drawn in.
+    def colors_at(x)
+      colors[(window.attrs_at(0, x) >> 8) - 1]
+    end
+
+    {
+      0 => %w[444444 000000], 1 => %w[ffff00 111111], 2 => %w[ff0000 222222],
+      true => %w[ffff00 111111], false => %w[444444 000000], nil => %w[444444 000000]
+    }.each do |value, expected|
+      it "is the color the label has without them for value #{value.inspect}" do
+        event_bus.emit(:indicator_update, id: 'room players', value: value, label_colors: nil)
+        plain = colors_at(0)
+
+        event_bus.emit(:indicator_update, id: 'room players', label_colors: highlight)
+
+        expect([plain, colors_at(0)]).to eq [expected, expected]
+        expect(colors_at(5)).to eq ['abcdef', expected[1]]
+      end
+    end
+  end
+
   describe '#apply_changes' do
     it 'says whether it redrew' do
       expect(window.apply_changes(label: 'None')).to be false
