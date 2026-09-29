@@ -164,14 +164,17 @@ RSpec.describe RoomAssembler do
       emitted[:room_objects].last
     end
 
+    # The assembler strips component and compDef tags from the raw line
+    # before handing it over, but the text then goes through the link
+    # extractor, which drops every tag that isn't a link. So whether those
+    # tags are stripped first can't be seen here, and no example pins it;
+    # only a strip that cuts into the visible text shows (the quoted > row).
     it 'shows the text of the raw line from "You also see" on, with every tag removed' do
       {
         "<component id='room objs'>You also see a box.</component>" => 'You also see a box.',
         "You also see a box.</component><component id='x'>"         => 'You also see a box.',
         'You also see <pushBold/>a goblin<popBold/>.</component>'   => 'You also see a goblin.',
         'You also see <compass>x</compass>'                         => 'You also see x',
-        'You also see a </compDef >box<compDefs/>.'                 => 'You also see a box.',
-        'You also see a <componentX>box</componentX>.'              => 'You also see a box.',
         # a > inside a quoted value stays inside its tag; a quoted value
         # can't hold a raw <, so that tag ends at the first > (see
         # XmlTokenizer::SINGLE_TAG_REGEX)
