@@ -47,7 +47,7 @@ RSpec.describe 'KEY_NAME' do
     KEY_NAME
   ensure
     $VERBOSE = original_verbose
-    Curses.singleton_class.send(:remove_method, :keyname)
+    Curses.singleton_class.remove_method(:keyname)
   end
 
   def names_for(table, code) = table.select { |_name, c| c == code }.keys
