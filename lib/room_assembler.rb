@@ -128,13 +128,14 @@ class RoomAssembler
       @capture_mode = nil
     end
 
-    # Skip inline pattern matching when inside a component stream.
-    # Component stream data (room objs, room players, room exits) is
-    # handled by process_room_stream instead. Without this guard,
-    # process_room_data would consume the text and prevent
-    # process_room_stream from running, or, without a RoomWindow, update
-    # the room players indicator a second time.
-    return room_data_captured if stream&.start_with?(Streams::ROOM)
+    # The inline lines are room data only on main. Component stream data
+    # (room objs, room players, room exits) is handled by
+    # process_room_stream instead: reading it here too would consume the
+    # text and prevent process_room_stream from running, or, without a
+    # RoomWindow, update the room players indicator a second time. Text on
+    # any other stream (a familiar's view, a script's window) is that
+    # stream's own, and must not commit a room or leave its window.
+    return room_data_captured unless stream.nil? || stream == Streams::MAIN
 
     # Without a RoomWindow, only update the room players indicator from
     # inline text patterns (objects, exits, etc. are not applicable).
