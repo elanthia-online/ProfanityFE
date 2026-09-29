@@ -12,23 +12,24 @@ require_relative 'link_extractor'
 # - The component path: text inside a room component stream (+room objs+,
 #   +room exits+, ...), with the link and bold regions the tag parser
 #   computed, is emitted as it arrives.
-# - The inline path: roomName/roomDesc styled text (captured through
-#   {#capture_mode}) and "You also see" / "Also here:" / "Obvious exits:"
-#   lines are staged, from the raw line so their markup is kept, and
-#   committed as one batch when the exits arrive.
+# - The inline path: roomName/roomDesc styled text (captured between
+#   {#start_capture} and {#end_capture}, which the tag parser calls) and
+#   "You also see" / "Also here:" / "Obvious exits:" lines are staged, from
+#   the raw line so their markup is kept, and committed as one batch when
+#   the exits arrive.
 #
 # UI updates are emitted on the event bus. The window manager is only asked
-# whether the layout has a RoomWindow.
+# whether the layout has a RoomWindow (see #room_window?).
 class RoomAssembler
   # Element names of the tags stripped from inline "You also see" text.
   COMPONENT_TAGS = %w[component compDef].freeze
 
   # What styled text is being captured for the room: +:title+ (roomName),
-  # +:desc+ (roomDesc) or nil. Set by the tag parser; the next text
+  # +:desc+ (roomDesc) or nil. See {#start_capture}: the next text
   # {#process_room_data} sees is captured and ends the capture.
   #
   # @return [Symbol, nil]
-  attr_accessor :capture_mode
+  attr_reader :capture_mode
 
   # Parse a room subtitle attribute into a clean room title string.
   #
@@ -67,6 +68,42 @@ class RoomAssembler
     @current_raw_line = nil
   end
 
+  # Start capturing styled text for the room: +:title+ when a roomName
+  # style opens, +:desc+ when a roomDesc style or preset opens. The next
+  # text {#process_room_data} sees is taken as the room title or
+  # description.
+  #
+  # The title also names the room in the terminal title, so it is captured
+  # without a room window; the description only with one. Yields before the
+  # capture starts, and only if it starts, so the caller can first flush
+  # the text before the tag (a roomDesc preset does; a style doesn't).
+  #
+  # @param kind [Symbol] +:title+ or +:desc+
+  # @yield before the capture starts
+  # @return [void]
+  def start_capture(kind)
+    return if kind == :desc && !room_window?
+
+    yield if block_given?
+    @capture_mode = kind
+  end
+
+  # End a capture of one of +kinds+ (a style or preset closed): yields so
+  # the caller can flush the captured text, which {#process_room_data}
+  # takes, then disarms the capture even if there was no text (an empty
+  # room name or description), or the next line would be taken as the room
+  # text. Does nothing when no capture of those kinds is open.
+  #
+  # @param kinds [Array<Symbol>] the kinds of capture the closing tag ends
+  # @yield before the capture ends, to flush its text
+  # @return [void]
+  def end_capture(*kinds)
+    return unless kinds.include?(@capture_mode)
+
+    yield if block_given?
+    @capture_mode = nil
+  end
+
   # Start a new server line: the inline path reads room markup from it.
   #
   # @param raw_line [String] the server line, tags intact
@@ -93,40 +130,7 @@ class RoomAssembler
   def process_room_data(text, stream)
     return false if text.empty?
 
-    room_data_captured = false
-
-    # Handle room capture mode (roomName/roomDesc styled text).
-    # Always update the terminal title from the roomName text since it
-    # includes the room number in DR (e.g., "[Room] (230008)").
-    # For templates without a RoomWindow, store the title for the
-    # terminal but do NOT consume the text — it must still flow to
-    # the main text window.
-    case @capture_mode
-    when :title
-      room_title = self.class.parse_subtitle(text)
-      @state.room_title = room_title unless room_title.empty?
-      if @wm.room[Streams::ROOM]
-        # Strip the title's brackets so RoomWindow#render can re-add them exactly once.
-        # The closing bracket takes two forms: "[Room] (230008)" (RealID appended, the
-        # bracket precedes the "(") and "[Room - 2071]" or plain "[Room]" (no RealID, the
-        # bracket is trailing). Handle the trailing case too - dropping only the "] (" form
-        # left the trailing "]" behind, which render then doubled into "[Room - 2071]]".
-        @room_pending_title = text.sub(/^\[/, '').sub(/\]\s*\(/, ' (').sub(/\]\s*\z/, '').strip
-        room_data_captured = true
-      end
-      @capture_mode = nil
-    when :desc
-      if @wm.room[Streams::ROOM]
-        # Don't overwrite if already set by component stream (preserves raw XML for links)
-        unless @room_pending_desc
-          # Extract from raw line to preserve <d>/<a> link tags for room window.
-          raw_desc = extract_styled_desc(@current_raw_line) if @current_raw_line
-          @room_pending_desc = (raw_desc || text).strip
-        end
-        room_data_captured = true
-      end
-      @capture_mode = nil
-    end
+    room_data_captured = take_captured_text(text)
 
     # The inline lines are room data only on main. Component stream data
     # (room objs, room players, room exits) is handled by
@@ -139,7 +143,7 @@ class RoomAssembler
 
     # Without a RoomWindow, only update the room players indicator from
     # inline text patterns (objects, exits, etc. are not applicable).
-    unless @wm.room[Streams::ROOM]
+    unless room_window?
       if text =~ /^Also here:\s*(.+)$/
         update_room_players_indicator(text.strip)
       end
@@ -218,7 +222,7 @@ class RoomAssembler
     return nil unless stream&.start_with?(Streams::ROOM)
 
     # Without a RoomWindow, only handle room players for the indicator
-    unless @wm.room[Streams::ROOM]
+    unless room_window?
       return stream == Streams::ROOM_PLAYERS ? :continue : nil
     end
 
@@ -288,6 +292,53 @@ class RoomAssembler
   end
 
   private
+
+  # Whether the layout has a RoomWindow.
+  #
+  # @return [Boolean]
+  def room_window?
+    !@wm.room[Streams::ROOM].nil?
+  end
+
+  # Take text as the room title or description if a capture is open (see
+  # {#start_capture}), and end the capture.
+  #
+  # The roomName text always updates the terminal title, since it includes
+  # the room number in DR (e.g., "[Room] (230008)"). Without a RoomWindow
+  # the text is not consumed: it must still flow to the main text window.
+  #
+  # @param text [String] non-empty game text
+  # @return [Boolean] whether the text was captured for the RoomWindow
+  def take_captured_text(text)
+    captured = false
+    case @capture_mode
+    when :title
+      room_title = self.class.parse_subtitle(text)
+      @state.room_title = room_title unless room_title.empty?
+      if room_window?
+        # Strip the title's brackets so RoomWindow#render can re-add them exactly once.
+        # The closing bracket takes two forms: "[Room] (230008)" (RealID appended, the
+        # bracket precedes the "(") and "[Room - 2071]" or plain "[Room]" (no RealID, the
+        # bracket is trailing). Handle the trailing case too - dropping only the "] (" form
+        # left the trailing "]" behind, which render then doubled into "[Room - 2071]]".
+        @room_pending_title = text.sub(/^\[/, '').sub(/\]\s*\(/, ' (').sub(/\]\s*\z/, '').strip
+        captured = true
+      end
+      @capture_mode = nil
+    when :desc
+      if room_window?
+        # Don't overwrite if already set by component stream (preserves raw XML for links)
+        unless @room_pending_desc
+          # Extract from raw line to preserve <d>/<a> link tags for room window.
+          raw_desc = extract_styled_desc(@current_raw_line) if @current_raw_line
+          @room_pending_desc = (raw_desc || text).strip
+        end
+        captured = true
+      end
+      @capture_mode = nil
+    end
+    captured
+  end
 
   # Extract link regions from SAX-computed line colors.
   # Returns only color regions that have a :cmd key (clickable links),
@@ -454,7 +505,7 @@ class RoomAssembler
   #
   # @return [void]
   def commit_room_data_batch
-    return unless @wm.room[Streams::ROOM]
+    return unless room_window?
 
     # Save exits before clearing — clear_pending_room_data wipes all
     # pending fields, but exits are emitted separately after the batch.

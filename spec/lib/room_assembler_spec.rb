@@ -33,7 +33,7 @@ RSpec.describe RoomAssembler do
     # @param text [String] the roomName styled text as sent by the game/Lich
     # @return [String, nil] the captured pending title
     def capture(text)
-      host.capture_mode = :title
+      host.start_capture(:title)
       host.process_room_data(text, nil)
       host.instance_variable_get(:@room_pending_title)
     end
@@ -71,7 +71,7 @@ RSpec.describe RoomAssembler do
 
     it 'does not capture a pending title when the layout has no RoomWindow' do
       windowless = assembler(has_room_window: false)
-      windowless.capture_mode = :title
+      windowless.start_capture(:title)
       windowless.process_room_data('[Town Square]', nil)
       expect(windowless.instance_variable_get(:@room_pending_title)).to be_nil
     end
@@ -110,7 +110,6 @@ RSpec.describe RoomAssembler do
     # @param raw_line [String] the raw server line the objects text came from
     # @return [String] the objects markup kept for the room window
     def objects(raw_line)
-      host.capture_mode = nil
       host.line_started(raw_line)
       host.process_room_data('You also see a box.', nil)
       host.instance_variable_get(:@room_pending_objects)
