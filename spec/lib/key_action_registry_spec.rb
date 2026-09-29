@@ -333,7 +333,7 @@ RSpec.describe KeyActionRegistry do
       expect(server.string).to eq "look at troll\n"
       expect(shown).to eq ''
       expect(main.rows.last(2)).to eq ['>look at', '  troll']
-      expect(app.cmd_buffer.history[1]).to eq 'look at troll'
+      expect(app.cmd_buffer.history.first).to eq 'look at troll'
     end
 
     it 'resends the last command with its key, echoing it first' do

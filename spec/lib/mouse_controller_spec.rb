@@ -104,7 +104,7 @@ RSpec.describe MouseController do
 
         expect(sent).to eq ['north']
         expect(main.rows).to eq ['go north', '>north', '', '']
-        expect(cmd_buffer.history[1]).to eq 'north'
+        expect(cmd_buffer.history.first).to eq 'north'
         expect(SelectionManager.selecting).to be_falsey
       end
 
@@ -122,7 +122,7 @@ RSpec.describe MouseController do
 
         expect(sent).to be_empty
         expect(main.rows).to eq ['go north', '', '', '']
-        expect(cmd_buffer.history[1]).to be_nil
+        expect(cmd_buffer.history).to be_empty
       end
 
       it 'sends nothing for a click beside the link' do

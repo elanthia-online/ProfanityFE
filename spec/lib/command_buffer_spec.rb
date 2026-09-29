@@ -711,7 +711,8 @@ RSpec.describe CommandBuffer do
       expect(shown.first).to eq 'cmd_1004'
       expect(shown[999]).to eq 'cmd_5'
       expect(shown.last).to eq 'cmd_5'
-      expect(buf.history.length).to eq 1001 # 1000 commands plus the edit line
+      expect(buf.history.length).to eq 1000
+      expect(buf.history.last).to eq 'cmd_5'
     end
 
     it 'follows the configured size' do
@@ -805,9 +806,10 @@ RSpec.describe CommandBuffer do
       expect(buf.text).to eq 'first'
     end
 
-    it 'does not crash when going past oldest' do
+    it 'stays on the oldest command when going past it' do
       20.times { buf.previous_command }
-      expect(buf.history_pos).to be <= buf.history.length - 1
+      expect(buf.text).to eq 'first'
+      expect(buf.history_pos).to eq 3
     end
 
     it 'navigates back to newer commands' do
@@ -816,13 +818,15 @@ RSpec.describe CommandBuffer do
       expect(buf.text).to eq 'third'
     end
 
-    it 'next_command on empty buffer with text pushes to history' do
+    it 'next_command at the bottom keeps the text for the up arrow, not in the lines sent' do
       type('unsent')
       buf.next_command
       expect(buf.text).to eq ''
-      expect(buf.history[1]).to eq 'unsent'
+      expect(buf.history).to eq %w[third second first]
       buf.previous_command
       expect(buf.text).to eq 'unsent'
+      buf.previous_command
+      expect(buf.text).to eq 'third'
     end
 
     it 'next_command at position 0 with empty buffer is a no-op' do
@@ -912,6 +916,84 @@ RSpec.describe CommandBuffer do
       buf.previous_command
       buf.next_command
       expect(screen.visible).to eq ''
+    end
+  end
+
+  # #history is what the resend keys and autocomplete read: the lines sent,
+  # newest first. Lines the up arrow shows but that were never sent (an
+  # edit left in a recalled entry, a line saved by the down arrow) are not
+  # in it.
+  describe '#history' do
+    let(:screen) { ScreenLineWindow.new(20) }
+
+    before do
+      buf.window = screen
+      %w[north look].each { |c| buf.add_to_history(c) }
+    end
+
+    it 'lists the lines sent, newest first' do
+      expect(buf.history).to eq %w[look north]
+    end
+
+    it 'keeps the sent line when a recalled copy is edited' do
+      buf.previous_command
+      type(' me')
+      buf.previous_command # leaves "look me" in the entry
+      2.times { buf.next_command }
+      expect(buf.history).to eq %w[look north]
+    end
+
+    it 'leaves out a line saved by the down arrow' do
+      type('draft')
+      buf.next_command
+      expect(buf.history).to eq %w[look north]
+    end
+
+    it 'adds a sent line that repeats a line saved by the down arrow' do
+      type('east')
+      buf.next_command
+      buf.add_to_history('east')
+      expect(buf.history).to eq %w[east look north]
+    end
+
+    it 'applies the size to the lines sent' do
+      CONFIG.history_size = 2
+      buf.add_to_history('east')
+      expect(buf.history).to eq %w[east look]
+    end
+
+    it 'keeps no lines when the size is 0' do
+      CONFIG.history_size = 0
+      buf.add_to_history('east')
+      expect(buf.history).to be_empty
+    end
+  end
+
+  # #text and #history are read-only views: changing what they return
+  # cannot change the command line or the lines sent.
+  describe 'read-only accessors' do
+    let(:screen) { ScreenLineWindow.new(20) }
+
+    before do
+      buf.window = screen
+      buf.add_to_history('north')
+      type('look')
+    end
+
+    it 'text cannot be cleared behind the cursor' do
+      expect { buf.text.clear }.to raise_error(FrozenError)
+      type('x')
+      expect(screen.visible).to eq 'lookx'
+      expect(screen.curx).to eq 5
+      expect(buf.pos).to be <= buf.text.length
+    end
+
+    it 'history cannot be changed from outside' do
+      expect { buf.history << 'south' }.to raise_error(FrozenError)
+      expect { buf.history.first << ' me' }.to raise_error(FrozenError)
+      buf.previous_command
+      expect(screen.visible).to eq 'north'
+      expect(buf.history).to eq %w[north]
     end
   end
 

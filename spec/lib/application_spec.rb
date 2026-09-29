@@ -463,6 +463,97 @@ RSpec.describe Application do
       end
     end
 
+    # The resend keys send only lines that were sent: an edit of a recalled
+    # entry and a line saved by the down arrow stay out of them.
+    context 'with lines that were never sent' do
+      let(:server) { StringIO.new }
+      let(:screen) { ScreenLineWindow.new(20) }
+
+      before do
+        app.connection.attach(server)
+        app.cmd_buffer.window = screen
+      end
+
+      def type(str)
+        str.each_char { |ch| app.cmd_buffer.put_ch(ch) }
+      end
+
+      def press(action)
+        app.key_action[action].call
+      end
+
+      # What the command line shows after each of +count+ up-arrow presses.
+      def up_arrow_lines(count)
+        Array.new(count) do
+          press('previous_command')
+          screen.visible
+        end
+      end
+
+      def resent_by(action)
+        server.truncate(0)
+        server.rewind
+        press(action)
+        server.string
+      end
+
+      before do
+        type('look')
+        press('send_command')
+      end
+
+      it 'send_last_command sends the recalled line, not the edit left in it' do
+        press('previous_command') # recall "look"
+        press('cursor_backspace') # edit it to "loo", not sent
+        press('next_command') # back down to the empty line
+
+        expect(resent_by('send_last_command')).to eq "look\n"
+      end
+
+      it 'send_second_last_command skips an edit left in an older entry' do
+        type('north')
+        press('send_command')
+        2.times { press('previous_command') } # recall "look"
+        type(' me')
+        2.times { press('next_command') }
+
+        expect(resent_by('send_second_last_command')).to eq "look\n"
+      end
+
+      it 'send_last_command sends the last sent line, not a line saved by the down arrow' do
+        type('draft')
+        press('next_command') # clears the line and keeps "draft" for the up arrow
+
+        expect(resent_by('send_last_command')).to eq "look\n"
+      end
+
+      it 'send_second_last_command skips a line saved by the down arrow' do
+        type('north')
+        press('send_command')
+        type('draft')
+        press('next_command')
+
+        expect(resent_by('send_second_last_command')).to eq "look\n"
+      end
+
+      it 'the up arrow still shows the edit and the line saved by the down arrow' do
+        press('previous_command')
+        press('cursor_backspace')
+        press('next_command')
+        type('draft')
+        press('next_command')
+
+        expect(up_arrow_lines(3)).to eq %w[draft loo loo]
+      end
+
+      it 'a resend key does nothing when fewer lines were sent' do
+        type('draft')
+        press('next_command')
+
+        expect(resent_by('send_second_last_command')).to eq ''
+      end
+    end
+
     it 'autocomplete does not complete from an unsent draft' do
       screen = ScreenLineWindow.new(20)
       app.cmd_buffer.window = screen

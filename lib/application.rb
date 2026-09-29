@@ -483,10 +483,14 @@ class Application
   # main window. Bound to the +send_last_command+ (1) and
   # +send_second_last_command+ (2) key actions.
   #
-  # @param index [Integer] history index, 1 = the last command sent
+  # Only lines that were sent are resent (see {CommandBuffer#recent_command}):
+  # never an edit left in a recalled entry or a line saved by the down
+  # arrow.
+  #
+  # @param index [Integer] 1 = the last command sent, 2 = the one before it
   # @return [void]
   def send_history_command(index)
-    if (cmd = @cmd_buffer.history[index])
+    if (cmd = @cmd_buffer.recent_command(index))
       if (window = @window_mgr.stream[MAIN_STREAM])
         @window_mgr.add_prompt(window, @shared_state.prompt_text, cmd)
         @cmd_buffer.flush_screen

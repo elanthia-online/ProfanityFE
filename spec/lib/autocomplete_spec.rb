@@ -105,6 +105,30 @@ RSpec.describe Autocomplete do
     end
   end
 
+  # Autocomplete offers only lines that were sent, newest first: not a line
+  # saved by the down arrow, and not an edit left in a recalled entry.
+  context 'with lines that were never sent' do
+    let(:history) { ['attack goblin', 'attack troll'] }
+
+    it 'does not offer a line saved by the down arrow' do
+      type('attack orc')
+      buf.next_command
+      type('att')
+      complete
+      expect(main_window.lines).to eq ['[autocomplete:2]', '[0] attack troll', '[1] attack goblin']
+    end
+
+    it 'offers the sent line, not the edit left in it' do
+      buf.previous_command # recall "attack troll"
+      3.times { buf.backspace }
+      type('ll')           # edited to "attack trll", not sent
+      buf.next_command
+      type('att')
+      complete
+      expect(main_window.lines).to eq ['[autocomplete:2]', '[0] attack troll', '[1] attack goblin']
+    end
+  end
+
   context 'with no matching history entry' do
     let(:history) { ['attack goblin'] }
 
