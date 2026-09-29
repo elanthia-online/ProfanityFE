@@ -30,8 +30,8 @@ class TextWindow < BaseWindow
   end
 
   # Fit every text window to the current terminal size. Resizing clears
-  # each window's scrollbar (and marks the window inactive); only the
-  # first text window moved gets its scrollbar drawn again.
+  # each window's scrollbar; only the first text window moved and the
+  # active one get their scrollbar drawn again.
   #
   # @return [void]
   def self.resize_all
@@ -88,10 +88,11 @@ class TextWindow < BaseWindow
 
   # Show the window again after {#move_to_layout} moved it: move its
   # scrollbar beside it, re-wrap every line to the new width, repaint the
-  # text and clear the scrollbar.
+  # text and clear the scrollbar. The active window's scrollbar is always
+  # drawn again, so it keeps its marker.
   #
   # @param show_scrollbar [Boolean] draw the scrollbar again after
-  #   clearing it
+  #   clearing it, even if the window isn't the active one
   # @return [void]
   # @api private
   def redraw_after_resize(show_scrollbar: true)
@@ -99,7 +100,7 @@ class TextWindow < BaseWindow
     rewrap
     repaint
     clear_scrollbar
-    update_scrollbar if show_scrollbar
+    update_scrollbar if show_scrollbar || active?
     noutrefresh
   end
 

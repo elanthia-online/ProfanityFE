@@ -524,8 +524,8 @@ class Application
   # {WindowManager#load_layout}), moves the command line to the layout's
   # command window, fills each text window the layout added with blank
   # lines, so that its text starts on its bottom row, and fits every
-  # window to the terminal. The resize shows every scrollbar as inactive,
-  # so the current scroll window's is then drawn again as the active one.
+  # window to the terminal. It flushes with {CommandBuffer#flush_screen},
+  # so the cursor ends on the command line.
   #
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
@@ -537,11 +537,7 @@ class Application
       window.maxy.times { window.add_string "\n".dup } unless kept.any? { |old| old.equal?(window) }
     end
     @window_mgr.resize(@cmd_buffer)
-    if (current = SCROLL_WINDOW[0])
-      current.clear_scrollbar
-      current.set_active(true)
-      @cmd_buffer.flush_screen
-    end
+    @cmd_buffer.flush_screen
   end
 
   # Connect to the game server (see {ServerConnection#connect}), forget the
