@@ -3,6 +3,7 @@
 require_relative 'streams'
 require_relative 'feedback'
 require_relative 'window_layout'
+require_relative 'layout_loader'
 require_relative 'url_launcher'
 require_relative 'clock'
 
@@ -15,7 +16,7 @@ require_relative 'clock'
 # room) that map string keys to their corresponding window objects, plus
 # the command input window. Provides mutex-protected layout reloading so
 # the server read thread can safely read handler hashes while a layout
-# reload replaces them.
+# reload replaces them. {LayoutLoader} builds the windows of a layout.
 #
 # @example
 #   wm = WindowManager.new
@@ -23,34 +24,6 @@ require_relative 'clock'
 #   wm.stream['main'].add_string("Hello")
 class WindowManager
   attr_reader :command_window, :command_window_layout
-
-  # Previous-layout hashes exposed for builder procs during {#load_layout}.
-  # These are only meaningful inside a layout reload; outside that context
-  # they are empty hashes.
-  #
-  # @return [Hash] previous indicator windows keyed by value
-  # @api private
-  attr_reader :previous_indicator
-
-  # @return [Hash] previous stream windows keyed by stream name
-  # @api private
-  attr_reader :previous_stream
-
-  # @return [Hash] previous progress windows keyed by value
-  # @api private
-  attr_reader :previous_progress
-
-  # @return [Hash] previous countdown windows keyed by value
-  # @api private
-  attr_reader :previous_countdown
-
-  # Windows from the previous layout that have not been reused.
-  # Builder procs delete reused windows from this set; remaining
-  # windows are closed after the layout loop.
-  #
-  # @return [Array<BaseWindow>]
-  # @api private
-  attr_reader :old_windows
 
   # The clock read by the windows this manager builds and by stun
   # countdowns.
@@ -71,12 +44,8 @@ class WindowManager
     @room = {}
     @command_window = nil
     @command_window_layout = nil
-    @previous_indicator = {}
-    @previous_stream = {}
-    @previous_progress = {}
-    @previous_countdown = {}
-    @old_windows = []
     @prompt_text = nil
+    @layout_loader = LayoutLoader.new(self)
   end
 
   # Returns the live stream handler hash mapping stream names to window objects.
@@ -310,56 +279,58 @@ class WindowManager
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
   def load_layout(layout_id)
-    xml = LAYOUT[layout_id]
-    unless xml
-      warn "Warning: layout '#{layout_id}' not found in LAYOUT (available: #{LAYOUT.keys.join(', ')})"
-      return
-    end
+    @layout_loader.load(layout_id)
+  end
 
-    @old_windows = BaseWindow.all_windows
-
-    @previous_indicator = @indicator
-    @indicator = {}
-
-    @previous_stream = @stream
+  # Point each handler hash (stream, indicator, progress, countdown, room)
+  # at a new, empty hash. The old hashes are left as they were, so the
+  # layout loader can still read the previous layout's windows from them.
+  #
+  # @return [void]
+  # @api private
+  def reset_registries
     @stream = {}
-
-    @previous_progress = @progress
+    @indicator = {}
     @progress = {}
-
-    @previous_countdown = @countdown
     @countdown = {}
     @room = {}
-
-    xml.elements.each do |e|
-      next unless e.name == 'window'
-
-      if e.attributes['class'] == 'sink'
-        sink = SinkWindow.new
-        e.attributes['value']&.split(',')&.each do |str|
-          @stream[str.strip] = sink
-        end
-        next
-      end
-
-      layout = WindowLayout.from_element(e)
-      size = layout.geometry
-
-      next unless (size.height > 0) && (size.width > 0) && (size.top >= 0) && (size.left >= 0) &&
-                  (size.top < Curses.lines) && (size.left < Curses.cols)
-
-      builder = BaseWindow.type_registry[e.attributes['class']]
-      window = builder&.call(size.height, size.width, size.top, size.left, e, self)
-      window.layout = layout if window.is_a?(BaseWindow)
-    end
-
-    @old_windows.each { |window| close_window(window) }
-    forget_previous_layout
-
-    SCROLL_WINDOW[0]&.set_active(true)
-
-    CursesRenderer.doupdate
   end
+
+  # The previous layout's indicator windows keyed by value, for builder
+  # procs during {#load_layout}; empty outside a layout reload.
+  #
+  # @return [Hash]
+  # @api private
+  def previous_indicator = @layout_loader.previous_indicator
+
+  # The previous layout's stream windows keyed by stream name, for builder
+  # procs during {#load_layout}; empty outside a layout reload.
+  #
+  # @return [Hash]
+  # @api private
+  def previous_stream = @layout_loader.previous_stream
+
+  # The previous layout's progress windows keyed by value, for builder
+  # procs during {#load_layout}; empty outside a layout reload.
+  #
+  # @return [Hash]
+  # @api private
+  def previous_progress = @layout_loader.previous_progress
+
+  # The previous layout's countdown windows keyed by value, for builder
+  # procs during {#load_layout}; empty outside a layout reload.
+  #
+  # @return [Hash]
+  # @api private
+  def previous_countdown = @layout_loader.previous_countdown
+
+  # Windows from the previous layout that have not been reused. Builder
+  # procs delete reused windows from this list; the layout loader closes
+  # the rest after the layout loop.
+  #
+  # @return [Array<BaseWindow>]
+  # @api private
+  def old_windows = @layout_loader.old_windows
 
   # Take the command window a layout asks for. The first layout creates
   # it with the block; later layouts keep that window, which the command
@@ -452,30 +423,6 @@ class WindowManager
     end
     prompt_window.label = @prompt_text
     true
-  end
-
-  # Close a window the new layout did not reuse, and remove it from every
-  # list that could still hit-test, repaint, or scroll it.
-  #
-  # @param window [BaseWindow] a window from the previous layout
-  # @return [void]
-  def close_window(window)
-    window.class.unregister_instance(window)
-    SCROLL_WINDOW.delete(window)
-    window.scrollbar&.close if window.respond_to?(:scrollbar)
-    window.close
-  end
-
-  # Drop the previous-layout references the builders used during
-  # {#load_layout}, so closed windows are not kept reachable.
-  #
-  # @return [void]
-  def forget_previous_layout
-    @old_windows = []
-    @previous_indicator = {}
-    @previous_stream = {}
-    @previous_progress = {}
-    @previous_countdown = {}
   end
 end
 
