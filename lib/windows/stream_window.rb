@@ -11,7 +11,10 @@
 #
 # The including window supplies
 # +add_string(text, colors = [], indent: nil)+, and may override
-# {#prompt_buffer} to have repeated bare prompts suppressed.
+# {#prompt_buffer} to have repeated bare prompts suppressed, and
+# {#component_opened}, {#component_closed} and {#stream_cleared} to keep
+# a stream's content as entries rather than show its lines as they come
+# (the exp and spell windows do).
 module StreamWindow
   # Route text to this window. Default: +add_string+ it.
   # TabbedTextWindow overrides this to route to the stream's tab.
@@ -24,6 +27,27 @@ module StreamWindow
   def route_string(text, colors, _stream = nil, indent: nil)
     add_string(text, colors, indent: indent)
   end
+
+  # A keyed component of a stream opened: the game sends each skill on
+  # the exp stream as one (+<component id='exp Parry Ability'>+ has the
+  # key "Parry Ability"), and the text up to {#component_closed} is that
+  # component's. Default: nothing, so the text shows as it arrives.
+  #
+  # @param _key [String] the component's key
+  # @return [void]
+  def component_opened(_key); end
+
+  # The component {#component_opened} announced closed. Default: nothing.
+  #
+  # @return [void]
+  def component_closed; end
+
+  # The game cleared a stream (+<clearStream id="percWindow"/>+) and sends
+  # its whole content again next. Default: nothing, so the lines already
+  # shown stay, as for any other stream.
+  #
+  # @return [void]
+  def stream_cleared; end
 
   # Check if the most recent non-empty line of the window's prompt buffer
   # (see {#prompt_buffer}) matches the given prompt text. Used to suppress

@@ -28,16 +28,16 @@ class SpyStreamWindow
     @calls << { method: :add_string, text: text, colors: colors }
   end
 
-  def set_current(skill)
-    @calls << { method: :set_current, skill: skill }
+  def component_opened(key)
+    @calls << { method: :component_opened, key: key }
   end
 
-  def delete_skill
-    @calls << { method: :delete_skill }
+  def component_closed
+    @calls << { method: :component_closed }
   end
 
-  def clear_spells
-    @calls << { method: :clear_spells }
+  def stream_cleared
+    @calls << { method: :stream_cleared }
   end
 
   def duplicate_prompt?(_text) = false
@@ -372,9 +372,9 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
 
     before { wm.instance_variable_set(:@stream, { 'main' => main_window, 'exp' => exp_window }) }
 
-    it 'calls set_current on exp window' do
+    it 'calls component_opened on exp window' do
       event_bus.emit(:exp_set_current, skill: 'Athletics')
-      expect(exp_window.calls.last).to include(method: :set_current, skill: 'Athletics')
+      expect(exp_window.calls.last).to include(method: :component_opened, key: 'Athletics')
     end
 
     it 'is a no-op when no exp window exists' do
@@ -388,9 +388,9 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
 
     before { wm.instance_variable_set(:@stream, { 'main' => main_window, 'exp' => exp_window }) }
 
-    it 'calls delete_skill on exp window' do
+    it 'calls component_closed on exp window' do
       event_bus.emit(:exp_delete_skill)
-      expect(exp_window.calls.last).to include(method: :delete_skill)
+      expect(exp_window.calls.last).to include(method: :component_closed)
     end
   end
 
@@ -399,9 +399,9 @@ RSpec.describe WindowManager, '#subscribe_to_events' do
 
     before { wm.instance_variable_set(:@stream, { 'main' => main_window, 'percWindow' => perc_window }) }
 
-    it 'calls clear_spells on percWindow' do
+    it 'calls stream_cleared on percWindow' do
       event_bus.emit(:clear_spells)
-      expect(perc_window.calls.last).to include(method: :clear_spells)
+      expect(perc_window.calls.last).to include(method: :stream_cleared)
     end
   end
 

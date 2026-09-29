@@ -45,11 +45,12 @@ class ExpWindow < BaseWindow
     @skills.values.map { |skill| [skill.to_s, []] }
   end
 
-  # Delete the most recently targeted skill from the display.
-  # Triggers a full redraw after removal.
+  # An exp component closed: delete the skill it named from the display,
+  # so an empty component (no skill line since {#component_opened})
+  # removes the skill. Triggers a full redraw after removal.
   #
   # @return [void]
-  def delete_skill
+  def component_closed
     return unless @current_skill
 
     @skills.delete(@current_skill)
@@ -57,11 +58,12 @@ class ExpWindow < BaseWindow
     @current_skill = ''
   end
 
-  # Set the current skill key for the next {#add_string} call.
+  # An exp component opened: set the current skill key for the next
+  # {#add_string} call.
   #
   # @param skill [String] the skill identifier
   # @return [void]
-  def set_current(skill)
+  def component_opened(skill)
     @current_skill = skill
   end
 

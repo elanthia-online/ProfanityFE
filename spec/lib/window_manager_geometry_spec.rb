@@ -129,7 +129,7 @@ RSpec.describe WindowManager, '#resize geometry' do
     %w[c1 c2 c3 c4 c5 c6].each { |text| wm.stream['combat'].route_string(text, [], 'combat') }
     wm.stream['logons'].route_string('Bob joins', [], 'logons')
     wm.stream['atmo'].route_string('wind', [], 'atmo')
-    wm.stream['exp'].set_current('Parry Ability')
+    wm.stream['exp'].component_opened('Parry Ability')
     wm.stream['exp'].add_string('   Parry Ability: 1709 59%  [34/34]', [])
     wm.stream['percWindow'].add_string('Shadows (2 roisaen)')
     wm.room['room'].update_title('[Town Square]')

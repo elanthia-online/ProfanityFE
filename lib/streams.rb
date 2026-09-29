@@ -9,7 +9,7 @@
 # tests for or routes by.
 #
 # @example
-#   @wm.stream[Streams::EXP]&.delete_skill
+#   @wm.stream[Streams::EXP]&.component_closed
 #   Streams::FALLBACK_TO_MAIN.include?(@current_stream)
 module Streams
   # The primary game output window; also where text with no stream goes.

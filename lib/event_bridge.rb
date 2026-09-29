@@ -153,16 +153,19 @@ class EventBridge
 
     # ---- Stream management events ----
 
+    # Whatever window lists the stream: an exp or spell window keeps
+    # entries, a text or tabbed window just shows the lines.
+
     event_bus.on(:exp_set_current) do |data|
-      @wm.stream[Streams::EXP]&.set_current(data[:skill])
+      @wm.stream[Streams::EXP]&.component_opened(data[:skill])
     end
 
     event_bus.on(:exp_delete_skill) do |_data|
-      @wm.stream[Streams::EXP]&.delete_skill
+      @wm.stream[Streams::EXP]&.component_closed
     end
 
     event_bus.on(:clear_spells) do |_data|
-      @wm.stream[Streams::PERC]&.clear_spells
+      @wm.stream[Streams::PERC]&.stream_cleared
     end
 
     # ---- Special events ----

@@ -35,15 +35,15 @@ class SinkWindow
   # @return [void]
   def redraw; end
 
-  # No-op: stands in for {ExpWindow#set_current} when a sink replaces the exp window.
+  # No-op: sinks discard components (see {StreamWindow#component_opened}).
   # @return [void]
-  def set_current(*); end
+  def component_opened(*); end
 
-  # No-op: stands in for {ExpWindow#delete_skill} when a sink replaces the exp window.
+  # No-op: sinks discard components (see {StreamWindow#component_closed}).
   # @return [void]
-  def delete_skill(*); end
+  def component_closed; end
 
-  # No-op: stands in for {PercWindow#clear_spells} when a sink replaces the spell window.
+  # No-op: nothing to clear (see {StreamWindow#stream_cleared}).
   # @return [void]
-  def clear_spells; end
+  def stream_cleared; end
 end
