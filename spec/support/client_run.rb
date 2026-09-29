@@ -1,0 +1,185 @@
+# frozen_string_literal: true
+
+require 'socket'
+
+# Runs the real client, Application#run, on the virtual screen: it loads
+# the settings file, connects to a scripted game server, starts the server
+# thread, and reads keys from a scripted keyboard until the keys run out
+# or the session ends.
+#
+# Include it in an example group that defines +app+, the Application, and
+# write the settings file +app+ was given before calling {#run_client}.
+#
+# @example
+#   File.write(settings_path, settings)
+#   status, stderr = run_client(keyboard("look\n"))
+#   expect(game_server.commands).to eq ['look']
+module ClientRun
+  # How long a keyboard waits for something (see {#wait_until} and the
+  # +idle+ option of {#keyboard}) before giving up.
+  DEADLINE = 5
+
+  # The game server (Lich) connection that +Socket.tcp+ returns. +gets+
+  # hands the client the lines sent with {#say}, waiting for the next one;
+  # +puts+ records what the client sends.
+  class GameServer
+    # @return [Array<String>] every line the client sent, its PID line first
+    attr_reader :received
+
+    # @param write_error [Exception, nil] raised by every write after the
+    #   PID line, as a socket whose other end is gone raises EPIPE
+    def initialize(write_error: nil)
+      @lines = Queue.new
+      @received = []
+      @write_error = write_error
+    end
+
+    # Send lines to the client, as the game does.
+    #
+    # @param lines [Array<String>] server lines, without line endings
+    # @return [void]
+    def say(*lines)
+      lines.each { |line| @lines << "#{line}\r\n" }
+    end
+
+    # End the connection from the game's side: after the lines already
+    # sent, the client's next read returns end of file, or raises +error+.
+    #
+    # @param error [Exception, nil]
+    # @return [void]
+    def hang_up(error = nil)
+      @lines << (error || :eof)
+    end
+
+    # @return [String, nil] the next line, or nil at end of file
+    def gets
+      line = @lines.pop
+      raise line if line.is_a?(Exception)
+
+      line unless line == :eof
+    end
+
+    def puts(line)
+      raise @write_error if @write_error && !@received.empty?
+
+      @received << line
+      nil
+    end
+
+    def flush = nil
+
+    # Closing the client's end makes a read waiting on it raise IOError,
+    # as a socket closed in another thread does.
+    def close
+      return if @lines.closed?
+
+      @lines << IOError.new('stream closed in another thread')
+      @lines.close
+      nil
+    end
+
+    # @return [Array<String>] the lines the client sent after its PID line
+    def commands = @received.drop(1)
+  end
+
+  # The game server +Socket.tcp+ returns in {#run_client}.
+  #
+  # @return [GameServer]
+  def game_server
+    @game_server ||= GameServer.new
+  end
+
+  # A command window (a virtual screen, one row of 80 columns) that is
+  # also the keyboard: each read the input loop makes (+get_char+) takes
+  # the next key.
+  #
+  # - A String is typed, one character per read. A control character
+  #   ("\n", "\e", "\x01") is read as itself, as curses returns it.
+  # - An Integer is a function key's code (Curses::KEY_RESIZE, ...).
+  # - A Proc runs at that read, and the read returns what it returns: a
+  #   key, or nil for no key.
+  #
+  # When the keys run out, the next read raises Interrupt (Ctrl+C), which
+  # ends the input loop. With +idle: true+ the reads return no key
+  # instead, until the session ends, or for at most {DEADLINE} seconds.
+  #
+  # The "Press any key to exit..." wait reads with +getch+, which returns
+  # each of +exit_keys+ in turn (a Proc is called for the key), then nil,
+  # as a read that timed out does.
+  #
+  # @param keys [Array<String, Integer, Proc>]
+  # @param idle [Boolean] wait for the session to end once the keys run out
+  # @param exit_keys [Array<String, Integer, Proc>] keys for the exit wait;
+  #   keys not read are left in the Array
+  # @return [Curses::Window]
+  def keyboard(*keys, idle: false, exit_keys: [])
+    reads = keys.flat_map { |key| key.is_a?(String) ? key.chars : [key] }
+    deadline = nil
+    Curses::Window.new(1, 80, 0, 0).tap do |window|
+      window.define_singleton_method(:get_char) do
+        if reads.empty?
+          raise Interrupt unless idle
+
+          deadline ||= Time.now + DEADLINE
+          raise Interrupt if Time.now > deadline
+
+          sleep 0.001
+          next nil
+        end
+
+        key = reads.shift
+        key.is_a?(Proc) ? key.call : key
+      end
+      window.define_singleton_method(:getch) do
+        key = exit_keys.shift
+        key.is_a?(Proc) ? key.call : key
+      end
+    end
+  end
+
+  # A keyboard step (see {#keyboard}) that waits, for at most {DEADLINE}
+  # seconds, until the block returns true, and returns no key.
+  #
+  # @return [Proc]
+  def wait_until(&condition)
+    lambda do
+      deadline = Time.now + DEADLINE
+      sleep 0.001 until condition.call || Time.now > deadline
+      nil
+    end
+  end
+
+  # Run the client (Application#run) with +command_window+ as its command
+  # line and keyboard, connected to +server+, until it exits or the input
+  # loop ends.
+  #
+  # @param command_window [Curses::Window] see {#keyboard}
+  # @param server [GameServer, #gets] what +Socket.tcp+ returns
+  # @return [Array(Integer, String)] the exit status (nil when the client
+  #   returned without exiting) and what it printed to stderr
+  def run_client(command_window, server: game_server)
+    allow(Socket).to receive(:tcp).and_return(server)
+    allow(IO).to receive(:select).and_return(nil)
+    # The layout keeps the command window it finds (it is created once)
+    app.window_mgr.install_command_window(nil) { command_window }
+    status = nil
+    stderr = capture_stderr do
+      app.run
+    rescue SystemExit => e
+      status = e.status
+    end
+    [status, stderr]
+  end
+
+  # Run a block with $stderr captured.
+  #
+  # @return [String] what the block wrote to $stderr
+  def capture_stderr
+    original = $stderr
+    $stderr = StringIO.new
+    yield
+    $stderr.string
+  ensure
+    $stderr = original
+  end
+end
