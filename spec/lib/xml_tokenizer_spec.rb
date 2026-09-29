@@ -290,6 +290,67 @@ RSpec.describe XmlTokenizer do
     end
   end
 
+  describe '.content' do
+    def content(xml) = described_class.content(xml)
+
+    it 'returns the text between the start tag and the end tag' do
+      expect(content('<right exist="1" noun="sword">steel sword</right>')).to eq 'steel sword'
+      expect(content("<prompt time='1727'>H&gt;</prompt>")).to eq 'H&gt;'
+    end
+
+    it 'starts after the whole start tag when a quoted value holds a >' do
+      expect(content('<right exist="1" noun="a>b">sword</right>')).to eq 'sword'
+      expect(content("<spell id='x>y' z=\"1>2\">Fire</spell>")).to eq 'Fire'
+      expect(content('<prompt time="1" s="a>b">H&gt;</prompt>')).to eq 'H&gt;'
+    end
+
+    it 'returns an empty string for an element with no content' do
+      expect(content('<spell></spell>')).to eq ''
+      expect(content('<right exist="1"></right>')).to eq ''
+    end
+
+    it 'keeps tags and entities in the content as sent' do
+      expect(content('<compass><dir value="n"/></compass>')).to eq '<dir value="n"/>'
+      expect(content('<left>a &lt;red&gt; &amp; blue gem</left>')).to eq 'a &lt;red&gt; &amp; blue gem'
+    end
+
+    it 'ends at the first end tag of the same name, as the tokenizer pairs them' do
+      expect(content('<right><right>x</right></right>')).to eq '<right>x'
+      expect(described_class.tags('<right><right>x</right></right>').first).to eq '<right><right>x</right>'
+      expect(content('<right><left>x</left>y</right>')).to eq '<left>x</left>y'
+    end
+
+    it 'returns nil for an element with no end tag' do
+      expect(content('<left>sword')).to be_nil
+      expect(content('<left>sword</right>')).to be_nil
+      expect(content('<left>sword</left')).to be_nil
+    end
+
+    it 'returns nil for a self-closing tag, even with an end tag after it' do
+      expect(content('<spell/>')).to be_nil
+      expect(content('<right noun="x" />')).to be_nil
+      expect(content('<spell/>Fire</spell>')).to be_nil
+      expect(content('<spell />Fire</spell>')).to be_nil
+    end
+
+    it 'returns nil for an end tag, plain text, an unclosed start tag or an empty string' do
+      ['</spell>', 'Fire</spell>', '<spell', '<spell id="x"', '', '<>Fire</>'].each do |xml|
+        expect(content(xml)).to be_nil, xml
+      end
+    end
+
+    it 'reads the element name exactly: no end tag closes a longer name' do
+      expect(content('<right-x>sword</right>')).to be_nil
+      expect(content('<rightx>sword</right>')).to be_nil
+    end
+
+    it 'ends a start tag with an unbalanced quote at its first >, as the tokenizer does' do
+      xml = '<right noun="a>sword</right>'
+      expect(described_class.tokenize(xml, paired: false).first).to eq [:tag, '<right noun="a>']
+      expect(content(xml)).to eq 'sword'
+    end
+  end
+
   describe '.start_tag_name' do
     it 'names start tags and empty-element tags, not end tags' do
       {
