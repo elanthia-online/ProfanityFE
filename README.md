@@ -33,11 +33,16 @@ See the **[User Guide](USER_GUIDE.md)** for full documentation including setting
 
 ## Dependencies
 
-- Ruby 3.0+
-- curses gem
-- rexml gem
+- Ruby 4.0+
+- Gems to run the client:
+  - [curses](https://rubygems.org/gems/curses) (~> 1.4)
+  - [rexml](https://rubygems.org/gems/rexml) (~> 3.4)
+- Gems for development (the `test` group):
+  - [rspec](https://rubygems.org/gems/rspec) (~> 3.13): the test suite
+  - [rubocop](https://rubygems.org/gems/rubocop) (~> 1.75): style checks; CI runs the version locked in `Gemfile.lock`
+  - [yard](https://rubygems.org/gems/yard) (~> 0.9): API documentation; CI fails on YARD warnings or undocumented public objects
 
-Install all dependencies with `bundle install`.
+Install all dependencies with `bundle install`, or only the ones needed to run the client with `bundle config set --local without test && bundle install`.
 
 ## License
 
