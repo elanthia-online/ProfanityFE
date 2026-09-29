@@ -196,9 +196,11 @@ RSpec.describe 'profanity.rb command line' do
   end
 
   # Run profanity.rb with +args+ on a wide terminal against a fake game
-  # server that sends +lines+, until the terminal shows +pattern+ (or 20s).
+  # server that sends +lines+, until the terminal shows +pattern+.
   #
   # @return [String] everything written to the terminal
+  # @raise [RuntimeError] naming what the terminal showed and the client's
+  #   log, when the client exits or 20s pass before +pattern+ shows
   def terminal_after_server_lines(args, lines, pattern)
     server = TCPServer.new('127.0.0.1', 0)
     sender = Thread.new do
@@ -209,14 +211,26 @@ RSpec.describe 'profanity.rb command line' do
       client&.close
     end
     output = +''
+    dir = Dir.mktmpdir('profanity-cli-spec')
+    log = File.join(dir, 'profanity.log')
     wide = env.merge('COLUMNS' => '240', 'LINES' => '50')
-    command = [RbConfig.ruby, File.join(repo, 'profanity.rb'), "--port=#{server.addr[1]}",
+    command = [RbConfig.ruby, File.join(repo, 'profanity.rb'), "--port=#{server.addr[1]}", "--log-file=#{log}",
                "--settings-file=#{File.join(repo, 'templates', 'default.xml')}", *args]
     PTY.spawn(wide, *command, chdir: Dir.home) do |reader, _writer, pid|
-      Timeout.timeout(20) do
-        output << reader.readpartial(4096) until output.match?(pattern)
-      rescue EOFError, Errno::EIO, Timeout::Error
-        nil
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 20
+      ended = begin
+        until output.match?(pattern)
+          left = deadline - Process.clock_gettime(Process::CLOCK_MONOTONIC)
+          break 'timed out after 20s' unless left.positive? && reader.wait_readable(left)
+
+          output << reader.readpartial(4096)
+        end
+      rescue EOFError, Errno::EIO
+        'the client exited'
+      end
+      if ended
+        raise "#{ended} before the terminal showed #{pattern.inspect}.\nTerminal:\n#{output.inspect}\n" \
+              "Log:\n#{File.exist?(log) ? File.read(log) : '(none)'}"
       end
     ensure
       begin
@@ -230,6 +244,7 @@ RSpec.describe 'profanity.rb command line' do
   ensure
     sender&.kill
     server&.close
+    FileUtils.remove_entry(dir) if dir
   end
 
   describe '--game' do
