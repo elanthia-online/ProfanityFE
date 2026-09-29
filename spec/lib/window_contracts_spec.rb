@@ -354,7 +354,7 @@ RSpec.describe 'Window contracts' do
     end
 
     it 'sends the command of a link in the room window' do
-      room.links_enabled = true
+      app.shared_state.blue_links = true
       event_bus.emit(:room_title, text: '[Town Square]')
       event_bus.emit(:room_exits, text: 'Obvious paths: north.', links: [{ start: 15, end: 20, cmd: 'north' }])
       row = room.rows.index('Obvious paths: north.')
