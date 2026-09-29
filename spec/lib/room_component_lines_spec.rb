@@ -21,8 +21,10 @@ require_relative '../../lib/window_manager'
 RSpec.describe 'Room component lines' do
   let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
   # Color pair number per foreground color, so a cell's color can be read
-  # back from its attributes.
-  let(:pairs) { { 'ff0000' => 1, '00ff00' => 2, 'ffff00' => 3 } }
+  # back from its attributes. 444444 and ffff00 are the room players
+  # indicator's off and on colors (fg='444444,ffff00' in the layouts
+  # below).
+  let(:pairs) { { 'ff0000' => 1, '00ff00' => 2, 'ffff00' => 3, '444444' => 4 } }
 
   before do
     allow(HighlightProcessor).to receive(:get_color_pair_id) { |fg, _bg| pairs.fetch(fg, 0) }
@@ -72,12 +74,19 @@ RSpec.describe 'Room component lines' do
     colors.size == 1 ? colors.first : colors
   end
 
+  # The color the room players indicator draws its label in: that of its
+  # first cell, where the label starts (a blank label is one space).
+  def indicator_color
+    pairs.key(@window_manager.indicator['room players'].attrs_at(0, 0) >> 8)
+  end
+
   describe 'with a room window' do
     before do
       load_layout(<<~XML)
         <window class='text' top='0' left='0' height='8' width='120' value='main'/>
         <window class='room' top='10' left='0' height='10' width='120' value='room'/>
-        <window class='indicator' top='23' left='0' height='1' width='40' label=' ' value='room players'/>
+        <window class='indicator' top='23' left='0' height='1' width='40' label=' ' value='room players'
+                fg='444444,ffff00'/>
       XML
     end
 
@@ -117,10 +126,13 @@ RSpec.describe 'Room component lines' do
     end
 
     it 'turns the room players indicator off when an empty players component arrives' do
-      receive_from_server("<component id='room players'>Also here: Mahtra.</component>",
-                          "<component id='room players'></component>")
+      receive_from_server("<component id='room players'>Also here: Mahtra.</component>")
+      expect(indicator_color).to eq 'ffff00'
+
+      receive_from_server("<component id='room players'></component>")
 
       expect(@window_manager.indicator['room players'].rows.first.rstrip).to eq ''
+      expect(indicator_color).to eq '444444'
     end
 
     describe 'an objects component with links and a creature (GemStone XML)' do
@@ -227,10 +239,13 @@ RSpec.describe 'Room component lines' do
     end
 
     it 'turns off when an empty players component arrives' do
-      receive_from_server("<component id='room players'>Also here: Cithrin</component>",
-                          "<component id='room players'></component>")
+      receive_from_server("<component id='room players'>Also here: Cithrin</component>")
+      expect(indicator_color).to eq 'ffff00'
+
+      receive_from_server("<component id='room players'></component>")
 
       expect(indicator_label).to eq ''
+      expect(indicator_color).to eq '444444'
     end
 
     it 'colors a name a highlight matches' do
