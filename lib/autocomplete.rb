@@ -10,7 +10,8 @@ Tab-completion from command history for the command buffer.
 #
 # When the user presses tab, searches command history for entries
 # that start with the whole command line. If multiple matches exist,
-# auto-progresses to the longest common prefix and displays options.
+# auto-progresses to the longest common prefix and displays options
+# (at most MAX_LISTED of them).
 #
 # The cursor position does not change what is matched: a completion
 # replaces the whole command line and leaves the cursor at the end, as
@@ -23,6 +24,11 @@ Tab-completion from command history for the command buffer.
 module Autocomplete
   # Hex foreground color for autocomplete messages in the main window.
   HIGHLIGHT_COLOR = 'a6e22e'
+
+  # Most candidates listed for one Tab press. Any further matches are
+  # summed up in a single "[... N more]" line; the header still shows the
+  # full count and the common prefix still comes from every match.
+  MAX_LISTED = 20
 
   # Find all history entries that start with the current input.
   #
@@ -74,7 +80,9 @@ module Autocomplete
       prefix = common_prefix(matches)
       apply_completion(cmd_buffer, prefix, current) if prefix.length > current.length
 
-      candidates = matches.each_with_index.map { |match, i| "[#{i}] #{match}" }
+      candidates = matches.first(MAX_LISTED).each_with_index.map { |match, i| "[#{i}] #{match}" }
+      hidden = matches.length - candidates.length
+      candidates << "[... #{hidden} more]" if hidden.positive?
       show_message(display_window, "[autocomplete:#{matches.length}]", *candidates)
     end
   rescue StandardError => e

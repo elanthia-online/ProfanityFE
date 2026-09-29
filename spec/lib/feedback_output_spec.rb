@@ -280,6 +280,51 @@ RSpec.describe 'Feedback lines in the main window' do
       expect(app.cmd_buffer.text).to eq 'look at '
     end
 
+    context 'when autocomplete has more matches than it lists' do
+      # Type +typed+ after adding +cmds+ to history (the last one added is
+      # listed first), then press the autocomplete key.
+      def autocomplete(cmds, typed = 'lo')
+        cmds.each { |cmd| app.cmd_buffer.add_to_history(cmd) }
+        typed.each_char { |ch| app.cmd_buffer.put_ch(ch) }
+        events.clear
+        app.key_action['autocomplete'].call
+      end
+
+      # History entries 'look at thing01'.. in the order they were added.
+      def things(count) = (1..count).map { |n| format('look at thing%02d', n) }
+
+      it 'lists the first 20 of 25 under the full count, then how many more, in its color with one flush' do
+        autocomplete(things(25))
+
+        listed = ['[autocomplete:25]'] + things(25).reverse.first(20).each_with_index.map { |cmd, i| "[#{i}] #{cmd}" }
+        listed << '[... 5 more]'
+        expect(listed[1]).to eq '[0] look at thing25'
+        expect(listed[20]).to eq '[19] look at thing06'
+        expect(events).to eq [:refresh_command_line, [:doupdate, []], [:doupdate, listed]]
+        expect(screen).to eq(listed.map { |row| [row, suggestion] })
+        expect(app.cmd_buffer.text).to eq 'look at thing'
+      end
+
+      it 'lists exactly 20 with no more-line' do
+        autocomplete(things(20))
+
+        listed = ['[autocomplete:20]'] + things(20).reverse.each_with_index.map { |cmd, i| "[#{i}] #{cmd}" }
+        expect(listed.last).to eq '[19] look at thing01'
+        expect(events).to eq [:refresh_command_line, [:doupdate, []], [:doupdate, listed]]
+        expect(screen).to eq(listed.map { |row| [row, suggestion] })
+      end
+
+      it 'says 1 more for 21, and completes the prefix of every match, including the unlisted one' do
+        autocomplete(['look around'] + things(20))
+
+        expect(shown.first).to eq '[autocomplete:21]'
+        expect(shown.last(2)).to eq ['[19] look at thing01', '[... 1 more]']
+        expect(shown).not_to include(a_string_including('look around'))
+        expect(screen.last).to eq ['[... 1 more]', suggestion]
+        expect(app.cmd_buffer.text).to eq 'look a'
+      end
+    end
+
     it 'autocomplete with no match says so in its color and flushes once' do
       'zz'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
       events.clear
