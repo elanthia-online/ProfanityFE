@@ -22,6 +22,8 @@ require_relative 'room_assembler'
 # - @room (a RoomAssembler)
 # - @prompts (a PromptTracker)
 # - handle_game_text(text, runs)
+# - line_gagged? (whether a gag dropped the text of the line being parsed,
+#   leaving only its kept tags; see LineFilter#gagged?)
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
@@ -93,7 +95,11 @@ module TagHandlers
     # This runs for every tag, before dispatch (matching original behavior).
     @router.end_combat_routing if name == 'popStream' && !closing
     # A prompt is the stream resync point: it closes any stream left open.
-    resync_streams_at_prompt(text_buffer) if name == 'prompt' && !closing
+    # It also ends a style left open, at the end of its line.
+    if name == 'prompt' && !closing
+      resync_streams_at_prompt(text_buffer)
+      @spans.prompt
+    end
 
     table = closing ? CLOSING_TAG_DISPATCH : TAG_DISPATCH
     handler = table[name]
@@ -306,6 +312,10 @@ module TagHandlers
     else
       # Non-empty id = opening style
       @spans.open(:style, text_buffer.length, **Presets.colors(style_id).to_h)
+      # A gagged line's text is gone, so its style tag must not make the
+      # next line's text the room title or description.
+      return if line_gagged?
+
       @room.start_capture(:title) if style_id == Presets::ROOM_NAME
       @room.start_capture(:desc) if style_id == Presets::ROOM_DESC
     end

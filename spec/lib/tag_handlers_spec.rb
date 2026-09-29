@@ -46,6 +46,9 @@ class TagHandlerHost
     @spans.end_line
   end
 
+  # No line is gagged here (see LineFilter#gagged?)
+  def line_gagged? = false
+
   # The color runs recorded since the last flush
   def line_colors = @spans.runs
 
