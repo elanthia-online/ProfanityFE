@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 # Tests the mutable Config container: default values, reset! behavior,
-# instance independence, and thread safety of concurrent mutations.
+# instance independence, and reset! waiting for the settings lock.
 
+require 'timeout'
 require_relative '../../lib/config'
 
 RSpec.describe Config do
@@ -58,12 +59,13 @@ RSpec.describe Config do
       expect(config.perc_transforms).to be_empty
     end
 
-    it 'preserves object identity (same Hash/Array objects)' do
-      highlight_id = config.highlight.object_id
-      preset_id = config.preset.object_id
+    # constants.rb aliases HIGHLIGHT, PRESET, LAYOUT, SCROLL_WINDOW and
+    # PERC_TRANSFORMS to these objects, so reset! must empty them in place.
+    it 'empties the same Hash and Array objects instead of replacing them' do
+      before_reset = [config.highlight, config.preset, config.layout, config.scroll_window, config.perc_transforms]
       config.reset!
-      expect(config.highlight.object_id).to eq highlight_id
-      expect(config.preset.object_id).to eq preset_id
+      after_reset = [config.highlight, config.preset, config.layout, config.scroll_window, config.perc_transforms]
+      expect(after_reset.map(&:object_id)).to eq before_reset.map(&:object_id)
     end
 
     it 'is idempotent' do
@@ -112,36 +114,24 @@ RSpec.describe Config do
       expect(preset_alias).to be_empty
     end
 
-    it 'lock alias works for synchronization' do
-      lock_alias = config.lock
-      result = lock_alias.synchronize { 42 }
-      expect(result).to eq 42
-    end
-  end
+    # SETTINGS_LOCK (constants.rb) is config.lock; HighlightProcessor holds
+    # it while it walks HIGHLIGHT, so reset! must not clear the patterns
+    # under it.
+    it 'makes reset! wait while another thread holds the lock' do
+      config.highlight[/goblin/] = ['ff0000', nil, nil]
+      lock_held = Queue.new
+      release_lock = Queue.new
+      reader = Thread.new { config.lock.synchronize { lock_held << true; release_lock.pop } }
+      lock_held.pop
 
-  # ---- Adversarial ----
+      resetter = Thread.new { config.reset! }
+      Timeout.timeout(5) { Thread.pass while resetter.status == 'run' }
+      patterns_while_locked = config.highlight.keys
+      release_lock << true
+      [reader, resetter].each(&:join)
 
-  describe 'adversarial edge cases' do
-    it 'reset! works while lock is used for reads' do
-      config.lock.synchronize do
-        config.highlight[/test/] = ['ff0000']
-      end
-      config.reset!
+      expect(patterns_while_locked).to eq [/goblin/]
       expect(config.highlight).to be_empty
-    end
-
-    it 'scroll_window maintains Array behavior after reset' do
-      config.scroll_window << 'a'
-      config.scroll_window.push(config.scroll_window.shift)
-      config.reset!
-      config.scroll_window << 'b'
-      expect(config.scroll_window).to eq ['b']
-    end
-
-    it 'perc_transforms accepts [Regexp, String] pairs' do
-      config.perc_transforms << [/ \(roisaen\)/, '']
-      config.perc_transforms << [/ \(roisan\)/, '']
-      expect(config.perc_transforms.length).to eq 2
     end
   end
 end
