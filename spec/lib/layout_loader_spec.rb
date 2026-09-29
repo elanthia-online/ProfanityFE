@@ -106,13 +106,11 @@ RSpec.describe LayoutLoader do
     end
 
     it 'skips elements that are not windows and window classes nothing builds' do
-      expect do
-        load(<<~XML)
-          <note class='text' top='0' left='0' height='5' width='20' value='main'/>
-          <window class='hologram' top='0' left='0' height='5' width='20' value='main'/>
-          <window top='0' left='0' height='5' width='20' value='main'/>
-        XML
-      end.not_to raise_error
+      load(<<~XML)
+        <note class='text' top='0' left='0' height='5' width='20' value='main'/>
+        <window class='hologram' top='0' left='0' height='5' width='20' value='main'/>
+        <window top='0' left='0' height='5' width='20' value='main'/>
+      XML
 
       expect(wm.stream).to be_empty
       expect(BaseWindow.all_windows).to be_empty
@@ -120,12 +118,17 @@ RSpec.describe LayoutLoader do
 
     it 'sends every stream a sink lists, spaces trimmed, to one window that shows nothing' do
       load("#{second_layout}<window class='sink' value='atmospherics, combat ,logons'/>")
+      event_bus = EventBus.new
+      wm.subscribe_to_events(event_bus)
+      main_rows = wm.stream['main'].rows
+
+      event_bus.emit(:stream_text, stream: 'combat', text: 'You swing.', colors: [])
 
       sink = wm.stream['atmospherics']
       expect(sink).to be_a SinkWindow
       expect([wm.stream['combat'], wm.stream['logons']]).to all(be sink)
       expect(wm.stream.keys).not_to include(' combat ')
-      expect { sink.route_string('You swing.', [], 'combat') }.not_to raise_error
+      expect(wm.stream['main'].rows).to eq main_rows
     end
   end
 
