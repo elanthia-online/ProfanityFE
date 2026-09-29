@@ -48,6 +48,15 @@ RSpec.describe EventBridge do
     event_bus.emit(:stream_text, stream: stream, text: text, colors: [])
   end
 
+  # What every window of the layout shows: the text and the attributes of
+  # each cell, row by row, for each window.
+  def screen
+    windows = [wm.stream, wm.indicator, wm.progress, wm.countdown, wm.room].flat_map(&:values).uniq
+    windows.grep(BaseWindow).to_h do |window|
+      [window, (0...window.maxy).map { |y| [window.row(y), (0...window.maxx).map { |x| window.attrs_at(y, x) }] }]
+    end
+  end
+
   before do
     load(layout)
     described_class.new(wm).subscribe(event_bus)
@@ -79,10 +88,11 @@ RSpec.describe EventBridge do
       expect(main.rows).to eq ["#{'word ' * 7}word", '  word end', "#{'word ' * 7}word", 'word end']
     end
 
-    it 'drops text for a sunk stream or a stream with no window' do
-      expect { stream_text('atmospherics', 'A breeze.') }.not_to raise_error
-      expect { stream_text('nowhere', 'Lost.') }.not_to raise_error
-      expect(main.rows).to all(eq '')
+    it 'shows text for a sunk stream or a stream with no window nowhere' do
+      expect do
+        stream_text('atmospherics', 'A breeze.')
+        stream_text('nowhere', 'Lost.')
+      end.not_to(change { screen })
     end
   end
 
@@ -102,9 +112,8 @@ RSpec.describe EventBridge do
       expect(main.rows[0, 2]).to eq ['H>', '']
     end
 
-    it 'ignores a prompt for a stream with no window' do
-      expect { event_bus.emit(:add_prompt, stream: 'nowhere', text: 'H>') }.not_to raise_error
-      expect(main.rows).to all(eq '')
+    it 'shows a prompt for a stream with no window nowhere' do
+      expect { event_bus.emit(:add_prompt, stream: 'nowhere', text: 'H>') }.not_to(change { screen })
     end
   end
 
@@ -126,8 +135,8 @@ RSpec.describe EventBridge do
       expect([wm.indicator['compass:n'].value, wm.indicator['compass:s'].value]).to eq [false, true]
     end
 
-    it 'ignores an indicator the layout does not have' do
-      expect { event_bus.emit(:indicator_update, id: 'sitting', value: true) }.not_to raise_error
+    it 'shows an update for an indicator the layout does not have on no other indicator' do
+      expect { event_bus.emit(:indicator_update, id: 'sitting', label: 'SIT', value: true) }.not_to(change { screen })
     end
   end
 
@@ -138,8 +147,8 @@ RSpec.describe EventBridge do
       expect(wm.progress['health'].rows).to eq ["HP#{'40'.rjust(18)}"]
     end
 
-    it 'ignores a bar the layout does not have' do
-      expect { event_bus.emit(:progress_update, id: 'mana', value: 1, max: 2) }.not_to raise_error
+    it 'shows an update for a bar the layout does not have on no other bar' do
+      expect { event_bus.emit(:progress_update, id: 'mana', label: 'MP', value: 1, max: 2) }.not_to(change { screen })
     end
   end
 
@@ -171,14 +180,14 @@ RSpec.describe EventBridge do
       expect(wm.countdown['stunned'].rows).to eq ["ST#{'6'.rjust(18)}"]
     end
 
-    it 'ignores countdowns the layout does not have' do
-      load(layout.lines.grep_v(/countdown/).join, id: 'no-countdowns')
+    it 'shows events for countdowns the layout does not have on no other countdown' do
+      load(layout.lines.grep_v(/value='stunned'/).join, id: 'no-stunned')
 
       expect do
-        event_bus.emit(:countdown_update, id: 'roundtime', end_time: now[0] + 5)
-        event_bus.emit(:countdown_active, id: 'roundtime', active: true)
+        event_bus.emit(:countdown_update, id: 'webbed', end_time: now[0] + 5)
+        event_bus.emit(:countdown_active, id: 'webbed', active: true)
         event_bus.emit(:stun, seconds: 6)
-      end.not_to raise_error
+      end.not_to(change { screen })
     end
   end
 
@@ -219,7 +228,7 @@ RSpec.describe EventBridge do
       expect(room.rows).to eq ['[[Town Square]]', '', '', '', '', '']
     end
 
-    it 'ignores room events when the layout has no room window' do
+    it 'shows room events nowhere when the layout has no room window' do
       load(layout.lines.grep_v(/class='room'/).join, id: 'no-room')
 
       expect do
@@ -227,7 +236,7 @@ RSpec.describe EventBridge do
           .each { |event| event_bus.emit(event, text: 'x') }
         event_bus.emit(:room_supplemental_clear)
         event_bus.emit(:room_render)
-      end.not_to raise_error
+      end.not_to(change { screen })
     end
   end
 
@@ -252,14 +261,14 @@ RSpec.describe EventBridge do
       expect(wm.stream['percWindow'].rows).to all(eq '')
     end
 
-    it 'ignores exp and spell events when the layout has neither window' do
+    it 'shows exp and spell events nowhere when the layout has neither window' do
       load(layout.lines.grep_v(/class='(exp|percWindow)'/).join, id: 'no-exp')
 
       expect do
         event_bus.emit(:exp_set_current, skill: 'Evasion')
         event_bus.emit(:exp_delete_skill)
         event_bus.emit(:clear_spells)
-      end.not_to raise_error
+      end.not_to(change { screen })
     end
   end
 
@@ -285,12 +294,14 @@ RSpec.describe EventBridge do
       expect(main.rows).to all(eq '')
     end
 
-    it 'does neither when the layout has no main window' do
+    it 'neither shows nor opens the URL when the layout has no main window' do
       allow(UrlLauncher).to receive(:open)
       load(layout.lines.grep_v(/value='main'/).join, id: 'no-main')
 
-      event_bus.emit(:launch_url, url: 'https://www.play.net/dr', remote: false)
-
+      expect do
+        event_bus.emit(:launch_url, url: 'https://www.play.net/dr', remote: true)
+        event_bus.emit(:launch_url, url: 'https://www.play.net/dr', remote: false)
+      end.not_to(change { screen })
       expect(UrlLauncher).not_to have_received(:open)
     end
   end
@@ -300,6 +311,12 @@ RSpec.describe EventBridge do
       event_bus.emit(:disconnect)
 
       expect(main.rows).to eq ['*', '* Connection closed', '* Press any key to exit...', '*']
+    end
+
+    it 'shows the banner nowhere when the layout has no main window' do
+      load(layout.lines.grep_v(/value='main'/).join, id: 'no-main')
+
+      expect { event_bus.emit(:disconnect) }.not_to(change { screen })
     end
   end
 
