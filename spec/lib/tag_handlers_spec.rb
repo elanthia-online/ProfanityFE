@@ -11,6 +11,8 @@ require_relative '../../lib/tag_handlers'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/clock'
 require_relative '../../lib/pending_render'
+require_relative '../../lib/prompt_tracker'
+require 'stringio'
 
 # Minimal host class that includes TagHandlers, providing the instance
 # variables and helper methods the module expects.
@@ -27,7 +29,6 @@ class TagHandlerHost
     @wm = wm
     @state = state
     @event_bus = event_bus
-    @clock = clock
     @xml_escapes = { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' }
     @line_colors = []
     @open_monsterbold = []
@@ -39,6 +40,9 @@ class TagHandlerHost
     @stream_stack = []
     @combat_next_line = nil
     @pending_render = PendingRender.new
+    @prompts = PromptTracker.new(shared_state: state, event_bus: event_bus, pending_render: @pending_render,
+                                 window_mgr: wm, clock: clock)
+    @prompts.server = StringIO.new
     @room_capture_mode = nil
     @flushed_texts = []
   end

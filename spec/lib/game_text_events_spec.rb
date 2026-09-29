@@ -41,6 +41,9 @@ RSpec.describe 'GameTextProcessor event emissions' do
     )
   end
 
+  # The processor's prompt tracker
+  def prompts = processor.send(:instance_variable_get, :@prompts)
+
   # The screen updates the processor asked for
   def pending_render = processor.send(:instance_variable_get, :@pending_render)
 
@@ -186,7 +189,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
 
     it 'suppresses prompt after movement text' do
       state.need_prompt = true
-      processor.send(:instance_variable_set, :@last_was_movement, true)
+      prompts.movement_seen
       events = []
       event_bus.on(:add_prompt) { |data| events << data }
 
@@ -197,19 +200,19 @@ RSpec.describe 'GameTextProcessor event emissions' do
 
     it 'detects movement text and sets last_was_movement flag' do
       process('You walk north.')
-      expect(processor.send(:instance_variable_get, :@last_was_movement)).to be true
+      expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be true
     end
 
     %w[run go swim climb crawl drag stride sneak stalk].each do |verb|
       it "detects '#{verb}' as a movement verb" do
         process("You #{verb} through the archway.")
-        expect(processor.send(:instance_variable_get, :@last_was_movement)).to be true
+        expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be true
       end
     end
 
     it 'does not detect non-movement verbs as movement' do
       process('You attack the goblin.')
-      expect(processor.send(:instance_variable_get, :@last_was_movement)).to be false
+      expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be false
     end
   end
 

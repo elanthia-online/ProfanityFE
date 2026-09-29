@@ -14,14 +14,14 @@ require_relative 'presets'
 # understand, test, and modify independently.
 #
 # Expects the including class to provide:
-# - @wm, @state, @xml_escapes, @event_bus, @clock
+# - @wm, @state, @xml_escapes, @event_bus
 # - @line_colors, @open_monsterbold, @open_preset, @open_style,
 #   @open_color, @open_link
 # - @current_stream, @combat_next_line
 # - @pending_render (a PendingRender: screen updates to flush)
 # - @stream_stack (an empty Array: the open pushStreams, innermost last)
 # - @room_capture_mode
-# - @boot_profiler (a BootProfiler)
+# - @prompts (a PromptTracker)
 # - handle_game_text, new_stun, parse_room_subtitle, add_prompt
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
@@ -152,38 +152,10 @@ module TagHandlers
   # Explicitly ignored game protocol tags (dialog data, labels, etc.).
   def handle_ignored_tag(_xml, _text_buffer); end
 
-  # Handle <prompt time='...'>text&gt;</prompt> paired tag.
-  # Syncs server time offset and updates the prompt display.
-  # Also forgets the last stream-window line, so a main line after the
-  # prompt is not taken for the game's copy of it and dropped.
+  # Handle <prompt time='...'>text&gt;</prompt> paired tag (see
+  # PromptTracker#prompt_tag).
   def handle_prompt_tag(xml, _text_buffer)
-    @last_stream_text = nil
-    # The text starts after the first >.
-    return unless (time = XmlTokenizer.attrs(xml)['time'])&.match?(/\A[0-9]+\z/)
-    return unless (m = xml.match(%r{\A.*?>(?<text>.*?)&gt;</prompt>$}))
-
-    unless @state.skip_server_time_offset
-      @clock.server_time_offset = @clock.now.to_f - time.to_f
-      @state.skip_server_time_offset = true
-    end
-
-    if @first_prompt
-      @first_prompt = false
-      # Sent once the render lock is released, so a full socket send
-      # buffer cannot block drawing (see CursesRenderer.outside_lock).
-      CursesRenderer.outside_lock do
-        @server.puts 'look'
-        @server.flush
-      end
-      @boot_profiler.log_elapsed('first prompt (sent look)')
-    end
-
-    new_prompt_text = "#{m[:text]}>"
-    if @state.update_prompt(new_prompt_text)
-      @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: new_prompt_text)
-      @event_bus.emit(:prompt_changed, text: new_prompt_text)
-      @pending_render.request_update
-    end
+    @prompts.prompt_tag(xml)
   end
 
   # Handle <spell>name</spell> paired tag.

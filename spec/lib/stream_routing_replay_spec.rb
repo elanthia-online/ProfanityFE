@@ -39,7 +39,8 @@ RSpec.describe 'Stream routing of a captured game stream' do
       xml_escapes: { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' },
       event_bus: event_bus
     )
-    @processor.instance_variable_set(:@first_prompt, false)
+    # No 'look' at the first prompt: this server only reads
+    @processor.instance_variable_get(:@prompts).instance_variable_set(:@first_prompt, false)
   end
 
   # Feed raw server lines through GameTextProcessor#run, as the socket would.

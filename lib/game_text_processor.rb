@@ -14,6 +14,7 @@ require_relative 'clock'
 require_relative 'pending_render'
 require_relative 'server_reader'
 require_relative 'line_filter'
+require_relative 'prompt_tracker'
 
 # Processes game server output in a dedicated thread, handling XML tag parsing,
 # stream routing, room data assembly, spell abbreviation, and UI updates.
@@ -53,9 +54,6 @@ class GameTextProcessor
   include FamiliarNotifier
   include TagHandlers
 
-  # Movement verbs that suppress the following prompt and empty line.
-  MOVEMENT_PATTERN = /^You (?:run|walk|go|swim|climb|crawl|drag|stride|sneak|stalk)\b/
-
   # Element names of the bold tags. The last of them on a line tells
   # whether the line leaves bold open (see #carry_bold).
   BOLD_TAGS = %w[pushBold popBold].freeze
@@ -72,7 +70,7 @@ class GameTextProcessor
   # @param speech_timestamps [Boolean] timestamp the lines of the streams in
   #   {Streams::TIMESTAMPED_IN_WINDOW} and {Streams::TIMESTAMPED_IN_MAIN}
   #   (--speech-ts)
-  # @param clock [Clock] read for timestamps and the server time offset (see TagHandlers#handle_prompt_tag)
+  # @param clock [Clock] read for timestamps and the server time offset (see PromptTracker#prompt_tag)
   # @param game_rules [Games::Rules] the game's death, logon, stun and
   #   spell-name rules (--game, see Games.rules_for); both games' when the
   #   game isn't known
@@ -83,7 +81,6 @@ class GameTextProcessor
     @state = shared_state
     @xml_escapes = xml_escapes
     @event_bus = event_bus
-    @boot_profiler = boot_profiler
     @speech_timestamps = speech_timestamps
     @clock = clock
     @game_rules = game_rules
@@ -93,6 +90,8 @@ class GameTextProcessor
     @reader = ServerReader.new(line_handler: self, pending_render: @pending_render, event_bus: event_bus,
                                cmd_buffer: cmd_buffer, shared_state: shared_state, boot_profiler: boot_profiler)
     @line_filter = LineFilter.new(shared_state: shared_state)
+    @prompts = PromptTracker.new(shared_state: shared_state, event_bus: event_bus, pending_render: @pending_render,
+                                 window_mgr: window_mgr, clock: clock, boot_profiler: boot_profiler)
 
     # Line color/style tracking
     @line_colors = []
@@ -109,16 +108,6 @@ class GameTextProcessor
     @stream_stack = []
     @bold_next_line = false
     @combat_next_line = nil
-    @first_prompt = true
-
-    # The last line sent to a stream window, stripped. The game sends some
-    # stream text again as the next main line (DR whispers); that copy is
-    # dropped. Only the next main-bound line is compared, and it uses the
-    # text up whether or not it matched; a <prompt> also clears it.
-    @last_stream_text = nil
-
-    # Track movement messages to suppress prompts/empty lines after them
-    @last_was_movement = false
 
     # Room data tracking for RoomWindow
     @room_capture_mode = nil # :title, :desc, or nil
@@ -137,7 +126,7 @@ class GameTextProcessor
   # @param server [IO] TCP socket (or socket-like) connected to the game server
   # @return [Symbol] +:disconnected+ or +:crashed+ (see {ServerReader#run})
   def run(server)
-    @server = server
+    @prompts.server = server
     @reader.run(server)
   end
 
@@ -166,36 +155,7 @@ class GameTextProcessor
   # @return [void]
   def process_line(line)
     if line.empty?
-      if @current_stream.nil?
-        # Check if last line in ANY tab was movement (backup check)
-        main_window = @wm.stream[MAIN_STREAM]
-        last_line_was_movement = false
-        if main_window.is_a?(TabbedTextWindow)
-          # Check all tabs for recent movement (movement could be in main, combat, etc.)
-          main_window.tabs.each_value do |tab_buffer|
-            last_entry = tab_buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-            if last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-              last_line_was_movement = true
-              break
-            end
-          end
-        elsif main_window.respond_to?(:buffer) && !main_window.buffer.empty?
-          last_entry = main_window.buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-          last_line_was_movement = last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-        end
-
-        # Blank lines from the game are not displayed; a blank line is
-        # where a pending prompt is shown, except after movement (use
-        # flag OR buffer check), where the prompt is skipped too. The
-        # pending flag is consumed either way.
-        pending = @state.consume_prompt!
-        if @last_was_movement || last_line_was_movement
-          @last_was_movement = false
-        elsif pending
-          @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
-          @pending_render.request_update
-        end
-      end
+      @prompts.blank_line if @current_stream.nil?
     else
       @current_raw_line = line.dup
       process_line_tags(line)
@@ -279,17 +239,6 @@ class GameTextProcessor
     @line_colors = HighlightProcessor.apply_highlights(text, [])
     @line_colors.push({ start: 0, end: timestamp.length, fg: fg })
     text
-  end
-
-  # Emit a prompt to the main stream if one is pending and the last
-  # line was not a movement command. Consumes the pending flag either way.
-  #
-  # @return [void]
-  # @api private
-  def emit_prompt_if_needed
-    return unless @state.consume_prompt!
-
-    @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text) unless @last_was_movement
   end
 
   # Set the stun countdown timer end time via the event bus.
@@ -482,7 +431,7 @@ class GameTextProcessor
             @event_bus.emit(:stream_text, stream: @current_stream, text: text, colors: @line_colors)
             @pending_render.request_update
             # Remembered so the game's main copy of it, if next, is dropped
-            @last_stream_text = text.strip
+            @prompts.stream_text_sent(text)
           end
         elsif Streams::FALLBACK_TO_MAIN.include?(@current_stream)
           # Timestamp thoughts/familiar when --speech-ts is active (not speech:
@@ -495,26 +444,22 @@ class GameTextProcessor
           end
           unless text.empty?
             # Detect movement in stream content too
-            @last_was_movement = true if text =~ MOVEMENT_PATTERN
-            emit_prompt_if_needed
+            @prompts.movement_seen if @prompts.movement?(text)
+            @prompts.emit_prompt_if_needed
             @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: text, colors: @line_colors)
             @pending_render.request_update
             # Shown in main, so it is the next main-bound line: the stored
             # stream-window text expires. Not compared: this is stream text
             # itself, never the game's main copy of a stream line.
-            @last_stream_text = nil
+            @prompts.forget_stream_text
           end
         end
       elsif @wm.stream[MAIN_STREAM]
         # Drop the game's main copy of the line just sent to a stream window.
-        # Only this next main-bound line is compared; the stored text is used
-        # up either way, so a later main line with the same text still shows.
-        duplicate = @last_stream_text && text.strip == @last_stream_text
-        @last_stream_text = nil
-        unless duplicate
+        unless @prompts.stream_text_copy?(text)
           # Detect movement messages to suppress following prompts/empty lines
-          is_movement = text =~ MOVEMENT_PATTERN
-          emit_prompt_if_needed
+          is_movement = @prompts.movement?(text)
+          @prompts.emit_prompt_if_needed
 
           # Strip leading whitespace from room-captured text (e.g., "  You also see..."
           # left after description extraction from the same server line)
@@ -525,7 +470,7 @@ class GameTextProcessor
           end
           @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: text, colors: @line_colors, indent: room_captured ? false : nil)
           @pending_render.request_update
-          @last_was_movement = true if is_movement
+          @prompts.movement_seen if is_movement
         end
       end
     end
