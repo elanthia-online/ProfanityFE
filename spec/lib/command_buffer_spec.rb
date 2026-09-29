@@ -233,6 +233,71 @@ RSpec.describe CommandBuffer do
     end
   end
 
+  # Every cursor column visited by repeated Ctrl+left from the end, or
+  # repeated Ctrl+right from the start, checking pos and the screen
+  # cursor agree at each stop.
+  describe 'word motion stops' do
+    def stops(str, motion)
+      type(str)
+      buf.cursor_home if motion == :cursor_word_right
+      seen = [window.curx]
+      goal = motion == :cursor_word_right ? str.length : 0
+      str.length.times do
+        break if buf.pos == goal
+
+        buf.public_send(motion)
+        expect(window.curx).to eq buf.pos
+        seen << window.curx
+      end
+      seen
+    end
+
+    # Pins the ASCII boundaries: punctuation stops, runs of spaces, and
+    # `_` inside a word (delete_word treats `_` as punctuation instead).
+    {
+      'hello.world'   => [[11, 6, 0], [0, 5, 6, 11]],
+      'hello, world!' => [[13, 7, 5, 0], [0, 5, 7, 12, 13]],
+      'hello   world' => [[13, 8, 0], [0, 8, 13]],
+      'x -- y'        => [[6, 2, 0], [0, 2, 5, 6]],
+      "tab\there"     => [[8, 4, 0], [0, 4, 8]],
+      'foo_bar baz'   => [[11, 8, 0], [0, 8, 11]]
+    }.each do |str, (left, right)|
+      it "stops at #{left.inspect} going left through #{str.inspect}" do
+        expect(stops(str, :cursor_word_left)).to eq left
+      end
+
+      it "stops at #{right.inspect} going right through #{str.inspect}" do
+        expect(stops(str, :cursor_word_right)).to eq right
+      end
+    end
+
+    # Non-ASCII letters are part of a word and non-ASCII spaces separate
+    # words, as for backspace_word/delete_word.
+    {
+      'café latte' => [[10, 5, 0], [0, 5, 10]],
+      'naïve'      => [[5, 0], [0, 5]],
+      'über.alles' => [[10, 5, 0], [0, 4, 5, 10]],
+      "ab\u00A0cd" => [[5, 3, 0], [0, 3, 5]]
+    }.each do |str, (left, right)|
+      it "stops at #{left.inspect} going left through #{str.inspect}" do
+        expect(stops(str, :cursor_word_left)).to eq left
+      end
+
+      it "stops at #{right.inspect} going right through #{str.inspect}" do
+        expect(stops(str, :cursor_word_right)).to eq right
+      end
+    end
+
+    it 'moves over the same word that backspace_word deletes' do
+      type('say naïve')
+      buf.cursor_word_left
+      expect(buf.pos).to eq 4
+      buf.cursor_end
+      buf.backspace_word
+      expect(buf.text).to eq 'say '
+    end
+  end
+
   # ==================================================================
   # Deletion
   # ==================================================================

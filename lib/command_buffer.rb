@@ -37,6 +37,13 @@ using StringClassification
 #   buf.put_ch('i')
 #   cmd = buf.clear_and_get  #=> "hi"
 class CommandBuffer
+  # Two characters that end one word and start the next, for Ctrl+left
+  # and Ctrl+right: a word character then punctuation, anything else then
+  # a word character, or a space then a non-space. The POSIX classes are
+  # Unicode-aware (so +é+ is a word character, unlike +\w+) and match
+  # +\w+/+\s+ exactly on ASCII, including +_+ as a word character.
+  WORD_START = /[[:word:]][^[:word:][:space:]]|[^[:word:]][[:word:]]|[[:space:]][^[:space:]]/
+
   # @return [String] current buffer contents
   attr_reader :text
 
@@ -161,7 +168,7 @@ class CommandBuffer
     @kill.end_sequence
     return unless @window && @pos > 0
 
-    new_pos = if (m = @text[0...(@pos - 1)].match(/.*(\w[^\w\s]|\W\w|\s\S)/))
+    new_pos = if (m = @text[0...(@pos - 1)].match(/.*(#{WORD_START})/o))
                 m.begin(1) + 1
               else
                 0
@@ -180,7 +187,7 @@ class CommandBuffer
     @kill.end_sequence
     return unless @window && @pos < @text.length
 
-    new_pos = if (m = @text[@pos..-1].match(/\w[^\w\s]|\W\w|\s\S/))
+    new_pos = if (m = @text[@pos..-1].match(WORD_START))
                 @pos + m.begin(0) + 1
               else
                 @text.length
