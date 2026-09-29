@@ -1555,6 +1555,7 @@ RSpec.describe Application do
       blocking = false
       deadline = Time.now + 5
       window.define_singleton_method(:nodelay=) { |value| blocking = !value }
+      window.define_singleton_method(:timeout=) { |ms| blocking = ms.positive? }
       window.define_singleton_method(:noutrefresh) { nil }
       window.define_singleton_method(:getch) do
         raise Interrupt if Time.now > deadline
@@ -1591,18 +1592,52 @@ RSpec.describe Application do
       end
     end
 
+    # A command window whose getch hands out +keys+ in turn, recording each
+    # timeout (ms) set before a read.
+    def exit_keyboard(keys, timeouts)
+      window = Object.new
+      window.define_singleton_method(:timeout=) { |ms| timeouts << ms }
+      window.define_singleton_method(:getch) { keys.shift }
+      window
+    end
+
     it 'waits past terminal resizes and mouse events for a real key' do
       keys = [Curses::KEY_RESIZE, Curses::KEY_MOUSE, 'q', 'not read']
-      nodelay = []
-      window = Object.new
-      window.define_singleton_method(:nodelay=) { |value| nodelay << value }
-      window.define_singleton_method(:getch) { keys.shift }
-      app.cmd_buffer.window = window
+      app.cmd_buffer.window = exit_keyboard(keys, [])
 
       app.send(:wait_for_exit_key)
 
-      expect(nodelay).to eq [false]
       expect(keys).to eq ['not read']
+    end
+
+    # BUG FOUND (fixed here): "Press any key to exit..." waited forever, so an
+    # unattended client never exited after a disconnect.
+    it 'waits at most 30 seconds for the key, then stops waiting' do
+      timeouts = []
+      app.cmd_buffer.window = exit_keyboard([nil, 'not read'], timeouts)
+
+      app.send(:wait_for_exit_key)
+
+      expect(timeouts).to eq [30_000]
+    end
+
+    it 'keeps the 30 second deadline across resizes and mouse events' do
+      timeouts = []
+      keys = [Curses::KEY_RESIZE, Curses::KEY_MOUSE, 'not read']
+      app.cmd_buffer.window = exit_keyboard(keys, timeouts)
+      allow(app).to receive(:monotonic_now).and_return(100.0, 100.0, 120.0, 131.0)
+
+      app.send(:wait_for_exit_key)
+
+      expect(timeouts).to eq [30_000, 10_000]
+      expect(keys).to eq ['not read']
+    end
+
+    it 'exits 0 when no key comes within the timeout' do
+      stub_const('Application::EXIT_KEY_TIMEOUT', 0.05)
+      exit_error = run_session(server_that_ends_with(nil))
+
+      expect(exit_error&.status).to eq 0
     end
 
     it 'exits 1 without the disconnect notice when the server thread crashes' do

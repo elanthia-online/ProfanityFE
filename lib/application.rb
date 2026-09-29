@@ -100,6 +100,10 @@ class Application
   # How long .key waits for a key press before giving up, in milliseconds.
   DOT_KEY_TIMEOUT_MS = 5000
 
+  # Seconds "Press any key to exit..." waits for a key after the game
+  # server disconnects before the client exits anyway.
+  EXIT_KEY_TIMEOUT = 30
+
   # Seconds to wait for the TCP connection to the game server before giving
   # up (see {ServerConnection::CONNECT_TIMEOUT}).
   CONNECT_TIMEOUT = ServerConnection::CONNECT_TIMEOUT
@@ -606,18 +610,29 @@ class Application
     exit 0
   end
 
-  # Block until a key is pressed. Resizes and mouse events are not key
-  # presses. A read error (nil) also ends the wait, so a lost terminal
-  # cannot spin here.
+  # Wait for a key press, at most +timeout+ seconds. Resizes and mouse
+  # events are not key presses; they don't extend the wait. A read that
+  # times out or fails (nil) ends the wait, so a lost terminal cannot spin
+  # here and an unattended client still exits.
   #
+  # @param timeout [Numeric] seconds to wait for a key
   # @return [void]
-  def wait_for_exit_key
+  def wait_for_exit_key(timeout: EXIT_KEY_TIMEOUT)
     window = @cmd_buffer.window
-    window.nodelay = false
+    deadline = monotonic_now + timeout
     loop do
+      remaining = deadline - monotonic_now
+      break unless remaining.positive?
+
+      window.timeout = (remaining * 1000).ceil
       ch = window.getch
       break unless [Curses::KEY_RESIZE, Curses::KEY_MOUSE].include?(ch)
     end
+  end
+
+  # @return [Float] seconds on the monotonic clock
+  def monotonic_now
+    Process.clock_gettime(Process::CLOCK_MONOTONIC)
   end
 
   # ---- Input loop ----

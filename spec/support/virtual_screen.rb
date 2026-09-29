@@ -263,6 +263,11 @@ module Curses
       log(:nodelay=, val)
     end
 
+    # wtimeout: how long the next getch waits, in milliseconds.
+    def timeout=(val)
+      log(:timeout=, val)
+    end
+
     def getch
       log(:getch)
       nil
