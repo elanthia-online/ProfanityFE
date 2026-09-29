@@ -5,8 +5,9 @@ require_relative 'xml_tokenizer'
 # Decides which server lines reach the parser: gags (general and
 # multi-line), gag logging (--log-gags), and collapsing runs of blank lines.
 #
-# A gag drops a line's text but keeps its stream tags, so a gagged
-# <popStream/> still closes its stream.
+# A gag drops a line's text but keeps its stream and style tags, so a
+# gagged <popStream/> still closes its stream and a gagged <style id=""/>
+# still closes its style.
 class LineFilter
   # Safety cap: a multi-line gag whose end pattern (or prompt) never arrives
   # is released after this many suppressed lines so it cannot swallow the
@@ -16,8 +17,14 @@ class LineFilter
   # Stream tags kept when a gag drops a line's text. Losing a <popStream/>
   # with the text would leave routing stuck on that stream (e.g. game text
   # landing in the spell window), so gagged lines keep these tags and gag
-  # logging flags them. Element names; see #stream_tags.
+  # logging flags them. Element names; see #tags_named.
   STREAM_TAGS = %w[pushStream popStream clearStream].freeze
+
+  # Tags kept when a gag drops a line's text: the stream tags, and style
+  # tags, whose <style id=""/> closes a style (losing it would leave the
+  # style coloring every later line up to a prompt). Element names; see
+  # #tags_named.
+  KEPT_TAGS = [*STREAM_TAGS, 'style'].freeze
 
   # Longest gag pattern source quoted in a gag log line. Some gags are long
   # alternations; the prefix is enough to find the gag in the settings XML.
@@ -34,13 +41,25 @@ class LineFilter
 
     # Blank lines in a row; only the first of a run is passed on.
     @emptycount = 0
+
+    # Whether the last line filtered was gagged
+    @gagged = false
+  end
+
+  # Whether a gag dropped the text of the last line filtered, passing on
+  # only its kept tags ({KEPT_TAGS}).
+  #
+  # @return [Boolean]
+  def gagged?
+    @gagged
   end
 
   # Filter one server line.
   #
-  # A gagged line keeps only its stream tags, and is dropped when it has
-  # none. A blank line is passed on only when the previous line wasn't
-  # blank (a gagged line with stream tags doesn't count either way).
+  # A gagged line keeps only its stream and style tags ({KEPT_TAGS}), and
+  # is dropped when it has none. A blank line is passed on only when the
+  # previous line wasn't blank (a gagged line with kept tags doesn't count
+  # either way).
   #
   # @param line [String] raw server line, line ending removed
   # @return [String, nil] the line to process, or nil to drop it
@@ -51,10 +70,11 @@ class LineFilter
       gagged = true
     end
 
+    @gagged = gagged
     if gagged
-      # A gag hides the line's text, never its stream tags: dropping a
-      # <popStream/> would leave routing stuck on that stream.
-      line = stream_tags(line).join
+      # A gag hides the line's text, never its stream or style tags:
+      # dropping a <popStream/> would leave routing stuck on that stream.
+      line = tags_named(line, KEPT_TAGS).join
       return if line.empty?
     elsif line.empty?
       @emptycount += 1
@@ -124,14 +144,15 @@ class LineFilter
     XmlTokenizer.tags(line).map { |tag| XmlTokenizer.start_tag_name(tag) }.include?('prompt')
   end
 
-  # The stream tags ({STREAM_TAGS}) of a raw line, as written and in order,
-  # as the tag dispatcher reads the line.
+  # The start tags of a raw line with the given element names, as written
+  # and in order, as the tag dispatcher reads the line.
   #
   # @param line [String] raw server line
+  # @param names [Array<String>] element names ({STREAM_TAGS}, {KEPT_TAGS})
   # @return [Array<String>] the tags
   # @api private
-  def stream_tags(line)
-    XmlTokenizer.tags(line).select { |tag| STREAM_TAGS.include?(XmlTokenizer.start_tag_name(tag)) }
+  def tags_named(line, names)
+    XmlTokenizer.tags(line).select { |tag| names.include?(XmlTokenizer.start_tag_name(tag)) }
   end
 
   # Log a gagged line in full when +--log-gags+ is active.
@@ -148,7 +169,7 @@ class LineFilter
   def log_gagged_line(kind, pattern, line)
     return unless @state.log_gags
 
-    marker = stream_tags(line).empty? ? '' : ' STREAM-TAG'
+    marker = tags_named(line, STREAM_TAGS).empty? ? '' : ' STREAM-TAG'
     source = pattern.source
     source = "#{source[0, GAG_LOG_PATTERN_LIMIT]}..." if source.length > GAG_LOG_PATTERN_LIMIT
     ProfanityLog.write('gag', "#{kind}#{marker} /#{source}/ #{line.inspect}")

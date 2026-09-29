@@ -8,10 +8,9 @@
 # window is handed with its text.
 #
 # Some of what is pinned here is odd (an unclosed color colors to the end
-# of the line but an unclosed preset colors nothing; a style carries across
-# lines and prompts; a link open at a flush is dropped). It is today's
-# behaviour, pinned so that a refactor keeps it; changing it is a separate
-# decision.
+# of the line but an unclosed preset colors nothing; a link open at a flush
+# is dropped). It is today's behaviour, pinned so that a refactor keeps it;
+# changing it is a separate decision.
 
 require_relative '../spec_helper'
 require 'rexml/document'
@@ -71,7 +70,8 @@ RSpec.describe 'Color span lifecycle' do
 
   # Feed raw server lines through GameTextProcessor#run, as the socket
   # would, and return what each window was handed: [stream, text, colors]
-  # per piece of text, in order. Lich ends every line with CRLF.
+  # per piece of text, in order. Lich ends every line with CRLF. The first
+  # prompt sends a look.
   #
   # @param lines [Array<String>] raw server lines
   # @return [Array<Array(String, String, Array<Hash>)>]
@@ -81,6 +81,8 @@ RSpec.describe 'Color span lifecycle' do
     queue = lines.map { |line| "#{line}\r\n" }
     server = Object.new
     server.define_singleton_method(:gets) { queue.shift&.dup }
+    server.define_singleton_method(:puts) { |*| nil }
+    server.define_singleton_method(:flush) { nil }
     @processor.run(server)
     handed
   end
@@ -104,11 +106,12 @@ RSpec.describe 'Color span lifecycle' do
       ]
     end
 
-    it 'an unclosed style colors every later line, across a prompt' do
-      expect(receive_from_server("<style id='whisper'/>one", 'two', '<prompt time="1">&gt;</prompt>', 'three')).to eq [
+    it 'an unclosed style colors the later lines, to the end of the line with a prompt (as carried bold)' do
+      expect(receive_from_server("<style id='whisper'/>one", 'two', '<prompt time="1">&gt;</prompt>after', 'three')).to eq [
         ['main', 'one', [{ start: 0, **whisper, end: 3 }]],
         ['main', 'two', [{ start: 0, **whisper, end: 3 }]],
-        ['main', 'three', [{ start: 0, **whisper, end: 5 }]]
+        ['main', 'after', [{ start: 0, **whisper, end: 5 }]],
+        ['main', 'three', []]
       ]
     end
 
