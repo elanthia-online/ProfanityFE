@@ -297,7 +297,7 @@ class Application
 
   def handle_dot_tab(arg)
     if TabbedTextWindow.list.empty?
-      write_to_client('* No tabbed windows configured', refresh: false, doupdate: false)
+      write_to_client('* No tabbed windows configured', refresh: false)
     elsif arg.nil? || arg.empty?
       lines = TabbedTextWindow.list.map do |win|
         tabs_info = win.tabs.keys.each_with_index.map do |name, i|
@@ -305,7 +305,7 @@ class Application
         end.join(' ')
         "* Tabs: #{tabs_info}"
       end
-      write_to_client(*lines, refresh: false, doupdate: false)
+      write_to_client(*lines, refresh: false)
     elsif arg =~ /^\d+$/
       TabbedTextWindow.list.each { |w| w.switch_tab_by_index(arg.to_i) }
       CursesRenderer.doupdate
