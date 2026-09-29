@@ -56,14 +56,17 @@ class LineBuffer
     @width = width
   end
 
-  # Set the maximum number of logical lines kept. Lines already over the
-  # new cap are not trimmed here; each later {#push} evicts one oldest
-  # logical line.
+  # Set the maximum number of logical lines kept, evicting the oldest
+  # logical lines, all their rows, that are over the new cap. The scroll
+  # position is left alone, as in {#push}: rows are evicted from the
+  # oldest end, so the rows it counts don't move, but it may now reach
+  # past the oldest row left.
   #
   # @param val [Integer, #to_i] new cap
   # @return [void]
   def cap=(val)
     @cap = val.to_i
+    evict_over_cap
   end
 
   # Re-wrap every stored line to a new width, rebuilding the rows. The
@@ -101,7 +104,7 @@ class LineBuffer
     count = add_rows(styled, indent)
     @lines_appended += count
     @logical.unshift([styled, indent, count])
-    @lines.pop(@logical.pop[2]) if @logical.length > @cap
+    evict_over_cap
     count
   end
 
@@ -216,6 +219,15 @@ class LineBuffer
     rows = styled.wrap(@width, indent: indent)
     rows.each_with_index { |row, idx| @lines.unshift([row.text, row.runs, idx.positive?]) }
     rows.length
+  end
+
+  # Evict the oldest logical lines, all their rows, while the buffer is
+  # over its cap. A cap below zero keeps nothing, like a cap of zero.
+  #
+  # @return [void]
+  def evict_over_cap
+    excess = @logical.length - @cap
+    @lines.pop(@logical.pop(excess).sum { |entry| entry[2] }) if excess.positive?
   end
 
   # Index (newest first) of the logical line a row belongs to.
