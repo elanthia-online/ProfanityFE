@@ -152,11 +152,12 @@ RSpec.describe 'The terminal cursor after an input-path flush' do
   describe 'after a mouse event that redraws a selection' do
     before { (1..8).each { |n| thoughts.add_string("t#{n}") } }
 
+    # On 'go', not the link: a double click on a link selects nothing
     it 'is on the command line after a double click selects a word' do
       type('ab')
-      mouse(Curses::BUTTON1_PRESSED, 0, 4)
-      mouse(Curses::BUTTON1_RELEASED, 0, 4)
-      mouse(Curses::BUTTON1_PRESSED, 0, 4)
+      mouse(Curses::BUTTON1_PRESSED, 0, 1)
+      mouse(Curses::BUTTON1_RELEASED, 0, 1)
+      mouse(Curses::BUTTON1_PRESSED, 0, 1)
 
       expect(SelectionManager.multi_click_selected?).to be true
       expect(cursor).to eq [9, 1 + 2]

@@ -217,6 +217,116 @@ RSpec.describe MouseController do
       end
     end
 
+    # A double or triple click whose first click followed a link neither
+    # selects nor copies, and sends nothing more. The memory of that link
+    # lasts only while the presses repeat: in the same window and row, a
+    # column apart at most, each within SelectionManager::MULTI_CLICK_INTERVAL
+    # of the last.
+    describe 'clicking again right after a click followed a link' do
+      let(:clock) { [100.0] }
+
+      before do
+        allow(SelectionManager).to receive(:monotonic_now) { clock[0] }
+        main.add_string('go north now', [{ start: 3, end: 12, cmd: 'north' }])
+        thoughts.add_string('alpha bravo')
+      end
+
+      def later(seconds = 0.1)
+        clock[0] += seconds
+      end
+
+      def reversed_text_cells
+        [main, thoughts].sum { |window| (0...window.maxy).sum { |y| reversed_columns(window, y).size } }
+      end
+
+      it 'sends the link once for a double click, selecting and copying nothing' do
+        click(0, 4)
+        later
+        click(0, 4)
+
+        expect(sent).to eq ['north']
+        expect(reversed_text_cells).to eq 0
+        expect(copied).to be_empty
+        expect(main.rows).to eq ['go north now', '>north', '', '']
+      end
+
+      it 'sends the link once for a triple click, selecting and copying nothing' do
+        3.times do
+          click(0, 5)
+          later
+        end
+
+        expect(sent).to eq ['north']
+        expect(reversed_text_cells).to eq 0
+        expect(copied).to be_empty
+      end
+
+      it 'sends the link once for a double click on the space inside it' do
+        click(0, 8)
+        later
+        click(0, 8)
+
+        expect(sent).to eq ['north']
+      end
+
+      it 'sends the link again for a second click after the double-click interval' do
+        click(0, 4)
+        later(SelectionManager::MULTI_CLICK_INTERVAL + 0.1)
+        click(0, 4)
+
+        expect(sent).to eq %w[north north]
+      end
+
+      it 'sends the link again for a second click two columns away' do
+        click(0, 4)
+        later
+        click(0, 6)
+
+        expect(sent).to eq %w[north north]
+      end
+
+      it 'still copies the word under a double click on plain text right after' do
+        click(0, 4)
+        later
+        2.times do
+          click(0, 1)
+          later
+        end
+
+        expect(sent).to eq ['north']
+        expect(copied).to eq ['go']
+      end
+
+      it 'still copies the word under a double click in another window right after' do
+        click(0, 4)
+        later
+        2.times do
+          click(5, 8)
+          later
+        end
+
+        expect(copied).to eq ['bravo']
+      end
+
+      it 'still copies the word under a double click on plain text' do
+        2.times do
+          click(5, 1)
+          later
+        end
+
+        expect(copied).to eq ['alpha']
+      end
+
+      it 'still copies a drag that starts with a second press on the link' do
+        click(0, 4)
+        later
+        drag([0, 4], [0, 11])
+
+        expect(sent).to eq ['north']
+        expect(copied).to eq ['orth no']
+      end
+    end
+
     # The terminal sends a press, then a release: ncurses decodes each one
     # when it's read, the release after the press was handled. Measured in
     # a PTY (ncurses 6.0 on macOS and 6.6 on Linux, X10 and SGR reports):
@@ -455,6 +565,9 @@ RSpec.describe MouseController do
       end
 
       it 'sends, for a click on each cell of the bottom row, the link shown there' do
+        # A second apart: no click counts as a double click
+        now = 100.0
+        allow(SelectionManager).to receive(:monotonic_now) { now += 1 }
         cells = (0...10).map do |x|
           sent.clear
           click(12, x)
@@ -463,6 +576,15 @@ RSpec.describe MouseController do
 
         expect(cells).to eq [['G', []], ['o', []], [':', []], [' ', []]] +
                             'north'.chars.map { |c| [c, ['north']] } + [['.', []]]
+      end
+
+      it 'sends a link once for a double click' do
+        now = 100.0
+        allow(SelectionManager).to receive(:monotonic_now) { now += 0.1 }
+
+        2.times { click(12, 6) }
+
+        expect(sent).to eq ['north']
       end
 
       it 'sends the link under the press, not the one under the release' do
