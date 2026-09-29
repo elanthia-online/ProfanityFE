@@ -267,7 +267,7 @@ RSpec.describe 'Feedback lines in the main window' do
       expect(events.grep(Array).map(&:last).uniq).to eq [['before']]
     end
 
-    it 'autocomplete completes the common prefix, then lists each match in its color with a flush per line' do
+    it 'autocomplete completes the common prefix, then lists the matches in its color with one flush' do
       ['look at goblin', 'look at troll'].each { |cmd| app.cmd_buffer.add_to_history(cmd) }
       'lo'.each_char { |ch| app.cmd_buffer.put_ch(ch) }
       events.clear
@@ -275,8 +275,7 @@ RSpec.describe 'Feedback lines in the main window' do
       app.key_action['autocomplete'].call
 
       listed = ['[autocomplete:2]', '[0] look at troll', '[1] look at goblin']
-      expect(events).to eq [:refresh_command_line, [:doupdate, []],
-                            [:doupdate, listed.first(1)], [:doupdate, listed.first(2)], [:doupdate, listed]]
+      expect(events).to eq [:refresh_command_line, [:doupdate, []], [:doupdate, listed]]
       expect(screen).to eq(listed.map { |row| [row, suggestion] })
       expect(app.cmd_buffer.text).to eq 'look at '
     end
