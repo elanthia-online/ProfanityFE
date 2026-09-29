@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'games'
-require_relative 'room_data_processor'
+require_relative 'room_assembler'
 require_relative 'familiar_notifier'
 require_relative 'xml_tokenizer'
 require_relative 'tag_handlers'
@@ -50,7 +50,6 @@ require_relative 'prompt_tracker'
 #   )
 #   processor.run(server)
 class GameTextProcessor
-  include RoomDataProcessor
   include FamiliarNotifier
   include TagHandlers
 
@@ -92,6 +91,8 @@ class GameTextProcessor
     @line_filter = LineFilter.new(shared_state: shared_state)
     @prompts = PromptTracker.new(shared_state: shared_state, event_bus: event_bus, pending_render: @pending_render,
                                  window_mgr: window_mgr, clock: clock, boot_profiler: boot_profiler)
+    @room = RoomAssembler.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
+                              shared_state: shared_state)
 
     # Line color/style tracking
     @line_colors = []
@@ -108,16 +109,6 @@ class GameTextProcessor
     @stream_stack = []
     @bold_next_line = false
     @combat_next_line = nil
-
-    # Room data tracking for RoomWindow
-    @room_capture_mode = nil # :title, :desc, or nil
-    @room_pending_title = nil
-    @room_pending_desc = nil
-    @room_pending_objects = nil
-    @room_pending_players = nil
-    @room_pending_exits = nil
-    @room_pending_number = nil
-    @current_raw_line = nil # Raw line with XML tags preserved for room object extraction
   end
 
   # Main processing loop: reads lines from the game server socket until
@@ -157,7 +148,7 @@ class GameTextProcessor
     if line.empty?
       @prompts.blank_line if @current_stream.nil?
     else
-      @current_raw_line = line.dup
+      @room.line_started(line.dup)
       process_line_tags(line)
     end
   end
@@ -198,23 +189,6 @@ class GameTextProcessor
   # @api private
   def start_tag_names(line)
     XmlTokenizer.tags(line).map { |tag| XmlTokenizer.start_tag_name(tag) }
-  end
-
-  # Parse a room subtitle attribute into a clean room title string.
-  #
-  # Handles both GemStone and DragonRealms subtitle formats:
-  # - GS: +" - [Town Square, Center]"+ → +"Town Square, Center"+
-  # - DR: +" - [Bosque Deriel, Shacks] (230008)"+ → +"Bosque Deriel, Shacks (230008)"+
-  #
-  # @param subtitle [String] raw subtitle attribute value
-  # @return [String] cleaned room title (may be empty)
-  # @api private
-  def parse_room_subtitle(subtitle)
-    # Strip leading " - " prefix
-    text = subtitle.sub(/^\s*-\s*/, '')
-    # DR format: [Room Title] (RoomNum) — strip brackets, keep room number
-    # GS format: [Room Title]          — strip brackets
-    text.sub(/^\[(.+?)\]/, '\1').strip
   end
 
   # Append a speech timestamp to text (e.g., "Hello (3:45:12)").
@@ -294,7 +268,7 @@ class GameTextProcessor
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
-    room_captured = process_room_data(text)
+    room_captured = @room.process_room_data(text, @current_stream)
     return if room_captured && @state.room_window_only
 
     check_familiar_notification(text)
@@ -367,12 +341,12 @@ class GameTextProcessor
         end
 
         # Handle room components for dedicated RoomWindow
-        room_result = process_room_stream(text)
+        room_result = @room.process_room_stream(text, @current_stream, @line_colors)
         if room_result == :consumed
           return
         elsif room_result == :continue
           # Room players: also update the indicator, then stop
-          update_room_players_indicator(text, @line_colors)
+          @room.update_room_players_indicator(text, @line_colors)
           return
         end
 

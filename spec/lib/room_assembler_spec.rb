@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Tests RoomDataProcessor#process_room_data's room-title capture (the :title mode).
+# Tests RoomAssembler#process_room_data's room-title capture (the :title mode).
 #
 # The RoomWindow re-brackets whatever bare title it is handed (see
 # RoomWindow#render: "[#{@title}]"), so process_room_data must hand it a title
@@ -10,52 +10,32 @@
 # trailing case leaves a stray "]" that render then doubles into "]]".
 
 require_relative '../../lib/event_bus'
-require_relative '../../lib/room_data_processor'
+require_relative '../../lib/pending_render'
+require_relative '../../lib/room_assembler'
 
-# Minimal host that includes RoomDataProcessor and supplies only the collaborators
-# #process_room_data touches in :title mode: a room-window presence check, a
-# writable room_title on shared state, and the parse_room_subtitle helper that
-# lives on GameTextProcessor in production.
-class RoomTitleHost
-  include RoomDataProcessor
-
-  attr_accessor :room_capture_mode, :room_pending_title,
-                :current_stream, :current_raw_line, :line_colors
-  attr_reader :wm, :state
-
+RSpec.describe RoomAssembler do
+  # An assembler with only the collaborators #process_room_data touches in
+  # :title mode: a room-window presence check and a writable room_title on
+  # shared state.
+  #
   # @param has_room_window [Boolean] whether the layout has a RoomWindow (only
   #   then is the pending title captured)
-  def initialize(has_room_window: true)
-    @event_bus = EventBus.new
-    @wm = Struct.new(:room).new(has_room_window ? { 'room' => Object.new } : {})
-    @state = Struct.new(:room_title).new(nil)
-    @room_capture_mode = :title
-    @room_pending_title = nil
-    @current_stream = nil
-    @current_raw_line = nil
-    @line_colors = []
+  def assembler(has_room_window: true)
+    described_class.new(window_mgr: Struct.new(:room).new(has_room_window ? { 'room' => Object.new } : {}),
+                        event_bus: EventBus.new, pending_render: PendingRender.new,
+                        shared_state: Struct.new(:room_title).new(nil))
   end
 
-  # Mirror of GameTextProcessor#parse_room_subtitle (strips the " - " prefix and
-  # the outer brackets), used here for the terminal-title assignment side of the
-  # method. Kept identical so the spec exercises the real capture logic.
-  def parse_room_subtitle(subtitle)
-    text = subtitle.sub(/^\s*-\s*/, '')
-    text.sub(/^\[(.+?)\]/, '\1').strip
-  end
-end
-
-RSpec.describe RoomDataProcessor do
   describe '#process_room_data room title capture (:title mode)' do
-    subject(:host) { RoomTitleHost.new }
+    subject(:host) { assembler }
 
     # Captures the bare (bracket-stripped) title RoomWindow#render will re-bracket.
     # @param text [String] the roomName styled text as sent by the game/Lich
-    # @return [String, nil] the captured @room_pending_title
+    # @return [String, nil] the captured pending title
     def capture(text)
-      host.room_capture_mode = :title
-      host.process_room_data(text)
-      host.room_pending_title
+      host.capture_mode = :title
+      host.process_room_data(text, nil)
+      host.instance_variable_get(:@room_pending_title)
     end
 
     it 'strips the brackets and keeps the RealID when the game appends one' do
@@ -90,15 +70,15 @@ RSpec.describe RoomDataProcessor do
     end
 
     it 'does not capture a pending title when the layout has no RoomWindow' do
-      windowless = RoomTitleHost.new(has_room_window: false)
-      windowless.room_capture_mode = :title
-      windowless.process_room_data('[Town Square]')
-      expect(windowless.room_pending_title).to be_nil
+      windowless = assembler(has_room_window: false)
+      windowless.capture_mode = :title
+      windowless.process_room_data('[Town Square]', nil)
+      expect(windowless.instance_variable_get(:@room_pending_title)).to be_nil
     end
   end
 
   describe '#extract_styled_desc' do
-    subject(:host) { RoomTitleHost.new }
+    subject(:host) { assembler }
 
     # Which spellings of the roomDesc markers are found in a raw line.
     it 'finds roomDesc style and preset markers in either quotes, among other attributes' do
@@ -125,14 +105,14 @@ RSpec.describe RoomDataProcessor do
   end
 
   describe 'inline "You also see" objects' do
-    subject(:host) { RoomTitleHost.new }
+    subject(:host) { assembler }
 
     # @param raw_line [String] the raw server line the objects text came from
     # @return [String] the objects markup kept for the room window
     def objects(raw_line)
-      host.room_capture_mode = nil
-      host.current_raw_line = raw_line
-      host.process_room_data('You also see a box.')
+      host.capture_mode = nil
+      host.line_started(raw_line)
+      host.process_room_data('You also see a box.', nil)
       host.instance_variable_get(:@room_pending_objects)
     end
 
@@ -156,7 +136,7 @@ RSpec.describe RoomDataProcessor do
   end
 
   describe '#extract_inline_creatures' do
-    subject(:host) { RoomTitleHost.new }
+    subject(:host) { assembler }
 
     it 'reads the text of each <pushBold/>...<popBold/> region, tags removed' do
       {
@@ -183,7 +163,7 @@ RSpec.describe RoomDataProcessor do
   end
 
   describe '#structurize_text' do
-    subject(:host) { RoomTitleHost.new }
+    subject(:host) { assembler }
 
     it 'reads a player list with link markup into text and link regions' do
       text = "Also here: <a exist='1' noun='Bob'>Bob</a> and <pushBold/><d cmd='look Al'>Al</d><popBold/>."
@@ -193,7 +173,7 @@ RSpec.describe RoomDataProcessor do
   end
 
   describe '#parse_player_names' do
-    subject(:host) { RoomTitleHost.new }
+    subject(:host) { assembler }
 
     # @param text [String] an "Also here: ..." line
     # @return [Array<String>] the names the room-players indicator shows

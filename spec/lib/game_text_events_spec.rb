@@ -365,7 +365,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     end
 
     def process_line(line)
-      processor.send(:instance_variable_set, :@current_raw_line, line)
+      processor.send(:instance_variable_get, :@room).line_started(line)
       processor.send(:process_line_tags, line)
     end
 
@@ -424,8 +424,8 @@ RSpec.describe 'GameTextProcessor event emissions' do
         cmd_buffer: cmd_buffer, xml_escapes: xml_escapes, event_bus: event_bus
       )
 
-      test_processor.send(:instance_variable_set, :@current_raw_line,
-                          "<component id='room players'>Also here: Mahtra.</component>")
+      test_processor.send(:instance_variable_get, :@room)
+                    .line_started("<component id='room players'>Also here: Mahtra.</component>")
       test_processor.send(:process_line_tags,
                           "<component id='room players'>Also here: Mahtra.</component>")
 
@@ -478,7 +478,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     # No wm.room['room'] set -- the default wm has an empty room hash
 
     def process_line(line)
-      processor.send(:instance_variable_set, :@current_raw_line, line)
+      processor.send(:instance_variable_get, :@room).line_started(line)
       processor.send(:process_line_tags, line)
     end
 
@@ -581,7 +581,7 @@ RSpec.describe 'GameTextProcessor event emissions' do
     end
 
     def process_line(line)
-      processor.send(:instance_variable_set, :@current_raw_line, line)
+      processor.send(:instance_variable_get, :@room).line_started(line)
       processor.send(:process_line_tags, line)
     end
 

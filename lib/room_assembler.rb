@@ -3,37 +3,77 @@
 require_relative 'xml_tokenizer'
 require_relative 'streams'
 require_relative 'presets'
+require_relative 'link_extractor'
 
-=begin
-Room data capture and assembly for RoomWindow.
-Extracts room title, description, objects, players, exits, and room number
-from game server XML component streams and inline text patterns.
-=end
-
-# Handles room data capture from game server component streams and inline text.
+# Assembles the room window's data (title, description, objects, players,
+# exits) from the two ways the game sends it, and updates the room players
+# indicator.
 #
-# Assembles room information (title, description, objects, players, exits)
-# from multiple XML component lines and inline text patterns, updating the
-# RoomWindow atomically when all components have arrived.
+# - The component path: text inside a room component stream (+room objs+,
+#   +room exits+, ...), with the link and bold regions the tag parser
+#   computed, is emitted as it arrives.
+# - The inline path: roomName/roomDesc styled text (captured through
+#   {#capture_mode}) and "You also see" / "Also here:" / "Obvious exits:"
+#   lines are staged, from the raw line so their markup is kept, and
+#   committed as one batch when the exits arrive.
 #
-# UI updates are emitted via @event_bus rather than calling window methods
-# directly. The @wm.room[Streams::ROOM] reference is retained only as a read-only
-# check for whether a RoomWindow is configured in the current layout.
-#
-# Expects the including class to provide:
-# - @wm           [WindowManager]
-# - @event_bus    [EventBus]
-# - @room_capture_mode, @room_pending_title,
-#   @room_pending_desc, @room_pending_desc_colors, @room_pending_objects,
-#   @room_pending_objects_colors, @room_pending_players, @room_pending_exits,
-#   @room_pending_number, @current_raw_line, @current_stream
-# - @line_colors   [Array<Hash>]
-# - @pending_render [PendingRender]
-#
-# @api private
-module RoomDataProcessor
+# UI updates are emitted on the event bus. The window manager is only asked
+# whether the layout has a RoomWindow.
+class RoomAssembler
   # Element names of the tags stripped from inline "You also see" text.
   COMPONENT_TAGS = %w[component compDef].freeze
+
+  # What styled text is being captured for the room: +:title+ (roomName),
+  # +:desc+ (roomDesc) or nil. Set by the tag parser; the next text
+  # {#process_room_data} sees is captured and ends the capture.
+  #
+  # @return [Symbol, nil]
+  attr_accessor :capture_mode
+
+  # Parse a room subtitle attribute into a clean room title string.
+  #
+  # Handles both GemStone and DragonRealms subtitle formats:
+  # - GS: +" - [Town Square, Center]"+ → +"Town Square, Center"+
+  # - DR: +" - [Bosque Deriel, Shacks] (230008)"+ → +"Bosque Deriel, Shacks (230008)"+
+  #
+  # @param subtitle [String] raw subtitle attribute value
+  # @return [String] cleaned room title (may be empty)
+  def self.parse_subtitle(subtitle)
+    # Strip leading " - " prefix
+    text = subtitle.sub(/^\s*-\s*/, '')
+    # DR format: [Room Title] (RoomNum) — strip brackets, keep room number
+    # GS format: [Room Title]          — strip brackets
+    text.sub(/^\[(.+?)\]/, '\1').strip
+  end
+
+  # @param window_mgr [WindowManager] asked whether the layout has a RoomWindow
+  # @param event_bus [EventBus] receives the room and indicator events
+  # @param pending_render [PendingRender] asked for flushes and room renders
+  # @param shared_state [SharedState] its +room_title+ is set from roomName text
+  def initialize(window_mgr:, event_bus:, pending_render:, shared_state:)
+    @wm = window_mgr
+    @event_bus = event_bus
+    @pending_render = pending_render
+    @state = shared_state
+
+    @capture_mode = nil
+    # Inline-path staging, committed as one batch when the exits arrive
+    @room_pending_title = nil
+    @room_pending_desc = nil
+    @room_pending_objects = nil
+    @room_pending_players = nil
+    @room_pending_exits = nil
+    # Raw line with XML tags preserved for room object extraction
+    @current_raw_line = nil
+  end
+
+  # Start a new server line: the inline path reads room markup from it.
+  #
+  # @param raw_line [String] the server line, tags intact
+  # @return [void]
+  def line_started(raw_line)
+    @current_raw_line = raw_line
+  end
 
   # Process room-related text from inline game text and update RoomWindow
   # data if applicable.
@@ -44,13 +84,13 @@ module RoomDataProcessor
   # pending room data is committed to the RoomWindow atomically.
   #
   # @param text [String] the current line of game text (XML-unescaped)
+  # @param stream [String, nil] the stream the text is routed to
   # @return [Boolean] true if this line was consumed by the RoomWindow
   #   (caller should not route it to the main window).  Returns false
   #   when title/desc text is captured for the terminal title but the
   #   template has no RoomWindow — the text must still flow to the
   #   main text window for display.
-  # @api private
-  def process_room_data(text)
+  def process_room_data(text, stream)
     return false if text.empty?
 
     room_data_captured = false
@@ -61,9 +101,9 @@ module RoomDataProcessor
     # For templates without a RoomWindow, store the title for the
     # terminal but do NOT consume the text — it must still flow to
     # the main text window.
-    case @room_capture_mode
+    case @capture_mode
     when :title
-      room_title = parse_room_subtitle(text)
+      room_title = self.class.parse_subtitle(text)
       @state.room_title = room_title unless room_title.empty?
       if @wm.room[Streams::ROOM]
         # Strip the title's brackets so RoomWindow#render can re-add them exactly once.
@@ -74,7 +114,7 @@ module RoomDataProcessor
         @room_pending_title = text.sub(/^\[/, '').sub(/\]\s*\(/, ' (').sub(/\]\s*\z/, '').strip
         room_data_captured = true
       end
-      @room_capture_mode = nil
+      @capture_mode = nil
     when :desc
       if @wm.room[Streams::ROOM]
         # Don't overwrite if already set by component stream (preserves raw XML for links)
@@ -85,7 +125,7 @@ module RoomDataProcessor
         end
         room_data_captured = true
       end
-      @room_capture_mode = nil
+      @capture_mode = nil
     end
 
     # Without a RoomWindow, only update the room players indicator from
@@ -102,7 +142,7 @@ module RoomDataProcessor
     # handled by process_room_stream instead. Without this guard,
     # process_room_data would consume the text and prevent
     # process_room_stream from running.
-    return room_data_captured if @current_stream&.start_with?(Streams::ROOM)
+    return room_data_captured if stream&.start_with?(Streams::ROOM)
 
     # Detect "You also see" for objects (may have leading whitespace)
     if text =~ /^\s*You also see\b/
@@ -166,30 +206,32 @@ module RoomDataProcessor
   # When exits arrive, commits all pending data to the RoomWindow.
   #
   # @param text [String] component text content
+  # @param stream [String, nil] the current stream
+  # @param line_colors [Array<Hash>] the color regions the tag parser
+  #   computed for +text+ (links carry +:cmd+)
   # @return [Symbol, nil] :consumed if text was fully handled (caller should
   #   return), :continue if caller should keep processing (room players
   #   also needs indicator handling), or nil if not a room stream
-  # @api private
-  def process_room_stream(text)
-    return nil unless @current_stream&.start_with?(Streams::ROOM)
+  def process_room_stream(text, stream, line_colors)
+    return nil unless stream&.start_with?(Streams::ROOM)
 
     # Without a RoomWindow, only handle room players for the indicator
     unless @wm.room[Streams::ROOM]
-      return @current_stream == Streams::ROOM_PLAYERS ? :continue : nil
+      return stream == Streams::ROOM_PLAYERS ? :continue : nil
     end
 
-    # Extract pre-computed link regions from SAX-parsed @line_colors.
+    # Extract pre-computed link regions from SAX-parsed line_colors.
     # These have correct positions relative to `text` (the clean text
     # buffer) and include :cmd for click dispatch. Creature bold regions
-    # are also extracted from @line_colors for the objects section.
+    # are also extracted from line_colors for the objects section.
     #
     # Adjust positions for leading whitespace that .strip removes,
     # since SAX positions are relative to the original text buffer.
     left_offset = text.length - text.lstrip.length
-    links = extract_sax_links(left_offset)
+    links = extract_sax_links(line_colors, left_offset)
     clean = text.strip
 
-    case @current_stream
+    case stream
     when Streams::ROOM, Streams::ROOM_TITLE
       @room_pending_title = clean
       @event_bus.emit(:room_title, text: clean)
@@ -197,7 +239,7 @@ module RoomDataProcessor
       @room_pending_desc = clean
       @event_bus.emit(:room_desc, text: clean, links: links)
     when Streams::ROOM_OBJS
-      creatures = extract_sax_creatures(text, left_offset)
+      creatures = extract_sax_creatures(line_colors, text, left_offset)
       @room_pending_objects = clean
       @event_bus.emit(:room_objects, text: clean, links: links, creatures: creatures)
     when Streams::ROOM_PLAYERS
@@ -211,44 +253,71 @@ module RoomDataProcessor
 
     # Defer room window render to the IO.select flush point to reduce
     # curses operation frequency (update_exits already renders internally)
-    @pending_render.request_room_render unless @current_stream == Streams::ROOM_EXITS
+    @pending_render.request_room_render unless stream == Streams::ROOM_EXITS
 
     @pending_render.request_update
     # Don't skip for room players - let the indicator handler also process it
-    @current_stream == Streams::ROOM_PLAYERS ? :continue : :consumed
+    stream == Streams::ROOM_PLAYERS ? :continue : :consumed
+  end
+
+  # Update the 'room players' indicator window with parsed player names.
+  #
+  # Merges SAX link colors (GemStone <a> tags) with highlights applied to
+  # the full "Also here: ..." text, then remaps color regions covering
+  # each name to the indicator label. Only highlights that fully cover a
+  # name are included -- partial matches create visual noise on a compact
+  # indicator display.
+  #
+  # @param players_text [String, nil] raw "Also here:" text or nil
+  # @param sax_colors [Array<Hash>] SAX-parsed color regions (link colors)
+  # @return [void]
+  def update_room_players_indicator(players_text, sax_colors = [])
+    names = players_text ? parse_player_names(players_text) : []
+    if names.any?
+      names_text = names.join(', ')
+      full_text = players_text.strip
+      full_colors = sax_colors.dup
+      HighlightProcessor.apply_highlights(full_text, full_colors)
+      label_colors = remap_name_colors(full_text, names, full_colors)
+      @event_bus.emit(:indicator_update, id: 'room players', label: names_text, label_colors: label_colors, value: true)
+    else
+      @event_bus.emit(:indicator_update, id: 'room players', label: ' ', label_colors: nil, value: false)
+    end
   end
 
   private
 
-  # Extract link regions from SAX-computed @line_colors.
+  # Extract link regions from SAX-computed line colors.
   # Returns only color regions that have a :cmd key (clickable links),
   # stripping color info (the room window applies its own link preset).
   # Adjusts positions by the given offset (for leading whitespace removed by .strip).
   #
+  # @param line_colors [Array<Hash>] the tag parser's color regions
   # @param offset [Integer] number of chars stripped from the left of the text
   # @return [Array<Hash>] `[{start:, end:, cmd:}, ...]`
-  def extract_sax_links(offset = 0)
-    @line_colors.select { |c| c[:cmd] }.map do |c|
+  def extract_sax_links(line_colors, offset = 0)
+    line_colors.select { |c| c[:cmd] }.map do |c|
       { start: c[:start] - offset, end: c[:end] - offset, cmd: c[:cmd] }
     end
   end
 
-  # Extract creature names from monsterbold regions in SAX-computed @line_colors.
+  # Extract creature names from monsterbold regions in SAX-computed line colors.
   # Finds color regions that match the monsterbold preset and extracts the
   # corresponding text from the stripped clean text.
   #
+  # @param line_colors [Array<Hash>] the tag parser's color regions
   # @param text [String] original text (SAX text buffer, before strip)
   # @param offset [Integer] left strip offset applied to produce clean text
   # @return [Array<String>] creature names
-  def extract_sax_creatures(text, offset = 0)
+  def extract_sax_creatures(line_colors, text, offset = 0)
     monsterbold = Presets.colors(Presets::MONSTERBOLD)
     return [] unless monsterbold
 
     stripped = text.strip
-    @line_colors.select { |c| c[:fg] == monsterbold[:fg] && c[:bg] == monsterbold[:bg] && !c[:cmd] }
-                .filter_map { |c| stripped[(c[:start] - offset)...(c[:end] - offset)]&.strip }
-                .reject(&:empty?)
-                .uniq
+    line_colors.select { |c| c[:fg] == monsterbold[:fg] && c[:bg] == monsterbold[:bg] && !c[:cmd] }
+               .filter_map { |c| stripped[(c[:start] - offset)...(c[:end] - offset)]&.strip }
+               .reject(&:empty?)
+               .uniq
   end
 
   # Reset all pending room data slots to nil.
@@ -260,7 +329,6 @@ module RoomDataProcessor
     @room_pending_objects = nil
     @room_pending_players = nil
     @room_pending_exits = nil
-    @room_pending_number = nil
   end
 
   # Extract player names from "Also here: ..." room text.
@@ -419,31 +487,6 @@ module RoomDataProcessor
     exits_clean, exits_links = structurize_text(exits_raw)
     @event_bus.emit(:room_exits, text: exits_clean, links: exits_links)
     @pending_render.request_update
-  end
-
-  # Update the 'room players' indicator window with parsed player names.
-  #
-  # Merges SAX link colors (GemStone <a> tags) with highlights applied to
-  # the full "Also here: ..." text, then remaps color regions covering
-  # each name to the indicator label. Only highlights that fully cover a
-  # name are included -- partial matches create visual noise on a compact
-  # indicator display.
-  #
-  # @param players_text [String, nil] raw "Also here:" text or nil
-  # @param sax_colors [Array<Hash>] SAX-parsed color regions (link colors)
-  # @return [void]
-  def update_room_players_indicator(players_text, sax_colors = [])
-    names = players_text ? parse_player_names(players_text) : []
-    if names.any?
-      names_text = names.join(', ')
-      full_text = players_text.strip
-      full_colors = sax_colors.dup
-      HighlightProcessor.apply_highlights(full_text, full_colors)
-      label_colors = remap_name_colors(full_text, names, full_colors)
-      @event_bus.emit(:indicator_update, id: 'room players', label: names_text, label_colors: label_colors, value: true)
-    else
-      @event_bus.emit(:indicator_update, id: 'room players', label: ' ', label_colors: nil, value: false)
-    end
   end
 
   # Map highlight color regions from full players text to indicator label positions.

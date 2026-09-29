@@ -20,9 +20,9 @@ require_relative 'presets'
 # - @current_stream, @combat_next_line
 # - @pending_render (a PendingRender: screen updates to flush)
 # - @stream_stack (an empty Array: the open pushStreams, innermost last)
-# - @room_capture_mode
+# - @room (a RoomAssembler)
 # - @prompts (a PromptTracker)
-# - handle_game_text, new_stun, parse_room_subtitle, add_prompt
+# - handle_game_text
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
@@ -283,7 +283,7 @@ module TagHandlers
 
     if preset_id == Presets::ROOM_DESC && @wm.room[Streams::ROOM]
       flush_text_buffer(text_buffer)
-      @room_capture_mode = :desc
+      @room.capture_mode = :desc
     end
     h = { start: text_buffer.length }
     colors = Presets.colors(preset_id)
@@ -293,7 +293,7 @@ module TagHandlers
 
   # Handle </preset> closing tag.
   def handle_close_preset(_xml, text_buffer)
-    if @room_capture_mode == :desc
+    if @room.capture_mode == :desc
       flush_text_buffer(text_buffer)
     end
     if (h = @open_preset.pop)
@@ -325,7 +325,7 @@ module TagHandlers
 
     if style_id.empty?
       # Empty id = closing style
-      if @room_capture_mode == :title || @room_capture_mode == :desc
+      if @room.capture_mode == :title || @room.capture_mode == :desc
         flush_text_buffer(text_buffer)
       end
       if @open_style
@@ -340,8 +340,8 @@ module TagHandlers
       @open_style = { start: text_buffer.length }
       colors = Presets.colors(style_id)
       @open_style.merge!(colors) if colors
-      @room_capture_mode = :title if style_id == Presets::ROOM_NAME
-      @room_capture_mode = :desc if style_id == Presets::ROOM_DESC && @wm.room[Streams::ROOM]
+      @room.capture_mode = :title if style_id == Presets::ROOM_NAME
+      @room.capture_mode = :desc if style_id == Presets::ROOM_DESC && @wm.room[Streams::ROOM]
     end
   end
 
@@ -363,7 +363,7 @@ module TagHandlers
     else
       @current_stream = new_stream
       if new_stream == Streams::ROOM && (subtitle = attrs['subtitle'])
-        title = parse_room_subtitle(subtitle)
+        title = RoomAssembler.parse_subtitle(subtitle)
         unless title.empty?
           @state.room_title = title
           @event_bus.emit(:room_title, text: title)
@@ -389,11 +389,11 @@ module TagHandlers
       # are meaningful — they clear the displayed data. Since flush_text_buffer
       # skips empty text, handle this directly.
       if @wm.room[Streams::ROOM]
-        result = process_room_stream('')
-        update_room_players_indicator(nil) if result == :continue
+        result = @room.process_room_stream('', @current_stream, @line_colors)
+        @room.update_room_players_indicator(nil) if result == :continue
       elsif @current_stream == Streams::ROOM_PLAYERS
         # No RoomWindow -- still clear the indicator
-        update_room_players_indicator(nil)
+        @room.update_room_players_indicator(nil)
       end
     else
       flush_text_buffer(text_buffer)
@@ -545,7 +545,7 @@ module TagHandlers
     id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
     return unless id == Streams::ROOM && subtitle
 
-    room = parse_room_subtitle(subtitle)
+    room = RoomAssembler.parse_subtitle(subtitle)
     return if room.empty?
 
     @state.room_title = room

@@ -12,6 +12,7 @@ require_relative '../../lib/shared_state'
 require_relative '../../lib/clock'
 require_relative '../../lib/pending_render'
 require_relative '../../lib/prompt_tracker'
+require_relative '../../lib/room_assembler'
 require 'stringio'
 
 # Minimal host class that includes TagHandlers, providing the instance
@@ -20,8 +21,7 @@ class TagHandlerHost
   include TagHandlers
 
   attr_accessor :line_colors, :open_monsterbold, :open_preset, :open_style,
-                :open_color, :open_link, :current_stream, :combat_next_line,
-                :room_capture_mode
+                :open_color, :open_link, :current_stream, :combat_next_line
 
   attr_reader :flushed_texts, :wm, :state, :event_bus, :stream_stack, :pending_render
 
@@ -43,7 +43,7 @@ class TagHandlerHost
     @prompts = PromptTracker.new(shared_state: state, event_bus: event_bus, pending_render: @pending_render,
                                  window_mgr: wm, clock: clock)
     @prompts.server = StringIO.new
-    @room_capture_mode = nil
+    @room = RoomAssembler.new(window_mgr: wm, event_bus: event_bus, pending_render: @pending_render, shared_state: state)
     @flushed_texts = []
   end
 
@@ -57,11 +57,8 @@ class TagHandlerHost
     @open_link.clear
   end
 
-  # Stubs for methods defined in GameTextProcessor
-  def parse_room_subtitle(subtitle)
-    text = subtitle.sub(/^\s*-\s*/, '')
-    text.sub(/^\[(.+?)\]/, '\1').strip
-  end
+  # What room styled text is being captured (see RoomAssembler#capture_mode)
+  def room_capture_mode = @room.capture_mode
 
   def new_stun(_seconds) = nil
 end
