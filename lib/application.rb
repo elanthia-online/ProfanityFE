@@ -8,6 +8,7 @@ require_relative 'clock'
 require_relative 'games'
 require_relative 'server_connection'
 require_relative 'key_action_registry'
+require_relative 'macro_interpreter'
 
 # Core application class for ProfanityFE.
 #
@@ -150,6 +151,7 @@ class Application
                                         key_binding: @key_binding,
                                         send_command: method(:send_command),
                                         send_history_command: method(:send_history_command)).actions
+    @macro_interpreter = MacroInterpreter.new(cmd_buffer: @cmd_buffer, send_command: method(:send_command))
 
     @mouse_scroll = MouseScroll.new(@key_action, method(:write_to_client))
     @mouse_scroll.enable_click_events if cli_options[:links]
@@ -193,54 +195,18 @@ class Application
     @connection.send_line(cmd.sub(/^\./, ';'))
   end
 
-  # Interpret and execute a macro string.
+  # Interpret and execute a macro string (see {MacroInterpreter}).
   #
   # Inserts characters into the command buffer while handling escape
   # sequences: \\ (literal backslash), \x (clear buffer), \r (send
   # command), \@ (literal @), \? (backfill cursor position). A bare @
-  # marks the final cursor position.
+  # marks the final cursor position. {SettingsLoader} binds macro keys to
+  # this method.
   #
   # @param macro [String] the macro string to execute
   # @return [void]
   def do_macro(macro)
-    backslash = false
-    at_pos = nil
-    backfill = nil
-    macro.split('').each_with_index do |ch, i|
-      if backslash
-        case ch
-        when '\\'
-          @cmd_buffer.put_ch('\\')
-        when 'x'
-          @cmd_buffer.text.clear
-          @cmd_buffer.clear_and_get
-        when 'r'
-          at_pos = nil
-          send_command
-        when '@'
-          @cmd_buffer.put_ch('@')
-        when '?'
-          backfill = i - 3
-        end
-        backslash = false
-      elsif ch == '\\'
-        backslash = true
-      elsif ch == '@'
-        at_pos = @cmd_buffer.pos
-      else
-        @cmd_buffer.put_ch(ch)
-      end
-    end
-    if at_pos
-      @cmd_buffer.cursor_left while at_pos < @cmd_buffer.pos
-      @cmd_buffer.cursor_right while at_pos > @cmd_buffer.pos
-    end
-    @cmd_buffer.refresh
-    if backfill
-      @cmd_buffer.window.setpos(0, backfill)
-      backfill = nil
-    end
-    CursesRenderer.doupdate
+    @macro_interpreter.call(macro)
   end
 
   private
