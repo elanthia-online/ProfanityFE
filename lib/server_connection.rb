@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'socket'
+require_relative 'server_reader'
 
 # The TCP connection to the game server (Lich).
 #
@@ -18,6 +19,9 @@ class ServerConnection
   # Seconds to wait for the TCP connection to the game server before giving
   # up, so an unreachable --host fails instead of hanging.
   CONNECT_TIMEOUT = 10
+
+  # Seconds {#stop} waits for the reader thread to end.
+  STOP_TIMEOUT = 1
 
   # Raised by {#connect} when the connection cannot be opened. The message
   # names the host and port and says why; +cause+ is the original error.
@@ -40,6 +44,7 @@ class ServerConnection
     @socket = nil
     # Receives the reader thread's outcome (see #start_reader)
     @session_end = Queue.new
+    @reader = nil
   end
 
   # Open the connection and tell the server the front end's PID.
@@ -77,10 +82,22 @@ class ServerConnection
   # the write waits until the lock is released (see
   # {CursesRenderer.outside_lock}); lines keep the order they were sent in.
   #
+  # A write that fails because the connection is gone (one of
+  # {ServerReader::DISCONNECT_ERRORS}, e.g. EPIPE once Lich has closed) is
+  # logged and closes the socket. That ends the reader thread's read, so
+  # it reports +:disconnected+ (if it has not already) and the session ends
+  # as it does when the server closes the connection. Other errors are
+  # raised.
+  #
   # @param line [String] the command to send
   # @return [void]
   def send_line(line)
-    CursesRenderer.outside_lock { @socket.puts line }
+    CursesRenderer.outside_lock do
+      @socket.puts line
+    rescue *ServerReader::DISCONNECT_ERRORS => e
+      ProfanityLog.write('main', "send failed, disconnected: #{e.class}: #{e.message}")
+      close
+    end
   end
 
   # Start the thread that reads from the server. The thread only reports
@@ -92,7 +109,7 @@ class ServerConnection
   #   +:crashed+, see {GameTextProcessor#run})
   # @return [Thread] the reader thread
   def start_reader
-    Thread.new do
+    @reader = Thread.new do
       outcome = :crashed
       outcome = yield @socket
     ensure
@@ -113,6 +130,18 @@ class ServerConnection
   #   +:crashed+ if it raised
   def take_outcome
     @session_end.pop
+  end
+
+  # Close the socket and wait for the reader thread to end, at most
+  # +timeout+ seconds, so it draws nothing more. Closing the socket ends a
+  # read in progress; a line already read is drawn first.
+  #
+  # @param timeout [Numeric] seconds to wait for the reader thread
+  # @return [void]
+  def stop(timeout: STOP_TIMEOUT)
+    close
+    @reader&.join(timeout)
+    nil
   end
 
   # Close the socket, ignoring errors; does nothing if never connected.

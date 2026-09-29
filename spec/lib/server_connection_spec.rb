@@ -140,6 +140,75 @@ RSpec.describe ServerConnection do
     end
   end
 
+  # BUG FOUND (fixed here): a command sent after Lich closed the connection
+  # raised EPIPE (or ECONNRESET) out of the input loop, and the client exited
+  # 1 as if it had crashed. The failed write now closes the socket, so the
+  # reader thread reports :disconnected and the session ends normally.
+  describe '#send_line when the connection is gone' do
+    real_renderer = Module.new.tap { |wrapper| load(File.expand_path('../../lib/curses_renderer.rb', __dir__), wrapper) }
+    let(:sockets) { UNIXSocket.pair }
+    let(:local) { sockets.first }
+    let(:peer) { sockets.last }
+
+    before do
+      stub_const('CursesRenderer', real_renderer::CursesRenderer)
+      allow(ProfanityLog).to receive(:write)
+      connection.attach(local)
+    end
+
+    after { peer.close unless peer.closed? }
+
+    # A reader thread that reports :eof when the server closes the
+    # connection and :socket_closed when our side is closed during a read.
+    def start_reader
+      connection.start_reader do |socket|
+        nil while socket.gets
+        :eof
+      rescue IOError
+        :socket_closed
+      end
+    end
+
+    it 'does not raise on EPIPE when the server has closed, and closes the socket' do
+      peer.close
+
+      expect { connection.send_line('look') }.not_to raise_error
+      expect(local).to be_closed
+    end
+
+    ServerReader::DISCONNECT_ERRORS.each do |error_class|
+      it "on #{error_class}, closes the socket, which ends the reader thread's read" do
+        allow(local).to receive(:puts).and_raise(error_class)
+        start_reader
+
+        connection.send_line('look')
+
+        expect(Timeout.timeout(5) { connection.take_outcome }).to eq :socket_closed
+        expect(ProfanityLog).to have_received(:write).with('main', a_string_starting_with("send failed, disconnected: #{error_class}"))
+      end
+    end
+
+    it 'does not raise for the lines after the first either (a macro sending two lines)' do
+      peer.close
+
+      expect do
+        CursesRenderer.synchronize do
+          connection.send_line('one')
+          connection.send_line('two')
+        end
+      end.not_to raise_error
+      expect(ProfanityLog).to have_received(:write).with('main', a_string_including('Errno::EPIPE')).once
+      expect(ProfanityLog).to have_received(:write).with('main', a_string_including('IOError')).once
+    end
+
+    it 'raises any other error and leaves the socket open' do
+      allow(local).to receive(:puts).and_raise(Errno::ETIMEDOUT)
+
+      expect { connection.send_line('look') }.to raise_error(Errno::ETIMEDOUT)
+      expect(local).not_to be_closed
+    end
+  end
+
   describe 'the reader thread' do
     it 'passes the socket to the block and reports what it returned' do
       connection.connect
@@ -185,6 +254,48 @@ RSpec.describe ServerConnection do
       expect(connection.take_outcome).to eq :crashed
     ensure
       Thread.report_on_exception = report
+    end
+  end
+
+  describe '#stop' do
+    it 'closes the socket and waits for the reader thread to end' do
+      connection.connect
+      peer = accept_peer
+      # The reader takes a moment to finish after its read is ended.
+      thread = connection.start_reader do |socket|
+        nil while socket.gets
+      rescue IOError
+        sleep 0.1
+        :disconnected
+      end
+
+      connection.stop
+
+      expect(thread).not_to be_alive
+      expect(Timeout.timeout(5) { peer.read }).to eq "SET_FRONTEND_PID #{Process.pid}\n"
+    ensure
+      peer&.close
+    end
+
+    it 'stops waiting after the timeout if the reader thread does not end' do
+      gate = Queue.new
+      connection.attach(StringIO.new)
+      thread = connection.start_reader { gate.pop }
+
+      connection.stop(timeout: 0.05)
+
+      expect(thread).to be_alive
+    ensure
+      gate << :disconnected
+    end
+
+    it 'only closes the socket when no reader thread was started' do
+      socket = StringIO.new
+      connection.attach(socket)
+
+      connection.stop
+
+      expect(socket).to be_closed
     end
   end
 

@@ -1649,5 +1649,273 @@ RSpec.describe Application do
       expect(blocking_reads).to be_empty
       expect(output).to include('error reading from the game server')
     end
+
+    # BUG FOUND (fixed here): a command sent after Lich closed the connection
+    # raised EPIPE or ECONNRESET out of the input loop, which ended the
+    # client as a crash (exit 1) instead of showing the disconnect notice.
+    describe 'a command sent after the game server has closed' do
+      real_renderer = Module.new.tap { |wrapper| load(File.expand_path('../../lib/curses_renderer.rb', __dir__), wrapper) }
+
+      before do
+        # The real render lock, so the command is written after the key
+        # handler, outside the lock, as in the client.
+        stub_const('CursesRenderer', real_renderer::CursesRenderer)
+        app.key_binding[1] = proc { app.execute_command('look') }
+      end
+
+      # A command window that returns ctrl+a (bound to send "look") at the
+      # first poll, once +before_key+ has run, then no key while polled, and
+      # 'q' once read blocking. Ends the loop with Interrupt after 5 seconds.
+      def keyboard_sending_command(before_key: -> {}, read_error: nil)
+        window = keyboard_with_key('q', screen)
+        keys = ["\x01"]
+        deadline = Time.now + 5
+        window.define_singleton_method(:get_char) do
+          raise Interrupt if Time.now > deadline
+          raise read_error if read_error
+
+          before_key.call unless keys.empty?
+          keys.shift
+        end
+        window
+      end
+
+      # A game server whose writes raise +error+ and whose reads wait until
+      # it is closed, then raise IOError, as a socket closed during a read.
+      def server_rejecting_writes(error)
+        closed = Queue.new
+        server = Object.new
+        server.define_singleton_method(:gets) do
+          closed.pop
+          raise IOError, 'stream closed in another thread'
+        end
+        server.define_singleton_method(:puts) { |_line| raise error }
+        server.define_singleton_method(:close) { closed << true }
+        server
+      end
+
+      # Run the server thread and the input loop with $stderr captured.
+      #
+      # @return [Array(SystemExit, String)] the exit raised (nil if the loop
+      #   returned), and what was printed
+      def run_sending_command(server, keyboard = keyboard_sending_command)
+        exit_error = nil
+        output = capture_stderr do
+          app.cmd_buffer.window = keyboard
+          app.connection.attach(server)
+          app.send(:start_server_thread)
+          app.send(:input_loop)
+        rescue SystemExit => e
+          exit_error = e
+        end
+        [exit_error, output]
+      end
+
+      def notices = screen.count { |_, text| text == '* Connection closed' }
+
+      [Errno::EPIPE, Errno::ECONNRESET].each do |error_class|
+        it "on #{error_class} from the write, shows the disconnect notice once, waits for a key, and exits 0" do
+          exit_error, output = run_sending_command(server_rejecting_writes(error_class.new))
+
+          expect(exit_error&.status).to eq 0
+          expect(output).to eq ''
+          expect(notices).to eq 1
+          expect(screen.map(&:last)).to include('* Press any key to exit...', :blocking_getch)
+        end
+      end
+
+      it 'exits 1 with the error message when the write fails with any other error' do
+        exit_error, output = run_sending_command(server_rejecting_writes(Errno::ETIMEDOUT.new))
+
+        expect(exit_error&.status).to eq 1
+        expect(notices).to eq 0
+        expect(output).to include('ProfanityFE stopped: error in the input loop (Errno::ETIMEDOUT: ')
+      end
+
+      it 'still exits 1 with the error message on an IOError that is not from a write' do
+        keyboard = keyboard_sending_command(read_error: IOError.new('terminal gone'))
+        exit_error, output = run_sending_command(server_rejecting_writes(Errno::EPIPE.new), keyboard)
+
+        expect(exit_error&.status).to eq 1
+        expect(notices).to eq 0
+        expect(output).to include('ProfanityFE stopped: error in the input loop (IOError: terminal gone)')
+      end
+
+      # The server closes, the server thread reports the disconnect, and then
+      # the command already typed is written to the closed connection (EPIPE).
+      it 'shows the notice once when the server thread has already reported the disconnect' do
+        sockets = UNIXSocket.pair
+        game = sockets.last
+        keyboard = keyboard_sending_command(before_key: lambda {
+          game.close unless game.closed?
+          sleep 0.001 until app.connection.ended?
+        })
+
+        exit_error, output = run_sending_command(sockets.first, keyboard)
+
+        expect(exit_error&.status).to eq 0
+        expect(output).to eq ''
+        expect(notices).to eq 1
+        expect(ProfanityLog).to have_received(:write).with('main', 'send failed, disconnected: Errno::EPIPE: Broken pipe')
+      ensure
+        sockets&.each { |socket| socket.close unless socket.closed? }
+      end
+    end
+  end
+
+  # BUG FOUND (fixed here): an error in the input loop outside a key handler
+  # (reading a key, ticking the countdowns) was logged and the client exited
+  # 0 with no message. It now ends like a server thread crash: the screen is
+  # closed, the error printed, and the client exits 1.
+  describe 'an error in the input loop outside a key handler' do
+    let(:events) { [] }
+
+    before do
+      allow(IO).to receive(:select).and_return(nil)
+      allow(ProfanityLog).to receive(:write)
+      allow(Curses).to receive(:close_screen) { events << [:close_screen, $stderr.string.dup] }
+    end
+
+    # A command window whose key reads raise the error once +ready+ returns
+    # true (at once by default).
+    def keyboard_raising(error, ready: -> { true })
+      window = Object.new
+      deadline = Time.now + 5
+      window.define_singleton_method(:nodelay=) { |_| nil }
+      window.define_singleton_method(:noutrefresh) { nil }
+      window.define_singleton_method(:get_char) do
+        raise error if ready.call || Time.now > deadline
+
+        nil
+      end
+      window
+    end
+
+    # Run the input loop with $stderr captured.
+    #
+    # @return [Array(SystemExit, String)] the exit raised (nil if the loop
+    #   returned), and what was printed
+    def run_input_loop
+      exit_error = nil
+      output = capture_stderr do
+        app.send(:input_loop)
+      rescue SystemExit => e
+        exit_error = e
+      end
+      [exit_error, output]
+    end
+
+    it 'closes the screen, then prints the error, and exits 1' do
+      app.cmd_buffer.window = keyboard_raising(RuntimeError.new('boom'))
+
+      exit_error, output = run_input_loop
+
+      expect(exit_error&.status).to eq 1
+      expect(events.first).to eq [:close_screen, '']
+      expect(output).to eq "ProfanityFE stopped: error in the input loop (RuntimeError: boom). See the log file for details.\n"
+    end
+
+    it 'still logs the error with its backtrace' do
+      app.cmd_buffer.window = keyboard_raising(RuntimeError.new('boom'))
+
+      run_input_loop
+
+      expect(ProfanityLog).to have_received(:write).with('main', 'boom', backtrace: an_instance_of(Array))
+    end
+
+    it 'prints the error with warnings turned off (ruby -W0)' do
+      app.cmd_buffer.window = keyboard_raising(RuntimeError.new('boom'))
+      verbose = $VERBOSE
+      $VERBOSE = nil
+
+      _, output = run_input_loop
+
+      expect(output).to include('RuntimeError: boom')
+    ensure
+      $VERBOSE = verbose
+    end
+
+    it 'still ends quietly on Ctrl+C' do
+      app.cmd_buffer.window = keyboard_raising(Interrupt.new)
+
+      exit_error, output = run_input_loop
+
+      expect(exit_error).to be_nil
+      expect(output).to eq ''
+      expect(events.map(&:first)).to eq [:close_screen]
+    end
+
+    context 'while the server thread is drawing game text' do
+      let(:monitor) { Monitor.new }
+      let(:sockets) { UNIXSocket.pair }
+      let(:reader_alive_at_close) { [] }
+      let(:game_text) do
+        events = self.events
+        window = Object.new
+        window.define_singleton_method(:add_string) { |*| events << [:draw] }
+        window.define_singleton_method(:route_string) { |*| events << [:draw] }
+        window
+      end
+
+      before do
+        # Pause after closing the screen, as a thread switch there would: a
+        # draw now reopens curses' alternate screen, and the error printed
+        # next lands on it and is discarded at exit.
+        allow(Curses).to receive(:close_screen) do
+          events << [:close_screen, $stderr.string.dup]
+          reader_alive_at_close << @reader.alive?
+          sleep 0.05
+        end
+        # The real render lock, so the two threads really take turns.
+        allow(CursesRenderer).to receive(:synchronize) { |&block| monitor.synchronize(&block) }
+        allow(CursesRenderer).to receive(:render) { |&block| monitor.synchronize(&block) }
+        app.window_mgr.instance_variable_set(:@stream, { 'main' => game_text })
+        app.connection.attach(sockets.first)
+        @writer = Thread.new do
+          loop { sockets.last.write("A goblin arrives.\n" * 50) }
+        rescue IOError, SystemCallError
+          nil
+        end
+        @reader = app.send(:start_server_thread)
+      end
+
+      after do
+        sockets.last.close
+        @writer.join(5)
+      end
+
+      def drawn = events.count { |event| event == [:draw] }
+
+      def events_after_screen_closed = events.drop_while { |event| event.first != :close_screen }
+
+      it 'stops the server thread before closing the screen, so nothing is drawn over the error' do
+        app.cmd_buffer.window = keyboard_raising(RuntimeError.new('boom'), ready: -> { drawn > 20 })
+
+        exit_error, output = run_input_loop
+
+        expect(exit_error&.status).to eq 1
+        expect(output).to include('RuntimeError: boom')
+        expect(reader_alive_at_close.first).to be false
+        expect(events_after_screen_closed).not_to include([:draw])
+      end
+
+      it 'exits 1 the same way when the error is raised with the render lock held' do
+        countdown = Object.new
+        countdown.define_singleton_method(:tick) { raise 'tick failed' }
+        app.window_mgr.countdown['roundtime'] = countdown
+        app.cmd_buffer.window = keyboard_raising(RuntimeError.new('not reached'))
+        deadline = Time.now + 5
+        allow(IO).to receive(:select) do
+          sleep 0.001 until drawn > 20 || Time.now > deadline if Thread.current == Thread.main
+        end
+
+        exit_error, output = run_input_loop
+
+        expect(exit_error&.status).to eq 1
+        expect(output).to include('RuntimeError: tick failed')
+        expect(reader_alive_at_close.first).to be false
+        expect(events_after_screen_closed).not_to include([:draw])
+      end
+    end
   end
 end
