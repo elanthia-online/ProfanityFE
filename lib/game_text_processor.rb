@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'games/dragonrealms'
-require_relative 'games/gemstone'
-require_relative 'games/combined_rules'
+require_relative 'games'
 require_relative 'room_data_processor'
 require_relative 'familiar_notifier'
 require_relative 'xml_tokenizer'
@@ -72,10 +70,6 @@ class GameTextProcessor
   # alternations; the prefix is enough to find the gag in the settings XML.
   GAG_LOG_PATTERN_LIMIT = 80
 
-  # The game rules used when none are passed in: both games', DragonRealms
-  # first, since ProfanityFE doesn't know which game it is connected to.
-  BOTH_GAMES_RULES = Games::CombinedRules.new(Games::DragonRealms, Games::GemStone)
-
   # Create a new processor wired to the given window manager and shared state.
   #
   # @param window_mgr [WindowManager] provides handler hashes for stream/indicator/progress/countdown/room windows
@@ -90,10 +84,11 @@ class GameTextProcessor
   #   (--speech-ts)
   # @param clock [Clock] read for timestamps and the server time offset (see TagHandlers#handle_prompt_tag)
   # @param game_rules [Games::Rules] the game's death, logon, stun and
-  #   spell-name rules
+  #   spell-name rules (--game, see Games.rules_for); both games' when the
+  #   game isn't known
   def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:,
                  boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false, clock: Clock.new,
-                 game_rules: BOTH_GAMES_RULES)
+                 game_rules: Games::BOTH_GAMES)
     @wm = window_mgr
     @state = shared_state
     @cmd_buffer = cmd_buffer

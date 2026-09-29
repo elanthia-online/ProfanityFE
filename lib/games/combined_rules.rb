@@ -7,10 +7,10 @@ module Games
   # Several games' rules asked in turn: for each question the first game
   # with an answer (not nil) wins.
   #
-  # ProfanityFE doesn't know which game it is connected to, so
-  # GameTextProcessor uses DragonRealms and GemStone together, in that
-  # order. A line both games claim therefore gets DragonRealms' answer
-  # (e.g. a "failed within ...!" death line).
+  # Without --game ProfanityFE doesn't know which game it is connected to,
+  # so GameTextProcessor uses DragonRealms and GemStone together, in that
+  # order ({Games::BOTH_GAMES}). A line both games claim then gets
+  # DragonRealms' answer (e.g. a "failed within ...!" death line).
   #
   # @example
   #   rules = Games::CombinedRules.new(Games::DragonRealms, Games::GemStone)

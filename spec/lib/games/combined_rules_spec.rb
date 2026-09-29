@@ -8,6 +8,7 @@ require 'rexml/document'
 require_relative '../../../lib/games/dragonrealms'
 require_relative '../../../lib/games/gemstone'
 require_relative '../../../lib/games/combined_rules'
+require_relative '../../../lib/games'
 require_relative '../../../lib/game_text_processor'
 require_relative '../../../lib/shared_state'
 
@@ -119,7 +120,7 @@ RSpec.describe Games::CombinedRules do
     end
 
     it 'uses both games\' rules, DragonRealms first, by default' do
-      expect(GameTextProcessor::BOTH_GAMES_RULES.games).to eq [Games::DragonRealms, Games::GemStone]
+      expect(Games::BOTH_GAMES.games).to eq [Games::DragonRealms, Games::GemStone]
       expect(death_window(bloodriven)).to eq ['09:05 Mahtra']
     end
 

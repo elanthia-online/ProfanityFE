@@ -5,6 +5,7 @@ require_relative 'streams'
 require_relative 'feedback'
 require_relative 'boot_profiler'
 require_relative 'clock'
+require_relative 'games'
 
 # Core application class for ProfanityFE.
 #
@@ -109,12 +110,16 @@ class Application
   # @param port [Integer] game server (Lich) port
   # @param boot_profiler [BootProfiler] records startup timings (--profile);
   #   also passed to the {GameTextProcessor}
-  def initialize(cli_options, settings_file:, host:, port:, boot_profiler: BootProfiler.new(enabled: false))
+  # @param game_rules [Games::Rules] the game's rules for the
+  #   {GameTextProcessor} (--game, see Games.rules_for)
+  def initialize(cli_options, settings_file:, host:, port:, boot_profiler: BootProfiler.new(enabled: false),
+                 game_rules: Games::BOTH_GAMES)
     @cli_options = cli_options
     @settings_file = settings_file
     @host = host
     @port = port
     @boot_profiler = boot_profiler
+    @game_rules = game_rules
     @server = nil
     # Receives the server thread's outcome (see #start_server_thread)
     @session_end = Queue.new
@@ -724,7 +729,8 @@ class Application
       event_bus: @event_bus,
       boot_profiler: @boot_profiler,
       speech_timestamps: @cli_options[:speech_ts],
-      clock: @clock
+      clock: @clock,
+      game_rules: @game_rules
     )
     # The server thread only reports how the connection ended; the input
     # loop picks that up and ends the session on the main thread.

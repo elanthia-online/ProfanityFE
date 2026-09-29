@@ -45,6 +45,13 @@ RSpec.describe 'profanity.rb startup errors' do
                                                 "Try 'profanity.rb --help' for the list of options.\n", 1])
   end
 
+  it 'prints an unknown --game and a usage hint to stderr and exits 1' do
+    stdout, stderr, status = run_client('--game=XX')
+
+    expect([stdout, stderr, status]).to eq(['', "profanity.rb: invalid argument: --game=XX\n" \
+                                                "Try 'profanity.rb --help' for the list of options.\n", 1])
+  end
+
   # BUG FOUND (fixed here): the option error was printed with Kernel#warn,
   # which prints nothing when warnings are off (ruby -W0), so the client
   # exited 1 without saying why.
@@ -68,6 +75,7 @@ RSpec.describe 'profanity.rb startup errors' do
     expect(stderr).to eq('')
     expect(stdout).to start_with("\nProfanity FrontEnd v#{VERSION}\n\n")
     expect(stdout).to include('--settings-file=FILE', '--profile')
+    expect(stdout).to match(/^\s+--game=CODE\s+Game's rules only: DR or GS/)
   end
 
   it 'prints a missing --settings-file to stderr and exits 1' do

@@ -27,6 +27,30 @@ RSpec.describe CliOptions do
       expect { described_class.parse(['--p']) }.to raise_error(OptionParser::AmbiguousOption)
     end
 
+    it 'leaves the game unknown without --game' do
+      expect(described_class.parse([])[:game]).to be_nil
+    end
+
+    # Any case; Lich's longer codes (test, fallen, platinum) start the same way
+    {
+      'DR' => 'DR', 'dr' => 'DR', 'DRT' => 'DR', 'drf' => 'DR',
+      'GS' => 'GS', 'gs4' => 'GS', 'GSX' => 'GS', 'GS4X' => 'GS', 'gst' => 'GS', 'GSF' => 'GS'
+    }.each do |code, game|
+      it "takes --game=#{code} as the code #{code.upcase}, #{game}'s rules" do
+        options = described_class.parse(["--game=#{code}"])
+
+        expect(options[:game]).to eq code.upcase
+        expect(Games.rules_for(options[:game])).to be(game == 'DR' ? Games::DragonRealms : Games::GemStone)
+      end
+    end
+
+    it 'refuses a --game no game code starts with, like any invalid value' do
+      ['--game=XX', '--game=', '--game=D', '--game= DR', '--game=ADR'].each do |arg|
+        expect { described_class.parse([arg]) }.to raise_error(OptionParser::InvalidArgument), "#{arg} was accepted"
+      end
+      expect { described_class.parse(['--game']) }.to raise_error(OptionParser::MissingArgument)
+    end
+
     it 'does not change DEFAULTS' do
       described_class.parse(['--port=9000'])
       expect(described_class::DEFAULTS[:port]).to eq(8000)
@@ -49,6 +73,7 @@ RSpec.describe CliOptions do
         ['--port=abc'] => 'profanity.rb: invalid argument: --port=abc',
         ['--port']     => 'profanity.rb: missing argument: --port',
         ['--p']        => 'profanity.rb: ambiguous option: --p',
+        ['--game=XX']  => 'profanity.rb: invalid argument: --game=XX',
       }.each do |argv, first_line|
         expect { described_class.parse_command_line(argv, program: 'profanity.rb') }
           .to raise_error(described_class::UsageError, /\A#{Regexp.escape(first_line)}\n/)
@@ -113,7 +138,7 @@ RSpec.describe 'profanity.rb command line' do
     output, status = run_client('--help')
 
     expect(status).to eq(0)
-    expect(output).to include('--settings-file=FILE', '--profile')
+    expect(output).to include('--settings-file=FILE', '--profile', '--game=CODE')
     expect(output).not_to include("\e")
   end
 
@@ -168,6 +193,64 @@ RSpec.describe 'profanity.rb command line' do
     accepted&.kill
     server&.close
     FileUtils.remove_entry(dir) if dir
+  end
+
+  # Run profanity.rb with +args+ on a wide terminal against a fake game
+  # server that sends +lines+, until the terminal shows +pattern+ (or 20s).
+  #
+  # @return [String] everything written to the terminal
+  def terminal_after_server_lines(args, lines, pattern)
+    server = TCPServer.new('127.0.0.1', 0)
+    sender = Thread.new do
+      client = server.accept
+      client.write(lines.map { |line| "#{line}\r\n" }.join)
+      sleep
+    ensure
+      client&.close
+    end
+    output = +''
+    wide = env.merge('COLUMNS' => '240', 'LINES' => '50')
+    command = [RbConfig.ruby, File.join(repo, 'profanity.rb'), "--port=#{server.addr[1]}",
+               "--settings-file=#{File.join(repo, 'templates', 'default.xml')}", *args]
+    PTY.spawn(wide, *command, chdir: Dir.home) do |reader, _writer, pid|
+      Timeout.timeout(20) do
+        output << reader.readpartial(4096) until output.match?(pattern)
+      rescue EOFError, Errno::EIO, Timeout::Error
+        nil
+      end
+    ensure
+      begin
+        Process.kill('KILL', pid)
+        Process.wait(pid)
+      rescue Errno::ESRCH, Errno::ECHILD
+        nil
+      end
+    end
+    output
+  ensure
+    sender&.kill
+    server&.close
+  end
+
+  describe '--game' do
+    # A Bloodriven bank death ending in "!": DragonRealms' "failed within
+    # .*!" catch-all and GemStone's DR-B area both match it.
+    let(:death_lines) do
+      ['<pushStream id="death"/> * Mahtra failed within the Bank at Bloodriven!<popStream/>',
+       '<prompt time="1790000000">&gt;</prompt>']
+    end
+
+    it 'applies only GemStone\'s rules with --game=GS' do
+      output = terminal_after_server_lines(['--game=GS'], death_lines, /Mahtra[^\e]*\e/)
+
+      expect(output[/Mahtra[^\e]*/]).to eq 'Mahtra DR-B'
+    end
+
+    it 'applies both games\' rules, DragonRealms first, without --game' do
+      output = terminal_after_server_lines([], death_lines, /Mahtra[^\e]*\e/)
+
+      expect(output[/Mahtra[^\e]*/]).to eq 'Mahtra'
+    end
   end
 
   # The log path is resolved before the rest of lib is loaded. Without
