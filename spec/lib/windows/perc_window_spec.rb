@@ -27,7 +27,7 @@ RSpec.describe PercWindow do
   # Deliver one spell update the way WindowManager does: clearStream, then
   # each spell line.
   def receive_spells(*spells)
-    window.clear_spells
+    window.stream_cleared
     spells.each { |spell| window.add_string(spell) }
   end
 
@@ -79,7 +79,7 @@ RSpec.describe PercWindow do
 
     it 'is empty after a clear with no spells following' do
       receive_spells('Bloodthorns (44)')
-      window.clear_spells
+      window.stream_cleared
 
       expect(visible_rows).to be_empty
     end

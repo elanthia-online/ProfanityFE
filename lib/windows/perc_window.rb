@@ -8,7 +8,7 @@ require_relative 'stream_window'
 # Active spells and effects display window.
 #
 # The server sends the full list of active spells as one block:
-# +<clearStream id="percWindow"/>+ ({#clear_spells}) followed by one line
+# +<clearStream id="percWindow"/>+ ({#stream_cleared}) followed by one line
 # per spell ({#add_string}). The window keeps that batch as logical
 # (unwrapped) entries, sorts them by remaining duration (highest first),
 # and wraps each entry only when drawing, so a long spell's continuation
@@ -108,7 +108,7 @@ class PercWindow < BaseWindow
   # follow are added with {#add_string}.
   #
   # @return [void]
-  def clear_spells
+  def stream_cleared
     @spells = {}.freeze
     redraw
   end
