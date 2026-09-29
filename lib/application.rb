@@ -9,12 +9,14 @@ require_relative 'games'
 require_relative 'server_connection'
 require_relative 'key_action_registry'
 require_relative 'macro_interpreter'
+require_relative 'mouse_controller'
 
 # Core application class for ProfanityFE.
 #
 # Owns all runtime state that was previously captured by closures in
 # profanity.rb: the command buffer, window manager, shared state,
-# key bindings, mouse scroll handler, and the {ServerConnection}.
+# key bindings, and the {ServerConnection}; mouse handling is in the
+# {MouseController} and macros run in the {MacroInterpreter}.
 #
 # Converts closure-captured local variables to instance variables. The
 # key actions are Procs by name (SettingsLoader requires this), built by
@@ -153,8 +155,12 @@ class Application
                                         send_history_command: method(:send_history_command)).actions
     @macro_interpreter = MacroInterpreter.new(cmd_buffer: @cmd_buffer, send_command: method(:send_command))
 
-    @mouse_scroll = MouseScroll.new(@key_action, method(:write_to_client))
-    @mouse_scroll.enable_click_events if cli_options[:links]
+    @mouse_controller = MouseController.new(key_action: @key_action, window_mgr: @window_mgr,
+                                            shared_state: @shared_state, cmd_buffer: @cmd_buffer,
+                                            write_to_client: method(:write_to_client),
+                                            send_to_server: @connection.method(:send_line),
+                                            links: cli_options[:links])
+    @mouse_scroll = @mouse_controller.mouse_scroll
     @boot_profiler.mark('Application.new')
   end
 
@@ -642,7 +648,7 @@ class Application
         # Tick countdowns on every iteration (~100ms), regardless of input
         countdown_updated = tick_countdowns
         # Drag held at a window edge keeps scrolling once per tick
-        drag_scrolled = tick_drag_auto_scroll
+        drag_scrolled = @mouse_controller.tick_drag_auto_scroll
 
         ch = read_key
         if ch.nil?
@@ -681,7 +687,7 @@ class Application
   # @return [Hash, nil] the key-combo map to use for the next key
   def handle_key(ch, key_combo)
     if ch == Curses::KEY_MOUSE
-      handle_mouse_event
+      @mouse_controller.handle_event
       return key_combo
     end
 
@@ -715,136 +721,5 @@ class Application
   rescue StandardError => e
     ProfanityLog.write('main', "input handler failed: #{e.message}", backtrace: e.backtrace)
     nil
-  end
-
-  # ---- Mouse event handling ----
-
-  def handle_mouse_event
-    mouse = Curses.getmouse
-    return unless mouse
-
-    if @mouse_scroll.configuring?
-      @mouse_scroll.process(mouse)
-      return
-    end
-    @mouse_scroll.process(mouse)
-
-    screen_y = mouse.y
-    screen_x = mouse.x
-    bstate = mouse.bstate
-
-    if (bstate & Curses::BUTTON1_PRESSED) != 0
-      handle_mouse_press(screen_y, screen_x)
-    elsif (bstate & Curses::BUTTON1_RELEASED) != 0
-      handle_mouse_release(screen_y, screen_x)
-    elsif defined?(Curses::BUTTON1_CLICKED) && (bstate & Curses::BUTTON1_CLICKED) != 0
-      SelectionManager.clear_selection
-      window = BaseWindow.find_window_at(screen_y, screen_x)
-      if window
-        rel_y = screen_y - window.begy
-        rel_x = screen_x - window.begx
-        dispatch_link(window, rel_y, rel_x)
-      end
-    elsif MouseScroll::MOTION_EVENTS.nonzero? && (bstate & MouseScroll::MOTION_EVENTS) != 0
-      handle_mouse_drag(screen_y, screen_x)
-    end
-  end
-
-  def handle_mouse_press(screen_y, screen_x)
-    window = BaseWindow.find_window_at(screen_y, screen_x)
-    unless window
-      SelectionManager.clear_selection
-      return
-    end
-
-    rel_y = screen_y - window.begy
-    rel_x = screen_x - window.begx
-    multi_click = SelectionManager.start_selection(window, rel_y, rel_x)
-    # Motion reporting only while the button is held — a permanent
-    # motion stream corrupts the display
-    @mouse_scroll.begin_drag_capture
-    CursesRenderer.doupdate if multi_click
-  end
-
-  # Live highlight update from a motion report while button 1 is held.
-  # SelectionManager throttles redraws so a motion flood coalesces.
-  def handle_mouse_drag(screen_y, screen_x)
-    window = SelectionManager.active_window
-    return unless window && SelectionManager.selecting
-
-    rel_y = screen_y - window.begy
-    rel_x = screen_x - window.begx
-    CursesRenderer.doupdate if SelectionManager.drag_update(rel_y, rel_x)
-  end
-
-  def handle_mouse_release(screen_y, screen_x)
-    @mouse_scroll.end_drag_capture
-    return unless SelectionManager.selecting
-
-    window = SelectionManager.active_window
-    unless window
-      SelectionManager.clear_selection
-      return
-    end
-
-    rel_y = screen_y - window.begy
-    rel_x = screen_x - window.begx
-    start_pos = SelectionManager.start_pos
-
-    if start_pos && start_pos[0] == rel_y && (start_pos[1] - rel_x).abs <= 3
-      if SelectionManager.multi_click_selected?
-        # Double/triple click: copy the expanded word/line selection
-        finalize_selection
-      else
-        # Single click (no drag): check for link, skip selection
-        dispatch_link(window, rel_y, rel_x)
-        SelectionManager.clear_selection
-      end
-    else
-      # Actual drag: finalize selection and copy to clipboard
-      SelectionManager.update_selection(rel_y, rel_x)
-      finalize_selection
-    end
-  end
-
-  # Copy the finished selection and show brief feedback in the main window.
-  def finalize_selection
-    chars = SelectionManager.end_selection
-    # write_to_client flushes when it shows the notice
-    return if chars&.positive? && write_to_client("* [copied #{chars} chars]")
-
-    CursesRenderer.doupdate
-  end
-
-  # While a drag is held at a window's top or bottom edge, keep scrolling
-  # one line per input-loop tick (~100ms) and extend the selection.
-  # Motion events stop when the pointer stops moving, so the tick drives
-  # the repeat. Returns true if the screen needs a refresh.
-  def tick_drag_auto_scroll
-    return false unless SelectionManager.selecting
-
-    window = SelectionManager.active_window
-    pos = SelectionManager.last_drag_pos
-    return false unless window && pos
-
-    scrolled = window.drag_auto_scroll(pos[0])
-    SelectionManager.update_selection(pos[0], pos[1]) if scrolled
-    scrolled
-  end
-
-  def dispatch_link(window, rel_y, rel_x)
-    # Links may be toggled off while selection capture (.select) stays on;
-    # lines rendered earlier can still carry cmd runs that must not fire
-    return unless @shared_state.blue_links
-
-    if (link_cmd = window.link_cmd_at(rel_y, rel_x))
-      if (main = @window_mgr.stream[MAIN_STREAM])
-        @window_mgr.add_prompt(main, @shared_state.prompt_text, link_cmd)
-        CursesRenderer.doupdate
-      end
-      @cmd_buffer.add_to_history(link_cmd)
-      @connection.send_line(link_cmd)
-      true
-    end
   end
 end
