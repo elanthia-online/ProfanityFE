@@ -229,19 +229,14 @@ RSpec.describe LayoutLoader do
       expect(wm.stream['logons']).to be_active
     end
 
-    it 'keeps the windows it reuses and rebuilds the rest when the same layout loads again' do
-      reused = [wm.stream['main'], wm.progress['health'], wm.countdown['roundtime'],
-                wm.indicator['kneeling'], wm.indicator['prompt']]
-      rebuilt = [wm.stream['thoughts'], wm.room['room']]
+    it 'keeps every window when the same layout loads again' do
+      windows = BaseWindow.all_windows
 
       load(first_layout)
 
-      expect(BaseWindow.all_windows.size).to eq reused.size + rebuilt.size
-      expect(BaseWindow.all_windows).to include(*reused)
-      expect(reused.map { |window| closed?(window) }).to all(be false)
-      expect(rebuilt.map { |window| closed?(window) }).to all(be true)
-      expect([wm.stream['thoughts'], wm.room['room']]).to all(be_a(BaseWindow))
-      expect(BaseWindow.all_windows).not_to include(*rebuilt)
+      expect(BaseWindow.all_windows).to contain_exactly(*windows)
+      expect(windows.map { |window| closed?(window) }).to all(be false)
+      expect(windows).to include(wm.stream['thoughts'], wm.stream['logons'], wm.room['room'])
     end
   end
 
@@ -259,38 +254,45 @@ RSpec.describe LayoutLoader do
     end
   end
 
-  describe 'what builders see' do
-    let(:seen) { [] }
+  describe 'what builders can reuse' do
+    let(:claimed) { [] }
 
-    before do
-      recorder = seen
+    # A builder that tries to claim a window of the previous layout for
+    # each of the given registry, keys and class, and builds nothing.
+    def probe(*claims)
+      recorder = claimed
       BaseWindow.register_type('probe') do |_height, _width, _top, _left, _element, manager|
-        recorder << { streams: manager.previous_stream.keys, indicators: manager.previous_indicator.keys,
-                      progress: manager.previous_progress.keys, countdowns: manager.previous_countdown.keys,
-                      old: manager.old_windows.size, current: manager.stream.keys }
+        claims.each { |claim| recorder << manager.claim_window(*claim) }
         nil
       end
     end
 
     after { BaseWindow.type_registry.delete('probe') }
 
-    it 'gives builders the previous layout while it loads and forgets it afterwards' do
+    it 'hands a builder a previous window of the class it asks for, for any of its keys, once' do
       load(first_layout)
-      old_count = BaseWindow.all_windows.size
+      tabbed = wm.stream['thoughts']
+      kneeling = wm.indicator['kneeling']
+      room = wm.room['room']
+      probe([:stream, %w[whispers logons], TabbedTextWindow], [:stream, ['thoughts'], TabbedTextWindow],
+            [:stream, ['main'], TabbedTextWindow], [:indicator, 'kneeling', IndicatorWindow], [:room, nil, RoomWindow])
 
-      load("<window class='text' top='0' left='0' height='5' width='40' value='main'/><window class='probe' top='6' left='0' height='1' width='1'/>",
-           id: 'probe')
+      load("<window class='probe' top='6' left='0' height='1' width='1'/>", id: 'probe')
 
-      expect(seen).to eq [{ streams: %w[thoughts logons], indicators: %w[kneeling prompt],
-                            progress: ['health'], countdowns: ['roundtime'], old: old_count - 1, current: ['main'] }]
-      expect([wm.previous_stream, wm.previous_indicator, wm.previous_progress, wm.previous_countdown]).to all(be_empty)
-      expect(wm.old_windows).to be_empty
+      # A key of a window already claimed, a window of another class and
+      # no key at all give nothing.
+      expect(claimed).to eq [tabbed, nil, nil, kneeling, nil]
+      # Claimed windows aren't closed; the rest of the previous layout is
+      expect([closed?(tabbed), closed?(kneeling), closed?(room)]).to eq [false, false, true]
     end
 
-    it 'shows builders an empty previous layout on the first load' do
+    it 'hands out nothing on the first load or once a layout has loaded' do
+      probe([:stream, ['main'], TextWindow], [:room, 'room', RoomWindow])
       load("<window class='probe' top='0' left='0' height='1' width='1'/>")
+      load(first_layout)
 
-      expect(seen).to eq [{ streams: [], indicators: [], progress: [], countdowns: [], old: 0, current: [] }]
+      expect(claimed).to eq [nil, nil]
+      expect(wm.claim_window(:stream, ['main'], TextWindow)).to be_nil
     end
   end
 
@@ -362,6 +364,171 @@ RSpec.describe LayoutLoader do
       app.execute_command('.layout roundtime')
 
       expect(app.window_mgr.countdown['roundtime'].rows).to eq ["Roundtime#{'0'.rjust(21)}"]
+    end
+
+    context 'with a tabbed window' do
+      # The tabbed window of the first layout: tabs thoughts and logons,
+      # 10 rows, text wrapped at 38 columns.
+      let(:tabbed) { app.window_mgr.stream['thoughts'] }
+
+      # A tabbed window with these tabs, at a new place and size.
+      def define_tabbed(id, tabs, attributes = '', width: 40)
+        define("<window class='tabbed' top='5' left='20' height='6' width='#{width}' tabs='#{tabs}' #{attributes}/>" \
+               "<window class='command' top='23' left='0' height='1' width='80'/>", id)
+      end
+
+      before do
+        tabbed.add_string_to_tab('thoughts', 'You think of home.')
+        tabbed.add_string_to_tab('logons', 'Mahtra just arrived.')
+      end
+
+      after { SelectionManager.clear_selection }
+
+      it 'keeps the window and every tab\'s lines when the new layout lists the same tabs' do
+        define_tabbed('moved', 'thoughts,logons')
+
+        app.execute_command('.layout moved')
+
+        expect(app.window_mgr.stream['thoughts']).to be tabbed
+        expect(app.window_mgr.stream['logons']).to be tabbed
+        expect(tabbed.rows).to eq [' 1:thoughts | 2:logons*', 'You think of home.', '', '', '', '']
+        tabbed.switch_tab('logons')
+        expect(tabbed.rows[1]).to eq 'Mahtra just arrived.'
+        expect(closed?(tabbed)).to be false
+      end
+
+      it 'keeps the tabs still listed, in the new order, adds new ones and drops the rest' do
+        tabbed.switch_tab('logons')
+        define_tabbed('others', 'whispers,logons')
+
+        app.execute_command('.layout others')
+
+        expect(app.window_mgr.stream['logons']).to be tabbed
+        expect(app.window_mgr.stream.keys).to contain_exactly('whispers', 'logons')
+        expect(tabbed.rows.first(2)).to eq [' 1:whispers | 2:logons', 'Mahtra just arrived.']
+        expect(tabbed.tabs['whispers']).to be_empty
+      end
+
+      it 'shows the first tab when the tab it showed is dropped, and drops the selection there' do
+        SelectionManager.start_selection(tabbed, 1, 0)
+        SelectionManager.update_selection(1, 5)
+        SelectionManager.end_selection
+        define_tabbed('logons', 'logons')
+
+        app.execute_command('.layout logons')
+
+        expect(app.window_mgr.stream['logons']).to be tabbed
+        expect(tabbed.rows.first(2)).to eq [' 1:logons', 'Mahtra just arrived.']
+        expect(SelectionManager.active_window).to be_nil
+        expect(tabbed.has_highlight?).to be false
+        expect((0...20).map { |x| tabbed.attrs_at(1, x) }.uniq).to eq [Curses::A_NORMAL]
+      end
+
+      it 're-wraps every tab\'s lines to a new width' do
+        tabbed.add_string_to_tab('thoughts', 'You think about the long road that leads home.')
+        tabbed.add_string_to_tab('logons', 'Mahtra the Empath just arrived in the lands.')
+        define_tabbed('narrow', 'thoughts,logons', width: 21) # as a new window this narrow shows them
+
+        app.execute_command('.layout narrow')
+
+        expect(tabbed.rows).to eq [' 1:thoughts | 2:logo', 'You think of home.', 'You think about',
+                                   '  the long road', '  that leads home.', '']
+        tabbed.switch_tab('logons')
+        expect(tabbed.rows).to eq [' 1:thoughts | 2:logo', 'Mahtra just', '  arrived.', 'Mahtra the Empath',
+                                   '  just arrived in', '  the lands.']
+      end
+
+      it 'takes the new buffer size and timestamp setting, trimming every tab at once' do
+        tabbed.add_string_to_tab('thoughts', 'You think again.')
+        define_tabbed('small', 'thoughts,logons', "buffer-size='1' timestamp='on'")
+
+        app.execute_command('.layout small')
+        tabbed.add_string_to_tab('logons', 'Sabre just arrived.')
+
+        expect(tabbed.rows).to eq [' 1:thoughts | 2:logons*', 'You think again.', '', '', '', '']
+        expect(tabbed.tabs['logons'].map(&:first)).to eq ["Sabre just arrived. [#{app.window_mgr.clock.hh_mm}]"]
+      end
+    end
+
+    context 'with exp, spell and room windows' do
+      let(:wm) { app.window_mgr }
+      let(:command) { "<window class='command' top='23' left='0' height='1' width='80'/>" }
+
+      before do
+        define("<window class='exp' top='0' left='0' height='4' width='30'/>" \
+               "<window class='percWindow' top='4' left='0' height='4' width='30'/>" \
+               "<window class='room' top='8' left='0' height='4' width='30'/>#{command}", 'panels')
+        app.execute_command('.layout panels')
+        wm.stream['exp'].component_opened('Evasion')
+        wm.stream['exp'].add_string('Evasion:  123 45%  [12/34]')
+        wm.stream['percWindow'].add_string('Shadows (2 roisaen)')
+        wm.room['room'].update_title('Town Square')
+        wm.room['room'].update_exits('Obvious paths: north.')
+      end
+
+      it 'keeps what each shows, drawn at its new place and size' do
+        windows = [wm.stream['exp'], wm.stream['percWindow'], wm.room['room']]
+        define("<window class='room' top='0' left='40' height='3' width='40'/>" \
+               "<window class='exp' top='10' left='40' height='2' width='40'/>" \
+               "<window class='percWindow' top='14' left='40' height='2' width='20'/>#{command}", 'moved')
+
+        app.execute_command('.layout moved')
+
+        expect([wm.stream['exp'], wm.stream['percWindow'], wm.room['room']]).to eq windows
+        expect(windows.map { |window| closed?(window) }).to all(be false)
+        expect(wm.stream['exp'].rows).to eq [' Evasion:  123 45% [12/34]', '']
+        expect(geometry(wm.stream['exp'])).to eq [10, 40, 2, 39]
+        expect(wm.stream['percWindow'].rows).to eq ['Shadows (2', '  roisaen)']
+        expect(wm.room['room'].rows).to eq ['[Town Square]', 'Obvious paths: north.', '']
+        expect(geometry(wm.room['room'])).to eq [0, 40, 3, 40]
+      end
+
+      it 'gives a kept room window the new element\'s presets' do
+        room = wm.room['room']
+        define("<window class='room' top='8' left='0' height='4' width='30' title-preset='speech' desc-preset='whisper'/>#{command}",
+               'presets')
+        app.execute_command('.layout presets')
+        expect([wm.room['room'], room.title_preset, room.desc_preset]).to eq [room, 'speech', 'whisper']
+
+        app.execute_command('.layout panels')
+
+        expect([wm.room['room'], room.title_preset, room.desc_preset]).to eq [room, Presets::ROOM_NAME, nil]
+      end
+
+      it 'keeps the links of a kept room window following .links' do
+        room = wm.room['room']
+        room.update_exits('Obvious paths: north.', links: [{ start: 15, end: 20, cmd: 'north' }])
+        app.execute_command('.links')
+
+        app.execute_command('.layout panels')
+
+        expect(wm.room['room']).to be room
+        expect((15...20).map { |x| room.link_cmd_at(1, x) }.uniq).to eq ['north']
+      end
+
+      it 'closes each of them when the new layout has none' do
+        windows = [wm.stream['exp'], wm.stream['percWindow'], wm.room['room']]
+        define("<window class='text' top='0' left='0' height='5' width='40' value='main'/>#{command}", 'bare')
+
+        app.execute_command('.layout bare')
+
+        expect(windows.map { |window| closed?(window) }).to all(be true)
+        expect([ExpWindow.list, PercWindow.list, RoomWindow.list]).to eq [[], [], []]
+        expect(wm.stream.keys).to eq ['main']
+        expect(wm.room).to be_empty
+      end
+    end
+
+    it 'closes a tabbed window the new layout doesn\'t have, dropping the selection in it' do
+      tabbed = app.window_mgr.stream['thoughts']
+      tabbed.add_string('You think of home.')
+      SelectionManager.start_selection(tabbed, 1, 0)
+
+      app.execute_command('.layout second')
+
+      expect(closed?(tabbed)).to be true
+      expect(TabbedTextWindow.list).to be_empty
+      expect(SelectionManager.active_window).to be_nil
     end
   end
 

@@ -139,10 +139,7 @@ class CountdownWindow < BaseWindow
 end
 
 BaseWindow.register_type('countdown') do |height, width, top, left, element, wm|
-  if element.attributes['value'] && (window = wm.previous_countdown[element.attributes['value']])
-    wm.previous_countdown[element.attributes['value']] = nil
-    wm.old_windows.delete(window)
-  else
+  unless (window = wm.claim_window(:countdown, element.attributes['value'], CountdownWindow))
     window = CountdownWindow.new(height, width, top, left)
   end
   window.scrollok(false)

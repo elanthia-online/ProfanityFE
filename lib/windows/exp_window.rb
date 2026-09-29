@@ -131,7 +131,9 @@ class ExpWindow < BaseWindow
 end
 
 BaseWindow.register_type('exp') do |height, width, top, left, _element, wm|
-  window = ExpWindow.new(height, width - ExpWindow.right_margin, top, left)
+  # The previous layout's exp window keeps its skills
+  window = wm.claim_window(:stream, Streams::EXP, ExpWindow) ||
+           ExpWindow.new(height, width - ExpWindow.right_margin, top, left)
   wm.stream[Streams::EXP] = window
   window
 end

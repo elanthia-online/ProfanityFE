@@ -316,7 +316,9 @@ RSpec.describe EventBridge do
 
     expect(wm.stream['death']).to be_a TabbedTextWindow
     expect(wm.stream['death'].rows[1]).to eq 'Bob died.'
-    expect(wm.room['room']).not_to be old_room
+    # The room window is kept, at its new place
+    expect(wm.room['room']).to be old_room
+    expect([old_room.begy, old_room.maxy]).to eq [10, 4]
     expect(wm.room['room'].rows.first).to eq 'Obvious paths: none.'
   end
 end

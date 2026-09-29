@@ -120,14 +120,19 @@ class WindowManager
   #
   # The server read thread reads the handler hashes, so call this before
   # that thread starts or inside {CursesRenderer.synchronize}, which the
-  # server thread holds while it processes a line. Text, indicator,
-  # progress, and countdown windows whose keys appear in the new layout are
-  # reused rather than recreated, preserving their content buffers. A
-  # reused indicator, progress bar or countdown is placed where the new
-  # layout puts it and drawn again there at once; a reused text window
-  # keeps its place until the next {#resize}. Every other window from the
-  # previous layout, of any window class, is closed and removed from its
-  # class list and from SCROLL_WINDOW.
+  # server thread holds while it processes a line. A window of the
+  # previous layout is reused, with what it shows, by an element of its
+  # class that serves one of its keys: a text window for any of its
+  # streams, a tabbed window for any of its tabs (it keeps the lines of
+  # the tabs the element still lists; see {TabbedTextWindow#keep_tabs}),
+  # the exp, spell and room windows for their stream, and indicators,
+  # progress bars and countdowns for their value. The element's other
+  # attributes (buffer size, timestamps, label, colors, presets) are
+  # applied to it. A reused window is placed where the new layout puts it
+  # and drawn again there at once, except a text window, which keeps its
+  # place until the next {#resize}. Every other window from the previous
+  # layout, of any window class, is closed and removed from its class list
+  # and from SCROLL_WINDOW.
   #
   # Each window built from a BaseWindow subclass gets the element's
   # {WindowLayout} as its +layout+, which {#resize} places it by.
@@ -152,41 +157,19 @@ class WindowManager
     @room = {}
   end
 
-  # The previous layout's indicator windows keyed by value, for builder
-  # procs during {#load_layout}; empty outside a layout reload.
+  # Take a window of the previous layout for a builder proc to reuse,
+  # during {#load_layout} (see {LayoutLoader#claim}).
   #
-  # @return [Hash]
+  # @param registry [Symbol] the handler hash the window was in
+  #   (+:stream+, +:indicator+, +:progress+, +:countdown+ or +:room+)
+  # @param keys [String, Array<String>, nil] the keys the new window
+  #   serves, in the order to try them
+  # @param window_class [Class] the class the window must be
+  # @return [BaseWindow, nil] the window to reuse, or nil to build one
   # @api private
-  def previous_indicator = @layout_loader.previous_indicator
-
-  # The previous layout's stream windows keyed by stream name, for builder
-  # procs during {#load_layout}; empty outside a layout reload.
-  #
-  # @return [Hash]
-  # @api private
-  def previous_stream = @layout_loader.previous_stream
-
-  # The previous layout's progress windows keyed by value, for builder
-  # procs during {#load_layout}; empty outside a layout reload.
-  #
-  # @return [Hash]
-  # @api private
-  def previous_progress = @layout_loader.previous_progress
-
-  # The previous layout's countdown windows keyed by value, for builder
-  # procs during {#load_layout}; empty outside a layout reload.
-  #
-  # @return [Hash]
-  # @api private
-  def previous_countdown = @layout_loader.previous_countdown
-
-  # Windows from the previous layout that have not been reused. Builder
-  # procs delete reused windows from this list; the layout loader closes
-  # the rest after the layout loop.
-  #
-  # @return [Array<BaseWindow>]
-  # @api private
-  def old_windows = @layout_loader.old_windows
+  def claim_window(registry, keys, window_class)
+    @layout_loader.claim(registry, keys, window_class)
+  end
 
   # Take the command window a layout asks for. The first layout creates
   # it with the block; later layouts keep that window, which the command
