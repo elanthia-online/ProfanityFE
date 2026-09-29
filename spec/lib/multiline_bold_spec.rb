@@ -155,15 +155,20 @@ RSpec.describe 'Bold across lines' do
   end
 
   describe 'which tags carry bold' do
+    # The first step for each server line (GameTextProcessor#prepare_line),
+    # on a fresh processor.
+    #
     # @param line [String] a raw server line
-    # @param carried [Boolean] whether bold is carried in from the line before
+    # @param carried [Boolean] whether the line before left bold open
     # @return [Array(String, Boolean)] the line with carried bold made
-    #   explicit, and whether bold carries on to the next line
+    #   explicit, and whether bold carries on to the next line (the next
+    #   line gets an opening <pushBold/>)
     def carry(line, carried: false)
       processor = GameTextProcessor.new(window_mgr: @wm, shared_state: state, cmd_buffer: Struct.new(:window).new(nil),
                                         xml_escapes: {}, event_bus: EventBus.new)
-      processor.instance_variable_set(:@bold_next_line, carried)
-      [processor.send(:carry_bold, line.dup), processor.instance_variable_get(:@bold_next_line)]
+      processor.prepare_line('A troll says, <pushBold/>') if carried
+      prepared = processor.prepare_line(line.dup)
+      [prepared, processor.prepare_line('The next line.').start_with?('<pushBold/>')]
     end
 
     it 'reads the last pushBold or popBold tag, in any spelling the dispatcher reads' do
