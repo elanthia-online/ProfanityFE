@@ -15,7 +15,7 @@ require_relative 'room_assembler'
 # understand, test, and modify independently.
 #
 # Expects the including class to provide:
-# - @wm, @state, @xml_escapes, @event_bus
+# - @state, @xml_escapes, @event_bus
 # - @spans (a SpanTracker: the open color spans and the runs they record)
 # - @router (a StreamRouter: the current stream and the open pushStreams)
 # - @pending_render (a PendingRender: screen updates to flush)
@@ -119,17 +119,6 @@ module TagHandlers
   def flush_text_buffer(buf)
     handle_game_text(buf.dup, @spans.split_at_flush(buf.length)) unless buf.empty?
     buf.clear
-  end
-
-  # End a roomName/roomDesc capture: flush its text, and disarm the capture
-  # even if there was none (an empty room name or description), or the next
-  # line would be taken as the room text.
-  #
-  # @param buf [String] mutable text buffer to flush and clear
-  # @return [void]
-  def end_room_capture(buf)
-    flush_text_buffer(buf)
-    @room.capture_mode = nil
   end
 
   # Unescape XML entities in a text segment.
@@ -282,18 +271,14 @@ module TagHandlers
     return if xml.end_with?('/>') # an empty preset has nothing to color
     return unless (preset_id = XmlTokenizer.attrs(xml)['id'])
 
-    if preset_id == Presets::ROOM_DESC && @wm.room[Streams::ROOM]
-      flush_text_buffer(text_buffer)
-      @room.capture_mode = :desc
-    end
+    # Unlike a roomDesc style, the preset flushes the text before it.
+    @room.start_capture(:desc) { flush_text_buffer(text_buffer) } if preset_id == Presets::ROOM_DESC
     @spans.open(:preset, text_buffer.length, **Presets.colors(preset_id).to_h)
   end
 
   # Handle </preset> closing tag.
   def handle_close_preset(_xml, text_buffer)
-    if @room.capture_mode == :desc
-      end_room_capture(text_buffer)
-    end
+    @room.end_capture(:desc) { flush_text_buffer(text_buffer) }
     @spans.close(:preset, text_buffer.length)
   end
 
@@ -316,15 +301,13 @@ module TagHandlers
 
     if style_id.empty?
       # Empty id = closing style
-      if @room.capture_mode == :title || @room.capture_mode == :desc
-        end_room_capture(text_buffer)
-      end
+      @room.end_capture(:title, :desc) { flush_text_buffer(text_buffer) }
       @spans.close(:style, text_buffer.length)
     else
       # Non-empty id = opening style
       @spans.open(:style, text_buffer.length, **Presets.colors(style_id).to_h)
-      @room.capture_mode = :title if style_id == Presets::ROOM_NAME
-      @room.capture_mode = :desc if style_id == Presets::ROOM_DESC && @wm.room[Streams::ROOM]
+      @room.start_capture(:title) if style_id == Presets::ROOM_NAME
+      @room.start_capture(:desc) if style_id == Presets::ROOM_DESC
     end
   end
 
@@ -360,14 +343,10 @@ module TagHandlers
     if text_buffer.empty? && stream&.start_with?(Streams::ROOM)
       # Empty room components (e.g., <component id='room players'></component>)
       # are meaningful — they clear the displayed data. Since flush_text_buffer
-      # skips empty text, handle this directly.
-      if @wm.room[Streams::ROOM]
-        result = @room.process_room_stream('', stream, @spans.runs)
-        @room.update_room_players_indicator(nil) if result == :continue
-      elsif stream == Streams::ROOM_PLAYERS
-        # No RoomWindow -- still clear the indicator
-        @room.update_room_players_indicator(nil)
-      end
+      # skips empty text, handle this directly. Without a RoomWindow only an
+      # empty room players component does anything: it clears the indicator.
+      result = @room.process_room_stream('', stream, @spans.runs)
+      @room.update_room_players_indicator(nil) if result == :continue
     else
       flush_text_buffer(text_buffer)
     end
