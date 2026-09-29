@@ -49,7 +49,9 @@ class CountdownWindow < BaseWindow
     @label = String.new
     @fg = []
     @bg = DEFAULT_BG.dup
-    @active = nil
+    # false, not nil: differing from @old_active makes the builder's first
+    # tick draw the label and 0
+    @active = false
     @old_active = nil
     @end_time = 0
     @secondary_end_time = 0

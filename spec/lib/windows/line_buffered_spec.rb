@@ -119,7 +119,7 @@ RSpec.describe LineBuffered do
       window.set_active(true)
 
       expect(scrollbar_cells).to eq Array.new(window.content_top, '') +
-                                    [BaseWindow::ACTIVE_INDICATOR, BaseWindow::ACTIVE_SCROLLBAR_CHAR, 'thumb']
+                                    [LineBuffered::ACTIVE_INDICATOR, LineBuffered::ACTIVE_SCROLLBAR_CHAR, 'thumb']
     end
 
     it 'moves the scrollbar thumb to the top text row when scrolled back to the oldest line' do
@@ -128,7 +128,7 @@ RSpec.describe LineBuffered do
       window.scroll_lines(-2)
 
       expect(scrollbar_cells).to eq Array.new(window.content_top, '') +
-                                    ['thumb', BaseWindow::ACTIVE_SCROLLBAR_CHAR, BaseWindow::ACTIVE_SCROLLBAR_CHAR]
+                                    ['thumb', LineBuffered::ACTIVE_SCROLLBAR_CHAR, LineBuffered::ACTIVE_SCROLLBAR_CHAR]
     end
 
     it 'keeps a highlight on its text when the view scrolls' do

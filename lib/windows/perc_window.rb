@@ -135,6 +135,31 @@ class PercWindow < BaseWindow
     end
   end
 
+  # Wrap a string to the given width, splitting color regions across lines.
+  # Yields each [line, line_colors, continuation] triple to the caller.
+  #
+  # Delegates to {StyledText#wrap} which encapsulates all the position
+  # arithmetic. This eliminates the manual start/end adjustment loops
+  # that were the primary source of off-by-one color region bugs.
+  #
+  # @param string [String] the text to wrap
+  # @param width [Integer] maximum line width in characters
+  # @param string_colors [Array<Hash>] color region descriptors for the full string
+  # @param indent [Boolean] whether continuation lines should be indented
+  # @yield [line, line_colors, continuation] each wrapped line, its adjusted
+  #   color regions, and whether it continues the previous wrapped line
+  # @yieldparam line [String] one wrapped line of text
+  # @yieldparam line_colors [Array<Hash>] color regions scoped to this line
+  # @yieldparam continuation [Boolean] true for the 2nd+ line of a wrapped string
+  # @return [void]
+  # @api private
+  def wrap_text(string, width, string_colors, indent: true)
+    styled = StyledText.new(string, string_colors)
+    styled.wrap(width, indent: indent).each_with_index do |wrapped_line, idx|
+      yield wrapped_line.text, wrapped_line.runs, idx.positive?
+    end
+  end
+
   # Sort weight of a spell line: higher sorts first. Parsed from the first
   # parenthesised part, e.g. "Spell Name (5)" is 5; percentages weigh 3000,
   # "OM" 2000, "Cyclic" 1500, "Fading" 0, and lines without a duration

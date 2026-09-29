@@ -453,7 +453,7 @@ class WindowManager
   def close_window(window)
     window.class.unregister_instance(window)
     SCROLL_WINDOW.delete(window)
-    window.scrollbar&.close
+    window.scrollbar&.close if window.respond_to?(:scrollbar)
     window.close
   end
 
