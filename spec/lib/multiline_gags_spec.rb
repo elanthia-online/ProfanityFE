@@ -102,6 +102,14 @@ RSpec.describe 'Multi-line gags' do
 
       expect(shown_in_main).to eq ['The first line shown again.', 'And the next.']
     end
+
+    it 'hides the next block again after letting a runaway block go' do
+      hidden_lines = Array.new(LineFilter::MULTILINE_GAG_MAX_LINES) { |i| "Hidden line #{i + 1} of a runaway block." }
+
+      receive_from_server(block_start, *hidden_lines, 'The first line shown again.', block_start, block_body)
+
+      expect(shown_in_main).to eq ['The first line shown again.']
+    end
   end
 
   describe 'a gag with an end pattern' do
