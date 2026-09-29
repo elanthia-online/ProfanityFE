@@ -153,4 +153,58 @@ RSpec.describe 'Bold across lines' do
     expect(color_on_screen('Come closer.')).to eq 'ff0000'
     expect(color_on_screen('The troll grins.')).to be_nil
   end
+
+  describe 'which tags carry bold' do
+    # @param line [String] a raw server line
+    # @param carried [Boolean] whether bold is carried in from the line before
+    # @return [Array(String, Boolean)] the line with carried bold made
+    #   explicit, and whether bold carries on to the next line
+    def carry(line, carried: false)
+      processor = GameTextProcessor.new(window_mgr: @wm, shared_state: state, cmd_buffer: Struct.new(:window).new(nil),
+                                        xml_escapes: {}, event_bus: EventBus.new)
+      processor.instance_variable_set(:@bold_next_line, carried)
+      [processor.send(:carry_bold, line.dup), processor.instance_variable_get(:@bold_next_line)]
+    end
+
+    it 'reads the last pushBold or popBold tag, in any spelling the dispatcher reads' do
+      {
+        'a <pushBold/>'                 => ['a <pushBold/><popBold/>', true],
+        'a <pushBold />'                => ['a <pushBold /><popBold/>', true],
+        'a <pushBold>'                  => ['a <pushBold><popBold/>', true],
+        'a <pushBold x="1"/>'           => ['a <pushBold x="1"/><popBold/>', true],
+        'a <pushBold-x/>'               => ['a <pushBold-x/><popBold/>', true],
+        'a <pushBoldX/>'                => ['a <pushBoldX/>', false],
+        'a </pushBold>'                 => ['a </pushBold>', false],
+        'a <pushBold/>b<popBold/>'      => ['a <pushBold/>b<popBold/>', false],
+        'a <popBold/>b<pushBold/>'      => ['a <popBold/>b<pushBold/><popBold/>', true],
+        %(a <pushBold x="<popBold/>"/>) => [%(a <pushBold x="<popBold/>"/><popBold/>), true]
+      }.each do |line, expected|
+        expect(carry(line)).to eq(expected), line
+      end
+    end
+
+    it 'reads bold tags and a prompt only where the tag dispatcher reads them' do
+      {
+        '<prompt time="1"><pushBold/>&gt;</prompt>' => ['<prompt time="1"><pushBold/>&gt;</prompt>', false],
+        '<pushBold/><prompt time="1">&gt;</prompt>' => ['<pushBold/><prompt time="1">&gt;</prompt><popBold/>', false],
+        '<pushBold/> <prompt'                       => ['<pushBold/> <prompt<popBold/>', true],
+        %(<pushBold/><b t="<prompt>"/>)             => [%(<pushBold/><b t="<prompt>"/><popBold/>), true],
+        '<pushBold/></prompt>'                      => ['<pushBold/></prompt><popBold/>', true],
+        '<pushBold/><promptX>'                      => ['<pushBold/><promptX><popBold/>', true]
+      }.each do |line, expected|
+        expect(carry(line)).to eq(expected), line
+      end
+    end
+
+    it 'skips the carried <pushBold/> only before a literal <popBold/>' do
+      {
+        '<popBold/>x'                    => ['<popBold/>x', false],
+        '<popBold />x'                   => ['<pushBold/><popBold />x', false],
+        'x'                              => ['<pushBold/>x<popBold/>', true],
+        '<prompt time="1">&gt;</prompt>' => ['<pushBold/><prompt time="1">&gt;</prompt><popBold/>', false]
+      }.each do |line, expected|
+        expect(carry(line, carried: true)).to eq(expected), line
+      end
+    end
+  end
 end

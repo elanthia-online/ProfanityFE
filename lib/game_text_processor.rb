@@ -62,13 +62,12 @@ class GameTextProcessor
   # Stream tags kept when a gag drops a line's text. Losing a <popStream/>
   # with the text would leave routing stuck on that stream (e.g. game text
   # landing in the spell window), so gagged lines keep these tags and gag
-  # logging flags them.
-  STREAM_TAG_PATTERN = /<(?:pushStream|popStream|clearStream)\b[^>]*>/
+  # logging flags them. Element names; see #stream_tags.
+  STREAM_TAGS = %w[pushStream popStream clearStream].freeze
 
-  # A <pushBold/> or <popBold/> tag, in any form the tag dispatcher reads
-  # as one; captures +push+ or +pop+. Used to tell whether a line leaves
-  # bold open (see #carry_bold).
-  BOLD_TAG_PATTERN = /<(push|pop)Bold\b[^>]*>/
+  # Element names of the bold tags. The last of them on a line tells
+  # whether the line leaves bold open (see #carry_bold).
+  BOLD_TAGS = %w[pushBold popBold].freeze
 
   # Longest gag pattern source quoted in a gag log line. Some gags are long
   # alternations; the prefix is enough to find the gag in the settings XML.
@@ -232,7 +231,7 @@ class GameTextProcessor
     if gagged
       # A gag hides the line's text, never its stream tags: dropping a
       # <popStream/> would leave routing stuck on that stream.
-      line = line.scan(STREAM_TAG_PATTERN).join
+      line = stream_tags(line).join
       return if line.empty?
     elsif line.empty?
       @emptycount += 1
@@ -327,10 +326,31 @@ class GameTextProcessor
 
     # Carried bold closed at the very start of the line colors nothing.
     line = "<pushBold/>#{line}" if @bold_next_line && !line.start_with?('<popBold/>')
-    open = line.scan(BOLD_TAG_PATTERN).last == ['push']
+    names = start_tag_names(line)
+    open = names.reverse_each.find { |name| BOLD_TAGS.include?(name) } == 'pushBold'
     line = "#{line}<popBold/>" if open
-    @bold_next_line = open && !line.match?(/<prompt\b/)
+    @bold_next_line = open && !names.include?('prompt')
     line
+  end
+
+  # The element names of a raw line's start tags, in order, as the tag
+  # dispatcher reads the line (nil for an end tag or a nameless one).
+  #
+  # @param line [String] raw server line
+  # @return [Array<String, nil>] one name per tag
+  # @api private
+  def start_tag_names(line)
+    XmlTokenizer.tags(line).map { |tag| XmlTokenizer.start_tag_name(tag) }
+  end
+
+  # The stream tags ({STREAM_TAGS}) of a raw line, as written and in order,
+  # as the tag dispatcher reads the line.
+  #
+  # @param line [String] raw server line
+  # @return [Array<String>] the tags
+  # @api private
+  def stream_tags(line)
+    XmlTokenizer.tags(line).select { |tag| STREAM_TAGS.include?(XmlTokenizer.start_tag_name(tag)) }
   end
 
   # Parse a room subtitle attribute into a clean room title string.
@@ -403,7 +423,7 @@ class GameTextProcessor
         @active_multiline_gag = nil if line.match?(gag[:end])
         log_gagged_line('multiline', gag[:start], line)
         true
-      elsif line =~ /<prompt\b/
+      elsif start_tag_names(line).include?('prompt')
         # Prompt-terminated: stop gagging and let the prompt line through.
         @active_multiline_gag = nil
         false
@@ -435,7 +455,7 @@ class GameTextProcessor
   def log_gagged_line(kind, pattern, line)
     return unless @state.log_gags
 
-    marker = line.match?(STREAM_TAG_PATTERN) ? ' STREAM-TAG' : ''
+    marker = stream_tags(line).empty? ? '' : ' STREAM-TAG'
     source = pattern.source
     source = "#{source[0, GAG_LOG_PATTERN_LIMIT]}..." if source.length > GAG_LOG_PATTERN_LIMIT
     ProfanityLog.write('gag', "#{kind}#{marker} /#{source}/ #{line.inspect}")

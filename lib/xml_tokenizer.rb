@@ -23,17 +23,21 @@ module XmlTokenizer
   # never reaches a window; it has no handler.
   PAIRED_TAGS = %w[prompt spell right left inv compass].freeze
 
-  # Matches either a paired tag (with content) for one of {PAIRED_TAGS},
-  # or any single XML tag.
+  # Matches any single XML tag, without content.
   #
   # A single tag ends at the first > outside a quoted attribute value, so
   # <d cmd="look >here"> is one tag. A quoted value can't hold a raw <
   # (XML forbids it), which keeps a stray quote from running into the next
   # tag. A tag with an unbalanced quote falls back to ending at the first >.
   #
-  # Paired: <prompt time='123'>H&gt;</prompt>, <spell>Fire Ball</spell>
   # Single: <pushBold/>, <preset id='x'>, </color>, <progressBar .../>
-  TAG_REGEX = %r{(?:<(#{PAIRED_TAGS.join('|')})\b.*?</\1>|<(?:[^<>"']|"[^"<]*"|'[^'<]*')*>|<[^>]*>)}
+  SINGLE_TAG_REGEX = %r{<(?:[^<>"']|"[^"<]*"|'[^'<]*')*>|<[^>]*>}
+
+  # Matches either a paired tag (with content) for one of {PAIRED_TAGS},
+  # or any single XML tag (see {SINGLE_TAG_REGEX}).
+  #
+  # Paired: <prompt time='123'>H&gt;</prompt>, <spell>Fire Ball</spell>
+  TAG_REGEX = %r{(?:<(#{PAIRED_TAGS.join('|')})\b.*?</\1>|#{SINGLE_TAG_REGEX.source})}
 
   # One attribute of a start tag: whitespace, a name, +=+, then a value in
   # double or single quotes. The value runs to the next matching quote, so
@@ -43,14 +47,24 @@ module XmlTokenizer
 
   # Tokenize a line into ordered [:text, str] and [:tag, str] segments.
   #
+  # The segments joined give back the line.
+  #
+  # @example Paired tags split into their tags and content
+  #   XmlTokenizer.tokenize('<spell>Fire</spell>', paired: false)
+  #   # => [[:tag, "<spell>"], [:text, "Fire"], [:tag, "</spell>"]]
+  #
   # @param line [String] raw game server line (tags + text)
+  # @param paired [Boolean] keep each of {PAIRED_TAGS} whole with its
+  #   content, as the tag dispatcher reads a line; false splits them like
+  #   any other tag
   # @return [Array<Array(Symbol, String)>] ordered segments
-  def self.tokenize(line)
+  def self.tokenize(line, paired: true)
+    regex = paired ? TAG_REGEX : SINGLE_TAG_REGEX
     segments = []
     pos = 0
 
     while pos < line.length
-      m = TAG_REGEX.match(line, pos)
+      m = regex.match(line, pos)
       break unless m
 
       # Text before the tag
@@ -90,6 +104,31 @@ module XmlTokenizer
       attributes[scanner[1]] = scanner[2] || scanner[3] unless attributes.key?(scanner[1])
     end
     attributes
+  end
+
+  # The tags of a line, in order: the tag segments of {.tokenize}.
+  #
+  # @example
+  #   XmlTokenizer.tags("a <pushBold/>b<popBold/>") # => ["<pushBold/>", "<popBold/>"]
+  #
+  # @param line [String] raw game server line (tags + text)
+  # @param paired [Boolean] as for {.tokenize}
+  # @return [Array<String>] the tags
+  def self.tags(line, paired: true)
+    tokenize(line, paired: paired).filter_map { |type, segment| segment if type == :tag }
+  end
+
+  # The element name of a start tag or an empty-element tag.
+  #
+  # @example
+  #   XmlTokenizer.start_tag_name('<popStream id="combat"/>') # => "popStream"
+  #   XmlTokenizer.start_tag_name('</preset>')                # => nil
+  #
+  # @param tag [String] a tag, as a segment from {.tokenize}
+  # @return [String, nil] the name as {.tag_name} reads it, or nil for an
+  #   end tag
+  def self.start_tag_name(tag)
+    tag_name(tag) unless tag.start_with?('</')
   end
 
   # Extract the element name from an XML tag string.

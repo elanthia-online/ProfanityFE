@@ -244,6 +244,69 @@ RSpec.describe XmlTokenizer do
     end
   end
 
+  describe '.tokenize with paired: false' do
+    it 'splits a paired tag into its start tag, content and end tag' do
+      expect(described_class.tokenize("<prompt time='1'>H&gt;</prompt>x", paired: false))
+        .to eq [[:tag, "<prompt time='1'>"], [:text, 'H&gt;'], [:tag, '</prompt>'], [:text, 'x']]
+    end
+
+    it 'finds tags inside what would be a paired tag\'s content' do
+      expect(described_class.tokenize('<compass><dir value="n"/></compass>', paired: false).map(&:last))
+        .to eq ['<compass>', '<dir value="n"/>', '</compass>']
+    end
+
+    it 'reads every other tag as the paired tokenizer does' do
+      [
+        %(<d cmd="look >here">x</d>),
+        %(<b t="x>y" u='a>b'/>tail<popBold/>),
+        %(<a x="1>2 <b>3</b>),
+        '5 < 10 > 3 <> < >',
+        %(<pushStream id="combat"/><preset id='speech'>Hi</preset>)
+      ].each do |line|
+        expect(described_class.tokenize(line, paired: false)).to eq(described_class.tokenize(line)), line
+      end
+    end
+
+    it 'gives back the line when the segments are joined' do
+      ["<prompt>a</prompt><spell x='>'>b</spell>c", '<left>x', "</right><inv id='1'><a>y</a></inv>"].each do |line|
+        expect(described_class.tokenize(line, paired: false).map(&:last).join).to eq(line)
+      end
+    end
+  end
+
+  describe '.tags' do
+    it 'lists the tags of a line in order, without the text' do
+      expect(described_class.tags("a <pushBold/>b<popBold/> c")).to eq ['<pushBold/>', '<popBold/>']
+    end
+
+    it 'keeps a paired tag whole unless told otherwise' do
+      line = "<spell>x</spell><popBold/>"
+      expect(described_class.tags(line)).to eq ['<spell>x</spell>', '<popBold/>']
+      expect(described_class.tags(line, paired: false)).to eq ['<spell>', '</spell>', '<popBold/>']
+    end
+
+    it 'returns nothing for a line without tags' do
+      expect(described_class.tags('5 < 10')).to eq []
+    end
+  end
+
+  describe '.start_tag_name' do
+    it 'names start tags and empty-element tags, not end tags' do
+      {
+        '<pushStream id="combat"/>' => 'pushStream',
+        "<preset id='x'>"           => 'preset',
+        '<prompt>H&gt;</prompt>'    => 'prompt',
+        '<pushBold-x/>'             => 'pushBold',
+        '</preset>'                 => nil,
+        '</popStream>'              => nil,
+        '<>'                        => nil,
+        '< b>'                      => nil
+      }.each do |tag, name|
+        expect(described_class.start_tag_name(tag)).to eq(name), tag
+      end
+    end
+  end
+
   describe '.tag_name' do
     it 'extracts name from self-closing tags' do
       expect(described_class.tag_name('<pushBold/>')).to eq 'pushBold'
