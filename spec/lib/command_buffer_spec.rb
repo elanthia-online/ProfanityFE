@@ -253,7 +253,7 @@ RSpec.describe CommandBuffer do
     end
 
     # Pins the ASCII boundaries: punctuation stops, runs of spaces, and
-    # `_` inside a word (delete_word treats `_` as punctuation instead).
+    # `_` inside a word (as for backspace_word/delete_word).
     {
       'hello.world'   => [[11, 6, 0], [0, 5, 6, 11]],
       'hello, world!' => [[13, 7, 5, 0], [0, 5, 7, 12, 13]],
@@ -448,6 +448,112 @@ RSpec.describe CommandBuffer do
     it 'does nothing on empty buffer' do
       buf.delete_word
       expect(buf.text).to eq ''
+    end
+  end
+
+  # The text left after each repeated backspace_word from the end, or
+  # delete_word from the start, checking pos and the screen cursor after
+  # every press.
+  describe 'word deletion steps' do
+    def deletions(str, deletion)
+      type(str)
+      buf.cursor_home if deletion == :delete_word
+      left = []
+      str.length.times do
+        break if deletion == :delete_word ? buf.text.empty? : buf.pos.zero?
+
+        buf.public_send(deletion)
+        expect(buf.pos).to eq(deletion == :delete_word ? 0 : buf.text.length)
+        expect(window.curx).to eq buf.pos
+        left << buf.text
+      end
+      left
+    end
+
+    # Pins the ASCII rules other than `_`: a run of punctuation goes with
+    # the word after it (in the direction of deletion) but not before it,
+    # and spaces go with the next word or punctuation run.
+    {
+      'hello, world!' => [['hello, ', ''], [', world!', ' world!', '!', '']],
+      'x -- y'        => [['x -- ', 'x ', ''], [' -- y', ' y', '']],
+      'hello   world' => [['hello   ', ''], ['   world', '']],
+      "tab\there"     => [["tab\t", ''], ["\there", '']],
+      'a1 22 b3'      => [['a1 22 ', 'a1 ', ''], [' 22 b3', ' b3', '']],
+      'go north.'     => [['go ', ''], [' north.', '.', '']],
+      '..foo'         => [['..', ''], ['']],
+      'foo--bar'      => [['foo--', ''], ['--bar', '']],
+      'say "hi"'      => [['say "', 'say ', ''], [' "hi"', '"', '']],
+      '$HOME/bin'     => [['$HOME/', '$', ''], ['/bin', '']],
+      'a  '           => [[''], ['  ', '']],
+      '  a'           => [['  ', ''], ['']],
+      '!!'            => [[''], ['']],
+      '(1+2)*3'       => [['(1+2)*', '(1+', '(', ''], ['+2)*3', ')*3', '']]
+    }.each do |str, (backward, forward)|
+      it "backspace_word leaves #{backward.inspect} from the end of #{str.inspect}" do
+        expect(deletions(str, :backspace_word)).to eq backward
+      end
+
+      it "delete_word leaves #{forward.inspect} from the start of #{str.inspect}" do
+        expect(deletions(str, :delete_word)).to eq forward
+      end
+    end
+
+    # `_` is a word character, as for Ctrl+left/right: `foo_bar` is one
+    # word, which keeps script names whole.
+    {
+      'foo_bar baz' => [['foo_bar ', ''], [' baz', '']],
+      '__init__'    => [[''], ['']],
+      'a_ b'        => [['a_ ', ''], [' b', '']],
+      'x _y'        => [['x ', ''], [' _y', '']]
+    }.each do |str, (backward, forward)|
+      it "backspace_word leaves #{backward.inspect} from the end of #{str.inspect}" do
+        expect(deletions(str, :backspace_word)).to eq backward
+      end
+
+      it "delete_word leaves #{forward.inspect} from the start of #{str.inspect}" do
+        expect(deletions(str, :delete_word)).to eq forward
+      end
+    end
+
+    # A combining mark (here U+0301 after `e`) is part of the word, as
+    # for Ctrl+left/right.
+    {
+      "cafe\u0301 au"   => [["cafe\u0301 ", ''], [' au', '']],
+      "e\u0301te\u0301" => [[''], ['']]
+    }.each do |str, (backward, forward)|
+      it "backspace_word leaves #{backward.inspect} from the end of #{str.inspect}" do
+        expect(deletions(str, :backspace_word)).to eq backward
+      end
+
+      it "delete_word leaves #{forward.inspect} from the start of #{str.inspect}" do
+        expect(deletions(str, :delete_word)).to eq forward
+      end
+    end
+  end
+
+  # Ctrl+left/right and backspace_word/delete_word share one definition
+  # of a word character: `_` and other connector punctuation, combining
+  # marks and joiners (U+200D) are all part of the word.
+  describe 'word motion and word deletion agree' do
+    ['run foo_bar', "say nai\u0308ve", "go e\u203Fe", "a\u200Db"].each do |str|
+      it "backspace_word deletes the word Ctrl+left moves over in #{str.inspect}" do
+        type(str)
+        buf.cursor_word_left
+        start = buf.pos
+        buf.cursor_end
+        buf.backspace_word
+        expect(buf.text).to eq str[0, start]
+        expect(window.curx).to eq start
+      end
+
+      it "delete_word deletes the word Ctrl+left moves over in #{str.inspect}" do
+        type(str)
+        buf.cursor_word_left
+        start = buf.pos
+        buf.delete_word
+        expect(buf.text).to eq str[0, start]
+        expect(window.curx).to eq start
+      end
     end
   end
 

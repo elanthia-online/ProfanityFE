@@ -46,12 +46,19 @@ using StringClassification
 #   buf.put_ch('i')
 #   cmd = buf.clear_and_get  #=> "hi"
 class CommandBuffer
+  # The characters that make up a word, for every word key (Ctrl+left,
+  # Ctrl+right, {#backspace_word} and {#delete_word}), as the body of a
+  # regex bracket expression. POSIX +[:word:]+ is Unicode-aware: letters,
+  # combining marks, digits and connector punctuation, so +é+ (precomposed
+  # or +e+ plus U+0301) is a word character, unlike with +\w+. On ASCII it
+  # matches +\w+ exactly, so +_+ joins words: +foo_bar+ is one word.
+  WORD_CHAR = '[:word:]'
+
   # Two characters that end one word and start the next, for Ctrl+left
   # and Ctrl+right: a word character then punctuation, anything else then
-  # a word character, or a space then a non-space. The POSIX classes are
-  # Unicode-aware (so +é+ is a word character, unlike +\w+) and match
-  # +\w+/+\s+ exactly on ASCII, including +_+ as a word character.
-  WORD_START = /[[:word:]][^[:word:][:space:]]|[^[:word:]][[:word:]]|[[:space:]][^[:space:]]/
+  # a word character, or a space then a non-space. Word characters are
+  # {WORD_CHAR}; +[:space:]+ matches +\s+ exactly on ASCII.
+  WORD_START = /[#{WORD_CHAR}][^#{WORD_CHAR}[:space:]]|[^#{WORD_CHAR}][#{WORD_CHAR}]|[[:space:]][^[:space:]]/
 
   # @return [Integer] cursor position within the buffer (0-based)
   attr_reader :pos
@@ -297,7 +304,8 @@ class CommandBuffer
 
   # Delete the word before the cursor, saving deleted text to the kill ring.
   # Word boundaries follow readline-style rules: punctuation and
-  # whitespace transitions delimit words.
+  # whitespace transitions delimit words. Word characters are
+  # {WORD_CHAR}, as for Ctrl+left/right.
   #
   # @return [void]
   def backspace_word
@@ -306,7 +314,8 @@ class CommandBuffer
 
   # Delete the word after the cursor, saving deleted text to the kill ring.
   # Word boundaries follow readline-style rules: punctuation and
-  # whitespace transitions delimit words.
+  # whitespace transitions delimit words. Word characters are
+  # {WORD_CHAR}, as for Ctrl+left/right.
   #
   # @return [void]
   def delete_word
@@ -581,6 +590,15 @@ class CommandBuffer
     @window.setpos(0, @pos - @offset)
   end
 
+  # Whether a character is part of a word ({WORD_CHAR}).
+  #
+  # @param char [String] a single character
+  # @return [Boolean]
+  # @api private
+  def word_char?(char)
+    char.match?(/[#{WORD_CHAR}]/o)
+  end
+
   # Delete a word in the given direction, saving deleted text to the kill ring.
   # Iterates character-by-character using readline-style word boundary rules
   # (punctuation and whitespace transitions delimit words), delegating each
@@ -591,17 +609,18 @@ class CommandBuffer
   # @api private
   def delete_word_in_direction(direction)
     num_deleted = 0
-    deleted_alnum = false
+    deleted_word = false
     deleted_nonspace = false
     backward = direction == :backward
 
     while backward ? @pos > 0 : @pos < @text.length
       next_char = backward ? @text[@pos - 1] : @text[@pos]
-      unless num_deleted == 0 || (!deleted_alnum && next_char.punct?) || (!deleted_nonspace && next_char.space?) || next_char.alnum?
+      word = word_char?(next_char)
+      unless num_deleted == 0 || (!deleted_word && next_char.punct?) || (!deleted_nonspace && next_char.space?) || word
         break
       end
 
-      deleted_alnum ||= next_char.alnum?
+      deleted_word ||= word
       deleted_nonspace = !next_char.space?
       @kill.before(@text) if num_deleted.zero?
       num_deleted += 1
