@@ -75,8 +75,7 @@ class TextWindow < BaseWindow
   # scrollbar beside it, re-wrap every line to the new width, repaint the
   # text and clear the scrollbar. Only the active window's scrollbar is
   # drawn again, so it keeps its marker; an inactive window's is left
-  # blank, as an inactive tabbed window's is (see
-  # {TabbedTextWindow#update_scrollbar}).
+  # blank (see {LineBuffered#update_scrollbar}).
   #
   # @return [void]
   # @api private
@@ -85,7 +84,7 @@ class TextWindow < BaseWindow
     rewrap
     repaint
     clear_scrollbar
-    update_scrollbar if active?
+    update_scrollbar
     noutrefresh
   end
 

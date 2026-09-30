@@ -333,20 +333,6 @@ class TabbedTextWindow < BaseWindow
     redraw
   end
 
-  # Refresh the scrollbar, as {LineBuffered#update_scrollbar} does, but
-  # only while the window is the active one (the one the scroll keys act
-  # on, see {LineBuffered#set_active}). An inactive tabbed window shows no
-  # scrollbar: {LineBuffered#set_active} clears it when the window stops
-  # being active, and nothing draws it again until the window is active:
-  # not lines arriving, a redraw (a resize, a layout reusing the window, a
-  # tab switch, clearing a selection) or a scroll (a drag held at the
-  # window's edge scrolls an inactive window).
-  #
-  # @return [void]
-  def update_scrollbar
-    super if active?
-  end
-
   # The active tab's buffer.
   #
   # @return [LineBuffer, nil] nil before the first tab is added

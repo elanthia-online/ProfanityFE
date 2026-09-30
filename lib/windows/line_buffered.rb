@@ -21,7 +21,10 @@ module LineBuffered
   # Bold vertical line character used for the scrollbar when the window is active.
   ACTIVE_SCROLLBAR_CHAR = "\u2503" # bold vertical line
 
-  # Plain pipe character used for the scrollbar when the window is inactive.
+  # Plain pipe character {#render_scrollbar} uses for the bar when the
+  # window is inactive. The app never draws an inactive window's
+  # scrollbar ({#update_scrollbar} draws only the active one), so it
+  # is seen only when render_scrollbar is called directly.
   INACTIVE_SCROLLBAR_CHAR = '|'
 
   # Right-pointing triangle shown at the top of the scrollbar for the active window.
@@ -144,12 +147,17 @@ module LineBuffered
   end
 
   # Refresh the scrollbar to reflect the shown buffer and scroll state.
-  # It covers the text area's rows, beside them.
+  # It covers the text area's rows, beside them. Only the active window
+  # (the one the scroll keys act on, see {#set_active}) shows a
+  # scrollbar: {#set_active} clears it when the window stops being
+  # active, and nothing draws it again until the window is active: not
+  # lines arriving, a lowered buffer size, a redraw or a scroll (a drag
+  # held at the window's edge scrolls an inactive window).
   #
   # @return [void]
   def update_scrollbar
     line_buffer = shown_buffer
-    return unless line_buffer
+    return unless active? && line_buffer
 
     render_scrollbar(line_buffer.length, line_buffer.pos, content_height, top: content_top)
   end
@@ -183,14 +191,14 @@ module LineBuffered
 
   # Set whether this window is the active (focused) window, and show it:
   # the scrollbar is cleared, then drawn again in full as the active one
-  # if the window is now active.
+  # if the window is now active (see {#update_scrollbar}).
   #
   # @param is_active [Boolean] true to mark this window active
   # @return [void]
   def set_active(is_active)
     @active = is_active
     clear_scrollbar
-    update_scrollbar if @active
+    update_scrollbar
   end
 
   # Whether this window is currently the active (focused) window.
