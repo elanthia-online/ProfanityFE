@@ -83,6 +83,10 @@ class RoomAssembler
     # Whether Lich's lines (Room Exits, Room Number, StringProcs) are in the
     # room window, for the inline commit, which clears them
     @lich_lines_shown = false
+    # Whether the room window shows a room objs list the game cut short,
+    # which the inline commit leaves shown when its view has no "You also
+    # see" line; until a whole list, the room exits component or the commit
+    @cut_objects_shown = false
     # The title row's text last sent to the room window (see #emit), for
     # the inline commit's title rule (see #commit_title); nil before any
     @title_row = nil
@@ -251,9 +255,10 @@ class RoomAssembler
   # objs, room players, room exits) in the RoomWindow at once, and records
   # its field as delivered in this burst (see #commit_view), except a room
   # objs list the game cut short (see Games::Rules#room_list_cut_short?),
-  # which leaves the objects to the inline line. An empty component
-  # delivers an empty field: it clears it. The room exits component also
-  # drops the inline view read so far.
+  # which leaves the objects to the inline line (and stays shown if the
+  # view has none, see #commit_view). An empty component delivers an empty
+  # field: it clears it. The room exits component also drops the inline
+  # view read so far, and a cut-short list with it.
   #
   # @param text [String] component text content
   # @param stream [String, nil] the current stream
@@ -295,14 +300,17 @@ class RoomAssembler
         @delivered.delete(:objects)
         @next_burst&.delete(:objects)
         emit(:objects, part)
+        @cut_objects_shown = true
       else
         deliver(:objects, part)
+        @cut_objects_shown = false
       end
     when Streams::ROOM_PLAYERS
       deliver(:players, part)
     when Streams::ROOM_EXITS
       deliver(:exits, part)
       @view.clear
+      @cut_objects_shown = false
     end
 
     @pending_render.request_update
@@ -477,10 +485,16 @@ class RoomAssembler
   # from the row shown (Lich's room ids, or an earlier view of the burst),
   # so the row and the terminal title name the room alike.
   #
+  # A room objs list the game cut short owns nothing, so the view's "You
+  # also see" line replaces it; without one the list stays shown, as a
+  # staged list was, until this commit.
+  #
   # @return [void]
   def commit_view
     view = @view
     @view = {}
+    cut_objects_shown = @cut_objects_shown
+    @cut_objects_shown = false
     return unless room_window?
 
     if view.key?(:title) || view.key?(:desc) || view.key?(:objects) || view.key?(:players)
@@ -494,7 +508,9 @@ class RoomAssembler
         emit(:desc, view[:desc] || EMPTY_PART)
       end
 
-      emit(:objects, view[:objects] || EMPTY_PART) unless @delivered.key?(:objects)
+      unless @delivered.key?(:objects) || (cut_objects_shown && !view.key?(:objects))
+        emit(:objects, view[:objects] || EMPTY_PART)
+      end
 
       unless @delivered.key?(:players)
         emit(:players, view[:players] || EMPTY_PART)

@@ -165,6 +165,37 @@ RSpec.describe 'Room ownership' do
       expect(room_screen[2]).to eq 'You also see a box, a rat and some other stuff.'
     end
 
+    # Kept as on the base (undecided): with no "You also see" line in the
+    # view, the commit leaves the cut list shown. DR sends the room exits
+    # component after the room objs component, which drops it (next
+    # example); here it comes first.
+    it 'keeps showing when the view has no "You also see" line' do
+      receive_from_server("<streamWindow id='room' title='Room' subtitle=\" - [A] (1)\" location='center' target='drop' ifClosed='' resident='true'/>",
+                          "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>",
+                          "<component id='room objs'>#{cut}</component>", *inline('[A] (1)', objs: ''), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box, a rat and some other stuff.',
+                                 'Obvious paths: [north](north).']
+    end
+
+    # Kept as on the base (undecided): the cut list waits for a view's
+    # line past the prompt, as a staged value did.
+    it 'keeps showing for a LOOK after the prompt with no "You also see" line' do
+      receive_from_server(prompt, "<component id='room objs'>#{cut}</component>", prompt, *inline('[A] (1)', objs: ''), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box, a rat and some other stuff.',
+                                 'Obvious paths: [north](north).']
+    end
+
+    # Characterization (passes on the base by design): the room exits
+    # component after it drops the cut list with the view, so a view with
+    # no "You also see" line clears the objects.
+    it 'is cleared by a view with no "You also see" line after a room exits component' do
+      receive_from_server(*components('[A] (1)', objs: cut), *inline('[A] (1)', objs: ''), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'Obvious paths: [north](north).']
+    end
+
     it 'takes back the ownership a whole list gave earlier in the burst' do
       receive_from_server(*components('[A] (1)'), "<component id='room objs'>#{cut}</component>",
                           *inline('[A] (1)', objs: full), prompt)
