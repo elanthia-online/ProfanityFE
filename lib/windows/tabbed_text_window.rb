@@ -314,9 +314,9 @@ class TabbedTextWindow < BaseWindow
   # whatever the shown tab holds: an empty tab gets it as an empty text
   # window does (marker, bar, and the thumb at the bottom). An inactive
   # window's scrollbar is left blank. A window with no tab redraws only
-  # its (empty) tab bar and leaves the rest as it is. The text is drawn
-  # without the selection highlight; the next line to arrive in the shown
-  # tab repaints it with the highlight (see {LineBuffered#append_string}).
+  # its (empty) tab bar and leaves the rest as it is. The selected text,
+  # if any, is drawn in reverse video, on the cells a text window's
+  # repaint puts it (see {LineBuffered#repaint}).
   #
   # @return [void]
   def redraw
@@ -325,21 +325,22 @@ class TabbedTextWindow < BaseWindow
 
     tab_buffer = @tab_buffers[@active_tab]
     ch = content_height
+    selection = current_selection
 
     (TAB_BAR_HEIGHT...maxy).each do |y|
       setpos(y, 0)
       clrtoeol
     end
-    painted_without_selection
 
     # Zero or negative (nothing to draw) for an empty tab or no text rows
     tab_buffer.visible_count(ch).times do |i|
-      _id, line_data = tab_buffer.line_at_row(i, ch)
+      id, line_data = tab_buffer.line_at_row(i, ch)
       next unless line_data
 
       setpos(TAB_BAR_HEIGHT + i, 0)
-      add_line(line_data[0], line_data[1])
+      draw_row(id, line_data[0], line_data[1], selection)
     end
+    painted_with_selection(selection)
 
     update_scrollbar
     noutrefresh

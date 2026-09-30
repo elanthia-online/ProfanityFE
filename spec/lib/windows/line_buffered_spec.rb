@@ -191,13 +191,19 @@ RSpec.describe LineBuffered do
         expect(window.call_log.count { |meth, _| meth == :clrtoeol }).to eq 1
       end
 
-      it 'shows the highlight again on the next line after a resize that keeps the width' do
+      it 'keeps the highlight through a resize that keeps the width, and as the next line arrives' do
         window.redraw_after_resize
 
+        expect(text_rows).to eq %w[l4 l5 abcdef]
+        expect(reverse_cells).to eq [[false] * 6, [false] * 6, [false, true, true, true, false, false]]
+
+        window.call_log.clear
         window.add_string('l6')
 
         expect(text_rows).to eq %w[l5 abcdef l6]
-        expect(reverse_cells[1]).to eq [false, true, true, true, false, false]
+        expect(reverse_cells).to eq [[false] * 6, [false, true, true, true, false, false], [false] * 6]
+        # Only the new row is drawn: the rows shown already carry the highlight
+        expect(window.call_log.count { |meth, _| meth == :clrtoeol }).to eq 1
       end
 
       it 'highlights the selection set through the attribute writers when the next line arrives' do
