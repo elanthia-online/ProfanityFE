@@ -1948,9 +1948,10 @@ DragonRealms that includes the room number (e.g.,
 `Charname [H:[Bosque Deriel, Shacks] (230008)]`). The screen/tmux window
 name shows only the character name to keep the window list compact.
 
-Title escape sequences are written via a forked `printf` subprocess to
-avoid interleaving with curses output. Updates are dedup'd -- the escape
-only fires when the title actually changes.
+Title escape sequences are written to standard output after each game
+line's screen update has finished, so they don't interleave with curses
+output. Updates are dedup'd -- the escape only fires when the title
+actually changes.
 
 This is especially useful when running multiple characters in tmux or GNU
 Screen -- each pane/window shows which character is active. The title
