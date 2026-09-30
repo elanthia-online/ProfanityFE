@@ -17,11 +17,13 @@ require_relative 'room_title'
 # Expects the including class to provide:
 # - @state, @xml_escapes, @event_bus
 # - @spans (a SpanTracker: the open color spans and the runs they record)
+# - @marks (a SpanTracker with SpanTracker::ROOM_MARKS: the room marks,
+#   where the line's bold text and links are, whatever their colors)
 # - @router (a StreamRouter: the current stream and the open pushStreams)
 # - @pending_render (a PendingRender: screen updates to flush)
 # - @room (a RoomAssembler)
 # - @prompts (a PromptTracker)
-# - handle_game_text(text, runs)
+# - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
 #   leaving only its kept tags; see LineFilter#gagged?)
 module TagHandlers
@@ -99,6 +101,7 @@ module TagHandlers
     if name == 'prompt' && !closing
       resync_streams_at_prompt(text_buffer)
       @spans.prompt
+      @marks.prompt
     end
 
     table = closing ? CLOSING_TAG_DISPATCH : TAG_DISPATCH
@@ -123,8 +126,22 @@ module TagHandlers
   # @param buf [String] mutable text buffer to flush and clear
   # @return [void]
   def flush_text_buffer(buf)
-    handle_game_text(buf.dup, @spans.split_at_flush(buf.length)) unless buf.empty?
+    handle_game_text(buf.dup, *split_spans(:flush, buf.length)) unless buf.empty?
     buf.clear
+  end
+
+  # Hand off the text parsed so far to both span trackers, the color runs
+  # and the room marks, so the two always cover the same text.
+  #
+  # @param at [Symbol] +:flush+ (a mid-line flush, see
+  #   SpanTracker#split_at_flush) or +:line_end+ (the line's last text, see
+  #   SpanTracker#split_at_line_end)
+  # @param length [Integer] length of the text handed off
+  # @return [Array(Array<Hash>, Array<Hash>)] the color runs and the room
+  #   marks for that text
+  def split_spans(at, length)
+    split = at == :flush ? :split_at_flush : :split_at_line_end
+    [@spans.public_send(split, length), @marks.public_send(split, length)]
   end
 
   # Unescape XML entities in a text segment.
@@ -305,6 +322,7 @@ module TagHandlers
   # @return [void]
   def handle_push_bold(_xml, text_buffer)
     @spans.open(:bold, text_buffer.length, **Presets.colors(Presets::MONSTERBOLD).to_h)
+    @marks.open(:bold, text_buffer.length, mark: :bold)
   end
 
   # Handle <popBold/> or </b> tag. Closes the most recent monster bold region.
@@ -314,6 +332,7 @@ module TagHandlers
   # @return [void]
   def handle_pop_bold(_xml, text_buffer)
     @spans.close(:bold, text_buffer.length)
+    @marks.close(:bold, text_buffer.length)
   end
 
   # Handle <preset id='...'> opening tag.
@@ -427,7 +446,7 @@ module TagHandlers
       # are meaningful — they clear the displayed data. Since flush_text_buffer
       # skips empty text, handle this directly. Without a RoomWindow only an
       # empty room players component does anything: it clears the indicator.
-      result = @room.process_room_stream('', stream, @spans.runs)
+      result = @room.process_room_stream('', stream, @spans.runs, @marks.runs)
       @room.update_room_players_indicator(nil) if result == :continue
     else
       flush_text_buffer(text_buffer)
@@ -465,6 +484,10 @@ module TagHandlers
   # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
   # @return [void]
   def handle_open_link(xml, text_buffer)
+    cmd = LinkExtractor.extract_cmd(xml)
+    # The room marks record every link: the room window keeps its links
+    # while .links is off, so they work once it is turned on.
+    @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd)
     # Always track links for room component streams — the RoomWindow needs
     # pre-computed link positions even when .links is off, so they're ready
     # when toggled on. Room stream text is consumed (never reaches main
@@ -472,20 +495,29 @@ module TagHandlers
     return unless @state.blue_links || @router.current_stream&.start_with?(Streams::ROOM)
 
     colors = Presets.colors(Presets::LINKS, LinkExtractor::DEFAULT_LINK_COLOR)
-    @spans.open(:link, text_buffer.length, fg: colors[:fg], bg: colors[:bg], cmd: LinkExtractor.extract_cmd(xml))
+    @spans.open(:link, text_buffer.length, fg: colors[:fg], bg: colors[:bg], cmd: cmd)
   end
 
-  # Handle </a> or </d> link closing tag.
+  # Handle </a> or </d> link closing tag: closes the link's color span and
+  # its room mark.
   #
   # @param _xml [String] the tag (unused)
   # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
   # @return [void]
   def handle_close_link(_xml, text_buffer)
-    @spans.close(:link, text_buffer.length) do |h|
-      # For tags without cmd/exist (e.g., exit directions),
-      # use the link text itself as the command
-      h[:cmd] ||= text_buffer[h[:start]...h[:end]] if h[:start] && h[:end] > h[:start]
-    end
+    @spans.close(:link, text_buffer.length) { |span| link_text_cmd(span, text_buffer) }
+    @marks.close(:link, text_buffer.length) { |span| link_text_cmd(span, text_buffer) }
+  end
+
+  # Give a link without a cmd or exist attribute (e.g. an exit direction)
+  # its text as its command.
+  #
+  # @param span [Hash] the closed link span, with +:start+, +:end+ and
+  #   +:cmd+
+  # @param text_buffer [String] the text collected so far on the line
+  # @return [void]
+  def link_text_cmd(span, text_buffer)
+    span[:cmd] ||= text_buffer[span[:start]...span[:end]] if span[:start] && span[:end] > span[:start]
   end
 
   # Handle <indicator id='IconXXX' visible='y|n'/> tag.

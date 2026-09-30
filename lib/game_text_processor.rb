@@ -103,6 +103,9 @@ class GameTextProcessor
 
     # Open color spans and the runs they record
     @spans = SpanTracker.new
+    # Where the line's bold text and links are, whatever their colors (the
+    # room marks, handed off with the color runs; see TagHandlers#split_spans)
+    @marks = SpanTracker.new(SpanTracker::ROOM_MARKS)
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
@@ -231,9 +234,10 @@ class GameTextProcessor
       end
     end
 
-    handle_game_text(text_buffer, @spans.split_at_line_end(text_buffer.length))
+    handle_game_text(text_buffer, *split_spans(:line_end, text_buffer.length))
   ensure
     @spans.end_line
+    @marks.end_line
   end
 
   # Process a chunk of game text after XML tags have been stripped.
@@ -248,13 +252,15 @@ class GameTextProcessor
   #   entities already unescaped
   # @param runs [Array<Hash>] the color runs for +text+ (see
   #   SpanTracker#split_at_flush and SpanTracker#split_at_line_end)
+  # @param marks [Array<Hash>] the room marks for +text+ (see
+  #   SpanTracker::ROOM_MARKS)
   # @return [void]
   # @api private
-  def handle_game_text(text, runs)
+  def handle_game_text(text, runs, marks)
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
-    room_captured = @room.process_room_data(text, @router.current_stream)
+    room_captured = @room.process_room_data(text, @router.current_stream, marks)
     return if room_captured && @state.room_window_only
 
     check_familiar_notification(text)
@@ -294,6 +300,6 @@ class GameTextProcessor
       end
     end
 
-    @router.route(text, runs, room_captured: room_captured)
+    @router.route(text, runs, room_captured: room_captured, marks: marks)
   end
 end

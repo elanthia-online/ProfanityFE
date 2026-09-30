@@ -117,12 +117,14 @@ class RoomAssembler
   #
   # @param text [String] the current line of game text (XML-unescaped)
   # @param stream [String, nil] the stream the text is routed to
+  # @param _marks [Array<Hash>] the room marks for +text+ (see
+  #   SpanTracker::ROOM_MARKS); not read yet
   # @return [Boolean] true if this line was consumed by the RoomWindow
   #   (caller should not route it to the main window).  Returns false
   #   when title/desc text is captured for the terminal title but the
   #   template has no RoomWindow — the text must still flow to the
   #   main text window for display.
-  def process_room_data(text, stream)
+  def process_room_data(text, stream, _marks)
     return false if text.empty?
 
     room_data_captured = take_captured_text(text)
@@ -211,10 +213,12 @@ class RoomAssembler
   # @param stream [String, nil] the current stream
   # @param line_colors [Array<Hash>] the color regions the tag parser
   #   computed for +text+ (links carry +:cmd+)
+  # @param _marks [Array<Hash>] the room marks for +text+ (see
+  #   SpanTracker::ROOM_MARKS); not read yet
   # @return [Symbol, nil] :consumed if text was fully handled (caller should
   #   return), :continue if caller should keep processing (room players
   #   also needs indicator handling), or nil if not a room stream
-  def process_room_stream(text, stream, line_colors)
+  def process_room_stream(text, stream, line_colors, _marks)
     return nil unless stream&.start_with?(Streams::ROOM)
 
     # The room title names the room in the terminal title, with or without
