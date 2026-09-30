@@ -1,0 +1,16 @@
+<streamWindow id='room' title='Room' subtitle=" - [The Edge of the Forest, Before the Dragon's Breath] (2030003)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>The lushness of the forest begins to form a living wall, the leaves of the towering trees tinted with the dark hue of brightly-polished scales.</component>
+<component id='room objs'></component>
+<component id='room players'></component>
+<component id='room exits'>Obvious paths: <d>southwest</d>.<compass></compass></component>
+<component id='room extra'></component>
+<resource picture="0"/><style id="roomName" />[The Edge of the Forest, Before the Dragon's Breath] (2030003)
+<style id=""/>  
+Obvious paths: <d>southwest</d>.
+<prompt time="1787783856">&gt;</prompt>
+You will no longer see room descriptions.
+<prompt time="1787783857">&gt;</prompt>
+<resource picture="0"/><style id="roomName" />[The Edge of the Forest, Before the Dragon's Breath] (2030003)
+<style id=""/>  
+Obvious paths: <d>southwest</d>.
+<prompt time="1787783858">&gt;</prompt>

@@ -1,0 +1,17 @@
+<streamWindow id='room' title='Room' subtitle=" - [Jeol'gelvmoraen, Ice Grottos] (4217405)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>Lined in an immense layer of ice, the cavern expands outward into chamber after endless chamber.</component>
+<component id='room objs'>You also see <pushBold/>a jeol moradu<popBold/>, a huge bronze bar, <pushBold/>a jeol moradu<popBold/>, <pushBold/>a jeol moradu<popBold/>, <pushBold/>a jeol moradu<popBold/>, a pair of burlap slippers, a small pewter bar, <pushBold/>a jeol moradu<popBold/> and some junk.</component>
+<component id='room players'>Also here: Shadow Priest Promithius and Monster Gorkus.</component>
+<component id='room exits'>Obvious exits: <d>north</d>, <d>northeast</d>, <d>east</d>, <d>southwest</d>, <d>west</d>, <d>northwest</d>.<compass></compass></component>
+<component id='room extra'></component>
+<resource picture="0"/><style id="roomName" />[Jeol'gelvmoraen, Ice Grottos] (4217405)
+<style id=""/>  You also see <pushBold/>a jeol moradu<popBold/>, a huge bronze bar, <pushBold/>a jeol moradu<popBold/>, <pushBold/>a jeol moradu<popBold/>, <pushBold/>a jeol moradu<popBold/>, a pair of burlap slippers, a small pewter bar, <pushBold/>a jeol moradu<popBold/> and some junk.
+Also here: Shadow Priest Promithius and Monster Gorkus.
+Obvious exits: <d>north</d>, <d>northeast</d>, <d>east</d>, <d>southwest</d>, <d>west</d>, <d>northwest</d>.
+<compass><dir value="n"/><dir value="ne"/><dir value="e"/><dir value="sw"/><dir value="w"/><dir value="nw"/></compass><component id='room players'>Also here: Shadow Priest Promithius and Monster Gorkus.</component>
+<prompt time="1787793483">&gt;</prompt>
+<resource picture="0"/><style id="roomName" />[Jeol'gelvmoraen, Ice Grottos] (4217405)
+<style id=""/>  You also see <pushBold/>a jeol moradu<popBold/>, a huge bronze bar, <pushBold/>a jeol moradu<popBold/> (prone), <pushBold/>a jeol moradu<popBold/> (dead), <pushBold/>a jeol moradu<popBold/>, a pair of burlap slippers, a small pewter bar, <pushBold/>a jeol moradu<popBold/> and some junk.
+Also here: Shadow Priest Promithius and Monster Gorkus.
+Obvious exits: <d>north</d>, <d>northeast</d>, <d>east</d>, <d>southwest</d>, <d>west</d>, <d>northwest</d>.
+<compass><dir value="n"/><dir value="ne"/><dir value="e"/><dir value="sw"/><dir value="w"/><dir value="nw"/></compass><prompt time="1787793483">&gt;</prompt>

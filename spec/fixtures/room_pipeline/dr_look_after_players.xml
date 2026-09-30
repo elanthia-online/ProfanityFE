@@ -1,0 +1,18 @@
+<streamWindow id='main' title='Story' subtitle=" - [Bosque Deriel, Hermit's Shacks] (230008)" location='center' target='drop'/>
+<streamWindow id='room' title='Room' subtitle=" - [Bosque Deriel, Hermit's Shacks] (230008)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>Here on the route between the sacred sites of the Observatory and the Faery Ring is a semi-circular clearing.</component>
+<component id='room objs'></component>
+<component id='room players'>Also here: Holdigor, Paintress Catheroine, Traveler Fidon, Meraud's Hand Evro, Emerald Knight Mahtra, Quilsilgas and Druid Ytterby.</component>
+<component id='room exits'>Obvious paths: <d>north</d>, <d>south</d>.<compass></compass></component>
+<component id='room extra'></component>
+<resource picture="0"/><style id="roomName" />[Bosque Deriel, Hermit's Shacks] (230008)
+<style id=""/>  
+Also here: Holdigor, Paintress Catheroine, Traveler Fidon, Meraud's Hand Evro, Emerald Knight Mahtra, Quilsilgas and Druid Ytterby.
+Obvious paths: <d>north</d>, <d>south</d>.
+<compass><dir value="n"/><dir value="s"/></compass><component id='room players'>Also here: Holdigor, Paintress Catheroine, Traveler Fidon, Meraud's Hand Evro, Emerald Knight Mahtra, Quilsilgas and Druid Ytterby.</component>
+<prompt time="1787793497">&gt;</prompt>
+You will now see room descriptions.
+<prompt time="1787793498">&gt;</prompt>
+<resource picture="0"/><style id="roomName" />[Bosque Deriel, Hermit's Shacks] (230008)
+<style id=""/><preset id='roomDesc'>Here on the route between the sacred sites of the Observatory and the Faery Ring is a semi-circular clearing.</preset>  
+Also here: Holdigor who is emanating a benevolent holy aura, Paintress Catheroine who is blurred by hazy afterimages, Traveler Fidon who is awash in Xibar-blue light, Meraud's Hand Evro who is emanating a bright holy aura, Emerald Knight Mahtra, Quilsilgas and Druid Ytterby.
