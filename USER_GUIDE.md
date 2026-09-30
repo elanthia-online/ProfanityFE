@@ -958,7 +958,7 @@ sends, so bindings to them don't fire.
 | `alt+page_up`, `alt+page_down` | Alt + Page Up/Down |
 | `alt+1` through `alt+5` | Alt + number (for tab switching) |
 | `ctrl+?` | Ctrl + ? (keycode 127) |
-| `resize` | Terminal resize event (runs the `resize` action when not bound) |
+| `resize` | Terminal resize event (runs the `resize` action when not bound; once per burst of resizes, see `.resize`) |
 
 Ctrl and Alt with arrows, Delete or Page Up/Down need a `TERM` whose terminfo
 entry describes modified keys (extended capabilities such as `kNXT3`,
@@ -1411,6 +1411,12 @@ A resize, automatic or by `.resize`, re-wraps the text already in every text
 and tabbed window (every tab) to the new width, so widening or narrowing the
 terminal loses no text. The bottom line of each window stays at the bottom,
 and any text selection is cleared.
+
+Dragging the terminal's edge sends many resize events. ProfanityFE waits until
+none has come for 0.1 seconds, then re-fits once, at the final size (a single
+resize shows within about 0.2 seconds). A key pressed meanwhile re-fits at once,
+before the key is handled. A settings binding for the `resize` key also runs
+once per burst.
 
 ```
 .resize

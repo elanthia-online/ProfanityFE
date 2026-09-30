@@ -799,7 +799,7 @@ class Application
   # How long this pass of {#input_loop} waits for a key: {INPUT_POLL_SECONDS},
   # or less when a pending terminal resize is due sooner.
   #
-  # @return [Float] seconds
+  # @return [Numeric] seconds, 0 when the resize is already due
   def input_poll_seconds
     return INPUT_POLL_SECONDS unless @resize_due
 
