@@ -326,7 +326,8 @@ class RoomAssembler
   # the full "Also here: ..." text, then remaps color regions covering
   # each name to the indicator label. Only highlights that fully cover a
   # name are included -- partial matches create visual noise on a compact
-  # indicator display.
+  # indicator display. Asks for a flush, since a player arriving or
+  # leaving can be the only change in a burst.
   #
   # @param players_text [String, nil] raw "Also here:" text or nil
   # @param sax_colors [Array<Hash>] SAX-parsed color regions (link colors)
@@ -343,6 +344,7 @@ class RoomAssembler
     else
       @event_bus.emit(:indicator_update, id: 'room players', label: ' ', label_colors: nil, value: false)
     end
+    @pending_render.request_update
   end
 
   private

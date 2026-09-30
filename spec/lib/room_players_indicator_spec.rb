@@ -77,4 +77,50 @@ RSpec.describe 'Room players indicator without a room window' do
     expect([indicator.rows.first.rstrip, indicator_draws]).to eq ['Vellenor', 2]
     expect(main_rows.count('Also here: Vellenor who has a stony visage.')).to eq 1
   end
+
+  # A player arriving or leaving changes only the indicator: the move line
+  # is gagged or absent and the prompt that follows is unchanged, so the
+  # indicator alone must ask for the flush that shows it.
+  context 'when a player arrives or leaves and the prompt is unchanged' do
+    # The indicator's row at every flush to the terminal.
+    let(:shown) { [] }
+    let(:prompt) { '<prompt time="1">&gt;</prompt>' }
+
+    before do
+      allow(Curses).to receive(:doupdate).and_wrap_original do |original|
+        shown << indicator.rows.first.rstrip
+        original.call
+      end
+      receive_in_one_write(prompt)
+      shown.clear
+    end
+
+    # Feed raw server lines written at once: every line but the last is
+    # followed by one already waiting, so the loop flushes only after the
+    # last (the first prompt sends a LOOK).
+    def receive_in_one_write(*lines)
+      queue = lines.map { |line| "#{line}\r\n" }
+      server = Object.new
+      server.define_singleton_method(:gets) { queue.shift&.dup }
+      server.define_singleton_method(:puts) { |*| nil }
+      server.define_singleton_method(:flush) { nil }
+      allow(IO).to receive(:select) { queue.empty? ? nil : [[server], [], []] }
+      processor.run(server)
+    end
+
+    it 'flushes the arriving player to the screen' do
+      receive_in_one_write("<component id='room players'>Also here: Acolyte Tenuk.</component>", prompt)
+
+      expect(shown).to eq ['Tenuk']
+    end
+
+    it 'flushes the cleared indicator to the screen when an empty component says the player left' do
+      receive_in_one_write("<component id='room players'>Also here: Acolyte Tenuk.</component>", prompt)
+      shown.clear
+
+      receive_in_one_write("<component id='room players'></component>", prompt)
+
+      expect(shown).to eq ['']
+    end
+  end
 end
