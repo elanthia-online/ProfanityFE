@@ -77,12 +77,17 @@ RSpec.describe CommandBuffer do
     str.each_char { |ch| buf.put_ch(ch) }
   end
 
-  # "\n" and "\r" count as whitespace between words, as a space does.
+  # "\n" and "\r" count as whitespace between words, as a space does:
+  # word deletion first eats the run of them next to the cursor, then the
+  # word, then stops at the next one. Each input has a run of two
+  # whitespace characters, holding "\n" or "\r", next to the cursor in
+  # both directions, so if either stopped counting as whitespace the
+  # deletion would stop inside the run instead.
   describe 'word deletion over newlines and carriage returns' do
     {
-      "go\nnorth"    => ["go\n", "\nnorth"],
-      "go\r\nnorth"  => ["go\r\n", "\r\nnorth"],
-      "hi,\r\nthere" => ["hi,\r\n", ",\r\nthere"]
+      "\n\ngo\n\n" => ["\n\n", "\n\n"],
+      "\r\ngo\r\n" => ["\r\n", "\r\n"],
+      " \ngo\n "   => [" \n", "\n "]
     }.each do |str, (after_backspace, after_delete)|
       it "backspace_word at the end of #{str.inspect} leaves #{after_backspace.inspect}" do
         type(str)
