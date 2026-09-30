@@ -461,12 +461,42 @@ RSpec.describe 'Room carriers' do
                                  'StringProcs: Town']
     end
 
-    it 'decodes entities in Room Exits' do
+    it 'decodes entities in the text of Room Exits' do
       load_layout
 
-      receive_from_server(*move('[A] (1)'), "Room Exits: <d cmd='climb wall &amp; rope'>climb wall &amp; rope</d>", prompt)
+      receive_from_server(*move('[A] (1)'), "Room Exits: <d cmd='climb'>climb wall &amp; rope</d>", prompt)
 
-      expect(room_screen.last).to eq 'Room Exits: [climb wall & rope](climb wall &amp; rope)'
+      expect(room_screen.last).to eq 'Room Exits: [climb wall & rope](climb)'
+    end
+
+    # Characterization: no link decodes entities in its cmd attribute (the
+    # main window's and the room components' links don't either), so a
+    # click sends the attribute as the game wrote it.
+    it "sends a Room Exits link's cmd with its entities as written" do
+      load_layout
+
+      receive_from_server(*move('[A] (1)'), "Room Exits: <d cmd='climb wall &amp; rope'>climb</d>", prompt)
+
+      expect(room_screen.last).to eq 'Room Exits: [climb](climb wall &amp; rope)'
+    end
+
+    # Characterization (passes on the base by design): the room window
+    # keeps the links of a room read while .links is off, so they work
+    # once .links is turned on.
+    it 'makes the links of a room read with links off clickable once links are turned on' do
+      state.blue_links = false
+      load_layout
+
+      receive_from_server('<resource picture="0"/><style id="roomName" />[A] (1)',
+                          '<style id=""/>  You also see <a exist="1" noun="box">a box</a>.', 'Obvious paths: <d>north</d>.',
+                          "Room Exits: <d cmd='go gate'>go gate</d>")
+      shown_with_links_off = room_screen
+      state.blue_links = true
+      @window_manager.room['room'].render
+
+      expect(shown_with_links_off).to eq ['[A] (1)', 'You also see a box.', 'Obvious paths: north.', 'Room Exits: go gate']
+      expect(room_screen).to eq ['[A] (1)', 'You also see [a box](look #1).', 'Obvious paths: [north](north).',
+                                 'Room Exits: [go gate](go gate)']
     end
 
     it 'shows the linked lines as text with links off' do
@@ -591,6 +621,8 @@ RSpec.describe 'Room carriers' do
       expect(room_screen).to eq ['You also see {a rat:green} and a box.']
     end
 
+    # Characterization: the inline path already took bold spans for
+    # creatures whatever color bold is drawn in.
     it 'draws the bold creatures of an inline LOOK without a monsterbold preset' do
       PRESET.delete('monsterbold')
       PRESET['creature'] = ['00ff00', nil]
@@ -677,6 +709,15 @@ RSpec.describe 'Room carriers' do
                           *inline_room, 'Also here: Bob.', 'Obvious paths: out')
 
       expect(room_screen).to eq ['[A] (1)', 'Also here: [Bob](look #-4).', 'Obvious paths: out']
+    end
+
+    it 'keeps the links of a description a component staged when the inline commit re-sends it (GemStone)' do
+      load_layout
+
+      receive_from_server(%(<component id='room desc'>A <a exist="7" noun="gate">gate</a> here.</component>),
+                          *inline_room, 'Obvious paths: out')
+
+      expect(room_screen).to eq ['[A] (1)', 'A [gate](look #7) here.', 'Obvious paths: out']
     end
 
     it 'keeps the creatures of objects a component staged when the inline commit re-sends them' do

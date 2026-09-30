@@ -227,6 +227,16 @@ RSpec.describe 'Inline room lines' do
       expect(main_rows.first).to eq 'Before x. A door.'
     end
 
+    # Characterization: a link that opens before the roomDesc style is not
+    # the description's, even where it goes on into it.
+    it 'shows no link that opens before the roomDesc style' do
+      desc_shown_for(%(<d cmd='look x'>X <style id="roomDesc"/>dark</d> room.<style id=""/>))
+
+      expect(room_rows.first).to eq 'dark room.'
+      expect(commands_under('dark room.')).to eq [nil]
+      expect(main_rows.first).to eq 'X dark room.'
+    end
+
     it 'decodes entities in the description' do
       desc_shown_for(%(<preset id='roomDesc'>A &lt;red&gt; door &amp; a gate.</preset>))
 

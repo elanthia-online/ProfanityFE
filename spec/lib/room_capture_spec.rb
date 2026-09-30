@@ -163,4 +163,17 @@ RSpec.describe 'Room capture' do
     expect(room_rows).to eq ['A b', 'Obvious paths: north.']
     expect(main_rows).to eq [' c.']
   end
+
+  # As Q2 (a): a stream pushed inside a roomDesc style flushes the text
+  # before it, and the description is the text the capture took. (Read
+  # from the raw line, the row was "A foo c.", with the pushed stream's
+  # text in it.)
+  it 'ends a roomDesc style capture where a stream is pushed inside it' do
+    load_layout
+
+    receive_from_server(%(<style id='roomDesc'/>A <pushStream id='thoughts'/>foo<popStream/> c.<style id=''/>), 'Obvious paths: north.')
+
+    expect(room_rows).to eq ['A', 'Obvious paths: north.']
+    expect(main_rows).to eq ['A', 'foo', ' c.', 'Obvious paths: north.']
+  end
 end
