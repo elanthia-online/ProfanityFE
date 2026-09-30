@@ -138,6 +138,11 @@ RSpec.describe 'Room title' do
     'Town Square'                => '[Town Square]',
     'Town Square (1234)'         => '[Town Square] (1234)',
     '(1234)'                     => '[(1234)]',
+    # Without brackets only a room number is split off; other text in
+    # parentheses stays part of the name.
+    'The Heavens (**)'           => '[The Heavens (**)]',
+    'Town Square (u230008)'      => '[Town Square (u230008)]',
+    'Town Square(1234)'          => '[Town Square(1234)]',
     # Lich's forms and non-ASCII names.
     '[Room - 1234] (230008)'     => '[Room - 1234] (230008)',
     '[Room - 1234 - (u230008)]'  => '[Room - 1234 - (u230008)]',
@@ -215,16 +220,41 @@ RSpec.describe 'Room title' do
     expect(terminal_title).to eq 'Mahtra [[Old Room] (1)]'
   end
 
+  # A room component that closes itself sends no room text, so nothing
+  # clears the title row but its subtitle: a blank subtitle changes nothing,
+  # an empty name hides the row.
+  it "keeps the last room's title row for a blank self-closing room component subtitle, and hides it for an empty name" do
+    exits = %(<component id='room exits'>Obvious paths: <d>north</d>.</component>)
+    receive_from_server(*lines_for(:stream_window, '[Old Room] (1)'))
+
+    receive_from_server(%(<component id='room' subtitle="  "/>), exits)
+    after_blank = title_row
+    receive_from_server(%(<component id='room' subtitle="[] (1234)"/>), exits)
+
+    expect(after_blank).to eq '[Old Room] (1)'
+    expect(title_row).to be_nil
+    expect(terminal_title).to eq 'Mahtra [[Old Room] (1)]'
+  end
+
+  # An inline room's "Obvious paths:" commits the title the room title
+  # component sent, parsed like every other title.
+  it 'shows the room title component title when an inline room commits it' do
+    receive_from_server("<component id='room title'> - [Town Square]  (1234)</component>", 'Obvious paths: <d>north</d>.')
+
+    expect(row: title_row, terminal: terminal_title).to eq(row: '[Town Square] (1234)', terminal: 'Mahtra [[Town Square] (1234)]')
+  end
+
   # The room indicator (a layout's indicator window for 'room') shows the
   # streamWindow subtitle's room without its brackets, as before; its
   # entities are decoded like every other room title's.
   it 'names the room on the room indicator without brackets, entities decoded' do
-    shown = [' - [Town Square] (1234)', ' - [The Heavens] (**)', ' - [Smith & Sons] (1234)'].map do |sent|
-      receive_from_server(*lines_for(:stream_window, sent))
+    sent = [' - [Town Square] (1234)', ' - [The Heavens] (**)', ' - [Smith & Sons] (1234)', ' - [A] [B]']
+    shown = sent.map do |subtitle|
+      receive_from_server(*lines_for(:stream_window, subtitle))
       @wm.indicator['room'].rows.first.rstrip
     end
 
-    expect(shown).to eq ['Town Square (1234)', 'The Heavens (**)', 'Smith & Sons (1234)']
+    expect(shown).to eq ['Town Square (1234)', 'The Heavens (**)', 'Smith & Sons (1234)', 'A [B]']
   end
 
   it 'names the terminal title from the room title component without a room window' do
