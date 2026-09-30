@@ -353,7 +353,8 @@ RSpec.describe 'Room ownership' do
 
   # Two inline lines for one field in one view: the first roomDesc and the
   # first "Also here:" line stay (as the base's guards gave); the last
-  # roomName and "You also see" line win.
+  # roomName and "You also see" line win. A roomDesc on another stream (a
+  # familiar's view) is not one of the view's lines.
   describe 'two inline lines for one field in a view' do
     let(:look_desc) { ['<resource picture="0"/><style id="roomName" />[A] (1)', "<style id=\"\"/><preset id='roomDesc'>Main desc.</preset>  You also see a box."] }
     let(:familiar_desc) { ["<pushStream id='familiar'/><preset id='roomDesc'>The familiar's room.</preset>", '<popStream/>'] }
@@ -364,12 +365,12 @@ RSpec.describe 'Room ownership' do
       expect(room_screen).to eq ['[A] (1)', 'Main desc.', 'You also see a box.', 'Obvious paths: [north](north).']
     end
 
-    # Kept as on the base: a roomDesc on another stream is staged too (PLAN
-    # F2), so a familiar's read before the view's own is the one shown.
-    it "keep a familiar's roomDesc read before the view's own" do
+    # Only room text on main names the player's room, so a familiar's
+    # roomDesc read before the view's own isn't staged.
+    it "show the view's own roomDesc, not a familiar's read before it" do
       receive_from_server(prompt, *familiar_desc, *inline('[A] (1)'), prompt)
 
-      expect(room_screen[1]).to eq "The familiar's room."
+      expect(room_screen[1]).to eq 'Desc of [A] (1).'
     end
 
     it 'keep the first "Also here:" line' do
@@ -381,8 +382,7 @@ RSpec.describe 'Room ownership' do
 
     # Characterization (passes on the base by design).
     it 'take the last roomName' do
-      receive_from_server(prompt, *look_desc, "<pushStream id='familiar'/><style id=\"roomName\" />[F] (9)", '<style id=""/><popStream/>',
-                          'Obvious paths: <d>north</d>.', prompt)
+      receive_from_server(prompt, *look_desc, '<style id="roomName" />[F] (9)', '<style id=""/>', 'Obvious paths: <d>north</d>.', prompt)
 
       expect(room_screen.first).to eq '[F] (9)'
     end

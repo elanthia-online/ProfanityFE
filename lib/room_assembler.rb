@@ -14,9 +14,9 @@ require_relative 'games'
 #   marks show (see RoomPart), is emitted as it arrives.
 # - The inline path: roomName/roomDesc styled text (captured between
 #   {#start_capture} and {#end_capture}, which the tag parser calls) and
-#   "You also see" / "Also here:" / "Obvious exits:" lines, with the links
-#   and creatures their room marks show, are staged, and committed as one
-#   batch when the exits arrive.
+#   "You also see" / "Also here:" / "Obvious exits:" lines on main, with
+#   the links and creatures their room marks show, are staged, and
+#   committed as one batch when the exits arrive.
 #
 # Component data owns the room it described. A burst runs from a room
 # subtitle ({#subtitle}) or a prompt ({#prompt_seen}) to the next prompt,
@@ -132,7 +132,8 @@ class RoomAssembler
   # Start capturing styled text for the room: +:title+ when a roomName
   # style opens, +:desc+ when a roomDesc style or preset opens. The next
   # text {#process_room_data} sees is taken as the room title or
-  # description.
+  # description if it is on main; on another stream it only ends the
+  # capture.
   #
   # The title also names the room in the terminal title, so it is captured
   # without a room window; the description only with one. Yields before the
@@ -168,8 +169,7 @@ class RoomAssembler
     return unless kinds.include?(@capture_mode)
 
     yield if block_given?
-    @capture_mode = nil
-    @capture_at = 0
+    disarm_capture
   end
 
   # Process room-related text from inline game text and update RoomWindow
@@ -192,16 +192,21 @@ class RoomAssembler
   def process_room_data(text, stream, marks)
     return false if text.empty?
 
-    room_data_captured = take_captured_text(text, marks)
+    # The inline lines are room data only on main: only room text on main
+    # names the player's room. Component stream data (room objs, room
+    # players, room exits) is handled by process_room_stream instead:
+    # reading it here too would consume the text and prevent
+    # process_room_stream from running, or, without a RoomWindow, update
+    # the room players indicator a second time. Text on any other stream (a
+    # familiar's view, a script's window) is that stream's own: a roomName
+    # or roomDesc there ends the capture, but sets no terminal title, isn't
+    # staged for the room window, and stays in its window.
+    unless stream.nil? || stream == Streams::MAIN
+      disarm_capture
+      return false
+    end
 
-    # The inline lines are room data only on main. Component stream data
-    # (room objs, room players, room exits) is handled by
-    # process_room_stream instead: reading it here too would consume the
-    # text and prevent process_room_stream from running, or, without a
-    # RoomWindow, update the room players indicator a second time. Text on
-    # any other stream (a familiar's view, a script's window) is that
-    # stream's own, and must not commit a room or leave its window.
-    return room_data_captured unless stream.nil? || stream == Streams::MAIN
+    room_data_captured = take_captured_text(text, marks)
 
     # Without a RoomWindow, only update the room players indicator from
     # inline text patterns (objects, exits, etc. are not applicable).
@@ -412,9 +417,10 @@ class RoomAssembler
   # Take text as the room title or description if a capture is open (see
   # {#start_capture}), and end the capture.
   #
-  # The roomName text always updates the terminal title, since it includes
-  # the room number in DR (e.g., "[Room] (230008)"). Without a RoomWindow
-  # the text is not consumed: it must still flow to the main text window.
+  # Called only for text on main (see #process_room_data). The roomName
+  # text always updates the terminal title, since it includes the room
+  # number in DR (e.g., "[Room] (230008)"). Without a RoomWindow the text
+  # is not consumed: it must still flow to the main text window.
   #
   # @param text [String] non-empty game text
   # @param marks [Array<Hash>] the room marks for +text+
@@ -431,15 +437,22 @@ class RoomAssembler
       end
     when :desc
       if room_window?
-        # The view keeps the first description it read (a later one, a
-        # familiar's roomDesc before the exits line, doesn't replace it)
+        # The view keeps the first description it read (a later roomDesc
+        # before the exits line doesn't replace it)
         @view[:desc] ||= captured_desc(text, marks)
         captured = true
       end
     end
+    disarm_capture
+    captured
+  end
+
+  # End a capture (see {#start_capture}) without taking any text.
+  #
+  # @return [void]
+  def disarm_capture
     @capture_mode = nil
     @capture_at = 0
-    captured
   end
 
   # The description a roomDesc capture takes from +text+: the text from
