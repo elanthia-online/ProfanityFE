@@ -1,9 +1,15 @@
 # frozen_string_literal: true
 
-# Tests GameTextProcessor#handle_game_text event emissions: indicator
-# updates (empty hands, nsys), stream routing (main, dedicated, fallback),
-# prompt handling (emit/suppress after movement), stun detection, combat
-# gag, and highlight application.
+# What the game-text checks and the routing of GameTextProcessor show:
+# the nerve damage (nsys) indicator, the stun countdown, the hand
+# indicators, main and stream windows, highlights, and when the pending
+# prompt shows (not after movement, not after a bracket prompt line).
+#
+# Lines are fed through the real server loop (GameTextProcessor#run) into
+# real windows built from layout XML; the assertions are on what those
+# windows show on the virtual screen (spec/support/virtual_screen.rb).
+# Multi-line gags are in multiline_gags_spec.rb and room component lines
+# in room_component_lines_spec.rb.
 
 require_relative '../spec_helper'
 require 'rexml/document'
@@ -11,722 +17,250 @@ require_relative '../../lib/game_text_processor'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/window_manager'
 
-RSpec.describe 'GameTextProcessor event emissions' do
-  before { GagPatterns.load_defaults }
+RSpec.describe 'GameTextProcessor game text on screen' do
+  # The countdown windows count down from this fixed time.
+  let(:clock) { Clock.new(now: -> { Time.at(1_800_000_000) }) }
+  # Color pair number per foreground color, so a cell's color can be read
+  # back from its attributes.
+  let(:pairs) { { 'ff0000' => 1, '00ff00' => 2, 'ff9900' => 3, 'ffff00' => 4, '444444' => 5 } }
+  # The game repeats an unchanged prompt; that marks a prompt as pending,
+  # shown before the next line of main text.
+  let(:same_prompt) { '<prompt time="1800000000">&gt;</prompt>' }
 
-  let(:main_window) do
-    obj = Object.new
-    def obj.route_string(*) = nil
-    def obj.add_string(*) = nil
-    def obj.respond_to?(m, *) = m == :buffer ? false : super
-    obj
-  end
-  let(:event_bus) { EventBus.new }
-  let(:wm) do
-    Struct.new(:stream, :indicator, :progress, :countdown, :room,
-               :command_window, :command_window_layout).new(
-                 { 'main' => main_window }, {}, {}, {}, {}, nil, nil
-               )
-  end
-  let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
-  let(:cmd_buffer) { Struct.new(:window).new(nil) }
-  let(:xml_escapes) { { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' } }
-  let(:processor) do
-    GameTextProcessor.new(
-      window_mgr: wm,
-      shared_state: state,
-      cmd_buffer: cmd_buffer,
-      xml_escapes: xml_escapes,
+  before { allow(HighlightProcessor).to receive(:get_color_pair_id) { |fg, _bg| pairs.fetch(fg, 0) } }
+
+  # Start a client: the windows of a layout, and a processor (with its own
+  # event bus and shared state) that feeds them.
+  #
+  # @param windows_xml [String] the layout's <window> elements
+  # @return [void]
+  def load_layout(windows_xml)
+    LAYOUT['events'] = REXML::Document.new("<layout>#{windows_xml}</layout>").root
+    event_bus = EventBus.new
+    @window_manager = WindowManager.new(clock: clock)
+    @window_manager.load_layout('events')
+    @window_manager.subscribe_to_events(event_bus)
+    @processor = GameTextProcessor.new(
+      window_mgr: @window_manager, shared_state: SharedState.new.tap { |s| s.skip_server_time_offset = true },
+      cmd_buffer: Struct.new(:window).new(nil),
+      xml_escapes: { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' },
       event_bus: event_bus
     )
   end
 
-  # The processor's stream router
-  def router = processor.send(:instance_variable_get, :@router)
-
-  # The processor's prompt tracker
-  def prompts = processor.send(:instance_variable_get, :@prompts)
-
-  # The screen updates the processor asked for
-  def pending_render = processor.send(:instance_variable_get, :@pending_render)
-
-  # Send text through handle_game_text via the private method, with no
-  # color runs
-  def process(text)
-    processor.send(:handle_game_text, text, [])
+  # Feed raw server lines through GameTextProcessor#run, as the socket
+  # would (Lich ends every line with CRLF). The first prompt makes the
+  # client send 'look', which this server accepts.
+  def receive_from_server(*lines)
+    queue = lines.map { |line| "#{line}\r\n" }
+    server = Object.new
+    server.define_singleton_method(:gets) { queue.shift&.dup }
+    server.define_singleton_method(:puts) { |*| nil }
+    server.define_singleton_method(:flush) { nil }
+    allow(IO).to receive(:select).and_return(nil)
+    @processor.run(server)
   end
 
-  # ---- Empty hands indicator ----
-
-  describe 'empty hands text emits indicator events' do
-    it 'emits indicator_update for both right and left when glancing at empty hands' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
-
-      process('You glance down at your empty hands.')
-
-      right_event = events.find { |e| e[:id] == 'right' }
-      left_event = events.find { |e| e[:id] == 'left' }
-      expect(right_event).to include(label: 'Empty')
-      expect(left_event).to include(label: 'Empty')
-    end
-
-    it 'asks for a screen update after emitting empty hands events' do
-      process('You glance down at your empty hands.')
-      expect(pending_render.update_requested?).to be true
-    end
+  # The lines a stream's text window shows, blank rows left out.
+  def shown_in(stream)
+    @window_manager.stream[stream].rows.reject(&:empty?)
   end
 
-  # ---- Nerve system indicator ----
+  # The color of each character of +text+ where main shows it: a
+  # foreground color, nil when uncolored, or an Array when mixed.
+  def color_in_main(text)
+    window = @window_manager.stream['main']
+    y = window.rows.index { |row| row.include?(text) }
+    raise "#{text.inspect} not in main: #{shown_in('main').inspect}" unless y
 
-  describe 'nerve system text emits nsys indicator events' do
-    it 'emits nsys value 3 for severe muscle control issues' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
-
-      process('You have a very difficult time with muscle control in your left arm.')
-
-      nsys_event = events.find { |e| e[:id] == 'nsys' }
-      expect(nsys_event).to include(value: 3)
-    end
-
-    it 'emits nsys value 2 for constant muscle spasms' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
-
-      process('You have constant muscle spasms in your right leg.')
-
-      nsys_event = events.find { |e| e[:id] == 'nsys' }
-      expect(nsys_event).to include(value: 2)
-    end
-
-    it 'emits nsys value 1 for slurred speech' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
-
-      process('You have developed slurred speech.')
-
-      nsys_event = events.find { |e| e[:id] == 'nsys' }
-      expect(nsys_event).to include(value: 1)
-    end
-
-    it 'does not emit nsys for unrelated text' do
-      events = []
-      event_bus.on(:indicator_update) { |data| events << data }
-
-      process('You swing your sword at a goblin.')
-
-      nsys_events = events.select { |e| e[:id] == 'nsys' }
-      expect(nsys_events).to be_empty
-    end
+    x = window.row(y).index(text)
+    colors = (x...(x + text.length)).map { |col| pairs.key(window.attrs_at(y, col) >> 8) }.uniq
+    colors.size == 1 ? colors.first : colors
   end
 
-  # ---- Stream text routing ----
-
-  describe 'text routing emits stream_text events' do
-    it 'emits stream_text to main stream for regular game text' do
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('A goblin attacks you!')
-
-      expect(events.last).to include(stream: 'main', text: 'A goblin attacks you!')
-    end
-
-    it 'emits stream_text to the current stream when a dedicated window exists' do
-      wm.stream['combat'] = main_window
-      router.send(:instance_variable_set, :@current_stream, 'combat')
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('A goblin swings at you.')
-
-      expect(events.last).to include(stream: 'combat')
-    end
-
-    it 'falls back to main stream when no dedicated window exists for a known stream' do
-      router.send(:instance_variable_set, :@current_stream, 'thoughts')
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('Someone thinks out loud.')
-
-      expect(events.last).to include(stream: 'main')
-    end
-
-    it 'does not emit stream_text for whitespace-only text' do
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('   ')
-
-      expect(events).to be_empty
-    end
-
-    it 'skips duplicate text already sent to a stream window' do
-      wm.stream['combat'] = main_window
-      router.send(:instance_variable_set, :@current_stream, 'combat')
-      process('A goblin attacks!')
-      router.send(:instance_variable_set, :@current_stream, nil)
-
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-      process('A goblin attacks!')
-
-      stream_texts = events.select { |e| e[:stream] == 'main' }
-      expect(stream_texts).to be_empty
-    end
-  end
-
-  # ---- Prompt emission ----
-
-  describe 'prompt handling emits add_prompt events' do
-    it 'emits add_prompt when need_prompt is true before regular text' do
-      state.need_prompt = true
-      events = []
-      event_bus.on(:add_prompt) { |data| events << data }
-
-      process('Hello world.')
-
-      expect(events.last).to include(stream: 'main', text: '>')
-    end
-
-    it 'suppresses prompt after movement text' do
-      state.need_prompt = true
-      prompts.movement_seen
-      events = []
-      event_bus.on(:add_prompt) { |data| events << data }
-
-      process('Some text after walking.')
-
-      expect(events).to be_empty
-    end
-
-    it 'detects movement text and sets last_was_movement flag' do
-      process('You walk north.')
-      expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be true
-    end
-
-    %w[run go swim climb crawl drag stride sneak stalk].each do |verb|
-      it "detects '#{verb}' as a movement verb" do
-        process("You #{verb} through the archway.")
-        expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be true
-      end
-    end
-
-    it 'does not detect non-movement verbs as movement' do
-      process('You attack the goblin.')
-      expect(prompts.send(:instance_variable_get, :@last_was_movement)).to be false
-    end
-  end
-
-  # ---- Stun detection ----
-
-  describe 'stun text emits stun event' do
-    it 'emits stun event with correct seconds for standard stun text' do
-      events = []
-      event_bus.on(:stun) { |data| events << data }
-
-      process('You are stunned for 5 rounds!')
-
-      expect(events.last).to include(seconds: 25)
-    end
-
-    it 'emits stun for multi-round stun' do
-      events = []
-      event_bus.on(:stun) { |data| events << data }
-
-      process('  You are stunned for 12 rounds!')
-
-      expect(events.last).to include(seconds: 60)
-    end
-
-    it 'emits stun for single round (1 round = 5 seconds)' do
-      events = []
-      event_bus.on(:stun) { |data| events << data }
-
-      process('You are stunned for 1 round!')
-
-      expect(events.last).to include(seconds: 5)
-    end
-
-    it 'does not emit stun for non-stun text containing "stunned"' do
-      events = []
-      event_bus.on(:stun) { |data| events << data }
-
-      process('The goblin looks stunned.')
-
-      expect(events).to be_empty
-    end
-  end
-
-  # ---- Bracket prompt lines ----
-
-  describe 'bracket prompt lines consume need_prompt' do
-    it 'clears need_prompt on [prompt]> lines' do
-      state.need_prompt = true
-      process('[Cleric]>')
-      expect(state.need_prompt).to be false
-    end
-  end
-
-  # ---- Multi-line gag state machine ----
-
-  describe 'multi-line gag suppression' do
-    # The processor's line filter, which runs the gag state machine
-    def line_filter = processor.send(:instance_variable_get, :@line_filter)
-
-    def gag?(line)
-      line_filter.send(:multiline_gag?, line)
-    end
-
-    def start_block(gag)
-      allow(GagPatterns).to receive(:match_multiline_start) { |line| line =~ /START/ ? gag : nil }
-    end
-
-    it 'passes lines through when no multi-line gag matches' do
-      allow(GagPatterns).to receive(:match_multiline_start).and_return(nil)
-      expect(gag?('ordinary line')).to be false
-    end
-
-    it 'suppresses the start line and begins a block' do
-      start_block({ start: /START/, end: nil })
-      expect(gag?('the START of knowledge')).to be true
-      expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
-    end
-
-    context 'prompt-terminated block (no end pattern)' do
-      before do
-        start_block({ start: /START/, end: nil })
-        gag?('the START of knowledge')
-      end
-
-      it 'suppresses body lines while active' do
-        expect(gag?('a long paragraph of crystal lore')).to be true
-        expect(gag?('another suppressed line')).to be true
-      end
-
-      it 'releases on a prompt line and lets the prompt through' do
-        gag?('body line')
-        expect(gag?('<prompt time="123">&gt;</prompt>')).to be false
-        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
-      end
-
-      it 'resumes normal processing after the block ends' do
-        gag?('body line')
-        gag?('<prompt time="123">&gt;</prompt>')
-        allow(GagPatterns).to receive(:match_multiline_start).and_return(nil)
-        expect(gag?('back to normal')).to be false
-      end
-    end
-
-    context 'end-pattern block' do
-      before do
-        start_block({ start: /START/, end: /THE END/ })
-        gag?('the START of the block')
-      end
-
-      it 'suppresses lines until the end pattern, inclusive' do
-        expect(gag?('middle line')).to be true
-        expect(gag?('here is THE END of it')).to be true
-        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
-      end
-
-      it 'does not release on a prompt line (only the end pattern ends it)' do
-        expect(gag?('<prompt time="123">&gt;</prompt>')).to be true
-        expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).not_to be_nil
-      end
-    end
-
-    it 'releases the block after the safety cap and lets the line through' do
-      start_block({ start: /START/, end: /NEVER MATCHES/ })
-      gag?('the START of a runaway block')
-      LineFilter::MULTILINE_GAG_MAX_LINES.times { gag?('still going') }
-      # The next line exceeds the cap and is released.
-      expect(gag?('one line too many')).to be false
-      expect(line_filter.send(:instance_variable_get, :@active_multiline_gag)).to be_nil
-    end
-  end
-
-  # ---- Highlight application ----
-
-  describe 'highlights are applied to routable streams' do
-    it 'applies highlights and provides colors array with stream_text event' do
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('Hello world.')
-
-      expect(events.last[:colors]).to be_an(Array)
-    end
-  end
-
-  # ---- Standalone room component updates ----
-
-  describe 'standalone room component updates (not full room entry)' do
+  describe 'the nerve damage indicator' do
+    # Its colors by damage rank: none, slurred speech, muscle spasms,
+    # trouble with muscle control.
     before do
-      wm.room['room'] = main_window
+      allow_any_instance_of(BaseWindow).to receive(:get_color_pair_id) { |_window, fg, _bg| pairs.fetch(fg, 0) }
+      load_layout(<<~XML)
+        <window class='text' top='0' left='0' height='8' width='80' value='main'/>
+        <window class='indicator' top='20' left='0' height='1' width='4' label='nsys' value='nsys'
+                fg='444444,ffff00,ff9900,ff0000'/>
+      XML
     end
 
-    def process_line(line)
-      processor.send(:instance_variable_get, :@room).line_started(line)
-      processor.send(:process_line_tags, line)
+    # The foreground color the nsys indicator is drawn in.
+    def nsys_color
+      pairs.key(@window_manager.indicator['nsys'].attrs_at(0, 0) >> 8)
     end
 
-    it 'emits :room_players when a standalone players component arrives' do
-      events = []
-      event_bus.on(:room_players) { |data| events << data }
+    it 'shows the worst rank (red) for trouble with muscle control' do
+      receive_from_server('You have a very difficult time with muscle control in your left arm.')
 
-      process_line("<component id='room players'>Also here: Quilsilgas and Dark Summoner Vlachodimos.</component>")
-
-      expect(events.last).to include(text: a_string_matching(/Quilsilgas/))
+      expect(nsys_color).to eq 'ff0000'
     end
 
-    it 'emits :room_objects when a standalone objects component arrives' do
-      events = []
-      event_bus.on(:room_objects) { |data| events << data }
+    it 'shows the middle rank (orange) for constant muscle spasms' do
+      receive_from_server('You have constant muscle spasms in your right leg.')
 
-      process_line("<component id='room objs'>You also see <pushBold/>a goblin<popBold/> and a sword.</component>")
-
-      expect(events.last).to include(text: a_string_matching(/goblin/))
+      expect(nsys_color).to eq 'ff9900'
     end
 
-    it 'asks for a room render for non-exit room components' do
-      process_line("<component id='room players'>Also here: Mahtra.</component>")
+    it 'shows the lowest rank (yellow) for slurred speech' do
+      receive_from_server('You have developed slurred speech.')
 
-      expect(pending_render.room_render_requested?).to be true
+      expect(nsys_color).to eq 'ffff00'
     end
 
-    it 'asks for a screen update for room components' do
-      process_line("<component id='room players'>Also here: Mahtra.</component>")
+    it 'stays in its no-damage color for other text' do
+      receive_from_server('You swing your sword at a goblin.')
 
-      expect(pending_render.update_requested?).to be true
-    end
-
-    it 'subscriber receives room_players event and calls update_players on window' do
-      room_spy = Object.new
-      def room_spy.calls = @calls ||= []
-      def room_spy.update_title(t)  = calls << [:update_title, t]
-      def room_spy.update_desc(t, **) = calls << [:update_desc, t]
-      def room_spy.update_objects(t, **) = calls << [:update_objects, t]
-      def room_spy.update_players(t, **) = calls << [:update_players, t]
-      def room_spy.update_exits(t, **) = calls << [:update_exits, t]
-      def room_spy.render = calls << [:render]
-      def room_spy.clear_supplemental = calls << [:clear_supplemental]
-      def room_spy.update_room_number(t) = calls << [:update_room_number, t]
-      def room_spy.update_stringprocs(t) = calls << [:update_stringprocs, t]
-
-      # Wire the spy through WindowManager subscription
-      test_wm = WindowManager.new
-      test_wm.instance_variable_set(:@room, { 'room' => room_spy })
-      test_wm.instance_variable_set(:@stream, { 'main' => main_window })
-      test_wm.subscribe_to_events(event_bus)
-
-      # Re-create processor with this wm
-      test_processor = GameTextProcessor.new(
-        window_mgr: test_wm, shared_state: state,
-        cmd_buffer: cmd_buffer, xml_escapes: xml_escapes, event_bus: event_bus
-      )
-
-      test_processor.send(:instance_variable_get, :@room)
-                    .line_started("<component id='room players'>Also here: Mahtra.</component>")
-      test_processor.send(:process_line_tags,
-                          "<component id='room players'>Also here: Mahtra.</component>")
-
-      expect(room_spy.calls).to include([:update_players, a_string_matching(/Mahtra/)])
-    end
-
-    it 'emits :room_players with empty text when an empty players component arrives' do
-      events = []
-      event_bus.on(:room_players) { |data| events << data }
-
-      process_line("<component id='room players'></component>")
-
-      expect(events.last).to include(text: '')
-    end
-
-    it 'clears room players indicator when an empty players component arrives' do
-      indicator_events = []
-      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
-
-      process_line("<component id='room players'></component>")
-
-      expect(indicator_events.last).to include(id: 'room players', value: false)
-    end
-
-    it 'asks for a room render for empty room components' do
-      process_line("<component id='room players'></component>")
-
-      expect(pending_render.room_render_requested?).to be true
-    end
-
-    it 'room_render event triggers render on the room window' do
-      room_spy = Object.new
-      def room_spy.calls = @calls ||= []
-      def room_spy.render = calls << [:render]
-
-      test_wm = WindowManager.new
-      test_wm.instance_variable_set(:@room, { 'room' => room_spy })
-      test_wm.instance_variable_set(:@stream, { 'main' => main_window })
-      test_wm.subscribe_to_events(event_bus)
-
-      event_bus.emit(:room_render)
-
-      expect(room_spy.calls).to include([:render])
+      expect(nsys_color).to eq '444444'
     end
   end
 
-  # ---- Room players indicator without RoomWindow ----
-
-  describe 'room players indicator without a RoomWindow' do
-    # No wm.room['room'] set -- the default wm has an empty room hash
-
-    def process_line(line)
-      processor.send(:instance_variable_get, :@room).line_started(line)
-      processor.send(:process_line_tags, line)
-    end
-
-    it 'updates indicator from room players component stream' do
-      indicator_events = []
-      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
-
-      process_line("<component id='room players'>Also here: Cithrin</component>")
-
-      expect(indicator_events.last).to include(id: 'room players', label: 'Cithrin', value: true)
-    end
-
-    it 'clears indicator from empty room players component' do
-      indicator_events = []
-      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
-
-      process_line("<component id='room players'></component>")
-
-      expect(indicator_events.last).to include(id: 'room players', value: false)
-    end
-
-    it 'maps highlight colors from full text to name positions' do
-      HIGHLIGHT[/Cithrin/] = ['ff0000', nil, nil]
-
-      indicator_events = []
-      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
-
-      process_line("<component id='room players'>Also here: Cithrin</component>")
-
-      colors = indicator_events.last[:label_colors]
-      expect(colors).to include(a_hash_including(start: 0, end: 7, fg: 'ff0000'))
-    ensure
-      HIGHLIGHT.delete(/Cithrin/)
-    end
-
-    it 'maps highlight colors correctly for multiple names' do
-      HIGHLIGHT[/Navesi/] = ['00ff00', nil, nil]
-
-      indicator_events = []
-      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
-
-      process_line("<component id='room players'>Also here: Cithrin and Navesi</component>")
-
-      label = indicator_events.last[:label]
-      colors = indicator_events.last[:label_colors]
-      expect(label).to eq('Cithrin, Navesi')
-      # "Navesi" starts at position 9 in "Cithrin, Navesi"
-      expect(colors).to include(a_hash_including(start: 9, end: 15, fg: '00ff00'))
-    ensure
-      HIGHLIGHT.delete(/Navesi/)
-    end
-
-    it 'shows every player in the indicator when the players line ends with a period' do
-      indicator_events = []
-      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
-
-      process_line("<component id='room players'>Also here: Bob and Alice.</component>")
-
-      expect(indicator_events.last).to include(label: 'Bob, Alice', value: true)
-    end
-
-    it 'excludes partial highlight matches from indicator colors' do
-      HIGHLIGHT[/ith/] = ['ff0000', nil, nil]
-
-      indicator_events = []
-      event_bus.on(:indicator_update) { |data| indicator_events << data if data[:id] == 'room players' }
-
-      process_line("<component id='room players'>Also here: Cithrin</component>")
-
-      colors = indicator_events.last[:label_colors]
-      expect(colors).to be_empty
-    ensure
-      HIGHLIGHT.delete(/ith/)
-    end
-  end
-
-  # ---- Stream fallback with preset colors ----
-
-  describe 'stream fallback applies preset colors' do
-    it 'applies preset color when falling back to main for a known stream' do
-      PRESET['thoughts'] = ['00ff00', '000000']
-      router.send(:instance_variable_set, :@current_stream, 'thoughts')
-      events = []
-      event_bus.on(:stream_text) { |data| events << data }
-
-      process('Someone thinks something.')
-
-      colors = events.last[:colors]
-      preset_color = colors.find { |c| c[:fg] == '00ff00' }
-      expect(preset_color).not_to be_nil
-    end
-  end
-
-  # ---- Structured room data from real game XML ----
-
-  describe 'structured room data from SAX parsing' do
+  describe 'the stun countdown' do
     before do
-      wm.room['room'] = main_window
-      PRESET['monsterbold'] = ['ff0000', nil]
+      load_layout(<<~XML)
+        <window class='text' top='0' left='0' height='8' width='80' value='main'/>
+        <window class='countdown' top='20' left='0' height='1' width='12' label='Stunned' value='stunned'/>
+      XML
     end
 
-    def process_line(line)
-      processor.send(:instance_variable_get, :@room).line_started(line)
-      processor.send(:process_line_tags, line)
+    # What the stun countdown window shows: its label and the seconds left.
+    def stun_countdown
+      @window_manager.countdown['stunned'].rows.first
     end
 
-    describe 'room objs with monsterbold creature and links' do
-      let(:raw_xml) do
-        <<~'XML'.chomp
-          <component id='room objs'>  You also see the <a exist="173594154" noun="disk">Pandin disk</a>, a <a exist="26164" noun="fissure">narrow fissure</a>, the <a exist="-2078" noun="Lodge">Wayside Lodge</a> and<b> <pushBold/>a <a exist="-477668" noun="assistant">dwarven blacksmith assistant</a><popBold/></b>.</component>
-        XML
-      end
+    it 'counts down five seconds per round of stun' do
+      receive_from_server('You are stunned for 5 rounds!')
 
-      it 'emits clean text with no XML tags' do
-        events = []
-        event_bus.on(:room_objects) { |data| events << data }
-        process_line(raw_xml)
-
-        text = events.last[:text]
-        expect(text).not_to include('<')
-        expect(text).to include('You also see the Pandin disk')
-        expect(text).to include('dwarven blacksmith assistant')
-        expect(text).to include('Wayside Lodge')
-      end
-
-      it 'emits pre-computed link regions with correct positions' do
-        events = []
-        event_bus.on(:room_objects) { |data| events << data }
-        process_line(raw_xml)
-
-        text = events.last[:text]
-        links = events.last[:links]
-
-        expect(links.length).to be >= 3
-
-        # Verify each link's position matches the actual text
-        links.each do |link|
-          linked_text = text[link[:start]...link[:end]]
-          expect(linked_text).not_to be_nil
-          expect(linked_text).not_to be_empty
-          expect(link[:cmd]).to be_a(String)
-        end
-
-        # Check specific links
-        pandin_link = links.find { |l| l[:cmd] == 'look #173594154' }
-        expect(pandin_link).not_to be_nil
-        expect(text[pandin_link[:start]...pandin_link[:end]]).to eq 'Pandin disk'
-
-        lodge_link = links.find { |l| l[:cmd] == 'look #-2078' }
-        expect(lodge_link).not_to be_nil
-        expect(text[lodge_link[:start]...lodge_link[:end]]).to eq 'Wayside Lodge'
-
-        assistant_link = links.find { |l| l[:cmd] == 'look #-477668' }
-        expect(assistant_link).not_to be_nil
-        expect(text[assistant_link[:start]...assistant_link[:end]]).to eq 'dwarven blacksmith assistant'
-      end
-
-      it 'emits creature names extracted from monsterbold regions' do
-        events = []
-        event_bus.on(:room_objects) { |data| events << data }
-        process_line(raw_xml)
-
-        creatures = events.last[:creatures]
-        expect(creatures).to include(a_string_matching(/dwarven blacksmith assistant/))
-      end
-
-      it 'links remain correct even when blue_links is off' do
-        state.blue_links = false
-        events = []
-        event_bus.on(:room_objects) { |data| events << data }
-        process_line(raw_xml)
-
-        text = events.last[:text]
-        links = events.last[:links]
-
-        # Links are always pre-computed for room components
-        expect(links).not_to be_empty
-        links.each do |link|
-          expect(text[link[:start]...link[:end]]).not_to be_empty
-        end
-      end
+      expect(stun_countdown).to eq 'Stunned   25'
     end
 
-    describe 'room players with links' do
-      let(:raw_xml) do
-        <<~'XML'.chomp
-          <component id='room players'>Also here: <a exist="-10987185" noun="Pandin">Pandin</a>, <a exist="-11184851" noun="Nexuspickbot">Nexuspickbot</a>, Grand Lord <a exist="-10995777" noun="Treeze">Treeze</a></component>
-        XML
-      end
+    it 'counts down five seconds for a single round' do
+      receive_from_server('You are stunned for 1 round!')
 
-      it 'emits clean text and link regions for player names' do
-        events = []
-        event_bus.on(:room_players) { |data| events << data }
-        process_line(raw_xml)
-
-        text = events.last[:text]
-        links = events.last[:links]
-
-        expect(text).to eq 'Also here: Pandin, Nexuspickbot, Grand Lord Treeze'
-        expect(links.length).to eq 3
-
-        pandin_link = links.find { |l| l[:cmd] == 'look #-10987185' }
-        expect(text[pandin_link[:start]...pandin_link[:end]]).to eq 'Pandin'
-
-        treeze_link = links.find { |l| l[:cmd] == 'look #-10995777' }
-        expect(text[treeze_link[:start]...treeze_link[:end]]).to eq 'Treeze'
-      end
+      expect(stun_countdown).to eq 'Stunned    5'
     end
 
-    describe 'empty room players component' do
-      it 'emits empty text and empty links' do
-        events = []
-        event_bus.on(:room_players) { |data| events << data }
-        process_line("<component id='room players'></component>")
+    it 'recognizes the stun message indented by spaces' do
+      receive_from_server('  You are stunned for 12 rounds!')
 
-        expect(events.last[:text]).to eq ''
-        expect(events.last[:links]).to eq []
-      end
+      expect(stun_countdown).to eq 'Stunned   60'
     end
 
-    describe 'room exits with direction links' do
-      let(:raw_xml) do
-        <<~'XML'.chomp
-          <component id='room exits'>Obvious paths: <a exist="-11230837" coord="2524,1864" noun="out">out</a><compass><dir value="out"/></compass></component>
-        XML
+    it 'does not start on a line that only mentions a stun' do
+      receive_from_server('The goblin looks stunned.',
+                          'Bob says, "You are stunned for 3 rounds!"')
+
+      expect(stun_countdown).to eq 'Stunned    0'
+    end
+  end
+
+  describe 'the hand indicators after a glance at empty hands' do
+    # (What each hand shows after a glance is in glance_hands_spec.rb.)
+    it 'are drawn to the terminal even when no window shows the glance text' do
+      load_layout(<<~XML)
+        <window class='indicator' top='23' left='20' height='1' width='20' label=' ' value='left'/>
+        <window class='indicator' top='23' left='45' height='1' width='20' label=' ' value='right'/>
+      XML
+      allow(Curses).to receive(:doupdate).and_call_original
+
+      receive_from_server('You glance down at your empty hands.')
+
+      expect(Curses).to have_received(:doupdate)
+    end
+  end
+
+  describe 'which window shows a line' do
+    it 'shows regular game text in main' do
+      load_layout("<window class='text' top='0' left='0' height='8' width='80' value='main'/>")
+
+      receive_from_server('A goblin attacks you!')
+
+      expect(shown_in('main')).to eq ['A goblin attacks you!']
+    end
+
+    it "shows a stream's text in its own window, not in main" do
+      load_layout(<<~XML)
+        <window class='text' top='0' left='0' height='8' width='80' value='main'/>
+        <window class='text' top='10' left='0' height='8' width='80' value='combat'/>
+      XML
+
+      receive_from_server('<pushStream id="combat"/>A goblin swings at you.<popStream/>')
+
+      expect(shown_in('combat')).to eq ['A goblin swings at you.']
+      expect(shown_in('main')).to be_empty
+    end
+
+    it "shows the text of a stream without a window in main, in the stream's preset color" do
+      load_layout("<window class='text' top='0' left='0' height='8' width='80' value='main'/>")
+      PRESET['thoughts'] = ['00ff00', nil]
+
+      receive_from_server('<pushStream id="thoughts"/>Someone thinks out loud.<popStream/>')
+
+      expect(shown_in('main')).to eq ['Someone thinks out loud.']
+      expect(color_in_main('Someone thinks out loud.')).to eq '00ff00'
+    end
+
+    it 'shows no row for a line of only spaces' do
+      load_layout("<window class='text' top='0' left='0' height='8' width='80' value='main'/>")
+
+      receive_from_server('A goblin arrives.', '   ', 'A goblin leaves.')
+
+      expect(@window_manager.stream['main'].rows.first(2)).to eq ['A goblin arrives.', 'A goblin leaves.']
+    end
+
+    it 'colors the words a highlight matches' do
+      load_layout("<window class='text' top='0' left='0' height='8' width='80' value='main'/>")
+      HIGHLIGHT[/goblin/] = ['ff0000', nil, nil]
+
+      receive_from_server('A goblin attacks you!')
+
+      expect(color_in_main('goblin')).to eq 'ff0000'
+      expect(color_in_main('attacks you!')).to be_nil
+    end
+  end
+
+  describe 'the pending prompt' do
+    before { load_layout("<window class='text' top='0' left='0' height='12' width='80' value='main'/>") }
+
+    it 'shows before the next line of game text' do
+      receive_from_server(same_prompt, 'Hello world.')
+
+      expect(shown_in('main')).to eq ['>', 'Hello world.']
+    end
+
+    it 'shows after a line that is not movement' do
+      receive_from_server('You attack the goblin.', same_prompt, 'The goblin dodges.')
+
+      expect(shown_in('main')).to eq ['You attack the goblin.', '>', 'The goblin dodges.']
+    end
+
+    it 'is skipped after a movement line' do
+      receive_from_server('You walk north.', same_prompt, 'A breeze blows.')
+
+      expect(shown_in('main')).to eq ['You walk north.', 'A breeze blows.']
+    end
+
+    it 'is skipped after each movement verb the game uses' do
+      movement_verbs = %w[run walk go swim climb crawl drag stride sneak stalk]
+
+      main_after = movement_verbs.to_h do |verb|
+        load_layout("<window class='text' top='0' left='0' height='12' width='80' value='main'/>")
+        receive_from_server("You #{verb} through the archway.", same_prompt, 'A breeze blows.')
+        [verb, shown_in('main')]
       end
 
-      it 'emits clean exits text and link for direction' do
-        events = []
-        event_bus.on(:room_exits) { |data| events << data }
-        process_line(raw_xml)
+      expect(main_after).to eq(movement_verbs.to_h { |verb| [verb, ["You #{verb} through the archway.", 'A breeze blows.']] })
+    end
 
-        text = events.last[:text]
-        links = events.last[:links]
+    it 'is used up by a bracket prompt line, which shows in its place' do
+      receive_from_server(same_prompt, '[Cleric]>', 'Hello world.')
 
-        # compass block is stripped by extract_links pre-strip
-        expect(text).not_to include('compass')
-        expect(text).to include('Obvious paths:')
-        expect(text).to include('out')
-
-        out_link = links.find { |l| l[:cmd] == 'look #-11230837' }
-        expect(out_link).not_to be_nil
-        expect(text[out_link[:start]...out_link[:end]]).to eq 'out'
-      end
+      expect(shown_in('main')).to eq ['[Cleric]>', 'Hello world.']
     end
   end
 end
