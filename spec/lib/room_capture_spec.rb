@@ -39,11 +39,14 @@ RSpec.describe 'Room capture' do
     )
   end
 
-  # Feed raw server lines through GameTextProcessor#run, as the socket would.
+  # Feed raw server lines through GameTextProcessor#run, as the socket
+  # would. The first prompt sends a LOOK to the server, which takes it.
   def receive_from_server(*lines)
     queue = lines.map { |line| "#{line}\r\n" }
     server = Object.new
     server.define_singleton_method(:gets) { queue.shift&.dup }
+    server.define_singleton_method(:puts) { |_command| nil }
+    server.define_singleton_method(:flush) { nil }
     @processor.run(server)
   end
 
