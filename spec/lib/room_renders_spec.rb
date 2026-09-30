@@ -206,6 +206,27 @@ RSpec.describe 'Room window renders' do
     expect(room_draws - before).to eq 6
   end
 
+  # A room stream's opening tag with a subtitle changes the title the
+  # window holds but asks for no draw (AUDIT 22:00 decision 2): the flush
+  # after the next main window line doesn't show it; the next room part
+  # does.
+  # Characterization (passes on the base by design).
+  it "doesn't draw the window for a room stream's subtitle alone, and shows it with the next room part" do
+    receive_from_server(*room_change, burst: true)
+    before = room_draws
+    shown.clear
+
+    receive_from_server(%(<component id='room' subtitle=" - [Crossing, Town Green] (1234)"/>),
+                        '<prompt time="1787793484">&gt;</prompt>', 'A cold wind blows.', burst: false)
+
+    expect(room_draws - before).to eq 0
+    expect(shown).to eq [room_rows]
+
+    receive_from_server("<component id='room players'>Also here: Bob.</component>", burst: false)
+
+    expect(shown.last).to eq ['[Crossing, Town Green] (1234)', room_rows[1], 'Also here: Bob.', room_rows.last]
+  end
+
   # The flush that follows the last burst is the disconnect notice's: the
   # room is drawn there with every part that burst sent.
   describe 'when the server closes the connection right after a burst' do

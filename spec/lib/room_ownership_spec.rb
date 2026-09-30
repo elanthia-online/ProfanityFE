@@ -117,6 +117,8 @@ RSpec.describe 'Room ownership' do
       expect(room_screen.first).to eq '[A] (1)'
     end
 
+    # Characterization (passes on the base by design): the room title
+    # component's title stayed on the base too.
     it 'keep the title a room title component delivered when they carry no roomName' do
       receive_from_server(prompt, "<component id='room title'>[B] (2)</component>", 'Also here: Bob.', 'Obvious paths: <d>north</d>.',
                           prompt)
@@ -196,13 +198,43 @@ RSpec.describe 'Room ownership' do
 
     # Characterization (passes on the base by design): a prompt on the exits
     # line ends the burst before the line's text is handed off, so that
-    # commit sends everything, as before ownership.
+    # commit fills every field from the inline lines. With DR's order (the
+    # room exits component, which drops what was staged, after the other
+    # components) the base sent the same.
     it 'show their own lines when the prompt ends the exits line' do
       exits_line = "Obvious paths: <d>south</d>.#{prompt}"
       receive_from_server(*components('[A] (1)'), *inline('[A] (1)', objs: '  You also see a rat.', exits: exits_line))
 
       expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a rat.', 'Obvious paths: [south](south).']
     end
+  end
+
+  # Pins the behaviour as it is until the user decides (it fails on the
+  # base, which kept Bob): with a component after the room exits component
+  # (an order DR doesn't send; the GemStone specs use it) and a prompt on
+  # the inline exits line, the prompt ends the burst before that line's
+  # text is handed off, so the commit clears the players the component
+  # delivered, which the inline lines don't have.
+  it 'clears players a component delivered after the room exits component when a prompt ends the inline exits line' do
+    receive_from_server(prompt,
+                        "<streamWindow id='room' title='Room' subtitle=\" - [A] (1)\" location='center' target='drop' ifClosed='' resident='true'/>",
+                        "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>",
+                        "<component id='room players'>Also here: Bob.</component>",
+                        *inline('[A] (1)', exits: "Obvious paths: <d>north</d>.#{prompt}"))
+
+    expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Obvious paths: [north](north).']
+    expect(indicator_label).to eq ''
+  end
+
+  # Characterization (passes on the base by design): an "Also here:" line
+  # alone before the exits line commits a view, as a title, description or
+  # objects line does.
+  it 'shows an "Also here:" line that comes alone before the exits line, and hides what it lacks' do
+    receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt,
+                        'Also here: Ann.', 'Obvious paths: <d>north</d>.', prompt)
+
+    expect(room_screen).to eq ['Desc of [A] (1).', 'Also here: Ann.', 'Obvious paths: [north](north).']
+    expect(indicator_label).to eq 'Ann'
   end
 
   it 'changes only the exits for a lone exits line after a trailing players component' do

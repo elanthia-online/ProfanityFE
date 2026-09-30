@@ -153,5 +153,9 @@ RSpec.describe Games::DragonRealms do
     it 'is false for "other stuff" that is not the mark (synthetic)' do
       expect(described_class.room_list_cut_short?('You also see a rock, a stick and handsome other stuff.')).to be false
     end
+
+    it 'is false when "and" ends a longer word (synthetic)' do
+      expect(described_class.room_list_cut_short?('You also see a rock and a bland some other stuff.')).to be false
+    end
   end
 end
