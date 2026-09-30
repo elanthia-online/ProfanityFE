@@ -322,6 +322,21 @@ RSpec.describe 'An inactive tabbed window' do
       expect(scrollbar_cells(main)).to eq blank(6)
     end
 
+    # Becoming active draws the scrollbar in full; that draw must be
+    # flushed, or the new marker reaches the screen only with some later
+    # flush. (A resize used to check this in passing, through the inactive
+    # scrollbar's flushes between the window's.)
+    it 'flushes its scrollbar after drawing it in full' do
+      press('switch_current_window')
+      tabbed.scrollbar.call_log.clear
+
+      press('switch_current_window')
+
+      expect(tabbed_cells).to eq active(text_rows)
+      last_write = tabbed.scrollbar.call_log.rindex { |meth, _args| %i[addstr addch].include?(meth) }
+      expect(tabbed.scrollbar.call_log.drop(last_write + 1).map(&:first)).to include(:noutrefresh)
+    end
+
     it 'shows its scrollbar after a terminal resize to the same size or another' do
       press('resize')
       expect(tabbed_cells).to eq active(text_rows)
