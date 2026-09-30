@@ -545,33 +545,50 @@ RSpec.describe 'Room carriers' do
       expect(room_screen).to eq ['[A - 55] (1)', 'Desc of A.', 'Obvious paths: [north](north).']
     end
 
-    # Lich (v5.20.0+) sends the room's uid alone with ';display uid' on and
-    # ';display lichid' off, and "(**)" in a room without a uid (or with
-    # both on in an unmapped room); ';display mono' wraps the line.
-    { 'the uid' => '(u230008)', 'no uid' => '(**)' }.each do |room, id|
+    # Lich (at least since v5.11.0) sends the room's uid alone with
+    # ';display uid' on and ';display lichid' off, and "(**)" in a room
+    # without a uid; ';display mono' wraps the line. Up to v5.19, with both
+    # on in an unmapped room, the missing lich id leaves " - (u230008)".
+    # Lich sends the line before Room Exits.
+    { 'the uid' => '(u230008)', 'no uid' => '(**)', 'no lich id' => ' - (u230008)' }.each do |room, id|
       plain = "Room Number: #{id}"
       { 'plain' => plain, 'mono' => %(<output class="mono"/>#{plain}<output class=""/>) }.each do |form, line|
         it "shows a uid-only Room Number (#{room}, #{form}) under the exits, and in main" do
           load_layout
 
-          receive_from_server(*move('[A] (1)'), 'Room Exits: go gate', line, prompt)
+          receive_from_server(*move('[A] (1)'), line, 'Room Exits: go gate', prompt)
 
           expect(room_screen).to eq ['[A] (1)', 'Desc of A.', 'Obvious paths: [north](north).',
                                      'Room Exits: go gate', "Room Number: #{id}"]
-          expect(main_rows).to eq ['[A] (1)', 'Desc of A.', 'Obvious paths: north.', 'Room Exits: go gate',
-                                   "Room Number: #{id}"]
+          expect(main_rows).to eq ['[A] (1)', 'Desc of A.', 'Obvious paths: north.', "Room Number: #{id}",
+                                   'Room Exits: go gate']
         end
 
         it "drops a uid-only Room Number (#{room}, #{form}) from main under --room-window-only" do
           state.room_window_only = true
           load_layout
 
-          receive_from_server(*move('[A] (1)'), 'Room Exits: go gate', line, prompt)
+          receive_from_server(*move('[A] (1)'), line, 'Room Exits: go gate', prompt)
 
           expect(room_screen.last(2)).to eq ['Room Exits: go gate', "Room Number: #{id}"]
           expect(main_rows).to be_empty
         end
       end
+    end
+
+    it 'takes a Room Number line only when text follows the colon (--room-window-only)' do
+      state.room_window_only = true
+      load_layout
+
+      receive_from_server(*move('[A] (1)'), 'Room Number:', prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of A.', 'Obvious paths: [north](north).']
+      expect(main_rows).to eq ['Room Number:']
+
+      receive_from_server(*move('[B] (2)'), 'Room Number: (**)', prompt)
+
+      expect(room_screen).to eq ['[B] (2)', 'Desc of A.', 'Obvious paths: [north](north).', 'Room Number: (**)']
+      expect(main_rows).to eq ['Room Number:']
     end
   end
 
