@@ -6,6 +6,7 @@
 # objects, taken from the game's bold regions.
 
 require 'rexml/document'
+require 'timeout'
 require_relative '../../../lib/window_manager'
 
 RSpec.describe RoomWindow do
@@ -73,5 +74,16 @@ RSpec.describe RoomWindow do
     show_objects('You also see a rat, a rat and a rat.', ['a rat'])
 
     expect(highlighted).to eq 'a rat' * 3
+  end
+
+  # The room pipeline never hands over an empty name (an empty bold span
+  # names no creature, room_carriers_spec.rb), but an empty name matches
+  # at every word boundary without moving on, so the window skips it
+  # rather than hang.
+  it 'skips an empty creature name and highlights the others' do
+    Timeout.timeout(1) { show_objects('You also see a rat.', ['', 'a rat']) }
+
+    expect(window.rows[0]).to eq 'You also see a rat.'
+    expect(highlighted).to eq 'a rat'
   end
 end

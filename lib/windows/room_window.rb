@@ -325,6 +325,8 @@ class RoomWindow < BaseWindow
     preset_name = @creatures_preset || Presets::MONSTERBOLD
     if (colors = Presets.colors(preset_name))
       @extracted_creatures.each do |creature|
+        next if creature.empty? # it would match at pos without moving on
+
         # Whole words only ("rat" not inside "pirate"); apostrophes and
         # hyphens count as part of a word, as in "Adan'f" or "void-black".
         whole_word = /(?<![[:word:]'-])#{Regexp.escape(creature)}(?![[:word:]'-])/
