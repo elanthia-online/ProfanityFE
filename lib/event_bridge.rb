@@ -131,7 +131,7 @@ class EventBridge
     end
 
     event_bus.on(:room_lich_exits) do |data|
-      @wm.room[Streams::ROOM]&.update_lich_exits(data[:text])
+      @wm.room[Streams::ROOM]&.update_lich_exits(data[:text], links: data[:links] || [])
     end
 
     event_bus.on(:room_number) do |data|

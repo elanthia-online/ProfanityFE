@@ -461,6 +461,14 @@ RSpec.describe 'Room carriers' do
                                  'StringProcs: Town']
     end
 
+    it 'decodes entities in Room Exits' do
+      load_layout
+
+      receive_from_server(*move('[A] (1)'), "Room Exits: <d cmd='climb wall &amp; rope'>climb wall &amp; rope</d>", prompt)
+
+      expect(room_screen.last).to eq 'Room Exits: [climb wall & rope](climb wall &amp; rope)'
+    end
+
     it 'shows the linked lines as text with links off' do
       state.blue_links = false
       load_layout

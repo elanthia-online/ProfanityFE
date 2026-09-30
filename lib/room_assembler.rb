@@ -180,12 +180,8 @@ class RoomAssembler
 
     # Detect Lich-injected supplemental lines (come after game exits)
     if text =~ /^Room Exits:/
-      raw = if @current_raw_line && (match = @current_raw_line.match(/Room Exits:.*/))
-              match[0].strip
-            else
-              text.strip
-            end
-      show(:room_lich_exits, text: raw)
+      exits = RoomPart.from_chunk(text, marks)
+      show(:room_lich_exits, text: exits.text, links: exits.links)
       room_data_captured = true
       @pending_render.request_update
     elsif text =~ /^Room Number:\s*\d+/
