@@ -604,12 +604,8 @@ module LineBuffered
     scrl(1) if buffer_length > height
     setpos(top + [buffer_length, height].min - 1, 0)
     clrtoeol
-    if selection && id.between?(selection[0], selection[2])
-      draw_line_with_selection(id, line, line_colors || [], *selection)
-    else
-      painted_without_selection unless selection
-      add_line(line, line_colors)
-    end
+    painted_without_selection unless selection
+    draw_row(id, line, line_colors, selection)
   end
 
   # The selection the text area shows, when it is the current one: the
@@ -640,7 +636,7 @@ module LineBuffered
   # @return [void]
   private def paint_content
     line_buffer = shown_buffer
-    start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end) if has_highlight?
+    selection = normalize_selection(*@selection_start, *@selection_end) if has_highlight?
     height = content_height
 
     (0...height).each do |row|
@@ -650,14 +646,27 @@ module LineBuffered
       next unless entry
 
       line_text, line_colors = entry
-      if start_id && id >= start_id && id <= end_id
-        draw_line_with_selection(id, line_text, line_colors || [], start_id, start_x, end_id, end_x)
-      else
-        add_line(line_text, line_colors || [])
-      end
+      draw_row(id, line_text, line_colors, selection)
     end
-    @painted_selection = start_id ? [start_id, start_x, end_id, end_x] : nil
+    @painted_selection = selection
     noutrefresh
+  end
+
+  # Draw one buffer row at the cursor, in the selection highlight where
+  # it falls in the selection.
+  #
+  # @param id [Integer] the row's stable ID
+  # @param line_text [String] the row's text
+  # @param line_colors [Array<Hash>, nil] the row's color regions
+  # @param selection [Array<Integer>, nil] the normalized selection
+  #   (see {#normalize_selection}), or nil to draw the row plain
+  # @return [void]
+  private def draw_row(id, line_text, line_colors, selection)
+    if selection && id.between?(selection[0], selection[2])
+      draw_line_with_selection(id, line_text, line_colors || [], *selection)
+    else
+      add_line(line_text, line_colors || [])
+    end
   end
 
   # Normalize selection coordinates so start is the older (topmost) endpoint.
