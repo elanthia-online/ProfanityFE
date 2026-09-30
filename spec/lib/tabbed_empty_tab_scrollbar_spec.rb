@@ -251,12 +251,10 @@ RSpec.describe 'A tabbed window whose shown tab is empty' do
       # The other tab is scrolled to the top: its thumb is on the marker's
       # row. The switch moves the thumb to the bottom with the same
       # incremental update a text window uses when its thumb leaves the
-      # top row, so the empty tab's column is the one an active text
-      # window shows after it is scrolled to the top and back to the
-      # bottom, whatever that looks like (today the bar glyph on the top
-      # row, with no marker until the next full redraw; an open question
-      # for the maintainer, shared with text windows and full tabs).
-      it 'moves the thumb off the top row as an active text window does, leaving no stale thumb' do
+      # top row, and the marker comes back on the row the thumb left: the
+      # empty tab's column is the one an active text window shows after
+      # it is scrolled to the top and back to the bottom.
+      it 'moves the thumb off the top row as an active text window does, bringing the marker back' do
         (1..8).each { |n| tabbed.route_string("c#{n}", [], 'combat') }
         10.times { press('scroll_current_window_up_one') }
         expect(tabbed.rows).to eq [' 1:combat | 2:logons', 'c1', 'c2', 'c3', 'c4']
@@ -265,8 +263,7 @@ RSpec.describe 'A tabbed window whose shown tab is empty' do
         press('next_tab')
         expect(tabbed.rows).to eq [' 1:combat | 2:logons', '', '', '', '']
         empty_tab_cells = tabbed_cells
-        expect(empty_tab_cells.last).to eq :thumb
-        expect(empty_tab_cells[0...-1]).not_to include :thumb
+        expect(empty_tab_cells).to eq active(text_rows)
 
         # The reference: an active text window with as many rows, scrolled
         # to the top and back to the bottom (built last: a WindowManager of
