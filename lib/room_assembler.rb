@@ -212,8 +212,11 @@ class RoomAssembler
 
     # The room title names the room in the terminal title, with or without
     # a RoomWindow (as roomName text does).
-    title = RoomTitle.text(text) if [Streams::ROOM, Streams::ROOM_TITLE].include?(stream)
-    @state.room_title = title unless title.nil? || title.empty?
+    if [Streams::ROOM, Streams::ROOM_TITLE].include?(stream)
+      parsed = RoomTitle.parse(text)
+      title = parsed.to_s
+      @state.room_title = parsed.plain if parsed
+    end
 
     # Without a RoomWindow, only handle room players for the indicator
     unless room_window?
@@ -308,10 +311,10 @@ class RoomAssembler
     captured = false
     case @capture_mode
     when :title
-      room_title = RoomTitle.text(text)
-      @state.room_title = room_title unless room_title.empty?
+      room_title = RoomTitle.parse(text)
+      @state.room_title = room_title.plain if room_title
       if room_window?
-        @room_pending_title = room_title
+        @room_pending_title = room_title.to_s
         captured = true
       end
       @capture_mode = nil

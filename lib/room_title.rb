@@ -5,8 +5,8 @@ RoomTitle = Data.define(:name, :suffix)
 # A room's title, parsed from any of the ways the game sends it: the
 # subtitle of the room streamWindow, pushStream or component, the text of a
 # roomName style, and the text of the +room title+ component or +room+
-# stream. The room window's title row and the terminal title both show
-# {#to_s}, so they always agree.
+# stream. The room window's title row shows {#to_s} and the terminal title
+# {#plain}, both from the same parse, so they always name the same room.
 #
 # The title is parsed into the room's name and what follows it. The name
 # is the text inside the first pair of brackets when the title starts with
@@ -61,11 +61,21 @@ class RoomTitle
     parse(text).to_s
   end
 
-  # The title as the room window and the terminal title show it: the name
-  # in brackets, then the suffix.
+  # The title as the room window's title row shows it: the name in
+  # brackets, then the suffix.
   #
   # @return [String]
   def to_s
     "[#{name}]#{suffix}"
+  end
+
+  # The title as the terminal title and the room indicator name the room:
+  # the title row's text without the brackets around the name
+  # (+"Town Square (1234)"+), since the terminal title already puts the
+  # room inside brackets (+"Mahtra [Town Square (1234)]"+).
+  #
+  # @return [String]
+  def plain
+    "#{name}#{suffix}"
   end
 end

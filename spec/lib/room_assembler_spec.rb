@@ -104,7 +104,7 @@ RSpec.describe RoomAssembler do
 
       windowless.process_room_data(exits_line, nil)
 
-      expect(shared_state.room_title).to eq '[Town Square]'
+      expect(shared_state.room_title).to eq 'Town Square'
       expect(emitted[:room_title]).to be_empty
     end
   end

@@ -61,7 +61,7 @@ RSpec.describe 'Room capture' do
       receive_from_server(*lines)
 
       expect(room_rows).to eq ['[You arrive.[Town Square]]', 'Obvious exits: north.']
-      expect(state.room_title).to eq '[You arrive.[Town Square]]'
+      expect(state.room_title).to eq 'You arrive.[Town Square]'
       expect(main_rows).to eq ['You arrive.[Town Square]', 'Obvious exits: north.']
     end
 
@@ -80,7 +80,7 @@ RSpec.describe 'Room capture' do
 
       receive_from_server(*lines)
 
-      expect(state.room_title).to eq '[You arrive.[Town Square]]'
+      expect(state.room_title).to eq 'You arrive.[Town Square]'
       expect(main_rows).to eq ['You arrive.[Town Square]', 'Obvious exits: north.']
     end
   end
@@ -147,7 +147,7 @@ RSpec.describe 'Room capture' do
     receive_from_server(%(<style id="roomName" />[Town <preset id='speech'>Square</preset>]<style id=""/>), 'Obvious exits: north.')
 
     expect(room_rows.first).to eq '[Town Square]'
-    expect(state.room_title).to eq '[Town Square]'
+    expect(state.room_title).to eq 'Town Square'
     expect(main_rows).to be_empty
   end
 

@@ -404,7 +404,7 @@ module TagHandlers
       stream = new_stream
       if new_stream == Streams::ROOM && (subtitle = attrs['subtitle']) && !subtitle.strip.empty?
         title = RoomTitle.parse(unescape_entities(subtitle))
-        @state.room_title = title.to_s if title
+        @state.room_title = title.plain if title
         # An empty name is no title: it hides the title row, and the
         # terminal title keeps naming the last room.
         @event_bus.emit(:room_title, text: title.to_s)
@@ -571,9 +571,9 @@ module TagHandlers
 
     title = RoomTitle.parse(unescape_entities(subtitle))
     if title
-      @state.room_title = title.to_s
+      @state.room_title = title.plain
       # The room indicator names the room without its brackets, as before.
-      @event_bus.emit(:indicator_update, id: 'room', label: "#{title.name}#{title.suffix}", value: 1)
+      @event_bus.emit(:indicator_update, id: 'room', label: title.plain, value: 1)
     end
     # An empty name is no title: it hides the title row, and the terminal
     # title and the room indicator keep naming the last room.

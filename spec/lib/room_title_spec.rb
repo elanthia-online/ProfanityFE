@@ -10,7 +10,8 @@
 #
 # All of them parse the title the same way (RoomTitle): the name in the
 # first brackets and whatever the game sent after them, XML entities
-# decoded, and the terminal title shows exactly the title row's text. The
+# decoded. The terminal title names the room from the same parse: the
+# title row's text without the brackets around the name. The
 # lines are driven through the real server loop into windows built from
 # layout XML.
 
@@ -113,56 +114,56 @@ RSpec.describe 'Room title' do
   title_row_carriers = %i[stream_window room_name room_title_component room_stream].freeze
   carriers = (title_row_carriers + %i[component_subtitle]).freeze
 
-  # What the game sends (decoded) => the title row, which the terminal
-  # title shows too.
+  # What the game sends (decoded) => the title row, and the room as the
+  # terminal title names it (the row's text without the name's brackets).
   titles = {
     # Text after the closing bracket is shown as the game sends it.
-    '[The Heavens] (**)'         => '[The Heavens] (**)',
-    ' - [The Heavens] (**)'      => '[The Heavens] (**)',
-    '[Town Square] (u230008)'    => '[Town Square] (u230008)',
-    '[Town Square] (unknown)'    => '[Town Square] (unknown)',
-    '[A] x'                      => '[A] x',
-    '[A] [B]'                    => '[A] [B]',
-    '[[Town Square]]'            => '[[Town Square]]',
+    '[The Heavens] (**)'         => ['[The Heavens] (**)', 'The Heavens (**)'],
+    ' - [The Heavens] (**)'      => ['[The Heavens] (**)', 'The Heavens (**)'],
+    '[Town Square] (u230008)'    => ['[Town Square] (u230008)', 'Town Square (u230008)'],
+    '[Town Square] (unknown)'    => ['[Town Square] (unknown)', 'Town Square (unknown)'],
+    '[A] x'                      => ['[A] x', 'A x'],
+    '[A] [B]'                    => ['[A] [B]', 'A [B]'],
+    '[[Town Square]]'            => ['[[Town Square]]', '[Town Square]'],
     # Brackets are neither doubled nor lost, on every carrier.
-    '[Town Square] (1234)'       => '[Town Square] (1234)',
-    '[Town Square]'              => '[Town Square]',
+    '[Town Square] (1234)'       => ['[Town Square] (1234)', 'Town Square (1234)'],
+    '[Town Square]'              => ['[Town Square]', 'Town Square'],
     # A subtitle's leading " - ", surrounding spaces, and the spaces
     # between the name and what follows it.
-    ' - [Town Square] (1234)'    => '[Town Square] (1234)',
-    '   [Town Square] (1234)   ' => '[Town Square] (1234)',
-    '[Town Square]  (1234)'      => '[Town Square] (1234)',
+    ' - [Town Square] (1234)'    => ['[Town Square] (1234)', 'Town Square (1234)'],
+    '   [Town Square] (1234)   ' => ['[Town Square] (1234)', 'Town Square (1234)'],
+    '[Town Square]  (1234)'      => ['[Town Square] (1234)', 'Town Square (1234)'],
     # Spaces just inside the brackets are not part of the name.
-    '[ Town Square ] (1234)'     => '[Town Square] (1234)',
+    '[ Town Square ] (1234)'     => ['[Town Square] (1234)', 'Town Square (1234)'],
     # A title without brackets.
-    'Town Square'                => '[Town Square]',
-    'Town Square (1234)'         => '[Town Square] (1234)',
-    '(1234)'                     => '[(1234)]',
+    'Town Square'                => ['[Town Square]', 'Town Square'],
+    'Town Square (1234)'         => ['[Town Square] (1234)', 'Town Square (1234)'],
+    '(1234)'                     => ['[(1234)]', '(1234)'],
     # Without brackets only a room number is split off; other text in
     # parentheses stays part of the name.
-    'The Heavens (**)'           => '[The Heavens (**)]',
-    'Town Square (u230008)'      => '[Town Square (u230008)]',
-    'Town Square(1234)'          => '[Town Square(1234)]',
+    'The Heavens (**)'           => ['[The Heavens (**)]', 'The Heavens (**)'],
+    'Town Square (u230008)'      => ['[Town Square (u230008)]', 'Town Square (u230008)'],
+    'Town Square(1234)'          => ['[Town Square(1234)]', 'Town Square(1234)'],
     # Lich's forms and non-ASCII names.
-    '[Room - 1234] (230008)'     => '[Room - 1234] (230008)',
-    '[Room - 1234 - (u230008)]'  => '[Room - 1234 - (u230008)]',
-    '[Room - (**)]'              => '[Room - (**)]',
-    '[Café, Ünïcödé] (1234)'     => '[Café, Ünïcödé] (1234)',
+    '[Room - 1234] (230008)'     => ['[Room - 1234] (230008)', 'Room - 1234 (230008)'],
+    '[Room - 1234 - (u230008)]'  => ['[Room - 1234 - (u230008)]', 'Room - 1234 - (u230008)'],
+    '[Room - (**)]'              => ['[Room - (**)]', 'Room - (**)'],
+    '[Café, Ünïcödé] (1234)'     => ['[Café, Ünïcödé] (1234)', 'Café, Ünïcödé (1234)'],
     # XML entities, decoded once.
-    '[Smith & Sons] (1234)'      => '[Smith & Sons] (1234)',
-    "[Smith's Forge]"            => "[Smith's Forge]",
-    '[The "Inn"] (1234)'         => '[The "Inn"] (1234)',
-    '[A < B > C]'                => '[A < B > C]',
-    '[Tom &amp; Jerry]'          => '[Tom &amp; Jerry]'
+    '[Smith & Sons] (1234)'      => ['[Smith & Sons] (1234)', 'Smith & Sons (1234)'],
+    "[Smith's Forge]"            => ["[Smith's Forge]", "Smith's Forge"],
+    '[The "Inn"] (1234)'         => ['[The "Inn"] (1234)', 'The "Inn" (1234)'],
+    '[A < B > C]'                => ['[A < B > C]', 'A < B > C'],
+    '[Tom &amp; Jerry]'          => ['[Tom &amp; Jerry]', 'Tom &amp; Jerry']
   }.freeze
 
   carriers.each do |carrier|
     describe "sent as #{carrier}" do
-      titles.each do |sent, expected|
+      titles.each do |sent, (expected, room)|
         it "shows #{sent.inspect} as #{expected.inspect}" do
           row = title_row_carriers.include?(carrier) ? expected : nil
 
-          expect(shown(carrier, sent)).to eq(row: row, terminal: "Mahtra [#{expected}]")
+          expect(shown(carrier, sent)).to eq(row: row, terminal: "Mahtra [#{room}]")
         end
       end
     end
@@ -172,15 +173,15 @@ RSpec.describe 'Room title' do
   # them is accepted as it is; this pins it.
   describe 'unbalanced brackets (accepted as the parser gives them)' do
     {
-      '[Town Square'   => '[[Town Square]',
-      'Town Square]'   => '[Town Square]]',
-      '[Town Square]]' => '[Town Square]]'
-    }.each do |sent, expected|
+      '[Town Square'   => ['[[Town Square]', '[Town Square'],
+      'Town Square]'   => ['[Town Square]]', 'Town Square]'],
+      '[Town Square]]' => ['[Town Square]]', 'Town Square]']
+    }.each do |sent, (expected, room)|
       carriers.each do |carrier|
         it "shows #{sent.inspect} as #{expected.inspect} when sent as #{carrier}" do
           row = title_row_carriers.include?(carrier) ? expected : nil
 
-          expect(shown(carrier, sent)).to eq(row: row, terminal: "Mahtra [#{expected}]")
+          expect(shown(carrier, sent)).to eq(row: row, terminal: "Mahtra [#{room}]")
         end
       end
     end
@@ -200,7 +201,7 @@ RSpec.describe 'Room title' do
 
           receive_from_server(*lines_for(carrier, sent))
 
-          expect(row: title_row, terminal: terminal_title).to eq(row: nil, terminal: 'Mahtra [[Old Room] (1)]')
+          expect(row: title_row, terminal: terminal_title).to eq(row: nil, terminal: 'Mahtra [Old Room (1)]')
         end
       end
     end
@@ -217,7 +218,7 @@ RSpec.describe 'Room title' do
 
     expect(after_blank).to eq '[Old Room] (1)'
     expect(title_row).to be_nil
-    expect(terminal_title).to eq 'Mahtra [[Old Room] (1)]'
+    expect(terminal_title).to eq 'Mahtra [Old Room (1)]'
   end
 
   # A room component that closes itself sends no room text, so nothing
@@ -233,7 +234,7 @@ RSpec.describe 'Room title' do
 
     expect(after_blank).to eq '[Old Room] (1)'
     expect(title_row).to be_nil
-    expect(terminal_title).to eq 'Mahtra [[Old Room] (1)]'
+    expect(terminal_title).to eq 'Mahtra [Old Room (1)]'
   end
 
   # An inline room's "Obvious paths:" commits the title the room title
@@ -241,7 +242,7 @@ RSpec.describe 'Room title' do
   it 'shows the room title component title when an inline room commits it' do
     receive_from_server("<component id='room title'> - [Town Square]  (1234)</component>", 'Obvious paths: <d>north</d>.')
 
-    expect(row: title_row, terminal: terminal_title).to eq(row: '[Town Square] (1234)', terminal: 'Mahtra [[Town Square] (1234)]')
+    expect(row: title_row, terminal: terminal_title).to eq(row: '[Town Square] (1234)', terminal: 'Mahtra [Town Square (1234)]')
   end
 
   # The room indicator (a layout's indicator window for 'room') shows the
@@ -262,7 +263,7 @@ RSpec.describe 'Room title' do
 
     receive_from_server(*lines_for(:room_title_component, '[Smith & Sons] (1234)'))
 
-    expect(terminal_title).to eq 'Mahtra [[Smith & Sons] (1234)]'
+    expect(terminal_title).to eq 'Mahtra [Smith & Sons (1234)]'
   end
 
   it 'shows the same title on a move that sends both the subtitle and the roomName' do
@@ -271,8 +272,8 @@ RSpec.describe 'Room title' do
 
     receive_from_server(*lines_for(:room_name, "[Smith's Forge] (1234)"))
 
-    expect(after_subtitle).to eq(row: "[Smith's Forge] (1234)", terminal: "Mahtra [[Smith's Forge] (1234)]")
+    expect(after_subtitle).to eq(row: "[Smith's Forge] (1234)", terminal: "Mahtra [Smith's Forge (1234)]")
     expect(title_row).to eq "[Smith's Forge] (1234)"
-    expect(terminal_title).to eq "Mahtra [[Smith's Forge] (1234)]"
+    expect(terminal_title).to eq "Mahtra [Smith's Forge (1234)]"
   end
 end

@@ -421,7 +421,7 @@ RSpec.describe TagHandlers do
       receive_from_server(%q{<component id="room" subtitle=" - [Town Square]"></component>})
 
       expect(events).to eq [{ type: :room_title, text: '[Town Square]' }]
-      expect(state.room_title).to eq '[Town Square]'
+      expect(state.room_title).to eq 'Town Square'
     end
 
     it 'ignores a pushStream or component without an id, keeping the text around it on one line in main' do
@@ -669,21 +669,21 @@ RSpec.describe TagHandlers do
       receive_from_server("<style id='roomName'/>[Town Square]<style id=''/>")
 
       expect(styled_lines('main')).to eq [[['[Town Square]', '00ff00']]]
-      expect(state.room_title).to eq '[Town Square]'
+      expect(state.room_title).to eq 'Town Square'
     end
 
     it 'closes the style at a style with an empty id, showing the title on its own line' do
       receive_from_server("<style id='roomName'/>[Town Square]<style id=''/>A cat sleeps here.")
 
       expect(styled_lines('main')).to eq [[['[Town Square]', '00ff00']], [['A cat sleeps here.', nil]]]
-      expect(state.room_title).to eq '[Town Square]'
+      expect(state.room_title).to eq 'Town Square'
     end
 
     it 'leaves an open style and its room title alone at a style without an id' do
       receive_from_server("<style id='roomName'/>[Town <style/>Square]<style id=''/>")
 
       expect(styled_lines('main')).to eq [[['[Town Square]', '00ff00']]]
-      expect(state.room_title).to eq '[Town Square]'
+      expect(state.room_title).to eq 'Town Square'
     end
   end
 
@@ -803,7 +803,7 @@ RSpec.describe TagHandlers do
 
       receive_from_server(%q{<streamWindow id='room' subtitle=" - [Town Square]"/>})
 
-      expect(state.room_title).to eq '[Town Square]'
+      expect(state.room_title).to eq 'Town Square'
       expect(events).to eq [{ type: :indicator_update, id: 'room', label: 'Town Square', value: 1 },
                             { type: :room_title, text: '[Town Square]' }]
     end
@@ -811,7 +811,7 @@ RSpec.describe TagHandlers do
     it 'keeps the DragonRealms room number after the title' do
       receive_from_server(%q{<streamWindow id='room' subtitle=" - [Bosque Deriel] (230008)"/>})
 
-      expect(state.room_title).to eq '[Bosque Deriel] (230008)'
+      expect(state.room_title).to eq 'Bosque Deriel (230008)'
     end
 
     it 'ignores a streamWindow other than room' do
@@ -940,11 +940,11 @@ RSpec.describe TagHandlers do
 
     it 'reads the style id in either quotes, anywhere among the attributes, taking the room title only for roomName' do
       expect_each(
-        "<style id='roomName'/>"       => '[Hall]',
-        '<style id="roomName"/>'       => '[Hall]',
-        "<style id='roomName' x='1'/>" => '[Hall]',
-        "<style x='1' id='roomName'/>" => '[Hall]',
-        "<style  id='roomName'/>"      => '[Hall]',
+        "<style id='roomName'/>"       => 'Hall',
+        '<style id="roomName"/>'       => 'Hall',
+        "<style id='roomName' x='1'/>" => 'Hall',
+        "<style x='1' id='roomName'/>" => 'Hall',
+        "<style  id='roomName'/>"      => 'Hall',
         "<style pid='roomName'/>"      => ''
       ) do |fresh, tag|
         receive_from_server("#{tag}[Hall]<style id=''/>", into: fresh)
@@ -1061,8 +1061,8 @@ RSpec.describe TagHandlers do
 
     it 'reads a room subtitle only from an attribute named subtitle' do
       expect_each(
-        "<component id='room' subtitle=' - [Hall]'/>"  => '[Hall]',
-        "<component subtitle=' - [Hall]' id='room'/>"  => '[Hall]',
+        "<component id='room' subtitle=' - [Hall]'/>"  => 'Hall',
+        "<component subtitle=' - [Hall]' id='room'/>"  => 'Hall',
         "<component id='room' xsubtitle=' - [Hall]'/>" => ''
       ) do |fresh, tag|
         receive_from_server(tag, into: fresh)
@@ -1189,10 +1189,10 @@ RSpec.describe TagHandlers do
 
     it 'reads a room streamWindow in either quotes and any order' do
       expect_each(
-        %(<streamWindow id='room' subtitle=" - [Hall]"/>)              => '[Hall]',
-        %(<streamWindow id='room' title='Room' subtitle=' - [Hall]'/>) => '[Hall]',
-        %(<streamWindow id="room" subtitle=" - [Hall]"/>)              => '[Hall]',
-        %(<streamWindow subtitle=" - [Hall]" id='room'/>)              => '[Hall]',
+        %(<streamWindow id='room' subtitle=" - [Hall]"/>)              => 'Hall',
+        %(<streamWindow id='room' title='Room' subtitle=' - [Hall]'/>) => 'Hall',
+        %(<streamWindow id="room" subtitle=" - [Hall]"/>)              => 'Hall',
+        %(<streamWindow subtitle=" - [Hall]" id='room'/>)              => 'Hall',
         %(<streamWindow id='room' xsubtitle=" - [Hall]"/>)             => '',
         %(<streamWindow id='room' title="subtitle=' - [Hall]'"/>)      => ''
       ) do |fresh, tag|
