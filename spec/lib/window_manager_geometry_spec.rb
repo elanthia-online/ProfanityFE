@@ -267,21 +267,14 @@ RSpec.describe WindowManager, '#resize geometry' do
     # Every window is drawn again from what it holds; one whose size is
     # the same shows the same cells, colors included.
     #
-    # KNOWN BUG, not intended behaviour: the combat tabbed window's
-    # scrollbar is left out only because of it. An inactive tabbed window
-    # shows no scrollbar while lines arrive, but a full redraw (this resize)
-    # draws its inactive scrollbar. It should stay blank. To reproduce,
-    # drop both .except(:combat) calls: this example then fails with the
-    # combat scrollbar drawn after the resize. Drop them, and this
-    # paragraph, once that is fixed.
     it 'draws every window the same when the terminal size has not changed' do
       drawn = windows.transform_values { |window| cells(window) }
-      bars = scrollbars.except(:combat)
+      bars = scrollbars
 
       resize_to(24, 80)
 
       expect(windows.transform_values { |window| cells(window) }).to eq drawn
-      expect(scrollbars.except(:combat)).to eq bars
+      expect(scrollbars).to eq bars
     end
 
     it 'leaves everything as it was when the terminal is under 3 lines or under 10 columns' do
