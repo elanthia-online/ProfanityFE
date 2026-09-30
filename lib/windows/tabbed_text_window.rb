@@ -294,7 +294,9 @@ class TabbedTextWindow < BaseWindow
   # whatever the shown tab holds: an empty tab gets it as an empty text
   # window does (marker, bar, and the thumb at the bottom). An inactive
   # window's scrollbar is left blank. A window with no tab redraws only
-  # its (empty) tab bar and leaves the rest as it is.
+  # its (empty) tab bar and leaves the rest as it is. The text is drawn
+  # without the selection highlight; the next line to arrive in the shown
+  # tab repaints it with the highlight (see {LineBuffered#append_string}).
   #
   # @return [void]
   def redraw
@@ -308,6 +310,7 @@ class TabbedTextWindow < BaseWindow
       setpos(y, 0)
       clrtoeol
     end
+    painted_without_selection
 
     # Zero or negative (nothing to draw) for an empty tab or no text rows
     tab_buffer.visible_count(ch).times do |i|

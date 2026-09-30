@@ -141,6 +141,65 @@ RSpec.describe LineBuffered do
       expect(window.attrs_at(window_row(1), 0) & Curses::A_REVERSE).to eq 0
       expect(window.attrs_at(window_row(2), 0) & Curses::A_REVERSE).to eq Curses::A_REVERSE
     end
+
+    context 'with part of a shown line highlighted' do
+      # @return [Array<Array<Boolean>>] per text-area row, whether each of
+      #   its first 6 cells is in reverse video
+      def reverse_cells
+        (0...window.content_height).map do |text_row|
+          (0...6).map { |x| window.attrs_at(window_row(text_row), x).anybits?(Curses::A_REVERSE) }
+        end
+      end
+
+      before do
+        window.add_string('abcdef')
+        line_id, = window.selection_anchor_at(window_row(2), 0)
+        window.highlight_selection(line_id, 1, line_id, 4)
+      end
+
+      it 'keeps the highlight on the selected cells as lines arrive and scroll them up' do
+        window.add_string('l6')
+        window.add_string('l7')
+
+        expect(text_rows).to eq %w[abcdef l6 l7]
+        expect(reverse_cells).to eq [[false, true, true, true, false, false], [false] * 6, [false] * 6]
+      end
+
+      it 'keeps the highlight on the selected cells as a wrapped line arrives' do
+        window.add_string('one two three four five')
+
+        expect(text_rows).to eq ['abcdef', 'one two three four', '  five']
+        expect(reverse_cells).to eq [[false, true, true, true, false, false], [false] * 6, [false] * 6]
+      end
+
+      it 'highlights the start of a line that arrives inside a selection reaching past the newest line' do
+        line_id, = window.selection_anchor_at(window_row(2), 0)
+        window.highlight_selection(line_id, 1, line_id + 1, 2)
+
+        window.add_string('l6')
+
+        expect(text_rows).to eq %w[l5 abcdef l6]
+        expect(reverse_cells.drop(1)).to eq [[false] + [true] * 5, [true, true, false, false, false, false]]
+      end
+
+      it 'draws only the new row, not the rows already shown, when a line arrives' do
+        window.call_log.clear
+
+        window.add_string('l6')
+
+        expect(window.call_log.select { |meth, _| meth == :setpos }).to eq [[:setpos, [window_row(2), 0]]]
+        expect(window.call_log.count { |meth, _| meth == :clrtoeol }).to eq 1
+      end
+
+      it 'shows the highlight again on the next line after a resize that keeps the width' do
+        window.redraw_after_resize
+
+        window.add_string('l6')
+
+        expect(text_rows).to eq %w[l5 abcdef l6]
+        expect(reverse_cells[1]).to eq [false, true, true, true, false, false]
+      end
+    end
   end
 
   # Both windows have 3 text rows and wrap at 10 columns. The cap counts
