@@ -190,8 +190,8 @@ RSpec.describe WindowManager, '#resize geometry' do
     end
 
     # main is the current scroll window, so its scrollbar is the active one.
-    # The tabbed windows are inactive, so they show none.
-    it 'draws only the first text window\'s scrollbar, beside the text, after a resize' do
+    # thoughts and the tabbed windows are inactive, so they show none.
+    it 'draws only the active window\'s scrollbar, beside the text, after a resize' do
       resize_to(40, 120)
 
       expect(scrollbars).to eq(

@@ -48,11 +48,6 @@ RSpec.describe 'The active scrollbar across resizes' do
     [[LineBuffered::ACTIVE_INDICATOR, true], *Array.new(rows - 2, [LineBuffered::ACTIVE_SCROLLBAR_CHAR, false]), :thumb]
   end
 
-  # An inactive scrollbar over +rows+ text rows, thumb at the bottom.
-  def inactive(rows)
-    [*Array.new(rows - 1, [LineBuffered::INACTIVE_SCROLLBAR_CHAR, false]), :thumb]
-  end
-
   def blank(rows) = Array.new(rows, ['', false])
 
   # The tabbed window's scrollbar starts beside its first text row, below
@@ -120,8 +115,9 @@ RSpec.describe 'The active scrollbar across resizes' do
     terminal_resize
 
     expect(scrollbar_cells(thoughts)).to eq active(4)
-    # The first text window's scrollbar is drawn again too, as inactive.
-    expect(scrollbar_cells(main)).to eq inactive(6)
+    # The first text window is inactive, so its scrollbar is left blank
+    # (spec/lib/text_resize_active_scrollbar_spec.rb).
+    expect(scrollbar_cells(main)).to eq blank(6)
   end
 
   it 'moves the marker with the switch key after a resize, onto a window whose scrollbar is drawn' do

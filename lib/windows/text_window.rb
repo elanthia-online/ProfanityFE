@@ -29,21 +29,6 @@ class TextWindow < BaseWindow
     10
   end
 
-  # Fit every text window to the current terminal size. Resizing clears
-  # each window's scrollbar; only the first text window moved and the
-  # active one get their scrollbar drawn again.
-  #
-  # @return [void]
-  def self.resize_all
-    scrollbar_shown = false
-    list.to_a.each do |window|
-      next unless window.move_to_layout
-
-      window.redraw_after_resize(show_scrollbar: !scrollbar_shown)
-      scrollbar_shown = true
-    end
-  end
-
   # Create a new scrollable text window.
   #
   # @param args [Array] arguments forwarded to {BaseWindow#initialize}
@@ -88,19 +73,19 @@ class TextWindow < BaseWindow
 
   # Show the window again after {#move_to_layout} moved it: move its
   # scrollbar beside it, re-wrap every line to the new width, repaint the
-  # text and clear the scrollbar. The active window's scrollbar is always
-  # drawn again, so it keeps its marker.
+  # text and clear the scrollbar. Only the active window's scrollbar is
+  # drawn again, so it keeps its marker; an inactive window's is left
+  # blank, as an inactive tabbed window's is (see
+  # {TabbedTextWindow#update_scrollbar}).
   #
-  # @param show_scrollbar [Boolean] draw the scrollbar again after
-  #   clearing it, even if the window isn't the active one
   # @return [void]
   # @api private
-  def redraw_after_resize(show_scrollbar: true)
+  def redraw_after_resize
     fit_scrollbar
     rewrap
     repaint
     clear_scrollbar
-    update_scrollbar if show_scrollbar || active?
+    update_scrollbar if active?
     noutrefresh
   end
 
