@@ -14,24 +14,28 @@ Used by CommandBuffer for word-boundary detection in readline-style editing.
 #   "!@#".punct?  #=> true
 module StringClassification
   refine String do
-    # @return [Boolean] true if all characters are alphanumeric
+    # @return [Boolean] true if the string is non-empty and every character,
+    #   newlines included, is alphanumeric
     def alnum?
-      !!match(/^[[:alnum:]]+$/)
+      !!match(/\A[[:alnum:]]+\z/)
     end
 
-    # @return [Boolean] true if all characters are digits
+    # @return [Boolean] true if the string is non-empty and every character,
+    #   newlines included, is a digit
     def digits?
-      !!match(/^[[:digit:]]+$/)
+      !!match(/\A[[:digit:]]+\z/)
     end
 
-    # @return [Boolean] true if all characters are punctuation
+    # @return [Boolean] true if the string is non-empty and every character,
+    #   newlines included, is punctuation
     def punct?
-      !!match(/^[[:punct:]]+$/)
+      !!match(/\A[[:punct:]]+\z/)
     end
 
-    # @return [Boolean] true if all characters are whitespace
+    # @return [Boolean] true if the string is non-empty and every character,
+    #   newlines included, is whitespace
     def space?
-      !!match(/^[[:space:]]+$/)
+      !!match(/\A[[:space:]]+\z/)
     end
   end
 end
