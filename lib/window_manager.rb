@@ -209,7 +209,8 @@ class WindowManager
   #
   # Text and tabbed windows re-wrap their stored lines, every tab's, to
   # the new width and repaint (see {LineBuffered#rewrap}). The current
-  # scroll window keeps its active scrollbar.
+  # scroll window keeps its active scrollbar; every other text or tabbed
+  # window's scrollbar is left blank.
   #
   # After the command window is resized, +cmd_buffer+ is redrawn so its
   # cursor and horizontal scroll offset match the new width.
