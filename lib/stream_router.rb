@@ -227,7 +227,7 @@ class StreamRouter
     end
 
     # Handle room components for dedicated RoomWindow
-    room_result = @room.process_room_stream(text, @current_stream, colors, marks)
+    room_result = @room.process_room_stream(text, @current_stream, marks)
     if room_result == :consumed
       return
     elsif room_result == :continue

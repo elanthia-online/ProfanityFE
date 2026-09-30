@@ -446,7 +446,7 @@ module TagHandlers
       # are meaningful — they clear the displayed data. Since flush_text_buffer
       # skips empty text, handle this directly. Without a RoomWindow only an
       # empty room players component does anything: it clears the indicator.
-      result = @room.process_room_stream('', stream, @spans.runs, @marks.runs)
+      result = @room.process_room_stream('', stream, @marks.runs)
       @room.update_room_players_indicator(nil) if result == :continue
     else
       flush_text_buffer(text_buffer)

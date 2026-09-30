@@ -575,7 +575,6 @@ RSpec.describe 'Room carriers' do
     let(:inline_room) { ['<resource picture="0"/><style id="roomName" />[A] (1)', '<style id=""/>  '] }
 
     it 'P3: draws the bold creatures of an objs component without a monsterbold preset' do
-      pending 'component creatures are matched by the monsterbold color, so none are found without it (PLAN §5 P3; flips in commit 5)'
       PRESET.delete('monsterbold')
       PRESET['creature'] = ['00ff00', nil]
       load_layout(room_attrs: "creatures-preset='creature'")
@@ -596,7 +595,6 @@ RSpec.describe 'Room carriers' do
     end
 
     it "P3b: doesn't take a preset in monsterbold's color inside an objs component for a creature" do
-      pending 'component creatures are matched by color, so any span in that color counts (PLAN §5 P3b; flips in commit 5)'
       PRESET['speech'] = ['ff0000', nil]
       load_layout
 
@@ -606,7 +604,6 @@ RSpec.describe 'Room carriers' do
     end
 
     it "P3b: doesn't take a highlight in monsterbold's color inside an objs component for a creature" do
-      pending 'component creatures are matched on the runs after the highlights (PLAN §5 P3b; flips in commit 5)'
       PRESET['creature'] = ['00ff00', nil]
       HIGHLIGHT[/a box/] = ['ff0000', nil, nil]
       # A layout with a window for the room objs stream (as the commented-out

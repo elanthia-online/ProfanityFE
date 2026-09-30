@@ -5,14 +5,15 @@ require_relative 'streams'
 require_relative 'presets'
 require_relative 'link_extractor'
 require_relative 'room_title'
+require_relative 'room_part'
 
 # Assembles the room window's data (title, description, objects, players,
 # exits) from the two ways the game sends it, and updates the room players
 # indicator.
 #
 # - The component path: text inside a room component stream (+room objs+,
-#   +room exits+, ...), with the link and bold regions the tag parser
-#   computed, is emitted as it arrives.
+#   +room exits+, ...), with the links and creatures the tag parser's room
+#   marks show (see RoomPart), is emitted as it arrives.
 # - The inline path: roomName/roomDesc styled text (captured between
 #   {#start_capture} and {#end_capture}, which the tag parser calls) and
 #   "You also see" / "Also here:" / "Obvious exits:" lines are staged, from
@@ -211,14 +212,12 @@ class RoomAssembler
   #
   # @param text [String] component text content
   # @param stream [String, nil] the current stream
-  # @param line_colors [Array<Hash>] the color regions the tag parser
-  #   computed for +text+ (links carry +:cmd+)
-  # @param _marks [Array<Hash>] the room marks for +text+ (see
-  #   SpanTracker::ROOM_MARKS); not read yet
+  # @param marks [Array<Hash>] the room marks for +text+ (see
+  #   SpanTracker::ROOM_MARKS): its links and creatures
   # @return [Symbol, nil] :consumed if text was fully handled (caller should
   #   return), :continue if caller should keep processing (room players
   #   also needs indicator handling), or nil if not a room stream
-  def process_room_stream(text, stream, line_colors, _marks)
+  def process_room_stream(text, stream, marks)
     return nil unless stream&.start_with?(Streams::ROOM)
 
     # The room title names the room in the terminal title, with or without
@@ -234,16 +233,9 @@ class RoomAssembler
       return stream == Streams::ROOM_PLAYERS ? :continue : nil
     end
 
-    # Extract pre-computed link regions from SAX-parsed line_colors.
-    # These have correct positions relative to `text` (the clean text
-    # buffer) and include :cmd for click dispatch. Creature bold regions
-    # are also extracted from line_colors for the objects section.
-    #
-    # Adjust positions for leading whitespace that .strip removes,
-    # since SAX positions are relative to the original text buffer.
-    left_offset = text.length - text.lstrip.length
-    links = extract_sax_links(line_colors, left_offset)
-    clean = text.strip
+    part = RoomPart.from_chunk(text, marks)
+    links = part.links
+    clean = part.text
 
     # Another room stream (DR's room extra) changes nothing in the room
     # window, so it asks for no room render.
@@ -256,9 +248,8 @@ class RoomAssembler
       @component_desc_room = @state.room_title
       show(:room_desc, text: clean, links: links)
     when Streams::ROOM_OBJS
-      creatures = extract_sax_creatures(line_colors, text, left_offset)
       @room_pending_objects = clean
-      show(:room_objects, text: clean, links: links, creatures: creatures)
+      show(:room_objects, text: clean, links: links, creatures: part.creatures)
     when Streams::ROOM_PLAYERS
       @room_pending_players = clean
       show(:room_players, text: clean, links: links)
@@ -360,39 +351,6 @@ class RoomAssembler
       @capture_mode = nil
     end
     captured
-  end
-
-  # Extract link regions from SAX-computed line colors.
-  # Returns only color regions that have a :cmd key (clickable links),
-  # stripping color info (the room window applies its own link preset).
-  # Adjusts positions by the given offset (for leading whitespace removed by .strip).
-  #
-  # @param line_colors [Array<Hash>] the tag parser's color regions
-  # @param offset [Integer] number of chars stripped from the left of the text
-  # @return [Array<Hash>] `[{start:, end:, cmd:}, ...]`
-  def extract_sax_links(line_colors, offset = 0)
-    line_colors.select { |c| c[:cmd] }.map do |c|
-      { start: c[:start] - offset, end: c[:end] - offset, cmd: c[:cmd] }
-    end
-  end
-
-  # Extract creature names from monsterbold regions in SAX-computed line colors.
-  # Finds color regions that match the monsterbold preset and extracts the
-  # corresponding text from the stripped clean text.
-  #
-  # @param line_colors [Array<Hash>] the tag parser's color regions
-  # @param text [String] original text (SAX text buffer, before strip)
-  # @param offset [Integer] left strip offset applied to produce clean text
-  # @return [Array<String>] creature names
-  def extract_sax_creatures(line_colors, text, offset = 0)
-    monsterbold = Presets.colors(Presets::MONSTERBOLD)
-    return [] unless monsterbold
-
-    stripped = text.strip
-    line_colors.select { |c| c[:fg] == monsterbold[:fg] && c[:bg] == monsterbold[:bg] && !c[:cmd] }
-               .filter_map { |c| stripped[(c[:start] - offset)...(c[:end] - offset)]&.strip }
-               .reject(&:empty?)
-               .uniq
   end
 
   # Reset all pending room data slots to nil.
