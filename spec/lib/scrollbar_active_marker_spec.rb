@@ -6,8 +6,11 @@
 # the cell it left and the one it moved to, and the cell it left on the
 # top row used to get the bar glyph: once the thumb had been on the top
 # row, the marker was gone until the next full redraw (a resize, a layout
-# or a window switch). Text and tabbed windows alike. Driven through the
-# real Application, WindowManager, key actions and windows on the virtual
+# or a window switch). Text and tabbed windows alike; an inactive window
+# shows no scrollbar at all, so no marker either
+# (spec/lib/text_inactive_scrollbar_spec.rb,
+# spec/lib/tabbed_inactive_scrollbar_spec.rb). Driven through the real
+# Application, WindowManager, key actions and windows on the virtual
 # screen (24x80).
 
 require 'rexml/document'
@@ -238,18 +241,5 @@ RSpec.describe 'The active marker on the scrollbar' do
       expect(tabbed.rows.drop(1)).to eq ['c5', 'c6', 'c7', 'c8', 'c9', 'c10']
       expect(tabbed_cells).to eq active(6, thumb: 5)
     end
-  end
-
-  # Only the active window shows the marker: an inactive window scrolled
-  # (a drag held at its edge scrolls it) never gets one.
-  it 'never shows on an inactive text window whose thumb leaves the top row' do
-    (1..20).each { |n| main.add_string("m#{n}") }
-    press('switch_current_window') # the tabbed window
-    expect(main).not_to be_active
-
-    main.scroll_lines(-100)
-    main.scroll_lines(100)
-
-    expect(scrollbar_cells(main)).not_to include [LineBuffered::ACTIVE_INDICATOR, true]
   end
 end

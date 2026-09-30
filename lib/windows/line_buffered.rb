@@ -21,12 +21,6 @@ module LineBuffered
   # Bold vertical line character used for the scrollbar when the window is active.
   ACTIVE_SCROLLBAR_CHAR = "\u2503" # bold vertical line
 
-  # Plain pipe character {#render_scrollbar} uses for the bar when the
-  # window is inactive. The app never draws an inactive window's
-  # scrollbar ({#update_scrollbar} draws only the active one), so it
-  # is seen only when render_scrollbar is called directly.
-  INACTIVE_SCROLLBAR_CHAR = '|'
-
   # Right-pointing triangle shown at the top of the scrollbar for the active window.
   ACTIVE_INDICATOR = "\u25B6" # right-pointing triangle
 
@@ -208,18 +202,19 @@ module LineBuffered
     @active
   end
 
-  # Render the scrollbar for a buffer with the given metrics.
-  # {#update_scrollbar} calls this with the shown buffer's length and
-  # scroll position and the text area's height.
+  # Render the active window's scrollbar for a buffer with the given
+  # metrics. {#update_scrollbar} calls this, only while the window is
+  # active, with the shown buffer's length and scroll position and the
+  # text area's height.
   # The scrollbar covers the content area's rows only: +visible_height+
   # cells from row +top+ of the scrollbar window. A content area with no
   # rows gets no scrollbar.
   #
   # The thumb (a reverse-video blank) marks the scroll position. Every
-  # other cell shows the bar, except the active window's top cell, which
-  # shows the active marker whenever the thumb isn't on it. The first
-  # call after {#reset_scrollbar} draws every cell; later calls redraw
-  # only the cell the thumb left and the one it moved to.
+  # other cell shows the bar, except the top cell, which shows the active
+  # marker whenever the thumb isn't on it. The first call after
+  # {#reset_scrollbar} draws every cell; later calls redraw only the cell
+  # the thumb left and the one it moved to.
   #
   # @param buffer_length [Integer] total number of lines in the buffer
   # @param buffer_pos [Integer] current scroll offset from the bottom
@@ -229,14 +224,13 @@ module LineBuffered
   def render_scrollbar(buffer_length, buffer_pos, visible_height, top: 0)
     return unless @scrollbar && visible_height.positive?
 
-    scrollbar_char = @active ? ACTIVE_SCROLLBAR_CHAR : INACTIVE_SCROLLBAR_CHAR
     last_scrollbar_pos = @scrollbar_pos
     @scrollbar_pos = visible_height - ((buffer_pos / [(buffer_length - visible_height),
                                                       1].max.to_f) * (visible_height - 1)).round - 1
 
     if last_scrollbar_pos
       unless last_scrollbar_pos == @scrollbar_pos
-        draw_scrollbar_bar_cell(last_scrollbar_pos, top, scrollbar_char)
+        draw_scrollbar_bar_cell(last_scrollbar_pos, top)
         @scrollbar.setpos(top + @scrollbar_pos, 0)
         @scrollbar.attron(Curses::A_REVERSE) do
           @scrollbar.addch ' '
@@ -251,7 +245,7 @@ module LineBuffered
             @scrollbar.addch ' '
           end
         else
-          draw_scrollbar_bar_cell(num, top, scrollbar_char)
+          draw_scrollbar_bar_cell(num, top)
         end
       end
       @scrollbar.noutrefresh
@@ -259,20 +253,19 @@ module LineBuffered
   end
 
   # Draw one scrollbar cell without the thumb: the active marker (bold) on
-  # the top row of the active window's scrollbar, else the bar glyph.
+  # the top row, else the bar glyph.
   #
   # @param row [Integer] content-area row of the cell
   # @param top [Integer] window row where the content area starts
-  # @param scrollbar_char [String] the bar glyph for the window's state
   # @return [void]
-  private def draw_scrollbar_bar_cell(row, top, scrollbar_char)
+  private def draw_scrollbar_bar_cell(row, top)
     @scrollbar.setpos(top + row, 0)
-    if row.zero? && @active
+    if row.zero?
       @scrollbar.attron(Curses::A_BOLD) do
         @scrollbar.addstr ACTIVE_INDICATOR
       end
     else
-      @scrollbar.addstr scrollbar_char
+      @scrollbar.addstr ACTIVE_SCROLLBAR_CHAR
     end
   end
 
