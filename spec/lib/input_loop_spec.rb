@@ -229,12 +229,15 @@ RSpec.describe 'The input loop' do
       let(:fitted_at) { [] }
       let(:main_size_at_50x180) { [48, 119] }
       let(:main_size_at_45x165) { [43, 109] }
+      # The clock each time the layout was fitted
+      let(:fitted_when) { [] }
 
       before do
         allow(Process).to receive(:clock_gettime).and_call_original
         allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { clock[0] }
         allow(app.window_mgr).to receive(:resize).and_wrap_original do |resize, *args|
           fitted_at << [Curses.lines, Curses.cols]
+          fitted_when << clock[0].round(3)
           resize.call(*args)
         end
       end
@@ -254,6 +257,22 @@ RSpec.describe 'The input loop' do
         lambda do
           clock[0] += seconds
           layout_seen << [main.maxy, main.maxx]
+        end
+      end
+
+      # A keyboard step: from here on, each wait for a key lasts its whole
+      # timeout on the clock, as the real wait does when no key comes (and,
+      # like it, refuses a negative timeout).
+      def waits_take_their_time
+        lambda do
+          allow(IO).to receive(:select) do |readers, _writers, _errors, timeout|
+            next nil unless readers == [$stdin]
+            raise ArgumentError, 'time interval must not be negative' if timeout.negative?
+
+            clock[0] += timeout
+            sleep 0.0002
+            nil
+          end
         end
       end
 
@@ -277,6 +296,24 @@ RSpec.describe 'The input loop' do
 
         expect(layout_seen).to eq [main_size_at_60x200] * 4 + [main_size_at_40x150]
         expect(fitted_at).to eq [[60, 200], [40, 150]]
+      end
+
+      it 'fits resizes already queued 0.1 s after it reads them all, not 0.1 s per resize' do
+        # The next wait ends at 100.1, when all three resizes are read
+        run_client(keyboard(waits_take_their_time, resize_to(50, 180), resize_to(45, 165), resize_to(40, 150),
+                            wait_until { fitted_at.size == 2 }))
+
+        expect(fitted_at).to eq [[60, 200], [40, 150]]
+        expect(fitted_when).to eq [100.0, 100.2]
+      end
+
+      it 'fits a single resize 0.1 s after it is read, waiting only for what is left of that' do
+        # The resize is read at 100.1, then 0.03 s go by
+        run_client(keyboard(waits_take_their_time, resize_to(40, 150), pause(0.03),
+                            wait_until { fitted_at.size == 2 }))
+
+        expect(fitted_at).to eq [[60, 200], [40, 150]]
+        expect(fitted_when).to eq [100.0, 100.2]
       end
 
       it 'fits the layout before a key typed in the burst, then handles the keys in order' do
