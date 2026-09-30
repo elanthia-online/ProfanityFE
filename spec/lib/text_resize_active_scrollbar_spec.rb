@@ -52,11 +52,6 @@ RSpec.describe 'Text window scrollbars after a resize' do
     [[LineBuffered::ACTIVE_INDICATOR, true], *Array.new(rows - 2, [LineBuffered::ACTIVE_SCROLLBAR_CHAR, false]), :thumb]
   end
 
-  # An inactive scrollbar over +rows+ text rows, thumb at row +thumb+.
-  def inactive(rows, thumb:)
-    Array.new(rows) { |row| row == thumb ? :thumb : [LineBuffered::INACTIVE_SCROLLBAR_CHAR, false] }
-  end
-
   def blank(rows) = Array.new(rows, ['', false])
 
   def press(action) = app.key_action.fetch(action).call
@@ -171,11 +166,12 @@ RSpec.describe 'Text window scrollbars after a resize' do
       expect(tabbed_cells).to eq active(4)
     end
 
-    # Scrolling an inactive window (as a drag held at its edge does) draws
-    # its scrollbar; the resize clears it and leaves it blank.
-    it 'clears an inactive text window\'s scrollbar drawn by scrolling it, and keeps its view' do
+    # Scrolling an inactive window (as a drag held at its edge does)
+    # leaves its scrollbar blank (spec/lib/text_inactive_scrollbar_spec.rb),
+    # and so does the resize.
+    it 'leaves a scrolled inactive text window\'s scrollbar blank, and keeps its view' do
       main.scroll_lines(-2)
-      expect(scrollbar_cells(main)).to eq inactive(6, thumb: 4)
+      expect(scrollbar_cells(main)).to eq blank(6)
 
       press('resize')
 
