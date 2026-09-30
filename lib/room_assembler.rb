@@ -19,11 +19,13 @@ require_relative 'room_title'
 #   the raw line so their markup is kept, and committed as one batch when
 #   the exits arrive.
 #
-# UI updates are emitted on the event bus. Every room part sent to the room
-# window also asks for the window to be rendered at the next flush (see
-# {#show_title} and {PendingRender#request_room_render}): this is the one
-# place a room render is asked for, so a burst of room parts is drawn
-# once. The window manager is only asked whether the layout has a
+# UI updates are emitted on the event bus. Every room part this class sends
+# to the room window also asks for the window to be rendered at the next
+# flush (see {#show_title} and {PendingRender#request_room_render}), so a
+# burst of room parts is drawn once. The one room part sent elsewhere is
+# the subtitle on a room stream's opening tag
+# (TagHandlers#handle_stream_open): it asks for no render and shows with
+# the next one. The window manager is only asked whether the layout has a
 # RoomWindow (see #room_window?).
 class RoomAssembler
   # Element names of the tags stripped from inline "You also see" text.
@@ -171,7 +173,8 @@ class RoomAssembler
                               text.strip
                             end
       room_data_captured = true
-      # Trigger room render since exits are typically last
+      # The exits line ends an inline room: commit it (drawn at the next
+      # flush)
       commit_room_data_batch
     end
 
