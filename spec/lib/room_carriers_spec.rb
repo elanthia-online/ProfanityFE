@@ -601,6 +601,15 @@ RSpec.describe 'Room carriers' do
       expect(room_screen[1]).to eq 'You also see {a rat:green} and a box.'
     end
 
+    # Characterization: an empty bold span names no creature.
+    it 'takes no creature from an empty bold span in an objs component' do
+      load_layout
+
+      receive_from_server("<component id='room objs'>You also see <pushBold/> <popBold/>a box and <pushBold/>a rat<popBold/>.</component>")
+
+      expect(room_screen).to eq ['You also see  a box and {a rat:red}.']
+    end
+
     it "P3b: doesn't take a preset in monsterbold's color inside an objs component for a creature" do
       PRESET['speech'] = ['ff0000', nil]
       load_layout

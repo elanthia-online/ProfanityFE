@@ -301,6 +301,7 @@ RSpec.describe 'Inline room lines' do
         '<pushBold/>a goblin<popBold/>, <pushBold/>a goblin<popBold/>' => ['a goblin', 'a goblin'],
         '<pushBold>a<popBold>'                                         => ['a'],
         '<popBold/>a<pushBold/><popBold/>'                             => [],
+        '<pushBold/> <popBold/>a box.'                                 => [],
         # bold left open at the end of the line closes there
         # (GameTextProcessor#carry_bold)
         '<pushBold/>a'                                                 => ['a'],
