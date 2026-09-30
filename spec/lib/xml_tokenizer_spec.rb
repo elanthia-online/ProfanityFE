@@ -33,14 +33,14 @@ RSpec.describe XmlTokenizer do
       expect(described_class.tokenize('   ')).to eq [[:text, '   ']]
     end
 
-    it 'handles tag at very start of line with no trailing text' do
+    it 'handles a tag at the very start of the line, before text' do
       result = described_class.tokenize('<pushBold/>text')
-      expect(result.first).to eq [:tag, '<pushBold/>']
+      expect(result).to eq [[:tag, '<pushBold/>'], [:text, 'text']]
     end
 
-    it 'handles tag at very end of line with no leading text' do
+    it 'handles a tag at the very end of the line, after text' do
       result = described_class.tokenize('text<pushBold/>')
-      expect(result.last).to eq [:tag, '<pushBold/>']
+      expect(result).to eq [[:text, 'text'], [:tag, '<pushBold/>']]
     end
 
     it 'handles consecutive tags with no text between them' do
@@ -168,12 +168,10 @@ RSpec.describe XmlTokenizer do
 
     it 'handles mixed bold + link tags' do
       line = '<pushBold/><a exist="123" noun="goblin">a goblin</a><popBold/>'
-      result = described_class.tokenize(line)
-      tags = result.select { |type, _| type == :tag }
-      texts = result.select { |type, _| type == :text }
-      expect(tags.length).to eq 4
-      expect(texts.length).to eq 1
-      expect(texts.first.last).to eq 'a goblin'
+      expect(described_class.tokenize(line)).to eq [
+        [:tag, '<pushBold/>'], [:tag, '<a exist="123" noun="goblin">'], [:text, 'a goblin'], [:tag, '</a>'],
+        [:tag, '<popBold/>']
+      ]
     end
 
     # ---- Adversarial: attribute edge cases ----
@@ -238,9 +236,7 @@ RSpec.describe XmlTokenizer do
 
     it 'handles tags with single-quoted and double-quoted attributes on same line' do
       line = %q{<preset id='roomDesc'><style id="roomName"/>}
-      result = described_class.tokenize(line)
-      expect(result.length).to eq 2
-      expect(result).to all(satisfy { |type, _| type == :tag })
+      expect(described_class.tokenize(line)).to eq [[:tag, %q{<preset id='roomDesc'>}], [:tag, '<style id="roomName"/>']]
     end
   end
 

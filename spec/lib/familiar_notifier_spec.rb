@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Tests FamiliarNotifier event extraction (auction, empath, almanac, scroll,
+# Tests FamiliarNotifier notifications (auction, empath, almanac, scroll,
 # focus, lockbox, tarantula, script STATUS) and check_familiar_notification
 # event emission with monsterbold colors.
 
@@ -33,101 +33,109 @@ RSpec.describe FamiliarNotifier do
     events
   end
 
-  describe '#extract_notification (private)' do
-    subject(:extract) { host.send(:extract_notification, text) }
+  # The texts sent to the notification stream for one game line, through
+  # the public entry point the game text processor calls.
+  def notifications_for(text)
+    events = collect_stream_events
+    host.check_familiar_notification(text)
+    events.map { |event| event[:text] }
+  end
+
+  describe 'the notification sent for a game line' do
+    subject(:notifications) { notifications_for(text) }
 
     # ---- Positive matches ----
 
     context 'with auction announcement' do
       let(:text) { 'Auctioneer Endlar bangs his gavel and yells, "Bidding is now open for lot 5!"' }
-      it { is_expected.to eq text }
+      it { is_expected.to eq [text] }
     end
 
     context 'with empath healthy assessment' do
       let(:text) { 'You sense nothing wrong with Mahtra' }
-      it { is_expected.to eq 'Mahtra is all healthy.' }
+      it { is_expected.to eq ['Mahtra is all healthy.'] }
     end
 
     context 'with almanac discovery' do
       let(:text) { "You believe you've learned something significant about Foraging!" }
-      it { is_expected.to eq 'Almanac: Foraging' }
+      it { is_expected.to eq ['Almanac: Foraging'] }
     end
 
     context 'with two-word almanac topic' do
       let(:text) { "You believe you've learned something significant about First Aid!" }
-      it { is_expected.to eq 'Almanac: First Aid' }
+      it { is_expected.to eq ['Almanac: First Aid'] }
     end
 
     context 'with scroll spell' do
       let(:text) { 'contains a complete description of the Fire Ball spell' }
-      it { is_expected.to eq 'Scroll spell: Fire Ball' }
+      it { is_expected.to eq ['Scroll spell: Fire Ball'] }
     end
 
     context 'with focus effect start' do
       let(:text) { 'You raise the bead up, and a black glow surrounds it' }
-      it { is_expected.to eq 'Focus effect started.' }
+      it { is_expected.to eq ['Focus effect started.'] }
     end
 
     context 'with focus effect end' do
       let(:text) { 'The glow slowly fades away from around you' }
-      it { is_expected.to eq 'Focus effect ended.' }
+      it { is_expected.to eq ['Focus effect ended.'] }
     end
 
     context 'with lockbox loot summary' do
       let(:text) { 'Spent 5000 silvers looting 10 boxes.' }
-      it { is_expected.to eq 'Spent 5000 silvers looting 10 boxes.' }
+      it { is_expected.to eq ['Spent 5000 silvers looting 10 boxes.'] }
     end
 
     context 'with waiting list' do
       let(:text) { 'Mahtra just opened the waiting list.' }
-      it { is_expected.to eq text }
+      it { is_expected.to eq [text] }
     end
 
     context 'with hand-holding' do
       let(:text) { 'Cleric reaches over and holds your hand' }
-      it { is_expected.to eq text }
+      it { is_expected.to eq [text] }
     end
 
     context 'with pull-away' do
       let(:text) { 'Mahtra just tried to take your hand, but you politely pulled away' }
-      it { is_expected.to eq text }
+      it { is_expected.to eq [text] }
     end
 
     context 'with next on list' do
       let(:text) { 'Grocha is next on the healer list' }
-      it { is_expected.to eq text }
+      it { is_expected.to eq [text] }
     end
 
     context 'with tarantula sacrifice' do
       let(:text) { 'Tarantula successfully sacrificed 15/34 of Mahtra at the altar' }
-      it { is_expected.to eq 'Tarantula: Mahtra 15/34' }
+      it { is_expected.to eq ['Tarantula: Mahtra 15/34'] }
     end
 
-    # ---- Negative matches (should NOT produce notifications) ----
+    # ---- Lines that send no notification ----
 
     context 'with normal game text' do
       let(:text) { 'A goblin attacks you!' }
-      it { is_expected.to be_nil }
+      it { is_expected.to be_empty }
     end
 
     context 'with empty text' do
       let(:text) { '' }
-      it { is_expected.to be_nil }
+      it { is_expected.to be_empty }
     end
 
     context 'with whitespace-only text' do
       let(:text) { '   ' }
-      it { is_expected.to be_nil }
+      it { is_expected.to be_empty }
     end
 
     context 'with partial auction text' do
       let(:text) { 'Auctioneer Endlar waves hello' }
-      it { is_expected.to be_nil }
+      it { is_expected.to be_empty }
     end
 
     context 'with "sense" in non-empath context' do
       let(:text) { 'You sense a disturbance in the force' }
-      it { is_expected.to be_nil }
+      it { is_expected.to be_empty }
     end
 
     # ---- Adversarial ----
@@ -135,27 +143,31 @@ RSpec.describe FamiliarNotifier do
     context 'with script STATUS that starts with digits (should be suppressed)' do
       let(:text) { '[script: ***STATUS*** 500 seconds remaining' }
       # The pattern has (?!\d+) negative lookahead after STATUS
-      it { is_expected.to be_nil }
+      it { is_expected.to be_empty }
     end
 
     context 'with script STATUS that starts with non-digits' do
       let(:text) { '[custom/script: ***STATUS*** running smoothly' }
-      it { is_expected.not_to be_nil }
+      it { is_expected.to eq ['script: running smoothly'] }
     end
 
     context 'with hyphenated script name' do
       let(:text) { '[combat-trainer: ***STATUS*** Killing a rat]' }
-      it { is_expected.to eq 'combat-trainer: Killing a rat' }
+      it { is_expected.to eq ['combat-trainer: Killing a rat'] }
     end
 
     context 'with hyphenated custom/ script name' do
       let(:text) { '[custom/my-script: ***STATUS*** waiting]' }
-      it { is_expected.to eq 'my-script: waiting' }
+      it { is_expected.to eq ['my-script: waiting'] }
     end
 
-    context 'with very long text' do
-      let(:text) { 'You sense nothing wrong with ' + 'A' * 1000 }
-      it { is_expected.to include('is all healthy.') }
+    context 'with a very long name' do
+      let(:long_name) { 'A' * 1000 }
+      let(:text) { "You sense nothing wrong with #{long_name}" }
+
+      it 'shows the whole name' do
+        expect(notifications).to eq ["#{long_name} is all healthy."]
+      end
     end
   end
 
@@ -181,6 +193,7 @@ RSpec.describe FamiliarNotifier do
       expect(events.last[:stream]).to eq 'familiar'
     end
 
+    # Runs with no subscriber on the event bus.
     it 'asks for a screen update when a notification is sent' do
       host.check_familiar_notification('You sense nothing wrong with Mahtra')
       expect(host.pending_render.update_requested?).to be true
@@ -213,11 +226,6 @@ RSpec.describe FamiliarNotifier do
       host.check_familiar_notification('You sense nothing wrong with Mahtra')
       expect(events.last[:text]).to eq 'Mahtra is all healthy.'
       expect(events.last[:colors]).to be_empty
-    end
-
-    it 'does not crash when no subscribers are listening' do
-      # No subscriber on the event bus — emit should be a no-op
-      expect { host.check_familiar_notification('You sense nothing wrong with Mahtra') }.not_to raise_error
     end
 
     it 'leaves the colors of the game line that triggered the notification alone' do

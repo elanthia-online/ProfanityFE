@@ -3,6 +3,10 @@
 # Tests KillRing's readline-style accumulation: kills between #before and
 # #after share one buffer until #end_sequence, and a new sequence starts
 # a fresh buffer and captures the original text.
+#
+# Which end of the buffer a kill adds to (backward kills prepend, forward
+# kills append) is CommandBuffer's job; command_buffer_spec's 'kill
+# sequences' examples check it through the real editing keys.
 
 require_relative '../../lib/kill_ring'
 
@@ -66,27 +70,6 @@ RSpec.describe KillRing do
       kill('hello world') { ring.buffer += ' world' }
       ring.end_sequence
       expect(ring.buffer).to eq ' world'
-    end
-  end
-
-  describe 'multi-kill accumulation workflow' do
-    it 'appends forward kills' do
-      kill('hello big world') { ring.buffer += ' big' }
-      kill('hello world') { ring.buffer += ' world' }
-      expect(ring.buffer).to eq ' big world'
-    end
-
-    it 'prepends backward kills' do
-      kill('hello world') { ring.buffer = 'world' + ring.buffer }
-      kill('hello ') { ring.buffer = 'hello ' + ring.buffer }
-      expect(ring.buffer).to eq 'hello world'
-    end
-
-    it 'does not join kills separated by another command' do
-      kill('one two') { ring.buffer = 'two' + ring.buffer }
-      ring.end_sequence
-      kill('one ') { ring.buffer = 'one ' + ring.buffer }
-      expect(ring.buffer).to eq 'one '
     end
   end
 end

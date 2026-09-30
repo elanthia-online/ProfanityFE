@@ -179,18 +179,11 @@ RSpec.describe SharedState do
       expect(IO).not_to have_received(:popen)
     end
 
-    it 'sets process title' do
+    it 'sets the process title to the same title' do
       state.prompt_text = 'H>'
       state.room_title = 'Town Square'
       state.update_terminal_title
-      expect(Process).to have_received(:setproctitle).with(/Mahtra/)
-    end
-
-    it 'includes room in title' do
-      state.prompt_text = 'H>'
-      state.room_title = 'Town Square'
-      state.update_terminal_title
-      expect(Process).to have_received(:setproctitle).with(/Town Square/)
+      expect(Process).to have_received(:setproctitle).with('Mahtra [H:Town Square]')
     end
 
     it 'skips when char_name is nil' do
@@ -235,23 +228,24 @@ RSpec.describe SharedState do
       expect(Process).to have_received(:setproctitle).once
     end
 
-    # Adversarial
-    it 'handles empty room_title' do
+    it 'drops the room from the title when the room title is cleared' do
       state.prompt_text = 'H>'
+      state.room_title = 'Town Square'
+      state.update_terminal_title
       state.room_title = ''
-      expect { state.update_terminal_title }.not_to raise_error
+      expect(tty_bytes).to eq "\e]0;Mahtra [H:Town Square]\a\e]0;Mahtra [H]\a"
     end
 
-    it 'handles empty prompt_text' do
+    it 'shows only the room when the prompt is empty' do
       state.prompt_text = ''
       state.room_title = 'Room'
-      expect { state.update_terminal_title }.not_to raise_error
+      expect(tty_bytes).to eq "\e]0;Mahtra [Room]\a"
     end
 
-    it 'handles room_title with special characters' do
+    it 'keeps brackets, parentheses, ampersands and quotes in the room title' do
       state.prompt_text = '>'
       state.room_title = "Room [with] (parens) & 'quotes'"
-      expect { state.update_terminal_title }.not_to raise_error
+      expect(tty_bytes).to eq "\e]0;Mahtra [Room [with] (parens) & 'quotes']\a"
     end
   end
 end
