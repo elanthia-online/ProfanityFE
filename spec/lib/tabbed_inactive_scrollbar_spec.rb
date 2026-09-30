@@ -283,6 +283,22 @@ RSpec.describe 'An inactive tabbed window' do
 
   # The wheel runs the scroll-one-line actions, which act on the active
   # window whatever the pointer is over.
+  # A line in a background tab marks that tab in the tab bar ('*'). The
+  # shown tab didn't change, so nothing else flushes the window: the tab
+  # bar has to flush itself, or the mark reaches the screen only at the
+  # next redraw. (A resize used to check this in passing, through the
+  # inactive scrollbar's flushes between the window's.)
+  it 'flushes the tab bar when a line marks a background tab' do
+    press('next_tab')
+    tabbed.call_log.clear
+
+    tabbed.route_string('c9', [], 'combat')
+
+    expect(tabbed.rows.first).to eq ' 1:combat* | 2:logons'
+    mark_written = tabbed.call_log.rindex { |meth, _args| meth == :addstr }
+    expect(tabbed.call_log.drop(mark_written + 1).map(&:first)).to include(:noutrefresh)
+  end
+
   it 'is not scrolled by the wheel over it: the active window is' do
     allow(ProfanitySettings).to receive(:load_mouse_settings)
       .and_return('BUTTON4_PRESSED_MASK' => 0x10000, 'BUTTON5_PRESSED_MASK' => 0x200000)
