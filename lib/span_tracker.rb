@@ -9,7 +9,9 @@
 # The text parsed so far is handed off at a mid-line flush (a stream
 # switch, a room capture) and at the end of the line; each hand-off takes
 # the runs recorded for its text. Each kind of span has its own rules for
-# closing and for each hand-off, in {POLICIES}.
+# closing and for each hand-off, in {POLICIES}. A tracker built with
+# {ROOM_MARKS} tracks only bold and links, and records them whatever their
+# colors: the room marks the room pipeline reads creatures and links from.
 #
 # Positions are offsets into the text since the last hand-off. A span
 # carried past a hand-off restarts at 0.
@@ -62,29 +64,49 @@ class SpanTracker
     [:link,   true,  :colored,      :drop,          :drop,        :keep]
   ].to_h { |kind, *rules| [kind, Policy.new(*rules)] }.freeze
 
+  # The rules for the room marks: where the room pipeline finds a line's
+  # bold text (creatures) and links, whatever their colors.
+  #
+  # Bold and links follow the {POLICIES} rules for the same kinds, so the
+  # marks cover the same text as the color runs, except that every closed
+  # span records a mark, and bold records its mark at a flush even without
+  # a color. A mark is a run with +mark: :bold+ or +mark: :link+ (and a
+  # link's +:cmd+), so it tells its kind even for a link without a
+  # command.
+  ROOM_MARKS = [
+    # kind  stack record   at_flush at_last_text at_line_end
+    [:bold, true, :always, :split,  :keep,       :drop],
+    [:link, true, :always, :drop,   :drop,       :keep]
+  ].to_h { |kind, *rules| [kind, Policy.new(*rules)] }.freeze
+
   # Start with no span open and no run recorded.
-  def initialize
-    @open = POLICIES.keys.to_h { |kind| [kind, []] }
+  #
+  # @param policies [Hash{Symbol => Policy}] the kinds of span tracked and
+  #   their rules: {POLICIES} for the color runs, {ROOM_MARKS} for the
+  #   room marks
+  def initialize(policies = POLICIES)
+    @policies = policies
+    @open = policies.keys.to_h { |kind| [kind, []] }
     @runs = []
     @prompt = false
   end
 
   # Open a span.
   #
-  # @param kind [Symbol] a key of {POLICIES}
+  # @param kind [Symbol] a kind of span tracked (see {#initialize})
   # @param start [Integer] position in the text where the span starts
   # @param attrs [Hash] the span's colors (+fg+, +bg+, +ul+) and, for a
   #   link, its +cmd+; they become the run's keys, in the order given
   # @return [void]
   def open(kind, start, **attrs)
     span = { start: start, **attrs }
-    POLICIES.fetch(kind).stack ? @open[kind].push(span) : @open[kind].replace([span])
+    @policies.fetch(kind).stack ? @open[kind].push(span) : @open[kind].replace([span])
   end
 
   # Close the innermost open span of a kind, recording its run if the
   # kind's policy says so. Does nothing if none is open.
   #
-  # @param kind [Symbol] a key of {POLICIES}
+  # @param kind [Symbol] a kind of span tracked (see {#initialize})
   # @param end_pos [Integer] position in the text where the span ends
   # @yieldparam span [Hash] the span, with its +:end+ set, before its run is
   #   recorded (a link fills in its command here)
@@ -94,7 +116,7 @@ class SpanTracker
 
     span[:end] = end_pos
     yield span if block_given?
-    @runs.push(span) if record?(span, POLICIES[kind].record)
+    @runs.push(span) if record?(span, @policies[kind].record)
     span
   end
 
@@ -129,7 +151,7 @@ class SpanTracker
   # @return [void]
   def end_line
     ending = @prompt ? %i[drop until_prompt] : %i[drop]
-    POLICIES.each { |kind, policy| @open[kind].clear if ending.include?(policy.at_line_end) }
+    @policies.each { |kind, policy| @open[kind].clear if ending.include?(policy.at_line_end) }
     @prompt = false
   end
 
@@ -143,7 +165,7 @@ class SpanTracker
 
   # The innermost open span of a kind.
   #
-  # @param kind [Symbol] a key of {POLICIES}
+  # @param kind [Symbol] a kind of span tracked (see {#initialize})
   # @return [Hash, nil] a copy of the span, or nil if none is open
   def open_span(kind)
     @open.fetch(kind).last&.dup
@@ -159,7 +181,7 @@ class SpanTracker
   #   +:at_last_text+)
   # @return [Array<Hash>] the runs for the text handed off
   def hand_off(length, rule)
-    POLICIES.each do |kind, policy|
+    @policies.each do |kind, policy|
       case (action = policy.public_send(rule))
       when :split, :split_colored
         @open[kind].each do |span|

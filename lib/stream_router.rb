@@ -158,16 +158,18 @@ class StreamRouter
   # @param text [String] game text, tags removed and entities unescaped
   # @param colors [Array<Hash>] the line's color regions (highlights are
   #   added to this array)
+  # @param marks [Array<Hash>] the room marks for +text+ (see
+  #   SpanTracker::ROOM_MARKS), for a room component
   # @param room_captured [Boolean] whether the room assembler captured the
   #   line from main text (its leading space is dropped, and it isn't indented)
   # @return [void]
-  def route(text, colors, room_captured: false)
+  def route(text, colors, marks:, room_captured: false)
     # Apply highlight patterns to all routable streams
     HighlightProcessor.apply_highlights(text, colors) if routable?
     return if text.strip.empty?
 
     if @current_stream
-      route_stream_text(text, colors)
+      route_stream_text(text, colors, marks)
     elsif @wm.stream[MAIN_STREAM]
       route_main_text(text, colors, room_captured)
     end
@@ -211,9 +213,10 @@ class StreamRouter
   #
   # @param text [String] non-blank game text
   # @param colors [Array<Hash>] its color regions
+  # @param marks [Array<Hash>] its room marks
   # @return [void]
   # @api private
-  def route_stream_text(text, colors)
+  def route_stream_text(text, colors, marks)
     return if @current_stream == Streams::COMBAT && text.match(GagPatterns.combat_regexp)
 
     # LNet chat arrives on the thoughts stream. Move it to the lnet window
@@ -224,7 +227,7 @@ class StreamRouter
     end
 
     # Handle room components for dedicated RoomWindow
-    room_result = @room.process_room_stream(text, @current_stream, colors)
+    room_result = @room.process_room_stream(text, @current_stream, marks)
     if room_result == :consumed
       return
     elsif room_result == :continue

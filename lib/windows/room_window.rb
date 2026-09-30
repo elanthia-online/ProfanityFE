@@ -61,6 +61,7 @@ class RoomWindow < BaseWindow
     @exits = ''
     @exits_links = []
     @lich_exits = ''
+    @lich_exits_links = []
     @room_number = ''
     @stringprocs = ''
     @rendered_lines = [] # {text:, colors:} per window row, for link_cmd_at
@@ -128,12 +129,15 @@ class RoomWindow < BaseWindow
     @exits_links = links
   end
 
-  # Update the Lich-injected supplemental exits (non-cardinal "Room Exits:").
+  # Update the Lich-injected supplemental exits (non-cardinal "Room Exits:")
+  # with pre-computed link data.
   #
-  # @param text [String] the raw Lich exits text (may contain <d> link tags)
+  # @param text [String] clean Lich exits text
+  # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
   # @return [void]
-  def update_lich_exits(text)
+  def update_lich_exits(text, links: [])
     @lich_exits = text.strip
+    @lich_exits_links = links
   end
 
   # Update the room number text.
@@ -158,6 +162,7 @@ class RoomWindow < BaseWindow
   # @return [void]
   def clear_supplemental
     @lich_exits = ''
+    @lich_exits_links = []
     @room_number = ''
     @stringprocs = ''
   end
@@ -207,7 +212,7 @@ class RoomWindow < BaseWindow
     exits.concat(exits_rows(@exits, @exits_links)) unless @exits.empty?
 
     # Lich supplemental exits (non-cardinal "Room Exits:")
-    exits.concat(lich_exits_rows(@lich_exits)) unless @lich_exits.empty?
+    exits.concat(exits_rows(@lich_exits, @lich_exits_links)) unless @lich_exits.empty?
 
     below = []
 
@@ -320,6 +325,8 @@ class RoomWindow < BaseWindow
     preset_name = @creatures_preset || Presets::MONSTERBOLD
     if (colors = Presets.colors(preset_name))
       @extracted_creatures.each do |creature|
+        next if creature.empty? # it would match at pos without moving on
+
         # Whole words only ("rat" not inside "pirate"); apostrophes and
         # hyphens count as part of a word, as in "Adan'f" or "void-black".
         whole_word = /(?<![[:word:]'-])#{Regexp.escape(creature)}(?![[:word:]'-])/
@@ -335,7 +342,8 @@ class RoomWindow < BaseWindow
     wrap_rows(@objects, line_colors)
   end
 
-  # Wrap the exits section with pre-computed clickable direction links.
+  # Wrap an exits section (the game's, or Lich's "Room Exits:") with
+  # pre-computed clickable links; an empty list of exits ends in "none.".
   #
   # @param text [String] clean exits text
   # @param links [Array<Hash>] pre-computed link regions
@@ -345,20 +353,6 @@ class RoomWindow < BaseWindow
     clean_text = text.rstrip.end_with?(':') ? "#{text} none." : text
 
     line_colors = build_link_colors(links)
-    HighlightProcessor.apply_highlights(clean_text, line_colors)
-    wrap_rows(clean_text, line_colors)
-  end
-
-  # Wrap Lich-injected exits (may still contain raw XML from Lich injection).
-  # Uses extract_links as these come from inline text, not SAX-processed components.
-  #
-  # @param text [String] raw Lich exits text
-  # @return [Array<Hash>] the section's rows (see {#wrap_rows})
-  # @api private
-  def lich_exits_rows(text)
-    clean_text, line_colors = LinkExtractor.extract_links(text, links_enabled: links_enabled)
-    clean_text = "#{clean_text} none." if clean_text.rstrip.end_with?(':')
-
     HighlightProcessor.apply_highlights(clean_text, line_colors)
     wrap_rows(clean_text, line_colors)
   end

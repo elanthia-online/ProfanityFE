@@ -1,0 +1,29 @@
+<component id='room objs'>You also see a floating vessel of flaring crimson light.</component>
+<prompt time="1787779884">&gt;</prompt>
+<roundTime value='1787779904'/><nav/>
+<streamWindow id='main' title='Story' subtitle=" - [The Heavens] (**)" location='center' target='drop'/>
+<streamWindow id='room' title='Room' subtitle=" - [The Heavens] (**)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'></component>
+<component id='room objs'></component>
+<component id='room players'></component>
+<component id='room exits'></component>
+<component id='room extra'></component>
+<nav rm='230008'/>
+<streamWindow id='main' title='Story' subtitle=" - [Bosque Deriel, Hermit's Shacks] (230008)" location='center' target='drop'/>
+<streamWindow id='room' title='Room' subtitle=" - [Bosque Deriel, Hermit's Shacks] (230008)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>Here on the route between the sacred sites of the Observatory and the Faery Ring is a semi-circular clearing.</component>
+<component id='room objs'>You also see a floating vessel of flaring crimson light.</component>
+<component id='room players'>Also here: Holdigor, Inquisitor Eylise, War 'Tog Draze and Quilsilgas.</component>
+<component id='room exits'>Obvious paths: <d>north</d>, <d>south</d>.<compass></compass></component>
+<component id='room extra'></component>
+You scan the skies for a few moments.
+Xibar is unobscured by clouds.
+The blue moon Xibar is a growing crescent of light.
+It is fairly close and is shining brightly.
+
+You see nothing else of note.
+Roundtime: 20 sec.
+<component id='room objs'>You also see a floating vessel of flaring crimson light.</component>
+<component id='room players'>Also here: Holdigor, Inquisitor Eylise, War 'Tog Draze and Quilsilgas.</component>
+<prompt time="1787779884">R&gt;</prompt>
+Quilsilgas glances up at the sky.

@@ -1,0 +1,12 @@
+<resource picture="0"/><style id="roomName" />[Bosque Deriel, Hermit's Shacks] (230008)
+<style id=""/><preset id='roomDesc'>Here on the route between the sacred sites of the Observatory and the Faery Ring is a semi-circular clearing.</preset>  You also see a floating vessel of flaring crimson light.
+Also here: Druid Ytterby.
+Obvious paths: <d>north</d>, <d>south</d>.
+<compass><dir value="n"/><dir value="s"/></compass><prompt time="1785983492">&gt;</prompt>
+You will no longer see room IDs when LOOKing in the game and room windows.
+<prompt time="1785983500">&gt;</prompt>
+<resource picture="0"/><style id="roomName" />[Bosque Deriel, Hermit's Shacks]
+<style id=""/><preset id='roomDesc'>Here on the route between the sacred sites of the Observatory and the Faery Ring is a semi-circular clearing.</preset>  You also see a floating vessel of flaring crimson light.
+Also here: Druid Ytterby.
+Obvious paths: <d>north</d>, <d>south</d>.
+<compass><dir value="n"/><dir value="s"/></compass><prompt time="1785983500">&gt;</prompt>

@@ -39,11 +39,14 @@ RSpec.describe 'Room capture' do
     )
   end
 
-  # Feed raw server lines through GameTextProcessor#run, as the socket would.
+  # Feed raw server lines through GameTextProcessor#run, as the socket
+  # would. The first prompt sends a LOOK to the server, which takes it.
   def receive_from_server(*lines)
     queue = lines.map { |line| "#{line}\r\n" }
     server = Object.new
     server.define_singleton_method(:gets) { queue.shift&.dup }
+    server.define_singleton_method(:puts) { |_command| nil }
+    server.define_singleton_method(:flush) { nil }
     @processor.run(server)
   end
 
@@ -151,13 +154,29 @@ RSpec.describe 'Room capture' do
     expect(main_rows).to be_empty
   end
 
-  it 'ends a roomDesc style capture at any preset close inside it' do
+  # Decided (PLAN §9 Q2 (a)): the description is the text the capture
+  # took, so the room window loses the text after the preset, and main is
+  # unchanged.
+  it 'ends a roomDesc style capture at any preset close inside it, with the text before the close' do
     load_layout
     state.room_window_only = true
 
     receive_from_server(%(<style id='roomDesc'/>A <preset id='speech'>b</preset> c.<style id=''/>), 'Obvious paths: north.')
 
-    expect(room_rows).to eq ['A b c.', 'Obvious paths: north.']
+    expect(room_rows).to eq ['A b', 'Obvious paths: north.']
     expect(main_rows).to eq [' c.']
+  end
+
+  # As Q2 (a): a stream pushed inside a roomDesc style flushes the text
+  # before it, and the description is the text the capture took. (Read
+  # from the raw line, the row was "A foo c.", with the pushed stream's
+  # text in it.)
+  it 'ends a roomDesc style capture where a stream is pushed inside it' do
+    load_layout
+
+    receive_from_server(%(<style id='roomDesc'/>A <pushStream id='thoughts'/>foo<popStream/> c.<style id=''/>), 'Obvious paths: north.')
+
+    expect(room_rows).to eq ['A', 'Obvious paths: north.']
+    expect(main_rows).to eq ['A', 'foo', ' c.', 'Obvious paths: north.']
   end
 end

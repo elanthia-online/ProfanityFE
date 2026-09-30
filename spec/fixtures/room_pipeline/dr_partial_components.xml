@@ -1,0 +1,10 @@
+<nav rm='2280067'/>
+<streamWindow id='main' title='Story' subtitle=" - [Undergondola, Narrow Path] (2280067)" location='center' target='drop'/>
+<streamWindow id='room' title='Room' subtitle=" - [Undergondola, Narrow Path] (2280067)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>Widening and flattening out, the steep climb begins to level into a narrow path up the mountainside.  Tall purple lupine blossoms line the trail, their fragrance mingling with the crisp mountain air in a refreshing pause on an arduous journey.</component>
+<component id='room extra'></component>
+<resource picture="0"/><style id="roomName" />[Undergondola, Narrow Path] (2280067)
+<style id=""/>  You also see a stone wall.
+Obvious paths: <d>up</d>, <d>down</d>.
+<compass><dir value="up"/><dir value="down"/></compass><component id='room players'></component>
+<prompt time="1787793496">&gt;</prompt>

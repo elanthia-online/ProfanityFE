@@ -1,0 +1,12 @@
+<streamWindow id='room' title='Room' subtitle=" - [Kaal Utewg, Understory] (4219301)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>The faint path leading into the forest vanishes within the ghostly mist that snakes its way around gnarled and twisted tree trunks.  Night reigns unchallenged.</component>
+<component id='room objs'>You also see <pushBold/>a fuligin umbral moth<popBold/>, a fuligin moth antenna, a sloping path framed by craggy trees, <pushBold/>a fuligin umbral moth<popBold/>, some knee-high cotton boots and some junk.</component>
+<component id='room players'>Also here: Randomly Bias Dartwin.</component>
+<component id='room exits'>Obvious paths: <d>northeast</d>, <d>east</d>, <d>southeast</d>.<compass></compass></component>
+<component id='room extra'></component>
+<resource picture="0"/><style id="roomName" />[Kaal Utewg, Understory] (4219301)
+<style id=""/><preset id='roomDesc'>The faint path leading into the forest vanishes within the ghostly mist that snakes its way around gnarled and twisted tree trunks.  Night reigns unchallenged.</preset>  You also see <pushBold/>a fuligin umbral moth<popBold/>, a fuligin moth antenna, a sloping path framed by craggy trees, <pushBold/>a fuligin umbral moth<popBold/>, some knee-high cotton boots and some junk.
+Also here: Randomly Bias Dartwin.
+Obvious paths: <d>northeast</d>, <d>east</d>, <d>southeast</d>.
+<compass><dir value="ne"/><dir value="e"/><dir value="se"/></compass><component id='room players'>Also here: Randomly Bias Dartwin.</component>
+<prompt time="1790390747">&gt;</prompt>
