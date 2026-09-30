@@ -329,5 +329,39 @@ RSpec.describe 'Inline room lines' do
       }
       expect(creatures.keys.to_h { |markup| [markup, red_runs_for("You also see #{markup}")] }).to eq creatures
     end
+
+    # Characterization: the tag parser drops a <b> left open at the end of
+    # its line (only pushBold is carried to the next line).
+    it "doesn't take a bold left open on an earlier line into a creature" do
+      load_layout
+      receive_from_server('<style id="roomName" />[A]', '<b>A glint', 'You also see a rat<popBold/> and a box.', exits_line)
+
+      expect(room_rows[1]).to eq 'You also see a rat and a box.'
+      expect(red_runs('You also see')).to eq []
+    end
+
+    # A bold span open at a mid-line flush (here the roomDesc preset's
+    # close) goes on in the text after the flush from its start, as the
+    # main window draws it. (Read from the raw line, the objects had no
+    # creature: their text held only the span's end.)
+    it 'draws a bold span that goes on past a roomDesc preset in the objects after it' do
+      load_layout
+      receive_from_server('<style id="roomName" />[A]',
+                          "<preset id='roomDesc'>A <pushBold/>dark</preset>You also see a rat<popBold/>.", exits_line)
+
+      expect(room_rows[2]).to eq 'You also see a rat.'
+      expect(red_runs('You also see')).to eq ['You also see a rat']
+    end
+
+    # Bold left open at the end of a line is carried to the next
+    # (GameTextProcessor#carry_bold), and the main window draws it there;
+    # read from the raw line, the objects had no creature.
+    it 'draws a bold span carried from the line before in the objects' do
+      load_layout
+      receive_from_server('<style id="roomName" />[A]', '<pushBold/>A glint', 'You also see a rat<popBold/> and a box.', exits_line)
+
+      expect(room_rows[1]).to eq 'You also see a rat and a box.'
+      expect(red_runs('You also see')).to eq ['You also see a rat']
+    end
   end
 end
