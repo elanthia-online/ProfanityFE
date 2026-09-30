@@ -83,6 +83,9 @@ class RoomAssembler
     # Whether Lich's lines (Room Exits, Room Number, StringProcs) are in the
     # room window, for the inline commit, which clears them
     @lich_lines_shown = false
+    # The title row's text last sent to the room window (see #emit), for
+    # the inline commit's title rule (see #commit_title); nil before any
+    @title_row = nil
   end
 
   # A prompt arrived: it ends the burst when its line ends (see
@@ -349,6 +352,7 @@ class RoomAssembler
   #   asks itself)
   # @return [void]
   def emit(field, part, render: true)
+    @title_row = part if field == :title
     data = case field
            when :title then { text: part }
            when :objects then { text: part.text, links: part.links, creatures: part.creatures }
@@ -470,8 +474,8 @@ class RoomAssembler
   # #prompt_seen), and the view fills only the fields the burst didn't
   # deliver (a LOOK, brief mode, a room without components). The title row
   # is the one exception: it takes the roomName's text when that differs
-  # from the delivered title (Lich's room ids), so the row and the terminal
-  # title name the room alike.
+  # from the row shown (Lich's room ids, or an earlier view of the burst),
+  # so the row and the terminal title name the room alike.
   #
   # @return [void]
   def commit_view
@@ -513,15 +517,20 @@ class RoomAssembler
   end
 
   # Send the view's title row at the inline commit: the roomName's text,
-  # unless it is the title this burst delivered; with no roomName, an empty
-  # row (hidden) unless this burst delivered a title.
+  # unless the row already shows it; with no roomName, an empty row
+  # (hidden) unless this burst delivered a title.
+  #
+  # When the burst delivered a title, the roomName is compared with the
+  # row, not with the delivered title: an earlier view in the burst (two
+  # views with no prompt between) may have sent its own roomName, and the
+  # roomName sets the terminal title, so the row must follow it.
   #
   # @param title [String, nil] the view's title row text; nil without a
   #   roomName
   # @return [void]
   def commit_title(title)
     if @delivered.key?(:title)
-      emit(:title, title) if title && title != @delivered[:title]
+      emit(:title, title) if title && title != @title_row
     else
       emit(:title, title || '')
     end
