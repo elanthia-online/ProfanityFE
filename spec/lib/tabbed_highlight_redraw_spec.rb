@@ -41,6 +41,8 @@ RSpec.describe 'A selection highlight through a redraw' do
                     settings_file: settings_path, host: '127.0.0.1', port: 8000)
   end
   let(:terminal) { { lines: 24, cols: 80 } }
+  # Lines each of the two windows keeps (1000 is the layout default)
+  let(:cap) { 1000 }
   let(:mouse_events) { [] }
   let(:copied) { [] }
   # Times the layout was fitted to the terminal (WindowManager#resize)
@@ -77,10 +79,13 @@ RSpec.describe 'A selection highlight through a redraw' do
     File.write(settings_path, <<~XML)
       <settings>
         <key id='enter' action='send_command'/>
+        <key id='ctrl+a' action='switch_current_window'/>
+        <key id='ctrl+b' action='scroll_current_window_up_one'/>
         <layout id='default'>
           <window class='text' top='0' left='0' height='4' width='41' value='main'/>
-          <window class='text' top='5' left='0' height='lines-20' width='41' value='ooc'/>
-          <window class='tabbed' top='lines-14' left='0' height='lines-19' width='41' tabs='assess,voln'/>
+          <window class='text' top='5' left='0' height='lines-20' width='41' value='ooc' buffer-size='#{cap}'/>
+          <window class='tabbed' top='lines-14' left='0' height='lines-19' width='41' tabs='assess,voln'
+                  buffer-size='#{cap}'/>
           <window class='command' top='lines-1' left='0' height='1' width='80'/>
         </layout>
         <layout id='wide'>
@@ -117,8 +122,13 @@ RSpec.describe 'A selection highlight through a redraw' do
   end
 
   # Keyboard steps: drag over the window showing +stream+ from text row
-  # 1, column 2 to text row 2, column 5 (the release copies the selection).
-  def drag(stream)
+  # 1, column 2 to text row 2, column 5 (the release copies the selection),
+  # or, +upward+, the other way round: from row 2, column 5 up to row 1,
+  # column 2, which selects the same text.
+  def drag(stream, upward: false)
+    return [mouse(Curses::BUTTON1_PRESSED, stream, 2, 5), mouse(Curses::REPORT_MOUSE_POSITION, stream, 1, 3),
+            mouse(Curses::BUTTON1_RELEASED, stream, 1, 2)] if upward
+
     [mouse(Curses::BUTTON1_PRESSED, stream, 1, 2), mouse(Curses::REPORT_MOUSE_POSITION, stream, 2, 4),
      mouse(Curses::BUTTON1_RELEASED, stream, 2, 5)]
   end
@@ -155,12 +165,13 @@ RSpec.describe 'A selection highlight through a redraw' do
   # steps the block returns for that window come (+before_drag+ first).
   #
   # @param before_drag [Array] keyboard steps before each drag
+  # @param upward [Boolean] drag from the bottom up (see #drag)
   # @yieldparam kind [Symbol] :text or :tabbed
   # @yieldparam stream [String] the window's stream
   # @yieldreturn [Array] keyboard steps
-  def run_on_each_window(before_drag: [])
+  def run_on_each_window(before_drag: [], upward: false)
     steps = windows.flat_map do |kind, stream|
-      [*before_drag, *drag(stream), note(kind, :dragged), *yield(kind, stream)]
+      [*before_drag, *drag(stream, upward: upward), note(kind, :dragged), *yield(kind, stream)]
     end
     run_client(keyboard(*game_sends('ooc', *lines), *game_sends('assess', *lines), *steps))
   end
@@ -224,6 +235,48 @@ RSpec.describe 'A selection highlight through a redraw' do
 
     expect(both(:resized)).to eq [highlighted] * 2
     expect(both(:rewrapped)).to eq [{ rows: highlighted[:rows], reverse: [], highlight: false }] * 2
+  end
+
+  it 'keeps a selection dragged from the bottom up through .resize and a same-size resize' do
+    run_on_each_window(upward: true) do |kind|
+      [".resize\n", note(kind, :resized), *terminal_resize, note(kind, :same)]
+    end
+
+    expect(copied).to eq ["-four\nl5-fi"] * 2
+    expect(both(:dragged)).to eq [highlighted] * 2
+    expect(both(:resized)).to eq [highlighted] * 2
+    expect(both(:same)).to eq [highlighted] * 2
+  end
+
+  it 'keeps it in the current window scrolled back a row through .resize and a same-size resize' do
+    # Before each drag, the next window becomes the current one (ooc, then
+    # the tabbed window) and scrolls up a row: its 4 text rows show l2..l5.
+    run_on_each_window(before_drag: ["\x01", "\x02"]) do |kind|
+      [".resize\n", note(kind, :resized), *terminal_resize, note(kind, :same)]
+    end
+
+    # l3-three from column 2 to its end, and l4-four's columns 0-4
+    scrolled = { rows: %w[l2-two l3-three l4-four l5-five],
+                 reverse: (2...8).map { |x| [1, x] } + (0...5).map { |x| [2, x] }, highlight: true }
+    expect(copied).to eq ["-three\nl4-fo"] * 2
+    expect(both(:dragged)).to eq [scrolled] * 2
+    expect(both(:resized)).to eq [scrolled] * 2
+    expect(both(:same)).to eq [scrolled] * 2
+  end
+
+  context 'when a window keeps 4 lines' do
+    let(:cap) { 4 }
+
+    it 'keeps what is left of a selection whose first line was dropped through .resize' do
+      run_on_each_window do |kind, stream|
+        [*game_sends(stream, 'l7-seven', 'l8-eight'), note(kind, :appended), ".resize\n", note(kind, :resized)]
+      end
+
+      # l3 and l4 were dropped: l5-five from column 0 to 4 is left, on row 0
+      left = { rows: %w[l5-five l6-six l7-seven l8-eight], reverse: (0...5).map { |x| [0, x] }, highlight: true }
+      expect(both(:appended)).to eq [left] * 2
+      expect(both(:resized)).to eq [left] * 2
+    end
   end
 
   describe 'in a tabbed window' do
