@@ -640,6 +640,14 @@ creature highlighting), players, exits, room number, and string procs. The
 room window assembles data from the game's room-related XML streams and
 renders a complete room view.
 
+DragonRealms sends a room twice when you move: as room components, then as
+the lines the story window shows. The room window keeps what the components
+sent for that room; the lines fill in only what the components left out (a
+LOOK, which shows its own lines, brief mode, or a room sent without
+components). An objects list the game cut short ("... and some other
+stuff.") is replaced by the full list from the lines. When Lich adds a room
+id to the room name (`;display roomid title`), the title row shows it.
+
 By default, room data is echoed to both the room window and the story window.
 Pass `--room-window-only` to suppress room data from the story window.
 
