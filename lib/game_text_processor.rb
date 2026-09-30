@@ -76,9 +76,9 @@ class GameTextProcessor
   #   (--speech-ts)
   # @param clock [Clock] read for timestamps (see StreamRouter) and the
   #   server time offset (see PromptTracker#prompt_tag)
-  # @param game_rules [Games::Rules] the game's death, logon, stun and
-  #   spell-name rules (--game, see Games.rules_for); both games' when the
-  #   game isn't known
+  # @param game_rules [Games::Rules] the game's death, logon, stun,
+  #   spell-name and cut-short room list rules (--game, see
+  #   Games.rules_for); both games' when the game isn't known
   def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:,
                  boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false, clock: Clock.new,
                  game_rules: Games::BOTH_GAMES)
@@ -96,7 +96,7 @@ class GameTextProcessor
     @prompts = PromptTracker.new(shared_state: shared_state, event_bus: event_bus, pending_render: @pending_render,
                                  window_mgr: window_mgr, clock: clock, boot_profiler: boot_profiler)
     @room = RoomAssembler.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
-                              shared_state: shared_state)
+                              shared_state: shared_state, game_rules: game_rules)
     @router = StreamRouter.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
                                prompts: @prompts, room: @room, game_rules: game_rules, clock: clock,
                                speech_timestamps: speech_timestamps)
@@ -211,7 +211,9 @@ class GameTextProcessor
 
   # Process a line from the game server by tokenizing it into text and
   # tag segments, dispatching each tag to its handler, and flushing the
-  # accumulated text through handle_game_text.
+  # accumulated text through handle_game_text. Then ends the line for the
+  # span trackers and the room assembler (a prompt on the line ends the
+  # room burst only here; see RoomAssembler#prompt_seen).
   #
   # Replaces the original mutating regex-and-slice while loop. Entity
   # unescaping happens per text segment before it enters the buffer,
@@ -237,6 +239,7 @@ class GameTextProcessor
   ensure
     @spans.end_line
     @marks.end_line
+    @room.end_line
   end
 
   # Process a chunk of game text after XML tags have been stripped.

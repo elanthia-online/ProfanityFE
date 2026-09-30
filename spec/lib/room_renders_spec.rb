@@ -171,9 +171,60 @@ RSpec.describe 'Room window renders' do
       room_rows
     ]
     # Drawn for the subtitle, the desc, objs, players and exits
-    # components, and for the plain exits line and the players component
-    # after it: not for the room extra component
-    expect(room_draws - before).to eq 7
+    # components, and for the players component after the plain lines: not
+    # for the room extra component, nor for the plain exits line, whose
+    # commit sends nothing the components didn't already show
+    expect(room_draws - before).to eq 6
+  end
+
+  # Lich's lines follow the room they were sent after: the next room's
+  # commit (its plain exits line) clears them, and the window is drawn
+  # without them at that line's flush, though the commit sends nothing
+  # else. Characterization (passes on the base by design): before the
+  # commit asked for a render only when it cleared Lich's lines, it always
+  # asked.
+  it "draws the window without the last room's Lich lines at the flush after the next room's exits line" do
+    lich = ['Room Exits: go gate', 'Room Number: 1234 - (u230008)']
+    receive_from_server(*room_change, lich.last, lich.first, '<prompt time="1787793484">&gt;</prompt>', burst: true)
+    shown.clear
+
+    receive_from_server(*room_change, burst: false)
+
+    # A flush after every line up to the roomName line still shows them;
+    # the plain exits line's flush and the next don't
+    expect(shown).to eq Array.new(7, room_rows + lich) + Array.new(2, room_rows)
+  end
+
+  it "doesn't draw the window for the plain exits line of a room after the one whose Lich lines it cleared" do
+    receive_from_server(*room_change, 'Room Exits: go gate', '<prompt time="1787793484">&gt;</prompt>', burst: true)
+    receive_from_server(*room_change, burst: false)
+    before = room_draws
+
+    receive_from_server(*room_change, burst: false)
+
+    # As for a room without Lich's lines (see above)
+    expect(room_draws - before).to eq 6
+  end
+
+  # A room stream's opening tag with a subtitle changes the title the
+  # window holds but asks for no draw (AUDIT 22:00 decision 2): the flush
+  # after the next main window line doesn't show it; the next room part
+  # does.
+  # Characterization (passes on the base by design).
+  it "doesn't draw the window for a room stream's subtitle alone, and shows it with the next room part" do
+    receive_from_server(*room_change, burst: true)
+    before = room_draws
+    shown.clear
+
+    receive_from_server(%(<component id='room' subtitle=" - [Crossing, Town Green] (1234)"/>),
+                        '<prompt time="1787793484">&gt;</prompt>', 'A cold wind blows.', burst: false)
+
+    expect(room_draws - before).to eq 0
+    expect(shown).to eq [room_rows]
+
+    receive_from_server("<component id='room players'>Also here: Bob.</component>", burst: false)
+
+    expect(shown.last).to eq ['[Crossing, Town Green] (1234)', room_rows[1], 'Also here: Bob.', room_rows.last]
   end
 
   # The flush that follows the last burst is the disconnect notice's: the

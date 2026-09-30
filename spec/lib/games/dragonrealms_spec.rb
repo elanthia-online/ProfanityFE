@@ -136,4 +136,26 @@ RSpec.describe Games::DragonRealms do
       expect(described_class.logon('Mahtra joins the adventure with little fanfare.')).to be_nil
     end
   end
+
+  describe '.room_list_cut_short?' do
+    it 'is true for a room objs component that ends with the cut-short mark' do
+      expect(described_class.room_list_cut_short?('You also see a rock, a stick and some other stuff.')).to be true
+    end
+
+    it 'is false for a list that ends as a whole list does' do
+      expect(described_class.room_list_cut_short?('You also see a rock, a stick and some junk.')).to be false
+    end
+
+    it 'is false when the mark is not at the end (synthetic)' do
+      expect(described_class.room_list_cut_short?('You also see a rock and some other stuff. And a stick.')).to be false
+    end
+
+    it 'is false for "other stuff" that is not the mark (synthetic)' do
+      expect(described_class.room_list_cut_short?('You also see a rock, a stick and handsome other stuff.')).to be false
+    end
+
+    it 'is false when "and" ends a longer word (synthetic)' do
+      expect(described_class.room_list_cut_short?('You also see a rock and a bland some other stuff.')).to be false
+    end
+  end
 end

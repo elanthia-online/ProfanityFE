@@ -71,6 +71,18 @@ RSpec.describe Games::CombinedRules do
       expect(both.death_summary(' * Mahtra was just incinerated!')).to eq ''
     end
 
+    it 'finds a room list cut short when any game marks it so, even after a game that says it is not' do
+      marks_everything = Module.new do
+        extend Games::Rules
+
+        def self.room_list_cut_short?(_text) = true
+      end
+
+      expect(both.room_list_cut_short?('You also see a rock and some other stuff.')).to be true
+      expect(both.room_list_cut_short?('You also see a rock and some junk.')).to be false
+      expect(described_class.new(Games::DragonRealms, marks_everything).room_list_cut_short?('a rock and some junk.')).to be true
+    end
+
     it 'answers nil when no game has an answer' do
       expect(both.death_summary(' * Mahtra fell off a cliff.')).to be_nil
       expect(both.logon(' * Mahtra tiptoes in.')).to be_nil

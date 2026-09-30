@@ -48,6 +48,14 @@ module Games
       first_answer { |game| game.spell_abbreviation(spell_name) }
     end
 
+    # Whether any of the games marks the list as cut short.
+    #
+    # @param text [String] the component's text, tags removed and stripped
+    # @return [Boolean]
+    def room_list_cut_short?(text)
+      @games.any? { |game| game.room_list_cut_short?(text) }
+    end
+
     private
 
     # The first game's non-nil answer.

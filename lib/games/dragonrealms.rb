@@ -76,6 +76,11 @@ module Games
     # @return [Regexp]
     SHADOW_VALLEY_PATTERN = /^Just as you think the falling will never end, you crash through an ethereal barrier which bursts into a dazzling kaleidoscope of color!  Your sensation of falling turns to dizziness and you feel unusually heavy for a moment\.  Everything seems to stop for a prolonged second and then WHUMP!!!/.freeze
 
+    # How DR ends a room objs component it cut short (it caps the list at
+    # 26 items): the inline "You also see" line of the same move has them
+    # all.
+    ROOM_LIST_CUT_SHORT_PATTERN = /\band some other stuff\.\z/.freeze
+
     # Seconds of stun for a Raise Dead chant.
     RAISE_DEAD_STUN_SECONDS = 30.6
 
@@ -129,6 +134,16 @@ module Games
     #   spell has no short name
     def self.spell_abbreviation(spell_name)
       SPELL_ABBREVIATIONS[spell_name.strip]
+    end
+
+    # Whether a room objs component ends with DR's cut-short mark
+    # ({ROOM_LIST_CUT_SHORT_PATTERN}).
+    #
+    # @param text [String] the component's text, tags removed and stripped
+    # @return [Boolean] e.g. true for "You also see a rock, ... and some
+    #   other stuff."
+    def self.room_list_cut_short?(text)
+      text.match?(ROOM_LIST_CUT_SHORT_PATTERN)
     end
   end
 end

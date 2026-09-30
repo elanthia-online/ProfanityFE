@@ -3,6 +3,7 @@
 require_relative 'streams'
 require_relative 'room_title'
 require_relative 'room_part'
+require_relative 'games'
 
 # Assembles the room window's data (title, description, objects, players,
 # exits) from the two ways the game sends it, and updates the room players
@@ -17,14 +18,21 @@ require_relative 'room_part'
 #   and creatures their room marks show, are staged, and committed as one
 #   batch when the exits arrive.
 #
+# Component data owns the room it described. A burst runs from a room
+# subtitle ({#subtitle}) or a prompt ({#prompt_seen}) to the next prompt,
+# whose burst ends when its line does ({#end_line}); the inline commit
+# doesn't send again a field a component (or the subtitle, for the title)
+# delivered in the burst, and fills the rest (see #commit_view).
+#
 # UI updates are emitted on the event bus. Every room part this class sends
 # to the room window also asks for the window to be rendered at the next
-# flush (see {#show_title} and {PendingRender#request_room_render}), so a
-# burst of room parts is drawn once. The one room part sent elsewhere is
-# the subtitle on a room stream's opening tag
-# (TagHandlers#handle_stream_open): it asks for no render and shows with
-# the next one. The window manager is only asked whether the layout has a
-# RoomWindow (see #room_window?).
+# flush (see {PendingRender#request_room_render}), so a burst of room parts
+# is drawn once; for the subtitle the tag parser asks (a room streamWindow)
+# or doesn't (a room stream's opening tag, which shows with the next
+# render; see TagHandlers#handle_stream_open). The inline commit's clearing
+# of Lich's lines asks only when some are shown, so a commit that sends
+# nothing new doesn't draw the window again. The window manager is only
+# asked whether the layout has a RoomWindow (see #room_window?).
 class RoomAssembler
   # The part a room field shows when nothing was staged for it: no text.
   EMPTY_PART = RoomPart.new(text: '', links: [], creatures: []).freeze
@@ -41,27 +49,84 @@ class RoomAssembler
   # @param pending_render [PendingRender] asked for flushes and room renders
   # @param shared_state [SharedState] its +room_title+ is set from roomName
   #   text and room title component text
-  def initialize(window_mgr:, event_bus:, pending_render:, shared_state:)
+  # @param game_rules [Games::Rules] asked whether a room objs component was
+  #   cut short (see Games::Rules#room_list_cut_short?); both games' when
+  #   the game isn't known
+  def initialize(window_mgr:, event_bus:, pending_render:, shared_state:, game_rules: Games::BOTH_GAMES)
     @wm = window_mgr
     @event_bus = event_bus
     @pending_render = pending_render
     @state = shared_state
+    @game_rules = game_rules
 
     @capture_mode = nil
     # Where the description being captured starts in the text handed off
     # (see #start_capture)
     @capture_at = 0
-    # Staging for the inline commit when the exits arrive (the components
-    # stage here too): the title row's text, and a RoomPart for each other
-    # field
-    @room_pending_title = nil
-    @room_pending_desc = nil
-    @room_pending_objects = nil
-    @room_pending_players = nil
-    @room_pending_exits = nil
+    # The inline view being read, committed when its exits arrive (see
+    # #commit_view): field => the title row's text (+:title+) or a
+    # RoomPart (+:desc+, +:objects+, +:players+, +:exits+). Only the inline
+    # lines write it; the first description and players line stay, the
+    # last of the other lines wins.
+    @view = {}
     # The room (its SharedState#room_title) the room desc component last
     # described
     @component_desc_room = nil
+    # The fields the components (and the subtitle, for the title) delivered
+    # in this burst, which the inline commit doesn't send again (see
+    # #commit_view): field => the title row's text or the part
+    @delivered = {}
+    # After a prompt on the line being parsed: the fields delivered since
+    # that prompt, which are all the next burst keeps when the line ends
+    # (see #prompt_seen); nil otherwise
+    @next_burst = nil
+    # Whether Lich's lines (Room Exits, Room Number, StringProcs) are in the
+    # room window, for the inline commit, which clears them
+    @lich_lines_shown = false
+    # Whether the room window shows a room objs list the game cut short,
+    # which the inline commit leaves shown when its view has no "You also
+    # see" line; until a whole list, the room exits component or the commit
+    @cut_objects_shown = false
+    # The title row's text last sent to the room window (see #emit), for
+    # the inline commit's title rule (see #commit_title); nil before any
+    @title_row = nil
+  end
+
+  # A prompt arrived: it ends the burst when its line ends (see
+  # #end_line), so the fields the components delivered are no longer
+  # owned from then on (see #commit_view). The prompt tag comes before the
+  # line's last text is handed off, so the text on the prompt's line (an
+  # exits line's among it) is still read in the burst the prompt ends.
+  # What the components deliver after the prompt starts the next burst.
+  # What the inline lines staged stays.
+  #
+  # @return [void]
+  def prompt_seen
+    @next_burst = {}
+  end
+
+  # A server line has been parsed and its text handed off: if a prompt was
+  # on it, its burst ends, and only the fields delivered after the prompt
+  # stay owned (see #prompt_seen).
+  #
+  # @return [void]
+  def end_line
+    @delivered = @next_burst if @next_burst
+    @next_burst = nil
+  end
+
+  # A room subtitle (a room streamWindow, or a room stream's opening tag,
+  # with a subtitle) starts a burst, and delivers the title: show +text+ as
+  # the room window's title row. The inline commit then sends the title row
+  # again only when its roomName text differs (Lich's room ids).
+  #
+  # @param text [String] the title row's text (see {RoomWindow#update_title});
+  #   empty for an empty name, which hides the row
+  # @return [void]
+  def subtitle(text)
+    @delivered = { title: text }
+    @next_burst = { title: text } if @next_burst
+    emit(:title, text, render: false)
   end
 
   # Start capturing styled text for the room: +:title+ when a roomName
@@ -112,8 +177,8 @@ class RoomAssembler
   #
   # Handles title and description via capture mode, "You also see" objects,
   # "Also here:" players, "Obvious paths/exits:" exits, room number, and
-  # StringProcs.  When exits arrive (typically the last component), all
-  # pending room data is committed to the RoomWindow atomically.
+  # StringProcs.  The lines are staged as the inline view, which the exits
+  # line commits to the RoomWindow (see #commit_view).
   #
   # @param text [String] the current line of game text (XML-unescaped)
   # @param stream [String, nil] the stream the text is routed to
@@ -149,40 +214,36 @@ class RoomAssembler
 
     # Detect "You also see" for objects (may have leading whitespace)
     if text =~ /^\s*You also see\b/
-      @room_pending_objects = RoomPart.from_chunk(text, marks)
+      @view[:objects] = RoomPart.from_chunk(text, marks)
       room_data_captured = true
     end
 
-    # Detect "Also here:" for players
+    # Detect "Also here:" for players; the view keeps the first one
     if text =~ /^Also here:\s*(.+)$/
-      # Don't overwrite players the room players component staged
-      @room_pending_players ||= RoomPart.from_chunk(text, marks)
+      @view[:players] ||= RoomPart.from_chunk(text, marks)
       room_data_captured = true
     end
 
     # Detect "Obvious paths:" or "Obvious exits:" for exits (game-native)
     if text =~ /^Obvious (?:paths|exits):/
-      @room_pending_exits = RoomPart.from_chunk(text, marks)
+      @view[:exits] = RoomPart.from_chunk(text, marks)
       room_data_captured = true
       # The exits line ends an inline room: commit it (drawn at the next
       # flush)
-      commit_room_data_batch
+      commit_view
     end
 
     # Detect Lich-injected supplemental lines (come after game exits)
     if text =~ /^Room Exits:/
       exits = RoomPart.from_chunk(text, marks)
-      show(:room_lich_exits, text: exits.text, links: exits.links)
+      show_lich_line(:room_lich_exits, text: exits.text, links: exits.links)
       room_data_captured = true
-      @pending_render.request_update
     elsif text =~ /^Room Number:\s*\d+/
-      show(:room_number, text: text.strip)
+      show_lich_line(:room_number, text: text.strip)
       room_data_captured = true
-      @pending_render.request_update
     elsif text =~ /^StringProcs:/
-      show(:room_stringprocs, text: text.strip)
+      show_lich_line(:room_stringprocs, text: text.strip)
       room_data_captured = true
-      @pending_render.request_update
     end
 
     room_data_captured
@@ -190,11 +251,14 @@ class RoomAssembler
 
   # Process room-related data arriving via XML component streams.
   #
-  # Dispatches text from room component streams (room title, room desc,
-  # room objs, room players, room exits) to the appropriate pending slot
-  # and shows it in the RoomWindow. The room exits component clears the
-  # pending data; the inline "Obvious paths/exits:" line commits it (see
-  # {#process_room_data}).
+  # Shows the text of a room component stream (room title, room desc, room
+  # objs, room players, room exits) in the RoomWindow at once, and records
+  # its field as delivered in this burst (see #commit_view), except a room
+  # objs list the game cut short (see Games::Rules#room_list_cut_short?),
+  # which leaves the objects to the inline line (and stays shown if the
+  # view has none, see #commit_view). An empty component delivers an empty
+  # field: it clears it. The room exits component also drops the inline
+  # view read so far, and a cut-short list with it.
   #
   # @param text [String] component text content
   # @param stream [String, nil] the current stream
@@ -220,42 +284,38 @@ class RoomAssembler
     end
 
     part = RoomPart.from_chunk(text, marks)
-    links = part.links
-    clean = part.text
 
     # Another room stream (DR's room extra) changes nothing in the room
     # window, so it asks for no room render.
     case stream
     when Streams::ROOM, Streams::ROOM_TITLE
-      @room_pending_title = title
-      show_title(title)
+      deliver(:title, title)
     when Streams::ROOM_DESC, Streams::ROOM_DESC_ALT
-      @room_pending_desc = part
       @component_desc_room = @state.room_title
-      show(:room_desc, text: clean, links: links)
+      deliver(:desc, part)
     when Streams::ROOM_OBJS
-      @room_pending_objects = part
-      show(:room_objects, text: clean, links: links, creatures: part.creatures)
+      if @game_rules.room_list_cut_short?(part.text)
+        # A list the game cut short doesn't hold the whole room: it is shown,
+        # but the room's inline line (with every object) fills in.
+        @delivered.delete(:objects)
+        @next_burst&.delete(:objects)
+        emit(:objects, part)
+        @cut_objects_shown = true
+      else
+        deliver(:objects, part)
+        @cut_objects_shown = false
+      end
     when Streams::ROOM_PLAYERS
-      @room_pending_players = part
-      show(:room_players, text: clean, links: links)
+      deliver(:players, part)
     when Streams::ROOM_EXITS
-      @room_pending_exits = part
-      show(:room_exits, text: clean, links: links)
-      clear_pending_room_data
+      deliver(:exits, part)
+      @view.clear
+      @cut_objects_shown = false
     end
 
     @pending_render.request_update
     # Don't skip for room players - let the indicator handler also process it
     stream == Streams::ROOM_PLAYERS ? :continue : :consumed
-  end
-
-  # Show +text+ as the room window's title row, drawn at the next flush.
-  #
-  # @param text [String] the title row's text (see {RoomWindow#update_title})
-  # @return [void]
-  def show_title(text)
-    show(:room_title, text: text)
   end
 
   # Update the 'room players' indicator window with parsed player names.
@@ -285,16 +345,57 @@ class RoomAssembler
 
   private
 
-  # Send a room part to the room window and ask for the window to be
-  # rendered at the next flush. The window only stores the part (see
-  # {RoomWindow#update_exits}), so the parts of a burst are drawn once.
+  # The room window event of each room field.
+  FIELD_EVENTS = { title: :room_title, desc: :room_desc, objects: :room_objects, players: :room_players,
+                   exits: :room_exits }.freeze
+  private_constant :FIELD_EVENTS
+
+  # Send a room field to the room window: the one place the room field
+  # events are made, for both carriers.
   #
-  # @param event [Symbol] the room event (+:room_desc+, +:room_exits+, ...)
+  # @param field [Symbol] +:title+, +:desc+, +:objects+, +:players+ or +:exits+
+  # @param part [String, RoomPart] the title row's text for +:title+, else the part
+  # @param render [Boolean] whether to ask for a room render at the next
+  #   flush (#subtitle never does; for a room streamWindow the tag parser
+  #   asks itself)
+  # @return [void]
+  def emit(field, part, render: true)
+    @title_row = part if field == :title
+    data = case field
+           when :title then { text: part }
+           when :objects then { text: part.text, links: part.links, creatures: part.creatures }
+           else { text: part.text, links: part.links }
+           end
+    @event_bus.emit(FIELD_EVENTS.fetch(field), **data)
+    @pending_render.request_room_render if render
+  end
+
+  # Show a field a room component delivered, and record it as delivered in
+  # this burst (and in the next one, after a prompt on this line; see
+  # #prompt_seen), so the inline commit doesn't send it again.
+  #
+  # @param field [Symbol] the field (see #emit)
+  # @param part [String, RoomPart] the title row's text or the part
+  # @return [void]
+  def deliver(field, part)
+    @delivered[field] = part
+    @next_burst[field] = part if @next_burst
+    emit(field, part)
+  end
+
+  # Show one of the lines Lich adds after a room in the room window, asking
+  # for the window to be rendered at the next flush (the window only stores
+  # the line, so the parts of a burst are drawn once), and note that the
+  # window holds Lich lines for the inline commit to clear.
+  #
+  # @param event [Symbol] +:room_lich_exits+, +:room_number+ or +:room_stringprocs+
   # @param data [Hash] the event's data
   # @return [void]
-  def show(event, **data)
+  def show_lich_line(event, **data)
     @event_bus.emit(event, **data)
     @pending_render.request_room_render
+    @lich_lines_shown = true
+    @pending_render.request_update
   end
 
   # Whether the layout has a RoomWindow.
@@ -321,13 +422,14 @@ class RoomAssembler
       room_title = RoomTitle.parse(text)
       @state.room_title = room_title.plain if room_title
       if room_window?
-        @room_pending_title = room_title.to_s
+        @view[:title] = room_title.to_s
         captured = true
       end
     when :desc
       if room_window?
-        # Don't overwrite a description the room desc component staged
-        @room_pending_desc ||= captured_desc(text, marks)
+        # The view keeps the first description it read (a later one, a
+        # familiar's roomDesc before the exits line, doesn't replace it)
+        @view[:desc] ||= captured_desc(text, marks)
         captured = true
       end
     end
@@ -351,17 +453,6 @@ class RoomAssembler
     RoomPart.from_chunk(text, marks, from: @capture_at)
   end
 
-  # Reset all pending room data slots to nil.
-  #
-  # @return [void]
-  def clear_pending_room_data
-    @room_pending_title = nil
-    @room_pending_desc = nil
-    @room_pending_objects = nil
-    @room_pending_players = nil
-    @room_pending_exits = nil
-  end
-
   # Extract player names from "Also here: ..." room text.
   # Strips status descriptions, titles, and grouping to return bare names.
   #
@@ -378,50 +469,87 @@ class RoomAssembler
         .compact
   end
 
-  # Commit all pending room data to the RoomWindow and clear the staging area.
+  # Commit the inline view to the RoomWindow, and start a new one.
   #
   # Called by the inline "Obvious paths/exits:" line, which ends an inline
-  # room. Only commits if there is actual pending data to avoid
-  # double-updates that would clear previously committed data.
+  # room. The other fields are sent only when the view read a title,
+  # description, objects or players line, so a lone exits line doesn't
+  # clear them.
+  #
+  # Component data owns the room it described: a field a component (or the
+  # subtitle, for the title) delivered in this burst is not sent again (a
+  # prompt on the exits line ends the burst after this commit, see
+  # #prompt_seen), and the view fills only the fields the burst didn't
+  # deliver (a LOOK, brief mode, a room without components). The title row
+  # is the one exception: it takes the roomName's text when that differs
+  # from the row shown (Lich's room ids, or an earlier view of the burst),
+  # so the row and the terminal title name the room alike.
+  #
+  # A room objs list the game cut short owns nothing, so the view's "You
+  # also see" line replaces it; without one the list stays shown, as a
+  # staged list was, until this commit.
   #
   # @return [void]
-  def commit_room_data_batch
+  def commit_view
+    view = @view
+    @view = {}
+    cut_objects_shown = @cut_objects_shown
+    @cut_objects_shown = false
     return unless room_window?
 
-    # Save exits before clearing — clear_pending_room_data wipes all
-    # pending fields, but exits are emitted separately after the batch.
-    exits = @room_pending_exits || EMPTY_PART
-
-    # Only update if we have pending data (avoid double-updates clearing data)
-    if @room_pending_title || @room_pending_desc || @room_pending_objects || @room_pending_players
-      show_title(@room_pending_title || '')
+    if view.key?(:title) || view.key?(:desc) || view.key?(:objects) || view.key?(:players)
+      commit_title(view[:title])
 
       # Without a roomDesc (DR leaves it out when room descriptions are off,
       # and so does a brief LOOK) the lines keep the description the room
       # desc component, sent with every room change, gave this room. A room
       # the component didn't describe gets none, not the last room's.
-      if @room_pending_desc || @component_desc_room != @state.room_title
-        desc = @room_pending_desc || EMPTY_PART
-        show(:room_desc, text: desc.text, links: desc.links)
+      if !@delivered.key?(:desc) && (view[:desc] || @component_desc_room != @state.room_title)
+        emit(:desc, view[:desc] || EMPTY_PART)
       end
 
-      objects = @room_pending_objects || EMPTY_PART
-      show(:room_objects, text: objects.text, links: objects.links, creatures: objects.creatures)
+      unless @delivered.key?(:objects) || (cut_objects_shown && !view.key?(:objects))
+        emit(:objects, view[:objects] || EMPTY_PART)
+      end
 
-      players = @room_pending_players || EMPTY_PART
-      show(:room_players, text: players.text, links: players.links)
+      unless @delivered.key?(:players)
+        emit(:players, view[:players] || EMPTY_PART)
+      end
 
-      show(:room_supplemental_clear)
+      # Lich's lines go with the room they followed. Clearing them changes
+      # the window only when some are shown, so only then is it drawn again.
+      @event_bus.emit(:room_supplemental_clear)
+      @pending_render.request_room_render if @lich_lines_shown
+      @lich_lines_shown = false
 
-      # Also update the room players indicator (fallback for games that don't use streams)
-      update_room_players_indicator(@room_pending_players&.text)
-
-      clear_pending_room_data
+      # Also update the room players indicator (fallback for games that
+      # don't use streams); players a component delivered updated it already
+      update_room_players_indicator(view[:players]&.text) unless @delivered.key?(:players)
     end
 
-    # Always update exits (even on subsequent exit lines).
-    show(:room_exits, text: exits.text, links: exits.links)
+    # Update exits on every exits line, unless a component delivered them.
+    emit(:exits, view[:exits] || EMPTY_PART) unless @delivered.key?(:exits)
     @pending_render.request_update
+  end
+
+  # Send the view's title row at the inline commit: the roomName's text,
+  # unless the row already shows it; with no roomName, an empty row
+  # (hidden) unless this burst delivered a title.
+  #
+  # When the burst delivered a title, the roomName is compared with the
+  # row, not with the delivered title: an earlier view in the burst (two
+  # views with no prompt between) may have sent its own roomName, and the
+  # roomName sets the terminal title, so the row must follow it.
+  #
+  # @param title [String, nil] the view's title row text; nil without a
+  #   roomName
+  # @return [void]
+  def commit_title(title)
+    if @delivered.key?(:title)
+      emit(:title, title) if title && title != @title_row
+    else
+      emit(:title, title || '')
+    end
   end
 
   # Map highlight color regions from full players text to indicator label positions.

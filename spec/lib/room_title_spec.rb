@@ -276,4 +276,25 @@ RSpec.describe 'Room title' do
     expect(title_row).to eq "[Smith's Forge] (1234)"
     expect(terminal_title).to eq "Mahtra [Smith's Forge (1234)]"
   end
+
+  # Two inline views can reach one burst (a lost prompt, or none between
+  # them). Each roomName names the terminal title, so each view's must
+  # reach the row too, even when it equals the subtitle's title.
+  describe 'a second inline view in the burst of a subtitle' do
+    it 'shows the room the second view named, as the terminal title does' do
+      receive_from_server(*lines_for(:stream_window, ' - [Town Square] (1)'),
+                          "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>",
+                          *lines_for(:room_name, '[Deep Wood]'), *lines_for(:room_name, '[Town Square] (1)'),
+                          '<prompt time="1">&gt;</prompt>')
+
+      expect(row: title_row, terminal: terminal_title).to eq(row: '[Town Square] (1)', terminal: 'Mahtra [Town Square (1)]')
+    end
+
+    it 'hides the row for an empty name after a subtitle with an empty name, keeping the terminal title' do
+      receive_from_server(*lines_for(:stream_window, ' - []'), *lines_for(:room_name, '[Deep Wood]'),
+                          *lines_for(:room_name, '[]'), '<prompt time="1">&gt;</prompt>')
+
+      expect(row: title_row, terminal: terminal_title).to eq(row: nil, terminal: 'Mahtra [Deep Wood]')
+    end
+  end
 end
