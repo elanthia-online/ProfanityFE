@@ -88,8 +88,11 @@ class RoomAssembler
     # see" line; until a whole list, the room exits component or the commit
     @cut_objects_shown = false
     # The title row's text last sent to the room window (see #emit), for
-    # the inline commit's title rule (see #commit_title); nil before any
+    # the inline commit's title rule (see #commit_title) and for
+    # #subtitle's new-room test; nil before any
     @title_row = nil
+    # The text of the last room subtitle (see #subtitle); nil before any
+    @subtitle_row = nil
   end
 
   # A prompt arrived: it ends the burst when its line ends (see
@@ -120,13 +123,33 @@ class RoomAssembler
   # the room window's title row. The inline commit then sends the title row
   # again only when its roomName text differs (Lich's room ids).
   #
+  # A subtitle that names a new room also clears the exits and objects, so
+  # a burst that delivers neither (no room exits or objs component, no
+  # inline view) doesn't show the last room's under the new title; the
+  # burst's components and inline view fill them as usual. The room is new
+  # when +text+ differs both from the last subtitle and from the title row
+  # shown: a subtitle re-sent for the room shown clears nothing, when the
+  # row shows Lich's form of the roomName (its room id in the name) or a
+  # LOOK's roomName before any subtitle too. An empty name is no title
+  # (see TagHandlers#handle_stream_window), so it names no new room.
+  # Adjacent rooms of the same name look alike without room ids (DR's
+  # showroomid off), and so does a return to the last subtitle's room
+  # after a move that sent no subtitle.
+  #
   # @param text [String] the title row's text (see {RoomWindow#update_title});
   #   empty for an empty name, which hides the row
   # @return [void]
   def subtitle(text)
+    new_room = !text.empty? && text != @subtitle_row && text != @title_row
+    @subtitle_row = text
     @delivered = { title: text }
     @next_burst = { title: text } if @next_burst
     emit(:title, text, render: false)
+    return unless new_room
+
+    # Drawn with the title, asking for no render of their own
+    emit(:objects, EMPTY_PART, render: false)
+    emit(:exits, EMPTY_PART, render: false)
   end
 
   # Start capturing styled text for the room: +:title+ when a roomName
