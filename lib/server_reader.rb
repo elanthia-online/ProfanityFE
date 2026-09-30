@@ -92,6 +92,10 @@ class ServerReader
   # Process one line from the server, then flush the screen if no more
   # server data is waiting.
   #
+  # A line the handler drops is not processed and writes no terminal
+  # title, but the flush still runs: the dropped line may end a burst whose
+  # earlier lines staged text.
+  #
   # An error in one line is logged and the line is skipped, so a bad line
   # (or a failing window handler) cannot end the session. Connection errors
   # propagate to {#run}, which handles the disconnect.
@@ -108,15 +112,17 @@ class ServerReader
     line.force_encoding(Encoding::UTF_8).scrub!
     line.chomp!
     line = @line_handler.prepare_line(line)
-    return if line.nil?
 
     # Synchronize all curses operations (noutrefresh calls from indicator,
     # text, countdown, and room window updates) with the final doupdate so
     # that timer and input threads cannot flush a half-updated virtual screen.
     CursesRenderer.synchronize do
-      @line_handler.process_line(line)
+      @line_handler.process_line(line) unless line.nil?
+      # A dropped line can end a burst: flush what the lines before it staged.
       flush_if_idle
     end
+    return if line.nil?
+
     # Flush terminal title AFTER curses operations complete.
     # Writing escape sequences to $stdout inside the synchronize block
     # interleaves with curses output, causing visible artifacts.

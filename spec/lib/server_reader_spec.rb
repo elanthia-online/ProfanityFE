@@ -3,7 +3,8 @@
 # Tests ServerReader's batched flush: the screen is drawn only once no more
 # server data is waiting, a pending room render is drawn with that flush
 # (before the screen update), and a line the handler drops is neither
-# processed nor followed by a flush or a terminal title write.
+# processed nor followed by a terminal title write, but still flushes what
+# the lines before it staged.
 
 require_relative '../spec_helper'
 require_relative '../../lib/server_reader'
@@ -72,6 +73,12 @@ RSpec.describe ServerReader do
     read_lines(%w[drop])
 
     expect(timeline).to be_empty
+  end
+
+  it 'draws the screen after a dropped line that ends a burst' do
+    read_lines(%w[one drop], waiting: [true, false])
+
+    expect(timeline).to eq [[:process, 'one'], :title, :doupdate]
   end
 
   it 'reports a disconnect at the end of the stream' do
