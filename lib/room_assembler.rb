@@ -130,14 +130,17 @@ class RoomAssembler
   # when +text+ differs both from the last subtitle and from the title row
   # shown: a subtitle re-sent for the room shown clears nothing, when the
   # row shows Lich's form of the roomName (its room id in the name) or a
-  # LOOK's roomName before any subtitle too. Adjacent rooms of the same
-  # name look alike without room ids (DR's showroomid off).
+  # LOOK's roomName before any subtitle too. An empty name is no title
+  # (see TagHandlers#handle_stream_window), so it names no new room.
+  # Adjacent rooms of the same name look alike without room ids (DR's
+  # showroomid off), and so does a return to the last subtitle's room
+  # after a move that sent no subtitle.
   #
   # @param text [String] the title row's text (see {RoomWindow#update_title});
   #   empty for an empty name, which hides the row
   # @return [void]
   def subtitle(text)
-    new_room = text != @subtitle_row && text != @title_row
+    new_room = !text.empty? && text != @subtitle_row && text != @title_row
     @subtitle_row = text
     @delivered = { title: text }
     @next_burst = { title: text } if @next_burst

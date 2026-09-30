@@ -534,6 +534,35 @@ RSpec.describe 'Room ownership' do
       expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Obvious paths: [north](north).']
     end
 
+    # An empty name is no title: it hides the row and the terminal title
+    # keeps naming the last room, so it names no new room either.
+    it 'clears nothing for a subtitle with an empty name' do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt, subtitle('[]'), prompt)
+
+      expect(room_screen).to eq ['Desc of [A] (1).', 'You also see a box.', 'Obvious paths: [north](north).']
+      expect(state.room_title).to eq 'A (1)'
+    end
+
+    # What a new room does with the players is not decided, so the last
+    # room's stay until the burst delivers some.
+    it "keeps the last room's players" do
+      receive_from_server(*components('[A] (1)', players: 'Also here: Bob.'), *inline('[A] (1)'), prompt,
+                          subtitle('[B] (2)'), "<component id='room desc'>Desc of [B] (2).</component>", prompt)
+
+      expect(room_screen).to eq ['[B] (2)', 'Desc of [B] (2).', 'Also here: Bob.']
+    end
+
+    # B came by an inline view alone, then its subtitle re-sent (the room
+    # shown, so nothing cleared); the move back to A is a new room.
+    it "clears the room's objects and exits on a move back to the room before" do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt,
+                          *inline('[B] (2)', objs: '  You also see a rat.', exits: 'Obvious paths: <d>south</d>.'), prompt,
+                          subtitle('[B] (2)'), prompt,
+                          subtitle('[A] (1)'), "<component id='room desc'>Desc of [A] (1).</component>", prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).']
+    end
+
     context 'without a room window' do
       let(:room_window) { false }
 
