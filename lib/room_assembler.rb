@@ -238,7 +238,9 @@ class RoomAssembler
       exits = RoomPart.from_chunk(text, marks)
       show_lich_line(:room_lich_exits, text: exits.text, links: exits.links)
       room_data_captured = true
-    elsif text =~ /^Room Number:\s*\d+/
+    elsif text =~ /^Room Number:\s*\S/
+      # Any id: "1234", "1234 - (u230008)", or Lich's uid alone, "(u230008)"
+      # or "(**)" in a room without one
       show_lich_line(:room_number, text: text.strip)
       room_data_captured = true
     elsif text =~ /^StringProcs:/
