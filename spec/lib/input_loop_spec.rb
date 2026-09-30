@@ -216,6 +216,36 @@ RSpec.describe 'The input loop' do
       end
     end
 
+    # .key reads the next key itself, holding the render lock. A resize in
+    # its wait is not the key: it is fitted once .key is done.
+    describe 'while .key waits for a key' do
+      it 'shows the key pressed after the resize, not the resize, then fits the layout' do
+        run_client(keyboard(".key\n", resize_terminal, 'q', until_fitted))
+
+        expect(main.rows).to include('* Detected keycode: q')
+        expect(main.rows.grep(/keycode: #{Curses::KEY_RESIZE}/)).to be_empty
+        expect([main.maxy, main.maxx]).to eq main_size_at_40x150
+      end
+
+      it 'says no key was pressed when no key follows the resize, then fits the layout' do
+        run_client(keyboard(".key\n", resize_terminal, until_fitted))
+
+        expect(main.rows).to include('* No key pressed within 5 seconds')
+        expect([main.maxy, main.maxx]).to eq main_size_at_40x150
+      end
+
+      context 'when the settings file binds the resize key' do
+        let(:settings) { super().sub('</settings>', "<key id='resize' macro='look\\r'/></settings>") }
+
+        it 'runs that binding once .key has its key' do
+          run_client(keyboard(".key\n", resize_terminal, 'q', wait_until { game_server.commands.any? }))
+
+          expect(main.rows).to include('* Detected keycode: q')
+          expect(game_server.commands).to eq ['look']
+        end
+      end
+    end
+
     # A terminal drag sends a burst of resizes. The layout (and every text
     # window's re-wrap of its lines) waits until no resize has come for
     # 0.1 s, then fits once, at the final size. Time is the input loop's
@@ -273,6 +303,37 @@ RSpec.describe 'The input loop' do
             sleep 0.0002
             nil
           end
+        end
+      end
+
+      describe 'while .key waits for a key' do
+        # A keyboard step: +seconds+ pass, then the terminal is resized
+        # (as in resize_to).
+        def resize_after(seconds, lines, cols)
+          press_after(Curses::KEY_RESIZE) do
+            clock[0] += seconds
+            terminal.merge!(lines: lines, cols: cols)
+          end
+        end
+
+        # How long each read of the command window may wait, in ms
+        def key_waits = command_line.call_log.select { |name, _| name == :timeout= }.map { |_, (ms)| ms }
+
+        it "waits for what is left of .key's 5 seconds after each resize, then fits the layout once" do
+          run_client(keyboard(".key\n", resize_after(1, 50, 180), resize_after(1.5, 40, 150), 'q',
+                              pause(0.2), pause(0)))
+
+          expect(key_waits).to eq [5000, 4000, 2500]
+          expect(main.rows).to include('* Detected keycode: q')
+          expect(fitted_at).to eq [[60, 200], [40, 150]]
+        end
+
+        it 'ends the wait when a resize comes as the 5 seconds run out, then fits the layout' do
+          run_client(keyboard(".key\n", resize_after(5, 40, 150), pause(0.2), pause(0)))
+
+          expect(key_waits).to eq [5000]
+          expect(main.rows).to include('* No key pressed within 5 seconds')
+          expect(fitted_at).to eq [[60, 200], [40, 150]]
         end
       end
 

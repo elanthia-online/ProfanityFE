@@ -289,16 +289,30 @@ class Application
   # Read one key from the command window, waiting up to DOT_KEY_TIMEOUT_MS.
   #
   # {#input_loop} keeps the window in nodelay mode, where a read returns nil
-  # at once. This switches to a bounded wait for the one read, then puts
+  # at once. This switches to a bounded wait for the read, then puts
   # nodelay back even if the read raises. The caller holds the curses monitor,
   # so the server thread cannot draw during the wait; the bound keeps that
   # pause short if no key comes.
   #
+  # A terminal resize (KEY_RESIZE) is not a key press: it makes the resize
+  # pending, as in {#read_key_after_resizes}, for {#input_loop} to fit once
+  # this returns, and the wait goes on for what is left of the
+  # DOT_KEY_TIMEOUT_MS.
+  #
   # @return [Integer, String, nil] the key read (see {#read_key}), or nil
   #   if none arrived
   def wait_for_key
-    @cmd_buffer.window.timeout = DOT_KEY_TIMEOUT_MS
-    read_key
+    deadline = monotonic_now + (DOT_KEY_TIMEOUT_MS / 1000.0)
+    remaining_ms = DOT_KEY_TIMEOUT_MS
+    loop do
+      @cmd_buffer.window.timeout = remaining_ms
+      ch = read_key
+      return ch unless ch == Curses::KEY_RESIZE
+
+      @resize_due = monotonic_now + RESIZE_QUIET_SECONDS
+      remaining_ms = ((deadline - monotonic_now) * 1000).ceil
+      return nil unless remaining_ms.positive?
+    end
   ensure
     @cmd_buffer.window.nodelay = true
   end
