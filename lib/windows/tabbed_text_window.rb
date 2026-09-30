@@ -208,8 +208,8 @@ class TabbedTextWindow < BaseWindow
   # Show the window again after {#move_to_layout} moved it: move its
   # scrollbar, if it has one, beside it, re-wrap every tab's lines to the
   # new width, clear the scrollbar and redraw the tab bar and text. The
-  # scrollbar is drawn again only if the window is the active one and its
-  # shown tab has lines to show (see {#redraw}).
+  # scrollbar is drawn again if the window is the active one, whatever its
+  # shown tab holds (see {#redraw}).
   #
   # @return [void]
   # @api private
@@ -289,12 +289,12 @@ class TabbedTextWindow < BaseWindow
     add_string_to_tab(@active_tab, string, string_colors, indent: indent)
   end
 
-  # Redraw the tab bar and the active tab's content area. The scrollbar is
-  # drawn too only if the window is the active one (see
-  # {#update_scrollbar}) and it has lines to show: with no tab, an empty
-  # tab or no text rows, redraw returns before it and leaves the scrollbar
-  # as it is.
-  # An inactive window's scrollbar is left blank.
+  # Redraw the tab bar and the active tab's content area, and the
+  # scrollbar if the window is the active one (see {#update_scrollbar}),
+  # whatever the shown tab holds: an empty tab gets it as an empty text
+  # window does (marker, bar, and the thumb at the bottom). An inactive
+  # window's scrollbar is left blank. A window with no tab redraws only
+  # its (empty) tab bar and leaves the rest as it is.
   #
   # @return [void]
   def redraw
@@ -309,12 +309,8 @@ class TabbedTextWindow < BaseWindow
       clrtoeol
     end
 
-    return if tab_buffer.empty?
-
-    visible_lines = tab_buffer.visible_count(ch)
-    return if visible_lines <= 0
-
-    visible_lines.times do |i|
+    # Zero or negative (nothing to draw) for an empty tab or no text rows
+    tab_buffer.visible_count(ch).times do |i|
       _id, line_data = tab_buffer.line_at_row(i, ch)
       next unless line_data
 
