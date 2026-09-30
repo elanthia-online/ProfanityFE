@@ -354,4 +354,80 @@ RSpec.describe LineBuffer do
       expect(buffer.newest_text?('>')).to be_nil
     end
   end
+
+  describe '#fit' do
+    let(:long) { 'one two three four five six seven eight' }
+
+    # A buffer of +cap+ lines and +width+ holding +texts+, oldest first.
+    def filled(texts, cap: 10, width: 10)
+      described_class.new(cap: cap, width: width).tap do |line_buffer|
+        texts.each { |text| line_buffer.push(text, [], indent: true) }
+      end
+    end
+
+    it 'with later: true, shows on the next read what fitting at once shows' do
+      now = filled(['l1', long, 'l3', 'l4', 'l5'])
+      later = filled(['l1', long, 'l3', 'l4', 'l5'])
+      [now, later].each { |line_buffer| line_buffer.scroll_back(4, 3) }
+
+      now.fit(25, 3)
+      later.fit(25, 3, later: true)
+
+      expect(later.lines).to eq now.lines
+      expect(later.pos).to eq now.pos
+    end
+
+    it 'fits at once, keeping the view, a buffer whose re-wrap was put off to the same width' do
+      now = filled(['l1', 'l2', 'l3', long, 'l5'], width: 25)
+      later = filled(['l1', 'l2', 'l3', long, 'l5'], width: 25)
+      [now, later].each { |line_buffer| line_buffer.scroll_back(3, 3) }
+
+      # Narrower, the long line takes more rows: the view on l3 moves back
+      now.fit(10, 3)
+      later.fit(10, 3, later: true)
+      later.fit(10, 3)
+
+      expect(later.pos).to eq now.pos
+      expect(later.lines).to eq now.lines
+    end
+
+    # Seeded sequences of fits (widths 0 to 30, heights 0 to 6), lines
+    # added unseen, cap changes and reads, applied to a buffer fitted at
+    # once and to one whose re-wraps are put off: every read of the
+    # second must match the first.
+    it 'with later: true, matches fitting at once after any sequence of fits, lines and cap changes' do
+      words = %w[a bb ccc dddd eeeee ffffff]
+      200.times do |seed|
+        rng = Random.new(seed)
+        now = filled([], cap: 6, width: 10)
+        later = filled([], cap: 6, width: 10)
+        height = 3
+        40.times do
+          case rng.rand(6)
+          when 0, 1
+            width = rng.rand(0..30)
+            height = rng.rand(0..6)
+            now.fit(width, height)
+            later.fit(width, height, later: true)
+          when 2, 3
+            text = Array.new(rng.rand(1..12)) { words.sample(random: rng) }.join(' ')
+            indent = rng.rand < 0.5
+            [now, later].each { |line_buffer| line_buffer.push_unseen(text, [], indent: indent, height: height) }
+          when 4
+            cap = rng.rand(1..8)
+            [now, later].each do |line_buffer|
+              line_buffer.cap = cap
+              line_buffer.fit(line_buffer.width, height, later: line_buffer.equal?(later))
+            end
+          else
+            count = rng.rand(1..10)
+            [now, later].each { |line_buffer| line_buffer.scroll_back(count, height) }
+            expect([later.lines, later.pos]).to eq([now.lines, now.pos]), "seed #{seed}"
+          end
+          expect(later.newest_row { |row| !row[0].strip.empty? }).to eq(now.newest_row { |row| !row[0].strip.empty? }), "seed #{seed}"
+        end
+        expect([later.lines, later.pos]).to eq([now.lines, now.pos]), "seed #{seed}"
+      end
+    end
+  end
 end

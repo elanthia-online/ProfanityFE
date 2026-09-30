@@ -143,7 +143,8 @@ class LineBuffer
       keep_view_in(height)
     else
       self.width = width
-      @pos = @pos.clamp(0, [length - height, 0].max)
+      wrap_now
+      @pos = @pos.clamp(0, [@lines.length - height, 0].max)
     end
   end
 
