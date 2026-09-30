@@ -206,8 +206,11 @@ class StyledText
   # not to every run of the line: runs the wrap hasn't reached yet all
   # move by the same amount at each row, so they wait under one shared
   # offset and are only adjusted one by one once the row being cut could
-  # reach them. A long line with many links wraps in time proportional to
-  # its rows plus its runs.
+  # reach them. Without indent, a long line with many links wraps in time
+  # proportional to its rows plus its runs. With indent, each continuation
+  # row still copies the rest of the line to put the indent in front of it,
+  # so a very long line (tens of thousands of characters) costs more per
+  # row the longer it is.
   #
   # @param width [Integer] maximum line width in characters; values below 1
   #   (a window only one or two columns wide) are treated as 1
