@@ -105,7 +105,7 @@ RSpec.describe 'Room window renders' do
     expect(shown).to eq [room_rows]
   end
 
-  it "draws Lich's room lines, sent with the prompt in one write, once" do
+  it "draws Lich's room lines once when sent with the prompt in one write, and at each flush when apart" do
     receive_from_server(*room_change, burst: true)
     before = room_draws
 
@@ -114,6 +114,33 @@ RSpec.describe 'Room window renders' do
 
     expect(room_draws - before).to eq 1
     expect(shown.last).to eq room_rows + ['Room Exits: go gate', 'Room Number: 1234 - (u230008)', 'StringProcs: go path']
+
+    shown.clear
+    receive_from_server('Room Number: 5678 - (u230009)', 'Room Exits: climb wall', 'StringProcs: go door', burst: false)
+
+    expect(shown).to eq [
+      room_rows + ['Room Exits: go gate', 'Room Number: 5678 - (u230009)', 'StringProcs: go path'],
+      room_rows + ['Room Exits: climb wall', 'Room Number: 5678 - (u230009)', 'StringProcs: go path'],
+      room_rows + ['Room Exits: climb wall', 'Room Number: 5678 - (u230009)', 'StringProcs: go door']
+    ]
+  end
+
+  # A room as plain lines only, as a LOOK or a move with room
+  # descriptions off sends it: the room is drawn at the flush after its
+  # exits line, which commits it. An exits line on its own changes only
+  # the exits.
+  it 'draws a room sent only as plain lines at the flush after its exits line, and a lone exits line too' do
+    rows = ['[Crossing, Town Green] (1234)', 'Grass and a fountain.', 'You also see a goblin.']
+    receive_from_server('<resource picture="0"/><style id="roomName" />[Crossing, Town Green] (1234)',
+                        %(<style id=""/><preset id='roomDesc'>Grass and a fountain.</preset>  ) +
+                          'You also see <pushBold/>a goblin<popBold/>.',
+                        'Obvious exits: east, west.', burst: false)
+
+    expect(shown.last).to eq rows + ['Obvious exits: east, west.']
+
+    receive_from_server('Obvious exits: east, west, up.', burst: false)
+
+    expect(shown.last).to eq rows + ['Obvious exits: east, west, up.']
   end
 
   it 'draws a room that arrives line by line at each flush that changes it, and not for the room extra' do
