@@ -173,9 +173,8 @@ RSpec.describe WindowManager, '#load_layout' do
     it 'builds a text window for a stream that was sunk in the previous layout' do
       load("#{main_only}<window class='sink' value='atmospherics'/>")
 
-      expect do
-        load("#{main_only}<window class='text' top='10' left='0' height='5' width='40' value='atmospherics'/>")
-      end.not_to raise_error
+      load("#{main_only}<window class='text' top='10' left='0' height='5' width='40' value='atmospherics'/>")
+
       expect(window_manager.stream['atmospherics']).to be_a TextWindow
     end
 

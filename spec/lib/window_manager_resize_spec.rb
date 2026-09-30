@@ -16,11 +16,8 @@ RSpec.describe WindowManager, '#resize' do
   let(:screen) { ScreenLineWindow.new(30) }
   let(:buf) { CommandBuffer.new }
 
+  # No layout is loaded, so the command window is the only window to resize.
   before do
-    [TextWindow, TabbedTextWindow, ExpWindow, PercWindow, RoomWindow,
-     IndicatorWindow, ProgressWindow, CountdownWindow].each do |klass|
-      allow(klass).to receive(:list).and_return([])
-    end
     # Curses.cols is 80 in the spec stub, so the command window becomes 10 wide.
     wm.install_command_window(WindowLayout.new(height: '1', width: 'cols-70', top: '23', left: '0')) { screen }
     buf.window = screen
@@ -50,8 +47,9 @@ RSpec.describe WindowManager, '#resize' do
     expect(calls.index(:resize)).to be < calls.index(:addstr)
   end
 
-  it 'tolerates a nil command buffer' do
-    expect { wm.resize(nil) }.not_to raise_error
+  it 'resizes the command window when there is no command buffer to redraw' do
+    wm.resize(nil)
+
     expect(screen.maxx).to eq 10
   end
 end
