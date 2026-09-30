@@ -196,6 +196,25 @@ RSpec.describe 'Room ownership' do
       expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'Obvious paths: [north](north).']
     end
 
+    # Characterization (passes on the base by design): the commit that
+    # showed the view's line ends the wait, so a LOOK with no "You also
+    # see" line clears the objects.
+    it "is replaced for good by the view's line: a later LOOK with no objects line clears them" do
+      receive_from_server(prompt, "<component id='room objs'>#{cut}</component>", *inline('[A] (1)', objs: full), prompt,
+                          *inline('[A] (1)', objs: ''), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'Obvious paths: [north](north).']
+    end
+
+    # Decided (the commit fills from the inline view only): a whole list
+    # after it ends the wait, and a LOOK with no objects line clears it.
+    it 'stops waiting at a whole list after it' do
+      receive_from_server(prompt, "<component id='room objs'>#{cut}</component>",
+                          "<component id='room objs'>You also see a box.</component>", prompt, *inline('[A] (1)', objs: ''), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'Obvious paths: [north](north).']
+    end
+
     it 'takes back the ownership a whole list gave earlier in the burst' do
       receive_from_server(*components('[A] (1)'), "<component id='room objs'>#{cut}</component>",
                           *inline('[A] (1)', objs: full), prompt)
