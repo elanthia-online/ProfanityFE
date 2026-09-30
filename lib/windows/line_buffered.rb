@@ -46,6 +46,7 @@ module LineBuffered
   def initialize(*args)
     @active = false
     @scrollbar_pos = nil
+    @painted_selection = nil
     super
   end
 
@@ -436,10 +437,10 @@ module LineBuffered
 
   # Append a string to a buffer as one logical line; the buffer wraps it
   # to the window width. When the buffer is shown and live, the new rows
-  # are drawn at once; when it is scrolled back, shown or not, the view
-  # keeps its place (moving onto the oldest row left if an eviction
-  # dropped the rows it reached). A buffer that isn't shown draws
-  # nothing, and the block, if given, is called.
+  # are drawn at once (see {#draw_new_rows}); when it is scrolled back,
+  # shown or not, the view keeps its place (moving onto the oldest row
+  # left if an eviction dropped the rows it reached). A buffer that isn't
+  # shown draws nothing, and the block, if given, is called.
   #
   # @param line_buffer [LineBuffer] the buffer to append to
   # @param string [String] the text to append
@@ -466,10 +467,7 @@ module LineBuffered
         # row moved up: redraw them all
         paint_content
       else
-        (added - 1).downto(0).each_with_index do |index, drawn|
-          line, line_colors = line_buffer.lines[index]
-          draw_newest_line(line, line_colors, length_before + drawn + 1, content_top, height)
-        end
+        draw_new_rows(line_buffer, added, length_before, height)
       end
     else
       line_buffer.pos += added
@@ -478,11 +476,36 @@ module LineBuffered
     end
     return unless shown && line_buffer.live?
 
-    # Re-apply selection highlight if active (new text overwrites it)
-    if has_highlight?
-      redraw_with_highlight
-    else
-      noutrefresh
+    noutrefresh
+  end
+
+  # Draw the rows a line just added to a live view, each in the selection
+  # highlight where it falls in the selection. The rows already shown
+  # aren't drawn again: they keep their cells, highlight included, as
+  # the text area scrolls them up. That holds only while they show the
+  # current selection as {#paint_content} drew it; otherwise (a tabbed
+  # window's redraw shows no highlight, or the selection changed without
+  # a repaint) every row is repainted with the highlight after the new
+  # rows are drawn.
+  #
+  # @param line_buffer [LineBuffer] the shown buffer, live
+  # @param added [Integer] rows the line was wrapped to
+  # @param length_before [Integer] buffer length before the line was added
+  # @param height [Integer] rows in the text area
+  # @return [void]
+  private def draw_new_rows(line_buffer, added, length_before, height)
+    selection = painted_selection
+    (added - 1).downto(0).each_with_index do |index, drawn|
+      line, line_colors = line_buffer.lines[index]
+      draw_newest_line(line, line_colors, length_before + drawn + 1, content_top, height,
+                       id: line_buffer.lines_appended - index, selection: selection)
+    end
+    if has_highlight? && !selection
+      paint_content
+    elsif selection && line_buffer.length < height
+      # A repaint ends at the start of the bottom row, which stays blank
+      # until the text area fills: leave the cursor where it would
+      setpos(content_top + height - 1, 0)
     end
   end
 
@@ -541,7 +564,8 @@ module LineBuffered
   # Draw consecutive buffer lines on consecutive rows, starting at the
   # cursor and moving from older lines (higher index) to newer ones.
   # No newline follows the last line: on the bottom row of the scrolling
-  # region it would scroll the text up and blank that row.
+  # region it would scroll the text up and blank that row. The lines are
+  # drawn without the selection highlight.
   #
   # @param buffer [Array<Array(String, Array<Hash>, Boolean)>] the rows of a
   #   {LineBuffer} (newest first)
@@ -549,6 +573,7 @@ module LineBuffered
   # @param count [Integer] number of lines to draw
   # @return [void]
   private def draw_buffer_lines(buffer, from_index, count)
+    painted_without_selection
     from_index.downto(from_index - count + 1).each_with_index do |index, drawn|
       addstr "\n" if drawn.positive?
       add_line(buffer[index][0], buffer[index][1])
@@ -568,14 +593,41 @@ module LineBuffered
   # @param buffer_length [Integer] buffer length, including the new line
   # @param top [Integer] first row of the text area
   # @param height [Integer] number of rows in the text area
+  # @param id [Integer] the line's stable row ID
+  # @param selection [Array<Integer>, nil] the normalized selection
+  #   (see {#normalize_selection}) to draw the line in where it falls in
+  #   it, or nil to draw it without a highlight
   # @return [void]
-  private def draw_newest_line(line, line_colors, buffer_length, top, height)
+  private def draw_newest_line(line, line_colors, buffer_length, top, height, id:, selection:)
     return unless height.positive?
 
     scrl(1) if buffer_length > height
     setpos(top + [buffer_length, height].min - 1, 0)
     clrtoeol
-    add_line(line, line_colors)
+    painted_without_selection unless selection
+    draw_row(id, line, line_colors, selection)
+  end
+
+  # The selection the text area shows, when it is the current one: the
+  # one {#paint_content} last drew, as long as every row drawn since was
+  # drawn with it.
+  #
+  # @return [Array<Integer>, nil] the normalized selection, or nil when
+  #   there is none or the rows shown may not carry it
+  private def painted_selection
+    return nil unless has_highlight? && @painted_selection
+    return nil unless @painted_selection == normalize_selection(*@selection_start, *@selection_end)
+
+    @painted_selection
+  end
+
+  # Note that rows of the text area were drawn without the selection
+  # highlight, so the next line to arrive while a selection is set
+  # repaints every row with it (see {#draw_new_rows}).
+  #
+  # @return [void]
+  private def painted_without_selection
+    @painted_selection = nil
   end
 
   # Clear and redraw every row of the text area from the shown buffer,
@@ -584,7 +636,7 @@ module LineBuffered
   # @return [void]
   private def paint_content
     line_buffer = shown_buffer
-    start_id, start_x, end_id, end_x = normalize_selection(*@selection_start, *@selection_end) if has_highlight?
+    selection = normalize_selection(*@selection_start, *@selection_end) if has_highlight?
     height = content_height
 
     (0...height).each do |row|
@@ -594,13 +646,27 @@ module LineBuffered
       next unless entry
 
       line_text, line_colors = entry
-      if start_id && id >= start_id && id <= end_id
-        draw_line_with_selection(id, line_text, line_colors || [], start_id, start_x, end_id, end_x)
-      else
-        add_line(line_text, line_colors || [])
-      end
+      draw_row(id, line_text, line_colors, selection)
     end
+    @painted_selection = selection
     noutrefresh
+  end
+
+  # Draw one buffer row at the cursor, in the selection highlight where
+  # it falls in the selection.
+  #
+  # @param id [Integer] the row's stable ID
+  # @param line_text [String] the row's text
+  # @param line_colors [Array<Hash>, nil] the row's color regions
+  # @param selection [Array<Integer>, nil] the normalized selection
+  #   (see {#normalize_selection}), or nil to draw the row plain
+  # @return [void]
+  private def draw_row(id, line_text, line_colors, selection)
+    if selection && id.between?(selection[0], selection[2])
+      draw_line_with_selection(id, line_text, line_colors || [], *selection)
+    else
+      add_line(line_text, line_colors || [])
+    end
   end
 
   # Normalize selection coordinates so start is the older (topmost) endpoint.
