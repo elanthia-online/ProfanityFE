@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-require_relative 'xml_tokenizer'
 require_relative 'streams'
-require_relative 'link_extractor'
 require_relative 'room_title'
 require_relative 'room_part'
 
@@ -14,11 +12,10 @@ require_relative 'room_part'
 #   +room exits+, ...), with the links and creatures the tag parser's room
 #   marks show (see RoomPart), is emitted as it arrives.
 # - The inline path: roomName/roomDesc styled text (captured between
-#   {#start_capture} and {#end_capture}, which the tag parser calls; the
-#   description with the links its room marks show) and "You also see" /
-#   "Also here:" / "Obvious exits:" lines (from the raw line so their
-#   markup is kept) are staged, and committed as one batch when the exits
-#   arrive.
+#   {#start_capture} and {#end_capture}, which the tag parser calls) and
+#   "You also see" / "Also here:" / "Obvious exits:" lines, with the links
+#   and creatures their room marks show, are staged, and committed as one
+#   batch when the exits arrive.
 #
 # UI updates are emitted on the event bus. Every room part this class sends
 # to the room window also asks for the window to be rendered at the next
@@ -29,8 +26,8 @@ require_relative 'room_part'
 # the next one. The window manager is only asked whether the layout has a
 # RoomWindow (see #room_window?).
 class RoomAssembler
-  # Element names of the tags stripped from inline "You also see" text.
-  COMPONENT_TAGS = %w[component compDef].freeze
+  # The part a room field shows when nothing was staged for it: no text.
+  EMPTY_PART = RoomPart.new(text: '', links: [], creatures: []).freeze
 
   # What styled text is being captured for the room: +:title+ (roomName),
   # +:desc+ (roomDesc) or nil. See {#start_capture}: the next text
@@ -54,7 +51,8 @@ class RoomAssembler
     # Where the description being captured starts in the text handed off
     # (see #start_capture)
     @capture_at = 0
-    # Inline-path staging, committed as one batch when the exits arrive
+    # Inline-path staging, committed as one batch when the exits arrive:
+    # the title row's text, and a RoomPart for each other field
     @room_pending_title = nil
     @room_pending_desc = nil
     @room_pending_objects = nil
@@ -129,7 +127,7 @@ class RoomAssembler
   # @param text [String] the current line of game text (XML-unescaped)
   # @param stream [String, nil] the stream the text is routed to
   # @param marks [Array<Hash>] the room marks for +text+ (see
-  #   SpanTracker::ROOM_MARKS): the description's links
+  #   SpanTracker::ROOM_MARKS): its links and creatures
   # @return [Boolean] true if this line was consumed by the RoomWindow
   #   (caller should not route it to the main window).  Returns false
   #   when title/desc text is captured for the terminal title but the
@@ -160,31 +158,20 @@ class RoomAssembler
 
     # Detect "You also see" for objects (may have leading whitespace)
     if text =~ /^\s*You also see\b/
-      # Extract from raw line to preserve <pushBold/> tags for RoomWindow creature highlighting.
-      # Use regex here (not REXML) since inline text isn't inside a component element.
-      @room_pending_objects = if @current_raw_line && (match = @current_raw_line.match(/You also see\b.*/))
-                                strip_component_tags(match[0]).strip
-                              else
-                                text.strip
-                              end
+      @room_pending_objects = RoomPart.from_chunk(text, marks)
       room_data_captured = true
     end
 
     # Detect "Also here:" for players
     if text =~ /^Also here:\s*(.+)$/
-      # Don't overwrite if already set by component stream (preserves raw XML for links)
-      @room_pending_players = text.strip unless @room_pending_players
+      # Don't overwrite players the room players component staged
+      @room_pending_players ||= RoomPart.from_chunk(text, marks)
       room_data_captured = true
     end
 
     # Detect "Obvious paths:" or "Obvious exits:" for exits (game-native)
     if text =~ /^Obvious (?:paths|exits):/
-      # Use raw line to preserve <d>/<a> tags for link processing in room window
-      @room_pending_exits = if @current_raw_line && (match = @current_raw_line.match(/Obvious (?:paths|exits):.*/))
-                              match[0].strip
-                            else
-                              text.strip
-                            end
+      @room_pending_exits = RoomPart.from_chunk(text, marks)
       room_data_captured = true
       # The exits line ends an inline room: commit it (drawn at the next
       # flush)
@@ -254,17 +241,17 @@ class RoomAssembler
       @room_pending_title = title
       show_title(title)
     when Streams::ROOM_DESC, Streams::ROOM_DESC_ALT
-      @room_pending_desc = clean
+      @room_pending_desc = part
       @component_desc_room = @state.room_title
       show(:room_desc, text: clean, links: links)
     when Streams::ROOM_OBJS
-      @room_pending_objects = clean
+      @room_pending_objects = part
       show(:room_objects, text: clean, links: links, creatures: part.creatures)
     when Streams::ROOM_PLAYERS
-      @room_pending_players = clean
+      @room_pending_players = part
       show(:room_players, text: clean, links: links)
     when Streams::ROOM_EXITS
-      @room_pending_exits = clean
+      @room_pending_exits = part
       show(:room_exits, text: clean, links: links)
       clear_pending_room_data
     end
@@ -402,69 +389,6 @@ class RoomAssembler
         .compact
   end
 
-  # Convert raw XML text to structured data: clean text + link regions.
-  # Used by the inline path (commit_room_data_batch) where pending data
-  # may contain raw XML from @current_raw_line.
-  #
-  # @param raw_text [String] text potentially containing XML tags
-  # @return [Array(String, Array<Hash>)] [clean_text, `[{start:, end:, cmd:}, ...]`]
-  def structurize_text(raw_text)
-    return [raw_text, []] if raw_text.empty?
-
-    clean, colors = LinkExtractor.extract_links(raw_text, links_enabled: true)
-    links = colors.map { |c| { start: c[:start], end: c[:end], cmd: c[:cmd] } }
-    [clean.strip, links]
-  end
-
-  # A staged room part as a RoomPart: the inline description is staged as
-  # one; component text and the other inline lines as text, raw XML
-  # included for the lines.
-  #
-  # @param value [RoomPart, String] the staged part
-  # @return [RoomPart]
-  def staged_part(value)
-    return value if value.is_a?(RoomPart)
-
-    text, links = structurize_text(value)
-    RoomPart.new(text: text, links: links, creatures: [])
-  end
-
-  # Extract creature names from pushBold regions in raw XML text.
-  # Used by the inline path where SAX bold tracking isn't available.
-  #
-  # A region runs from a <pushBold/> to the next <popBold/>; its text, with
-  # any tags inside it removed, is a creature name.
-  #
-  # @param raw_text [String] raw objects text with XML bold tags
-  # @return [Array<String>] creature names, each once, in order
-  def extract_inline_creatures(raw_text)
-    creatures = []
-    name = nil
-    XmlTokenizer.tokenize(raw_text, paired: false).each do |type, segment|
-      if type == :text
-        name&.<<(segment)
-      elsif (tag = XmlTokenizer.start_tag_name(segment)) == 'pushBold'
-        name ||= String.new(encoding: raw_text.encoding)
-      elsif tag == 'popBold' && name
-        creatures << name.strip
-        name = nil
-      end
-    end
-    creatures.reject(&:empty?).uniq
-  end
-
-  # Remove component and compDef start and end tags from raw text, keeping
-  # every other tag and all the text.
-  #
-  # @param raw_text [String] raw text with XML tags
-  # @return [String] the text without component/compDef tags
-  def strip_component_tags(raw_text)
-    XmlTokenizer.tokenize(raw_text, paired: false)
-                .reject { |type, segment| type == :tag && COMPONENT_TAGS.include?(XmlTokenizer.tag_name(segment)) }
-                .map(&:last)
-                .join
-  end
-
   # Commit all pending room data to the RoomWindow and clear the staging area.
   #
   # Called when exits arrive (the last expected room component). Only commits
@@ -477,41 +401,37 @@ class RoomAssembler
 
     # Save exits before clearing — clear_pending_room_data wipes all
     # pending fields, but exits are emitted separately after the batch.
-    exits_raw = @room_pending_exits || ''
+    exits = @room_pending_exits || EMPTY_PART
 
     # Only update if we have pending data (avoid double-updates clearing data)
     if @room_pending_title || @room_pending_desc || @room_pending_objects || @room_pending_players
       show_title(@room_pending_title || '')
 
-      # Inline path stores raw XML — convert to structured data at emission time.
       # Without a roomDesc (DR leaves it out when room descriptions are off,
       # and so does a brief LOOK) the lines keep the description the room
       # desc component, sent with every room change, gave this room. A room
       # the component didn't describe gets none, not the last room's.
       if @room_pending_desc || @component_desc_room != @state.room_title
-        desc = staged_part(@room_pending_desc || '')
+        desc = @room_pending_desc || EMPTY_PART
         show(:room_desc, text: desc.text, links: desc.links)
       end
 
-      obj_raw = @room_pending_objects || ''
-      obj_clean, obj_links = structurize_text(obj_raw)
-      creatures = extract_inline_creatures(obj_raw)
-      show(:room_objects, text: obj_clean, links: obj_links, creatures: creatures)
+      objects = @room_pending_objects || EMPTY_PART
+      show(:room_objects, text: objects.text, links: objects.links, creatures: objects.creatures)
 
-      player_clean, player_links = structurize_text(@room_pending_players || '')
-      show(:room_players, text: player_clean, links: player_links)
+      players = @room_pending_players || EMPTY_PART
+      show(:room_players, text: players.text, links: players.links)
 
       show(:room_supplemental_clear)
 
       # Also update the room players indicator (fallback for games that don't use streams)
-      update_room_players_indicator(@room_pending_players)
+      update_room_players_indicator(@room_pending_players&.text)
 
       clear_pending_room_data
     end
 
     # Always update exits (even on subsequent exit lines).
-    exits_clean, exits_links = structurize_text(exits_raw)
-    show(:room_exits, text: exits_clean, links: exits_links)
+    show(:room_exits, text: exits.text, links: exits.links)
     @pending_render.request_update
   end
 

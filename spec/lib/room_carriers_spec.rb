@@ -533,7 +533,7 @@ RSpec.describe 'Room carriers' do
         '[Wayside Inn, Lobby]',
         'A cozy [fire](look #-1) warms the lobby.',
         'You also see a [bench](look #-2) and {a :red}[rat](look #-3).',
-        'Also here: Bob.',
+        'Also here: [Bob](look #-4).',
         'Obvious paths: [out](look #-5)'
       ]
       expect(main_rows).to eq ['[Wayside Inn, Lobby]', 'Some text. A cozy fire warms the lobby.', 'You also see a bench and a rat.',
@@ -543,7 +543,6 @@ RSpec.describe 'Room carriers' do
     end
 
     it "keeps the links of the inline players line" do
-      pending 'the inline "Also here:" line is staged as text, so its <a> links are lost (PLAN §6.4; flips in commit 7)'
       load_layout
 
       receive_from_server(*lines)
@@ -617,7 +616,6 @@ RSpec.describe 'Room carriers' do
     end
 
     it 'P4: pairs nested inline links by nesting, the innermost winning' do
-      pending 'the inline path pairs a close with the earliest open link (PLAN §5 P4; flips in commit 7)'
       load_layout
 
       receive_from_server(*inline_room, "  You also see <d cmd='a'>x<d cmd='b'>y</d>z</d> and a box.", 'Obvious paths: <d>north</d>.')
@@ -626,7 +624,6 @@ RSpec.describe 'Room carriers' do
     end
 
     it 'P4b: decodes entities in the inline objects' do
-      pending 'the inline path re-reads the raw line, entities and all (PLAN §5 P4b; flips in commit 7)'
       load_layout
 
       receive_from_server(*inline_room, '  You also see a &lt;red&gt; box.', 'Obvious paths: <d>north</d>.')
@@ -635,8 +632,27 @@ RSpec.describe 'Room carriers' do
       expect(main_rows[1]).to eq 'You also see a <red> box.'
     end
 
+    it 'keeps the links of players a component staged when the inline commit re-sends them (GemStone)' do
+      load_layout
+
+      receive_from_server("<component id='room exits'>Obvious paths: out</component>",
+                          "<component id='room players'>Also here: <a exist=\"-4\" noun=\"Bob\">Bob</a>.</component>",
+                          *inline_room, 'Also here: Bob.', 'Obvious paths: out')
+
+      expect(room_screen).to eq ['[A] (1)', 'Also here: [Bob](look #-4).', 'Obvious paths: out']
+    end
+
+    it 'keeps the creatures of objects a component staged when the inline commit re-sends them' do
+      load_layout
+
+      receive_from_server("<component id='room exits'>Obvious paths: out</component>",
+                          "<component id='room objs'>You also see <pushBold/>a rat<popBold/>.</component>",
+                          *inline_room, 'Obvious paths: out')
+
+      expect(room_screen).to eq ['[A] (1)', 'You also see {a rat:red}.', 'Obvious paths: out']
+    end
+
     it 'shows no prompt text on an exits line that ends with the prompt' do
-      pending "the raw line's prompt text ends the exits row (PLAN §5; flips in commit 7)"
       load_layout
 
       receive_from_server(*inline_room, 'Obvious paths: <d>north</d>.<prompt time="1">&gt;</prompt>')

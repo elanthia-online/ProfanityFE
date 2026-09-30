@@ -271,7 +271,6 @@ RSpec.describe 'Inline room lines' do
     end
 
     it 'shows only the text the objects line shows in main, not the text of paired tags or other streams' do
-      pending 'the inline path re-reads the raw line, so it shows text the tag parser gave to a tag or a stream (PLAN §2.2; flips in commit 7)'
       shown = {
         'You also see <compass>x</compass>'                 => 'You also see',
         %(You also see <component id="a>b">box</component>) => 'You also see'
@@ -322,7 +321,6 @@ RSpec.describe 'Inline room lines' do
     end
 
     it 'draws nested bold regions as the main window does' do
-      pending 'the inline path takes a flat region from the first pushBold to the next popBold (PLAN §2.2; flips in commit 7)'
       creatures = {
         '<pushBold/>a<pushBold/>b<popBold/>c<popBold/>' => ['abc'],
         "<pushBold/>a <b t='>'>b<popBold/>"             => ['b'],
