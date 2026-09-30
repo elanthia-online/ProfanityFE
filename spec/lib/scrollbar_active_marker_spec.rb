@@ -109,7 +109,12 @@ RSpec.describe 'The active marker on the scrollbar' do
     end
 
     it 'comes back when scrolling down one line at a time moves the thumb off the top row' do
-      press('scroll_current_window_down_one') until scrollbar_cells(main).first != :thumb
+      # Bounded: if the thumb never leaves the top row this fails, not hangs.
+      20.times do
+        break unless scrollbar_cells(main).first == :thumb
+
+        press('scroll_current_window_down_one')
+      end
 
       expect(scrollbar_cells(main)).to eq active(5, thumb: 1)
     end
@@ -117,8 +122,8 @@ RSpec.describe 'The active marker on the scrollbar' do
     it 'comes back when a page scroll moves the thumb off the top row' do
       press('scroll_current_window_down_page')
 
-      expect(scrollbar_cells(main).first).to eq [LineBuffered::ACTIVE_INDICATOR, true]
-      expect(scrollbar_cells(main).count(:thumb)).to eq 1
+      expect(main.rows.last).to eq 'm4'
+      expect(scrollbar_cells(main)).to eq active(5, thumb: 1)
     end
 
     it 'comes back when the view returns to the newest line' do
@@ -173,7 +178,12 @@ RSpec.describe 'The active marker on the scrollbar' do
     end
 
     it 'comes back when scrolling down one line at a time moves the thumb off the top row' do
-      press('scroll_current_window_down_one') until tabbed_cells.first != :thumb
+      # Bounded: if the thumb never leaves the top row this fails, not hangs.
+      10.times do
+        break unless tabbed_cells.first == :thumb
+
+        press('scroll_current_window_down_one')
+      end
 
       expect(tabbed_cells).to eq active(4, thumb: 1)
     end
@@ -225,8 +235,8 @@ RSpec.describe 'The active marker on the scrollbar' do
 
       press('scroll_current_window_down_page')
 
-      expect(tabbed_cells.first).to eq [LineBuffered::ACTIVE_INDICATOR, true]
-      expect(tabbed_cells.count(:thumb)).to eq 1
+      expect(tabbed.rows.drop(1)).to eq ['c5', 'c6', 'c7', 'c8', 'c9', 'c10']
+      expect(tabbed_cells).to eq active(6, thumb: 5)
     end
   end
 
