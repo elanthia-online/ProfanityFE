@@ -87,7 +87,7 @@ class KeyActionRegistry
   def register_window_actions
     @actions['switch_current_window'] = proc {
       SCROLL_WINDOW[0]&.set_active(false)
-      SCROLL_WINDOW.push(SCROLL_WINDOW.shift)
+      SCROLL_WINDOW.rotate!
       SCROLL_WINDOW[0]&.set_active(true)
       @cmd_buffer.flush_screen
     }
