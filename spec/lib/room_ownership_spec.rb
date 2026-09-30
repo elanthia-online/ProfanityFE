@@ -27,6 +27,7 @@ RSpec.describe 'Room ownership' do
   let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
   let(:prompt) { '<prompt time="1">&gt;</prompt>' }
   let(:game_rules) { Games::BOTH_GAMES }
+  let(:room_window) { true }
 
   before do
     allow(IO).to receive(:select).and_return(nil)
@@ -35,7 +36,7 @@ RSpec.describe 'Room ownership' do
     LAYOUT['ownership'] = REXML::Document.new(<<~XML).root
       <layout>
         <window class='text' top='0' left='0' height='20' width='100' value='main'/>
-        <window class='room' top='1' left='0' height='12' width='100' value='room'/>
+        #{"<window class='room' top='1' left='0' height='12' width='100' value='room'/>" if room_window}
         <window class='indicator' top='2' left='0' height='1' width='60' label=' ' value='room players'/>
       </layout>
     XML
@@ -435,5 +436,116 @@ RSpec.describe 'Room ownership' do
                         *inline('[B] (2)', objs: '  You also see a rat.', exits: 'Obvious paths: <d>south</d>.'), prompt)
 
     expect(room_screen).to eq ['[B] (2)', 'Desc of [B] (2).', 'You also see a rat.', 'Obvious paths: [south](south).']
+  end
+
+  # A new room clears the exits and objects its burst never delivers (AUDIT
+  # §0.2, survey F4). A subtitle names a new room when its text differs
+  # both from the last subtitle and from the title row shown: a subtitle
+  # re-sent for the room shown clears nothing, even when the row shows
+  # Lich's form of the roomName, or a LOOK's roomName before any subtitle.
+  # The burst's components and inline view then fill the fields as usual.
+  describe "a new room's subtitle" do
+    def subtitle(name)
+      "<streamWindow id='room' title='Room' subtitle=\" - #{name}\" location='center' target='drop' ifClosed='' resident='true'/>"
+    end
+
+    # The lines of a fixture in spec/fixtures/room_pipeline.
+    def fixture(name)
+      File.readlines(File.expand_path("../fixtures/room_pipeline/#{name}.xml", __dir__), chomp: true)
+    end
+
+    let(:jazriel_desc) do
+      ['Nature, with all its mysterious forces, works undisturbed in this remote wilderness.  The soft',
+       'gurgle of nearby waters becomes welcome music to the ears, though the stand of towering silverwood',
+       'and spruce trees on the horizon does not offer up the same invitation.']
+    end
+
+    # Real DR lines (Jazriel's log): the move south sends the subtitle, the
+    # room desc component and an empty room players component, and no objs
+    # or exits component and no inline view.
+    it "doesn't show the last room's exits under a room whose burst has none" do
+      receive_from_server(*fixture('dr_move_without_exits'))
+
+      expect(room_screen).to eq ['[Dark Woodlands, Rugged Trail] (2280068)', *jazriel_desc]
+    end
+
+    it "doesn't show the last room's objects under a room whose burst has none" do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt,
+                          subtitle('[B] (2)'), "<component id='room desc'>Desc of [B] (2).</component>", prompt)
+
+      expect(room_screen).to eq ['[B] (2)', 'Desc of [B] (2).']
+    end
+
+    it 'shows the exits a room exits component later in the burst delivers' do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt,
+                          subtitle('[B] (2)'), "<component id='room desc'>Desc of [B] (2).</component>",
+                          "<component id='room exits'>Obvious paths: <d>south</d>.<compass></compass></component>", prompt)
+
+      expect(room_screen).to eq ['[B] (2)', 'Desc of [B] (2).', 'Obvious paths: [south](south).']
+    end
+
+    it 'shows the objects a room objs component later in the burst delivers' do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt,
+                          subtitle('[B] (2)'), "<component id='room objs'>You also see a rat.</component>", prompt)
+
+      expect(room_screen).to eq ['[B] (2)', 'Desc of [A] (1).', 'You also see a rat.']
+    end
+
+    # Characterization (passes on the base by design): the inline commit
+    # fills what no component delivered.
+    it "shows the burst's inline view" do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt,
+                          subtitle('[B] (2)'), *inline('[B] (2)', objs: '  You also see a rat.', exits: 'Obvious paths: <d>south</d>.'),
+                          prompt)
+
+      expect(room_screen).to eq ['[B] (2)', 'Desc of [B] (2).', 'You also see a rat.', 'Obvious paths: [south](south).']
+    end
+
+    # A cut-short list waits for an inline "You also see" line; the new
+    # room's view has none.
+    it "clears a cut-short list the last room's burst left shown" do
+      receive_from_server(subtitle('[A] (1)'), "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>",
+                          "<component id='room objs'>You also see a box and some other stuff.</component>", prompt,
+                          subtitle('[B] (2)'), *inline('[B] (2)', objs: '', exits: 'Obvious paths: <d>south</d>.'), prompt)
+
+      expect(room_screen).to eq ['[B] (2)', 'Desc of [B] (2).', 'Obvious paths: [south](south).']
+    end
+
+    # Characterization (passes on the base by design).
+    it 'clears nothing when re-sent for the room shown' do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt, subtitle('[A] (1)'), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Obvious paths: [north](north).']
+    end
+
+    # Characterization (passes on the base by design): the row shows Lich's
+    # form of the roomName, the subtitle the game's.
+    it "clears nothing when re-sent for the room shown with Lich's room id in the row" do
+      receive_from_server(*components('[A] (1)'), *inline('[A - 55] (1)'), prompt, subtitle('[A] (1)'), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Obvious paths: [north](north).']
+    end
+
+    # Characterization (passes on the base by design): a LOOK showed the
+    # room before any subtitle.
+    it 'clears nothing when the first subtitle names the room a LOOK showed' do
+      receive_from_server(prompt, *inline('[A] (1)'), prompt, subtitle('[A] (1)'), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Obvious paths: [north](north).']
+    end
+
+    context 'without a room window' do
+      let(:room_window) { false }
+
+      # Characterization (passes on the base by design).
+      it 'shows the lines in the main window and names the room in the terminal title' do
+        receive_from_server(*fixture('dr_move_without_exits'))
+
+        expect(@window_manager.stream['main'].rows.map(&:rstrip).reject(&:empty?))
+          .to eq ['[Dark Woodlands, Rugged Trail] (2280069)', 'Obvious paths: northeast, south.', '>', 'You run south.']
+        expect(state.room_title).to eq 'Dark Woodlands, Rugged Trail (2280068)'
+        expect(indicator_label).to eq ''
+      end
+    end
   end
 end

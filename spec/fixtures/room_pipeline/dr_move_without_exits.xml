@@ -1,0 +1,17 @@
+<component id='room desc'>Deep shadows begin to fall long across the hillside as the foliage grows denser.  Birds chitter softly back and forth to each other from the safety of the trees, as if signaling a quiet warning to all who traverse the woodlands.</component>
+<component id='room objs'></component>
+<component id='room players'></component>
+<component id='room exits'>Obvious paths: <d>northeast</d>, <d>south</d>.<compass></compass></component>
+<component id='room extra'></component>
+<resource picture="0"/><style id="roomName" />[Dark Woodlands, Rugged Trail] (2280069)
+<style id=""/>  
+Obvious paths: <d>northeast</d>, <d>south</d>.
+<compass><dir value="ne"/><dir value="s"/></compass><component id='room players'></component>
+<prompt time="1787793496">&gt;</prompt>
+You run south.
+<nav rm='2280068'/>
+<streamWindow id='main' title='Story' subtitle=" - [Dark Woodlands, Rugged Trail] (2280068)" location='center' target='drop'/>
+<streamWindow id='room' title='Room' subtitle=" - [Dark Woodlands, Rugged Trail] (2280068)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>Nature, with all its mysterious forces, works undisturbed in this remote wilderness.  The soft gurgle of nearby waters becomes welcome music to the ears, though the stand of towering silverwood and spruce trees on the horizon does not offer up the same invitation.</component>
+<compass><dir value="n"/><dir value="down"/></compass><component id='room players'></component>
+<prompt time="1787793496">&gt;</prompt>
