@@ -1038,7 +1038,7 @@ Actions are predefined behaviors that can be bound to keys:
 
 | Action | Description |
 |--------|-------------|
-| `autocomplete` | Complete the current input from command history (see [Autocomplete](#15-autocomplete)) |
+| `autocomplete` | Complete the current input from command history (see [Autocomplete](#14-autocomplete)) |
 
 ### Macro Syntax
 
@@ -1474,7 +1474,7 @@ Toggle in-game link highlighting and clicking on or off at runtime.
 When enabled, clickable text (inventory items, exits, help links) is
 highlighted and can be clicked to execute the associated command.
 Disables native terminal text selection while active. Toggle off to
-restore text selection. See [Link Display](#13-link-display) for details.
+restore text selection. See [Link Display](#12-link-display) for details.
 
 ```
 .links
@@ -1510,7 +1510,7 @@ appears when you release the button, with this on or off.
 ### .scrollcfg
 
 Launch the interactive mouse scroll wheel calibration wizard. See
-[Mouse Scroll Wheel](#14-mouse-scroll-wheel) for details.
+[Mouse Scroll Wheel](#13-mouse-scroll-wheel) for details.
 
 ```
 .scrollcfg
