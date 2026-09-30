@@ -13,7 +13,8 @@ require_relative '../presets'
 # Updates arrive incrementally via the +update_*+ methods, which only
 # store the new text: nothing is drawn until {#render}. The server loop
 # renders the window once per flush when a room part changed (see
-# {RoomAssembler} and {ServerReader}), and a resize, a layout change or
+# {RoomAssembler} and {ServerReader}, which also draws a render still
+# pending when the connection closes), and a resize, a layout change or
 # +.links+ renders it at once. Mirrors Genie4's room window behavior.
 #
 # All room sections receive pre-computed structured data from the SAX

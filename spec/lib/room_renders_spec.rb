@@ -42,13 +42,19 @@ RSpec.describe 'Room window renders' do
       event_bus: event_bus
     )
   end
-  # The room window's rows at every flush to the terminal.
+  # The room window's rows at every flush to the terminal: the server
+  # loop's (Curses.doupdate) and the disconnect notice's
+  # (CursesRenderer.render).
   let(:shown) { [] }
 
   before do
     allow(Curses).to receive(:doupdate).and_wrap_original do |original|
       shown << room.rows.reject(&:empty?)
       original.call
+    end
+    allow(CursesRenderer).to receive(:render).and_wrap_original do |original, &block|
+      original.call(&block)
+      shown << room.rows.reject(&:empty?)
     end
   end
 
@@ -79,15 +85,17 @@ RSpec.describe 'Room window renders' do
   # Feed raw server lines through GameTextProcessor#run, as the socket
   # would (Lich ends every line with CRLF). With +burst+, every line but
   # the last is followed by one already waiting, so the screen is flushed
-  # only after the last; otherwise nothing is waiting after any line.
-  def receive_from_server(*lines, burst:)
+  # only after the last; otherwise nothing is waiting after any line. With
+  # +closed+, the server closes the connection after the last line: a
+  # closed socket reads as ready, so the loop doesn't flush after it.
+  def receive_from_server(*lines, burst:, closed: false)
     queue = lines.map { |line| "#{line}\r\n" }
     server = Object.new
     server.define_singleton_method(:gets) { queue.shift&.dup }
     # The first prompt sends a LOOK
     server.define_singleton_method(:puts) { |*| nil }
     server.define_singleton_method(:flush) { nil }
-    allow(IO).to receive(:select) { burst && !queue.empty? ? [[server], [], []] : nil }
+    allow(IO).to receive(:select) { (burst && !queue.empty?) || (closed && queue.empty?) ? [[server], [], []] : nil }
     processor.run(server)
   end
 
@@ -166,5 +174,29 @@ RSpec.describe 'Room window renders' do
     # components, and for the plain exits line and the players component
     # after it: not for the room extra component
     expect(room_draws - before).to eq 7
+  end
+
+  # The flush that follows the last burst is the disconnect notice's: the
+  # room is drawn there with every part that burst sent.
+  describe 'when the server closes the connection right after a burst' do
+    it "draws Lich's room lines on the disconnect notice's flush" do
+      receive_from_server(*room_change, burst: true)
+
+      receive_from_server('Room Number: 1234 - (u230008)', 'Room Exits: go gate',
+                          '<prompt time="1787793484">&gt;</prompt>', burst: true, closed: true)
+      processor.show_disconnect_message
+
+      expect(shown.last).to eq room_rows + ['Room Exits: go gate', 'Room Number: 1234 - (u230008)']
+    end
+
+    it "draws a room component that came after the exits on the disconnect notice's flush" do
+      receive_from_server(*room_change, burst: true)
+
+      receive_from_server("<component id='room players'>Also here: Bob.</component>",
+                          '<prompt time="1787793484">&gt;</prompt>', burst: true, closed: true)
+      processor.show_disconnect_message
+
+      expect(shown.last).to eq room_rows.first(2) + ['Also here: Bob.', room_rows.last]
+    end
   end
 end
