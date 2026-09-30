@@ -173,10 +173,14 @@ RSpec.describe 'Dot-commands typed on the command line' do
       expect(shown.last).to eq '* Arrow mode: page scroll'
     end
 
-    it '.links turns link highlighting on' do
+    it '.links turns link highlighting on, and off again' do
       app.execute_command('.links')
       expect(app.shared_state.blue_links).to be true
       expect(shown.last).to start_with('* Links: ON')
+
+      app.execute_command('.links')
+      expect(app.shared_state.blue_links).to be false
+      expect(shown.last).to eq '* Links: OFF (native terminal selection)'
     end
 
     it '.select turns drag-to-select on' do
@@ -254,6 +258,11 @@ RSpec.describe 'Dot-commands typed on the command line' do
       expect(app.shared_state.skip_server_time_offset).to be false
     end
 
+    it 'keeps the argument as typed when the name is in another case: .HIGHLIGHT Goblin adds Goblin' do
+      app.execute_command('.HIGHLIGHT Goblin')
+      expect(shown.last).to eq '* Highlight added: Goblin'
+    end
+
     {
       '.quitter'   => ";quitter\n",
       '.arrows'    => ";arrows\n",
@@ -269,7 +278,9 @@ RSpec.describe 'Dot-commands typed on the command line' do
       '.'          => ";\n"
     }.each do |typed, forwarded|
       it "sends #{typed.inspect} to the game as #{forwarded.chomp.inspect}, since it is not a whole command name" do
-        app.execute_command(typed)
+        # Not raising covers exiting: a look-alike of .quit must not quit
+        # (an exit here would also end the whole rspec run with status 0)
+        expect { app.execute_command(typed) }.not_to raise_error
         expect(server.string).to eq forwarded
       end
     end
@@ -277,7 +288,8 @@ RSpec.describe 'Dot-commands typed on the command line' do
     commands.each_key do |name|
       %w[x s - 1 _].each do |suffix|
         it "sends .#{name}#{suffix} to the game as ;#{name}#{suffix}" do
-          app.execute_command(".#{name}#{suffix}")
+          # Not raising covers exiting, as above (.quitx must not quit)
+          expect { app.execute_command(".#{name}#{suffix}") }.not_to raise_error
           expect(server.string).to eq ";#{name}#{suffix}\n"
         end
       end
