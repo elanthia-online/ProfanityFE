@@ -4,12 +4,13 @@
 # pipeline). DragonRealms sends a room twice on a move: the room
 # components (after the room streamWindow's subtitle), then the inline
 # lines (roomName, roomDesc, "You also see", "Also here:", "Obvious
-# paths:"). Within one burst (from the subtitle or a prompt to the next
-# prompt) the inline lines no longer overwrite a field a component
-# delivered; they fill only what the burst didn't deliver, and a LOOK after
-# the prompt shows its own lines. The title row is the exception: it takes
-# the roomName's text when that differs from the subtitle (Lich's room
-# ids), so the row and the terminal title name the room alike.
+# paths:"). Within one burst (from the subtitle or a prompt to the end of
+# the line with the next prompt) the inline lines no longer overwrite a
+# field a component delivered; they fill only what the burst didn't
+# deliver, and a LOOK after the prompt shows its own lines. The title row
+# is the exception: it takes the roomName's text when that differs from
+# the subtitle (Lich's room ids), so the row and the terminal title name
+# the room alike.
 #
 # Lines are fed through the real server loop into windows built from
 # layout XML; the assertions read the room window's rows (with the command
@@ -195,35 +196,109 @@ RSpec.describe 'Room ownership' do
                                  'Obvious paths: [north](north), [south](south).']
       expect(indicator_label).to eq 'Ann'
     end
-
-    # Characterization (passes on the base by design): a prompt on the exits
-    # line ends the burst before the line's text is handed off, so that
-    # commit fills every field from the inline lines. With DR's order (the
-    # room exits component, which drops what was staged, after the other
-    # components) the base sent the same.
-    it 'show their own lines when the prompt ends the exits line' do
-      exits_line = "Obvious paths: <d>south</d>.#{prompt}"
-      receive_from_server(*components('[A] (1)'), *inline('[A] (1)', objs: '  You also see a rat.', exits: exits_line))
-
-      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a rat.', 'Obvious paths: [south](south).']
-    end
   end
 
-  # Pins the behaviour as it is until the user decides (it fails on the
-  # base, which kept Bob): with a component after the room exits component
-  # (an order DR doesn't send; the GemStone specs use it) and a prompt on
-  # the inline exits line, the prompt ends the burst before that line's
-  # text is handed off, so the commit clears the players the component
-  # delivered, which the inline lines don't have.
-  it 'clears players a component delivered after the room exits component when a prompt ends the inline exits line' do
-    receive_from_server(prompt,
-                        "<streamWindow id='room' title='Room' subtitle=\" - [A] (1)\" location='center' target='drop' ifClosed='' resident='true'/>",
-                        "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>",
-                        "<component id='room players'>Also here: Bob.</component>",
-                        *inline('[A] (1)', exits: "Obvious paths: <d>north</d>.#{prompt}"))
+  # A prompt on the inline exits line ends the burst at the line's end,
+  # after the line's text has been handed off, so that line's commit is
+  # still part of the burst the components delivered. DR sends no such line
+  # (the corpus has no text before a prompt on the same line).
+  describe 'a prompt on the inline exits line' do
+    let(:subtitle) do
+      "<streamWindow id='room' title='Room' subtitle=\" - [A] (1)\" location='center' target='drop' ifClosed='' resident='true'/>"
+    end
+    # A component after the room exits component: an order DR doesn't send
+    # (the GemStone specs use it).
+    let(:exits_then_players) do
+      [prompt, subtitle, "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>",
+       "<component id='room players'>Also here: Bob.</component>"]
+    end
 
-    expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Obvious paths: [north](north).']
-    expect(indicator_label).to eq ''
+    # Decided (component data owns the room it described), as without the
+    # prompt. The base sent the inline lines here: DR's room exits
+    # component, sent last, dropped what the components had staged.
+    it "keeps the component's fields in that line's commit" do
+      receive_from_server(*components('[A] (1)', players: 'Also here: Bob.'),
+                          *inline('[A] (1)', objs: '  You also see a rat.', players: 'Also here: Ann.',
+                                             exits: "Obvious paths: <d>south</d>.#{prompt}"))
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Also here: Bob.',
+                                 'Obvious paths: [north](north).']
+      expect(indicator_label).to eq 'Bob'
+    end
+
+    # Characterization (passes on the base by design): the base re-sent the
+    # players the component staged after the room exits component.
+    it 'keeps players a component delivered after the room exits component' do
+      receive_from_server(*exits_then_players, *inline('[A] (1)', exits: "Obvious paths: <d>north</d>.#{prompt}"))
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Also here: Bob.',
+                                 'Obvious paths: [north](north).']
+      expect(indicator_label).to eq 'Bob'
+    end
+
+    # Characterization (passes on the base by design).
+    it 'keeps them with the prompt at the start of the exits line' do
+      receive_from_server(*exits_then_players, *inline('[A] (1)', exits: "#{prompt}Obvious paths: <d>north</d>."))
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Also here: Bob.',
+                                 'Obvious paths: [north](north).']
+    end
+
+    # Characterization (passes on the base by design): the burst ended with
+    # that line, so a LOOK on the next lines shows its own lines.
+    it 'lets a LOOK on the next lines show its own lines' do
+      receive_from_server(*exits_then_players, *inline('[A] (1)', exits: "Obvious paths: <d>north</d>.#{prompt}"),
+                          *inline('[A] (1)', objs: '  You also see a rat.', players: 'Also here: Ann.'), prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a rat.', 'Also here: Ann.',
+                                 'Obvious paths: [north](north).']
+      expect(indicator_label).to eq 'Ann'
+    end
+
+    # Characterization (passes on the base by design): a component after
+    # the prompt on the same line belongs to the next burst, and keeps it
+    # when the line ends.
+    it 'leaves a component after the prompt on its line to the next burst' do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'),
+                          "#{prompt}<component id='room players'>Also here: Carl.</component>",
+                          *inline('[A] (1)', players: 'Also here: Bob.'), prompt)
+
+      expect(room_screen[3]).to eq 'Also here: Carl.'
+      expect(indicator_label).to eq 'Carl'
+    end
+
+    # Characterization (passes on the base by design): the same with a
+    # second prompt on the line.
+    it 'keeps them with two prompts on the exits line' do
+      receive_from_server(*exits_then_players, *inline('[A] (1)', exits: "Obvious paths: <d>north</d>.#{prompt}#{prompt}"))
+
+      expect(room_screen[3]).to eq 'Also here: Bob.'
+    end
+
+    # Decided (PLAN Q1 b): a cut-short objs list after a whole one, both
+    # after the prompt, leaves the objects to the next burst's inline list.
+    it 'lets a cut-short objs component after the prompt leave the objects to the inline list' do
+      receive_from_server(*components('[A] (1)'), *inline('[A] (1)'),
+                          "#{prompt}<component id='room objs'>You also see a box.</component>" \
+                          "<component id='room objs'>You also see a box and some other stuff.</component>",
+                          *inline('[A] (1)', objs: '  You also see a box and a rat.'), prompt)
+
+      expect(room_screen[2]).to eq 'You also see a box and a rat.'
+    end
+
+    # Decided (component data owns the room it described): a subtitle
+    # after the prompt starts the next burst at once, and that burst keeps
+    # its title.
+    it 'ends the burst at once for a subtitle after the prompt, which the next burst keeps' do
+      receive_from_server(*components('[A] (1)', players: 'Also here: Bob.'), *inline('[B] (2)').first(2),
+                          "#{prompt}#{subtitle.sub('[A] (1)', '[B] (2)')}Obvious paths: <d>south</d>.")
+
+      expect(room_screen).to eq ['[B] (2)', 'Desc of [B] (2).', 'You also see a box.', 'Obvious paths: [south](south).']
+
+      receive_from_server('Also here: Ann.', 'Obvious paths: <d>south</d>.', prompt)
+
+      expect(room_screen).to eq ['[B] (2)', 'Also here: Ann.', 'Obvious paths: [south](south).']
+    end
   end
 
   # Characterization (passes on the base by design): an "Also here:" line

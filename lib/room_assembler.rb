@@ -19,10 +19,10 @@ require_relative 'games'
 #   batch when the exits arrive.
 #
 # Component data owns the room it described. A burst runs from a room
-# subtitle ({#subtitle}) or a prompt ({#prompt_seen}) to the next prompt;
-# the inline commit doesn't send again a field a component (or the
-# subtitle, for the title) delivered in the burst, and fills the rest (see
-# #commit_view).
+# subtitle ({#subtitle}) or a prompt ({#prompt_seen}) to the next prompt,
+# whose burst ends when its line does ({#end_line}); the inline commit
+# doesn't send again a field a component (or the subtitle, for the title)
+# delivered in the burst, and fills the rest (see #commit_view).
 #
 # UI updates are emitted on the event bus. Every room part this class sends
 # to the room window also asks for the window to be rendered at the next
@@ -75,19 +75,36 @@ class RoomAssembler
     # in this burst, which the inline commit doesn't send again (see
     # #commit_view): field => the title row's text or the part
     @delivered = {}
+    # After a prompt on the line being parsed: the fields delivered since
+    # that prompt, which are all the next burst keeps when the line ends
+    # (see #prompt_seen); nil otherwise
+    @next_burst = nil
     # Whether Lich's lines (Room Exits, Room Number, StringProcs) are in the
     # room window, for the inline commit, which clears them
     @lich_lines_shown = false
   end
 
-  # A prompt arrived: it ends the burst, so the fields the components
-  # delivered are no longer owned (see #commit_view). What the
-  # inline lines staged stays (the prompt tag can come before the last text
-  # of its line, an exits line's among them).
+  # A prompt arrived: it ends the burst when its line ends (see
+  # #end_line), so the fields the components delivered are no longer
+  # owned from then on (see #commit_view). The prompt tag comes before the
+  # line's last text is handed off, so the text on the prompt's line (an
+  # exits line's among it) is still read in the burst the prompt ends.
+  # What the components deliver after the prompt starts the next burst.
+  # What the inline lines staged stays.
   #
   # @return [void]
   def prompt_seen
-    @delivered.clear
+    @next_burst = {}
+  end
+
+  # A server line has been parsed and its text handed off: if a prompt was
+  # on it, its burst ends, and only the fields delivered after the prompt
+  # stay owned (see #prompt_seen).
+  #
+  # @return [void]
+  def end_line
+    @delivered = @next_burst if @next_burst
+    @next_burst = nil
   end
 
   # A room subtitle (a room streamWindow, or a room stream's opening tag,
@@ -99,8 +116,8 @@ class RoomAssembler
   #   empty for an empty name, which hides the row
   # @return [void]
   def subtitle(text)
-    @delivered.clear
-    @delivered[:title] = text
+    @delivered = { title: text }
+    @next_burst = { title: text } if @next_burst
     emit(:title, text, render: false)
   end
 
@@ -272,6 +289,7 @@ class RoomAssembler
         # A list the game cut short doesn't hold the whole room: it is shown,
         # but the room's inline line (with every object) fills in.
         @delivered.delete(:objects)
+        @next_burst&.delete(:objects)
         emit(:objects, part)
       else
         deliver(:objects, part)
@@ -340,13 +358,15 @@ class RoomAssembler
   end
 
   # Show a field a room component delivered, and record it as delivered in
-  # this burst, so the inline commit doesn't send it again.
+  # this burst (and in the next one, after a prompt on this line; see
+  # #prompt_seen), so the inline commit doesn't send it again.
   #
   # @param field [Symbol] the field (see #emit)
   # @param part [String, RoomPart] the title row's text or the part
   # @return [void]
   def deliver(field, part)
     @delivered[field] = part
+    @next_burst[field] = part if @next_burst
     emit(field, part)
   end
 
@@ -442,12 +462,13 @@ class RoomAssembler
   # clear them.
   #
   # Component data owns the room it described: a field a component (or the
-  # subtitle, for the title) delivered in this burst is not sent again, and
-  # the view fills only the fields the burst didn't deliver (a LOOK, brief
-  # mode, a room without components). The title row is the one exception:
-  # it takes the roomName's text when that differs from the delivered title
-  # (Lich's room ids), so the row and the terminal title name the room
-  # alike.
+  # subtitle, for the title) delivered in this burst is not sent again (a
+  # prompt on the exits line ends the burst after this commit, see
+  # #prompt_seen), and the view fills only the fields the burst didn't
+  # deliver (a LOOK, brief mode, a room without components). The title row
+  # is the one exception: it takes the roomName's text when that differs
+  # from the delivered title (Lich's room ids), so the row and the terminal
+  # title name the room alike.
   #
   # @return [void]
   def commit_view

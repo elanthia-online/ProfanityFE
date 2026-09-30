@@ -211,7 +211,9 @@ class GameTextProcessor
 
   # Process a line from the game server by tokenizing it into text and
   # tag segments, dispatching each tag to its handler, and flushing the
-  # accumulated text through handle_game_text.
+  # accumulated text through handle_game_text. Then ends the line for the
+  # span trackers and the room assembler (a prompt on the line ends the
+  # room burst only here; see RoomAssembler#prompt_seen).
   #
   # Replaces the original mutating regex-and-slice while loop. Entity
   # unescaping happens per text segment before it enters the buffer,
@@ -237,6 +239,7 @@ class GameTextProcessor
   ensure
     @spans.end_line
     @marks.end_line
+    @room.end_line
   end
 
   # Process a chunk of game text after XML tags have been stripped.
