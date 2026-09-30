@@ -191,8 +191,10 @@ class RoomAssembler
   # Process room-related data arriving via XML component streams.
   #
   # Dispatches text from room component streams (room title, room desc,
-  # room objs, room players, room exits) to the appropriate pending slot.
-  # When exits arrive, commits all pending data to the RoomWindow.
+  # room objs, room players, room exits) to the appropriate pending slot
+  # and shows it in the RoomWindow. The room exits component clears the
+  # pending data; the inline "Obvious paths/exits:" line commits it (see
+  # {#process_room_data}).
   #
   # @param text [String] component text content
   # @param stream [String, nil] the current stream
@@ -378,9 +380,9 @@ class RoomAssembler
 
   # Commit all pending room data to the RoomWindow and clear the staging area.
   #
-  # Called when exits arrive (the last expected room component). Only commits
-  # if there is actual pending data to avoid double-updates that would clear
-  # previously committed data.
+  # Called by the inline "Obvious paths/exits:" line, which ends an inline
+  # room. Only commits if there is actual pending data to avoid
+  # double-updates that would clear previously committed data.
   #
   # @return [void]
   def commit_room_data_batch

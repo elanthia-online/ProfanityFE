@@ -488,10 +488,10 @@ module TagHandlers
     # The room marks record every link: the room window keeps its links
     # while .links is off, so they work once it is turned on.
     @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd)
-    # Always track links for room component streams — the RoomWindow needs
-    # pre-computed link positions even when .links is off, so they're ready
-    # when toggled on. Room stream text is consumed (never reaches main
-    # window), so these extra color regions don't affect other windows.
+    # The link's color span: with .links on, and always in a room stream,
+    # whose colors go to the room players indicator and to a text window
+    # showing that stream (the room window takes its links from the room
+    # marks). Room stream text never reaches main.
     return unless @state.blue_links || @router.current_stream&.start_with?(Streams::ROOM)
 
     colors = Presets.colors(Presets::LINKS, LinkExtractor::DEFAULT_LINK_COLOR)
