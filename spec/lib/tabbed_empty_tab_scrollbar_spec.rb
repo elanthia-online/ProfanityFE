@@ -248,6 +248,45 @@ RSpec.describe 'A tabbed window whose shown tab is empty' do
         expect(tabbed_cells).to eq active(text_rows, thumb: 1)
       end
 
+      # The other tab is scrolled to the top: its thumb is on the marker's
+      # row. The switch moves the thumb to the bottom with the same
+      # incremental update a text window uses when its thumb leaves the
+      # top row, so the empty tab's column is the one an active text
+      # window shows after it is scrolled to the top and back to the
+      # bottom, whatever that looks like (today the bar glyph on the top
+      # row, with no marker until the next full redraw; an open question
+      # for the maintainer, shared with text windows and full tabs).
+      it 'moves the thumb off the top row as an active text window does, leaving no stale thumb' do
+        (1..8).each { |n| tabbed.route_string("c#{n}", [], 'combat') }
+        10.times { press('scroll_current_window_up_one') }
+        expect(tabbed.rows).to eq [' 1:combat | 2:logons', 'c1', 'c2', 'c3', 'c4']
+        expect(tabbed_cells).to eq active(text_rows, thumb: 0)
+
+        press('next_tab')
+        expect(tabbed.rows).to eq [' 1:combat | 2:logons', '', '', '', '']
+        empty_tab_cells = tabbed_cells
+        expect(empty_tab_cells.last).to eq :thumb
+        expect(empty_tab_cells[0...-1]).not_to include :thumb
+
+        # The reference: an active text window with as many rows, scrolled
+        # to the top and back to the bottom (built last: a WindowManager of
+        # its own replaces the scroll windows).
+        wm = WindowManager.new
+        LAYOUT['top_and_back'] = REXML::Document.new(<<~XML).root
+          <layout><window class='text' top='0' left='0' height='#{text_rows}' width='40' value='ref'/></layout>
+        XML
+        wm.load_layout('top_and_back')
+        text = wm.stream['ref']
+        (1..8).each { |n| text.add_string("r#{n}") }
+        expect(text).to be_active
+        expect(scrollbar_cells(text)).to eq active(text_rows)
+        text.scroll_lines(-10)
+        expect(scrollbar_cells(text)).to eq active(text_rows, thumb: 0)
+        text.scroll_lines(10)
+
+        expect(empty_tab_cells).to eq scrollbar_cells(text)
+      end
+
       it 'keeps its scrollbar after a resize on the empty tab and a switch to a full one' do
         (1..8).each { |n| tabbed.route_string("c#{n}", [], 'combat') }
         press('next_tab')
