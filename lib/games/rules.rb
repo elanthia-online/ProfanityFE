@@ -53,5 +53,14 @@ module Games
     #   whitespace is ignored)
     # @return [String, nil] the short name; nil when the game has none for it
     def spell_abbreviation(spell_name); end
+
+    # Whether a room component's list was cut short by the game, so it
+    # doesn't hold the whole room: the room's inline line has the full
+    # list, and fills the room window in its place.
+    #
+    # @param text [String] the component's text, tags removed and stripped
+    # @return [Boolean, nil] true when the game marked the list as cut
+    #   short; nil when the game has no such mark
+    def room_list_cut_short?(text); end
   end
 end

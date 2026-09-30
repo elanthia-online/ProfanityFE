@@ -364,7 +364,6 @@ RSpec.describe 'Room carriers' do
 
   describe "DR's cut-short objs component, then the full inline list in the same move" do
     it 'shows the full inline list, with every creature' do
-      pending 'the cut-short objs component owns the objects (PLAN Q1 b; flips in the cut-short commit)'
       load_layout
 
       receive_from_server(*fixture('dr_cut_short_objs'))

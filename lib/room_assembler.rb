@@ -3,6 +3,7 @@
 require_relative 'streams'
 require_relative 'room_title'
 require_relative 'room_part'
+require_relative 'games'
 
 # Assembles the room window's data (title, description, objects, players,
 # exits) from the two ways the game sends it, and updates the room players
@@ -46,11 +47,15 @@ class RoomAssembler
   # @param pending_render [PendingRender] asked for flushes and room renders
   # @param shared_state [SharedState] its +room_title+ is set from roomName
   #   text and room title component text
-  def initialize(window_mgr:, event_bus:, pending_render:, shared_state:)
+  # @param game_rules [Games::Rules] asked whether a room objs component was
+  #   cut short (see Games::Rules#room_list_cut_short?); both games' when
+  #   the game isn't known
+  def initialize(window_mgr:, event_bus:, pending_render:, shared_state:, game_rules: Games::BOTH_GAMES)
     @wm = window_mgr
     @event_bus = event_bus
     @pending_render = pending_render
     @state = shared_state
+    @game_rules = game_rules
 
     @capture_mode = nil
     # Where the description being captured starts in the text handed off
@@ -259,7 +264,14 @@ class RoomAssembler
       @component_desc_room = @state.room_title
       deliver(:desc, part)
     when Streams::ROOM_OBJS
-      deliver(:objects, part)
+      if @game_rules.room_list_cut_short?(part.text)
+        # A list the game cut short doesn't hold the whole room: it is shown,
+        # but the room's inline line (with every object) fills in.
+        @delivered.delete(:objects)
+        emit(:objects, part)
+      else
+        deliver(:objects, part)
+      end
     when Streams::ROOM_PLAYERS
       deliver(:players, part)
     when Streams::ROOM_EXITS

@@ -18,12 +18,14 @@
 require_relative '../spec_helper'
 require 'rexml/document'
 require_relative '../../lib/game_text_processor'
+require_relative '../../lib/games'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/window_manager'
 
 RSpec.describe 'Room ownership' do
   let(:state) { SharedState.new.tap { |s| s.skip_server_time_offset = true } }
   let(:prompt) { '<prompt time="1">&gt;</prompt>' }
+  let(:game_rules) { Games::BOTH_GAMES }
 
   before do
     allow(IO).to receive(:select).and_return(nil)
@@ -43,7 +45,7 @@ RSpec.describe 'Room ownership' do
     @processor = GameTextProcessor.new(
       window_mgr: @window_manager, shared_state: state, cmd_buffer: Struct.new(:window).new(nil),
       xml_escapes: { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' },
-      event_bus: event_bus
+      event_bus: event_bus, game_rules: game_rules
     )
   end
 
@@ -139,6 +141,42 @@ RSpec.describe 'Room ownership' do
       expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a rat.', 'Also here: Ann.',
                                  'Obvious paths: [north](north).']
       expect(indicator_label).to eq 'Ann'
+    end
+  end
+
+  describe "DR's cut-short objs component" do
+    let(:cut) { 'You also see a box, a rat and some other stuff.' }
+    let(:full) { '  You also see a box, a rat, a pebble and a leaf.' }
+
+    it "doesn't own the objects: the inline list of the burst fills in" do
+      receive_from_server(*components('[A] (1)', objs: cut), *inline('[A] (1)', objs: full), prompt)
+
+      expect(room_screen[2]).to eq 'You also see a box, a rat, a pebble and a leaf.'
+    end
+
+    # Characterization (passes on the base by design): the cut list is
+    # shown as it arrives.
+    it 'shows until the inline list arrives' do
+      receive_from_server(*components('[A] (1)', objs: cut))
+
+      expect(room_screen[2]).to eq 'You also see a box, a rat and some other stuff.'
+    end
+
+    it 'takes back the ownership a whole list gave earlier in the burst' do
+      receive_from_server(*components('[A] (1)'), "<component id='room objs'>#{cut}</component>",
+                          *inline('[A] (1)', objs: full), prompt)
+
+      expect(room_screen[2]).to eq 'You also see a box, a rat, a pebble and a leaf.'
+    end
+
+    context 'with --game=GS' do
+      let(:game_rules) { Games.rules_for('GS') }
+
+      it 'owns the objects: GemStone has no cut-short mark' do
+        receive_from_server(*components('[A] (1)', objs: cut), *inline('[A] (1)', objs: full), prompt)
+
+        expect(room_screen[2]).to eq 'You also see a box, a rat and some other stuff.'
+      end
     end
   end
 
