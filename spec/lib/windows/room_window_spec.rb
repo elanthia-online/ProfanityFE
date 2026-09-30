@@ -45,6 +45,7 @@ RSpec.describe RoomWindow do
   def show_room(desc, desc_links: [], exits: 'Go: north.', exit_links: [{ start: 4, end: 9, cmd: 'north' }])
     window.update_desc(desc, links: desc_links)
     window.update_exits(exits, links: exit_links)
+    window.render
   end
 
   describe 'word wrap' do
@@ -157,6 +158,7 @@ RSpec.describe RoomWindow do
         window.update_stringprocs('proc')
         window.update_lich_exits('Also: <d cmd="go gate">gate</d>')
         window.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
+        window.render
       end
 
       it 'shows the game exits, then Lich exits, on the bottom rows, and cuts the sections below them' do
@@ -179,6 +181,7 @@ RSpec.describe RoomWindow do
         window.update_room_number('Room: 12')
         window.update_stringprocs('proc')
         window.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
+        window.render
       end
 
       it 'cuts the sections below the exits first' do
@@ -215,8 +218,26 @@ RSpec.describe RoomWindow do
       window.update_room_number('Room: 12')
       window.update_lich_exits('Also: <d cmd="go gate">gate</d>')
       window.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
+      window.render
 
       expect(window.rows).to eq ['abcdefghij', 'klm', 'Go: north.', 'Also: gate', 'Room: 12']
+    end
+  end
+
+  # The server loop draws the window once per flush (spec/lib/room_renders_spec.rb):
+  # a part only changes what the window holds.
+  describe 'a room part' do
+    it 'changes nothing on screen until the window is rendered' do
+      window.update_title('[Hall]')
+      window.update_exits('Go: north.')
+      window.update_lich_exits('Also: gate')
+      window.update_room_number('Room: 12')
+      window.update_stringprocs('proc')
+      expect(window.rows).to all(eq '')
+
+      window.render
+
+      expect(window.rows).to eq ['[Hall]', 'Go: north.', 'Also: gate', 'Room: 12', 'proc']
     end
   end
 end

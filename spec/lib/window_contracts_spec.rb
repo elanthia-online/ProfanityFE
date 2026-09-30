@@ -364,6 +364,7 @@ RSpec.describe 'Window contracts' do
       app.shared_state.blue_links = true
       event_bus.emit(:room_title, text: '[Town Square]')
       event_bus.emit(:room_exits, text: 'Obvious paths: north.', links: [{ start: 15, end: 20, cmd: 'north' }])
+      event_bus.emit(:room_render)
       row = room.rows.index('Obvious paths: north.')
       click(17 + row, 16)
 
@@ -545,6 +546,7 @@ RSpec.describe 'Window contracts' do
       stream_text('percWindow', 'Shadows (2 roisaen)')
       event_bus.emit(:room_title, text: '[Town Square]')
       event_bus.emit(:room_exits, text: 'Obvious paths: north.')
+      event_bus.emit(:room_render)
       event_bus.emit(:countdown_update, id: 'roundtime', end_time: now[0] + 2, secondary_end_time: now[0] + 4)
     end
 
@@ -608,6 +610,7 @@ RSpec.describe 'Window contracts' do
       event_bus.emit(:room_title, text: '[Town Square]')
       event_bus.emit(:room_desc, text: 'Old stones.')
       event_bus.emit(:room_exits, text: 'Obvious paths: north.')
+      event_bus.emit(:room_render)
 
       expect(room.rows).to eq ['[Town Square]', 'Old stones.', 'Obvious paths: north.', '']
     end

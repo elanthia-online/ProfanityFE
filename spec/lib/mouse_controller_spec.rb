@@ -562,6 +562,7 @@ RSpec.describe MouseController do
       before do
         room.update_desc('abcdefghij klmnopqrst e', links: [{ start: 22, end: 23, cmd: 'look e' }])
         room.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
+        room.render
       end
 
       it 'sends, for a click on each cell of the bottom row, the link shown there' do

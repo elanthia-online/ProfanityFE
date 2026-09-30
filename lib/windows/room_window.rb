@@ -10,9 +10,11 @@ require_relative '../presets'
 #
 # Shows the current room title, description, objects (with creature
 # highlighting), players, exits, room number, and string procs.
-# Updates arrive incrementally via the +update_*+ methods and a full
-# {#render} is triggered when exits arrive (the last component in the
-# batch). Mirrors Genie4's room window behavior.
+# Updates arrive incrementally via the +update_*+ methods, which only
+# store the new text: nothing is drawn until {#render}. The server loop
+# renders the window once per flush when a room part changed (see
+# {RoomAssembler} and {ServerReader}), and a resize, a layout change or
+# +.links+ renders it at once. Mirrors Genie4's room window behavior.
 #
 # All room sections receive pre-computed structured data from the SAX
 # parser: clean text, link regions (with :cmd for click dispatch), and
@@ -115,8 +117,7 @@ class RoomWindow < BaseWindow
     @players_links = links
   end
 
-  # Update the room exits and trigger a full render.
-  # Exits are typically the last component in a room update batch.
+  # Update the room exits text.
   #
   # @param text [String] clean exits text
   # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
@@ -124,7 +125,6 @@ class RoomWindow < BaseWindow
   def update_exits(text, links: [])
     @exits = text.strip
     @exits_links = links
-    render # Trigger full redraw on exits (last component)
   end
 
   # Update the Lich-injected supplemental exits (non-cardinal "Room Exits:").
@@ -133,25 +133,22 @@ class RoomWindow < BaseWindow
   # @return [void]
   def update_lich_exits(text)
     @lich_exits = text.strip
-    render
   end
 
-  # Update the room number text and re-render.
+  # Update the room number text.
   #
   # @param text [String] the raw room number text
   # @return [void]
   def update_room_number(text)
     @room_number = text.strip
-    render
   end
 
-  # Update the string procs text and re-render.
+  # Update the string procs text.
   #
   # @param text [String] the raw string procs text
   # @return [void]
   def update_stringprocs(text)
     @stringprocs = text.strip
-    render
   end
 
   # Clear supplemental fields (room number, stringprocs) between room changes

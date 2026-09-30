@@ -467,6 +467,7 @@ RSpec.describe LayoutLoader do
         wm.stream['percWindow'].add_string('Shadows (2 roisaen)')
         wm.room['room'].update_title('[Town Square]')
         wm.room['room'].update_exits('Obvious paths: north.')
+        wm.room['room'].render
       end
 
       it 'keeps what each shows, drawn at its new place and size' do
@@ -669,6 +670,7 @@ RSpec.describe LayoutLoader do
     # Show a room whose exit "north" is a link, as the game's exits do.
     def show_room
       room.update_exits('Obvious paths: north.', links: [{ start: 15, end: 20, cmd: 'north' }])
+      room.render
     end
 
     # What a click on each cell of "north" in the room window sends.
