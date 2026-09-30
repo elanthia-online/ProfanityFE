@@ -197,4 +197,66 @@ RSpec.describe SpanTracker do
       expect(spans.split_at_line_end(2)).to eq [{ start: 0, fg: 'c', end: 2 }]
     end
   end
+
+  describe 'the room marks (ROOM_MARKS)' do
+    subject(:marks) { described_class.new(described_class::ROOM_MARKS) }
+
+    it 'tracks only bold and links' do
+      expect(described_class::ROOM_MARKS.keys).to eq %i[bold link]
+      expect { marks.open(:preset, 0) }.to raise_error(KeyError)
+      expect { marks.close(:color, 0) }.to raise_error(KeyError)
+    end
+
+    it 'records a bold mark without a color, at a close and at a flush' do
+      marks.open(:bold, 2, mark: :bold)
+      marks.close(:bold, 5)
+      marks.open(:bold, 7, mark: :bold)
+      expect(marks.split_at_flush(9)).to eq [{ start: 2, mark: :bold, end: 5 }, { start: 7, mark: :bold, end: 9 }]
+      marks.close(:bold, 3)
+      expect(marks.split_at_line_end(4)).to eq [{ start: 0, mark: :bold, end: 3 }]
+    end
+
+    it 'records an empty bold mark' do
+      marks.open(:bold, 4, mark: :bold)
+      marks.close(:bold, 4)
+      expect(marks.runs).to eq [{ start: 4, mark: :bold, end: 4 }]
+    end
+
+    it 'records a link mark without a color or a command' do
+      marks.open(:link, 1, mark: :link, cmd: nil)
+      marks.close(:link, 3)
+      expect(marks.runs).to eq [{ start: 1, mark: :link, cmd: nil, end: 3 }]
+    end
+
+    it 'drops an open link at a flush, and records nothing for it' do
+      marks.open(:link, 1, mark: :link, cmd: 'go')
+      expect(marks.split_at_flush(4)).to be_empty
+      expect(marks.close(:link, 6)).to be_nil
+      expect(marks.runs).to be_empty
+    end
+
+    it 'closes nested links innermost first' do
+      marks.open(:link, 0, mark: :link, cmd: 'a')
+      marks.open(:link, 1, mark: :link, cmd: 'b')
+      marks.close(:link, 2)
+      marks.close(:link, 3)
+      expect(marks.runs).to eq [{ start: 1, mark: :link, cmd: 'b', end: 2 }, { start: 0, mark: :link, cmd: 'a', end: 3 }]
+    end
+
+    it 'records nothing for bold open at the last text, and drops it at the end of the line' do
+      marks.open(:bold, 2, mark: :bold)
+      expect(marks.split_at_line_end(5)).to be_empty
+      marks.end_line
+      expect(marks.close(:bold, 1)).to be_nil
+    end
+
+    # Characterization (passes before ROOM_MARKS too): the default rules
+    # are unchanged.
+    it 'leaves the color runs of a tracker built with the default rules alone' do
+      colors = described_class.new
+      colors.open(:bold, 0)
+      colors.close(:bold, 2)
+      expect(colors.runs).to be_empty
+    end
+  end
 end
