@@ -202,6 +202,13 @@ class StyledText
   # StyledText instances — one per wrapped line. Run positions are
   # correctly split across lines.
   #
+  # The work per row is proportional to the runs on or around that row,
+  # not to every run of the line: runs the wrap hasn't reached yet all
+  # move by the same amount at each row, so they wait under one shared
+  # offset and are only adjusted one by one once the row being cut could
+  # reach them. A long line with many links wraps in time proportional to
+  # its rows plus its runs.
+  #
   # @param width [Integer] maximum line width in characters; values below 1
   #   (a window only one or two columns wide) are treated as 1
   # @param indent [Boolean] whether continuation lines get 2-space indent
@@ -219,7 +226,18 @@ class StyledText
 
     lines = []
     remaining_text = @text.dup
-    remaining_runs = @runs.map(&:dup)
+
+    # Runs not reached yet, ordered by where they begin (the nearer of
+    # their start and end), all offset by +shift+ from their positions in
+    # @runs. A run joins +active+, as [index in @runs, run, start, end]
+    # kept in @runs order, once the row being cut reaches that position.
+    # Until then it starts and ends past the cut, so moving it never hits
+    # the clamp at 0, the removal of ended runs or the indent's start-at-0
+    # case below: the shared offset moves it exactly as they would.
+    waiting = @runs.each_with_index.sort_by { |run, index| [[run[:start] || 0, run[:end] || 0].min, index] }
+    next_waiting = 0
+    shift = 0
+    active = []
 
     while remaining_text.length > 0
       # Find a good break point
@@ -232,59 +250,70 @@ class StyledText
           # content on this line. Otherwise we'd emit a whitespace-only
           # line and indent would re-add whitespace → infinite loop.
           candidate = remaining_text[0, break_pos + 1]
-          if candidate.strip.length > 0
-            line = candidate
-          else
-            line = remaining_text[0, width]
-          end
+          line = candidate if candidate.strip.length > 0
         end
       end
 
       line_len = line.length
 
+      # Activate the waiting runs this row reaches
+      while next_waiting < waiting.length
+        run, index = waiting[next_waiting]
+        start = (run[:start] || 0) + shift
+        stop = (run[:end] || 0) + shift
+        break if [start, stop].min > line_len
+
+        active.insert(active.bsearch_index { |entry| entry[0] > index } || active.length, [index, run, start, stop])
+        next_waiting += 1
+      end
+
       # Build runs for this line segment
-      line_runs = remaining_runs.filter_map do |run|
-        next if (run[:start] || 0) >= line_len
-        next if (run[:end] || 0) <= 0
+      line_runs = active.filter_map do |_index, run, start, stop|
+        next if start >= line_len
+        next if stop <= 0
 
-        run.dup.merge(
-          start: [(run[:start] || 0), 0].max,
-          end: [(run[:end] || 0), line_len].min
-        )
+        run.merge(start: [start, 0].max, end: [stop, line_len].min)
       end
 
-      lines << self.class.new(line, line_runs)
+      lines << self.class.allocate.adopt(line, line_runs)
 
-      # Advance remaining text and shift run positions
+      # Advance remaining text, and stop when nothing but a line ending is
+      # left (the length test spares chomping a copy of the rest on every
+      # row)
       remaining_text = remaining_text[line_len..]
-      break if remaining_text.nil? || remaining_text.chomp.empty?
+      break if remaining_text.nil? || (remaining_text.length <= 2 && remaining_text.chomp.empty?)
 
-      remaining_runs.each do |run|
-        run[:start] = [(run[:start] || 0) - line_len, 0].max
-        run[:end] = (run[:end] || 0) - line_len
+      # Shift run positions
+      shift -= line_len
+      active.each do |entry|
+        entry[2] = [entry[2] - line_len, 0].max
+        entry[3] -= line_len
       end
-      remaining_runs.delete_if { |run| (run[:end] || 0) <= 0 }
+      active.delete_if { |entry| entry[3] <= 0 }
 
       # Handle indent/dedent for continuation lines
       if indent
         if remaining_text[0] == ' '
           remaining_text = " #{remaining_text}"
-          remaining_runs.each do |run|
-            run[:start] = (run[:start] || 0) + (run[:start] == 0 ? 2 : 1)
-            run[:end] = (run[:end] || 0) + 1
+          shift += 1
+          active.each do |entry|
+            entry[2] += (entry[2] == 0 ? 2 : 1)
+            entry[3] += 1
           end
         else
           remaining_text = "  #{remaining_text}"
-          remaining_runs.each do |run|
-            run[:start] = (run[:start] || 0) + 2
-            run[:end] = (run[:end] || 0) + 2
+          shift += 2
+          active.each do |entry|
+            entry[2] += 2
+            entry[3] += 2
           end
         end
       elsif remaining_text[0] == ' '
         remaining_text = remaining_text[1..]
-        remaining_runs.each do |run|
-          run[:start] = (run[:start] || 0) - 1
-          run[:end] = (run[:end] || 0) - 1
+        shift -= 1
+        active.each do |entry|
+          entry[2] -= 1
+          entry[3] -= 1
         end
       end
     end
@@ -302,6 +331,21 @@ class StyledText
   # @return [String] inspection string for debugging
   def inspect
     "#<StyledText text=#{@text.inspect} runs=#{@runs.length}>"
+  end
+
+  protected
+
+  # Fill an allocated, uninitialized instance with text and runs the
+  # caller built for it and hands over, without copying them (unlike
+  # {#initialize}). {#wrap} builds every row this way.
+  #
+  # @param text [String] the text, owned by this instance from now on
+  # @param runs [Array<Hash>] the runs, owned by this instance from now on
+  # @return [self]
+  def adopt(text, runs)
+    @text = text
+    @runs = runs
+    self
   end
 
   private
