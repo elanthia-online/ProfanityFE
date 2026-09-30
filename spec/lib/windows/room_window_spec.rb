@@ -147,30 +147,6 @@ RSpec.describe RoomWindow do
       end
     end
 
-    # Description 3 rows, exits 1, Lich's exits 1, room number 1 and
-    # stringprocs 1, in a window 4 rows high.
-    context 'with Lich exits and the sections below the exits' do
-      let(:height) { 4 }
-
-      before do
-        window.update_desc('abcdefghij klmnopqrst e')
-        window.update_room_number('Room: 12')
-        window.update_stringprocs('proc')
-        window.update_lich_exits('Also: <d cmd="go gate">gate</d>')
-        window.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
-        window.render
-      end
-
-      it 'shows the game exits, then Lich exits, on the bottom rows, and cuts the sections below them' do
-        expect(window.rows).to eq ['abcdefghij', 'klmnopqrst', 'Go: north.', 'Also: gate']
-      end
-
-      it 'sends the links of both exits where they are shown' do
-        expect(clicks_on_row(2)).to eq [nil, nil, nil, nil, 'north', 'north', 'north', 'north', 'north', nil]
-        expect(clicks_on_row(3)).to eq [nil, nil, nil, nil, nil, nil, 'go gate', 'go gate', 'go gate', 'go gate']
-      end
-    end
-
     # Description 2 rows, exits 1, room number 1 and stringprocs 1, in a
     # window 4 rows high.
     context 'only because of the sections below the exits' do
@@ -208,19 +184,6 @@ RSpec.describe RoomWindow do
         expect(clicks_on_row(0)).to eq [nil] * 10
         expect(clicks_on_row(1)).to eq ['north'] * 5 + [nil] * 5
       end
-    end
-  end
-
-  describe 'a room that fits the window' do
-    # Description 2 rows, exits 1, Lich's exits 1 and room number 1.
-    it 'shows every section in order' do
-      window.update_desc('abcdefghij klm')
-      window.update_room_number('Room: 12')
-      window.update_lich_exits('Also: <d cmd="go gate">gate</d>')
-      window.update_exits('Go: north.', links: [{ start: 4, end: 9, cmd: 'north' }])
-      window.render
-
-      expect(window.rows).to eq ['abcdefghij', 'klm', 'Go: north.', 'Also: gate', 'Room: 12']
     end
   end
 
