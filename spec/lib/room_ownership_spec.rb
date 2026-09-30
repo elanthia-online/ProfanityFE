@@ -205,6 +205,14 @@ RSpec.describe 'Room ownership' do
     end
   end
 
+  it 'changes only the exits for a lone exits line after a trailing players component' do
+    receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), "<component id='room players'>Also here: Bob.</component>", prompt,
+                        'Obvious paths: <d>north</d>, <d>up</d>.', prompt)
+
+    expect(room_screen).to eq ['[A] (1)', 'Desc of [A] (1).', 'You also see a box.', 'Also here: Bob.',
+                               'Obvious paths: [north](north), [up](up).']
+  end
+
   # Characterization (passes on the base by design): a roomDesc read on
   # another stream (a familiar's view) is staged, and the room exits
   # component drops it, so a later brief move doesn't show it.
