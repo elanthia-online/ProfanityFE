@@ -310,6 +310,35 @@ RSpec.describe 'The input loop' do
 
           expect(game_server.commands).to eq ['look']
         end
+
+        it 'runs that binding once for the rest of a burst that follows a lone Escape' do
+          # The pending combo takes the first resize, as it takes any key it
+          # does not list
+          run_client(keyboard("\e", resize_to(50, 180), resize_to(45, 165), resize_to(40, 150), pause(0.2)))
+
+          expect(game_server.commands).to eq ['look']
+        end
+      end
+
+      # original.xml and tysong.xml bind the resize key to the resize action,
+      # and Escape starts their alt combos, like default.xml's alt+N
+      context 'when the settings file binds the resize key to the resize action' do
+        let(:settings) { super().sub('</settings>', "<key id='resize' action='resize'/></settings>") }
+
+        it 'fits the layout once, at the final size, for a burst that follows a lone Escape' do
+          run_client(keyboard("\e", resize_to(50, 180), resize_to(45, 165), resize_to(40, 150),
+                              pause(0.2), pause(0)))
+
+          expect(fitted_at).to eq [[60, 200], [40, 150]]
+          expect([main.maxy, main.maxx]).to eq main_size_at_40x150
+        end
+
+        it 'does not fit a single resize that follows a lone Escape: the pending combo takes it' do
+          run_client(keyboard("\e", resize_to(40, 150), pause(0.2), pause(0)))
+
+          expect(fitted_at).to eq [[60, 200]]
+          expect([main.maxy, main.maxx]).to eq main_size_at_60x200
+        end
       end
     end
   end

@@ -1416,7 +1416,9 @@ Dragging the terminal's edge sends many resize events. ProfanityFE waits until
 none has come for 0.1 seconds, then re-fits once, at the final size (a single
 resize shows within about 0.2 seconds). A key pressed meanwhile re-fits at once,
 before the key is handled. A settings binding for the `resize` key also runs
-once per burst.
+once per burst (after a lone Escape, the pending key combo takes the first
+resize, as it takes any key it doesn't list; see
+[Nested Key Combos](#nested-key-combos-multi-key-sequences)).
 
 ```
 .resize

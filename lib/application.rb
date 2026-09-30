@@ -125,9 +125,10 @@ class Application
   # {#input_loop} re-fits the layout. A terminal drag sends a burst of
   # resizes; the layout (and the re-wrap of every text window's lines)
   # follows once, at the final size, when the burst stops. One input poll
-  # long, so a single resize is fitted 0.1-0.2 s after the terminal changed
-  # size, and no burst is fitted more often than one resize per poll.
-  RESIZE_QUIET_SECONDS = 0.1
+  # long ({INPUT_POLL_SECONDS}), so a single resize is fitted one to two
+  # polls (0.1-0.2 s) after the terminal changed size, and a burst with no
+  # key typed in it is not fitted more often than once per poll.
+  RESIZE_QUIET_SECONDS = INPUT_POLL_SECONDS
 
   # Seconds to wait for the TCP connection to the game server before giving
   # up (see {ServerConnection::CONNECT_TIMEOUT}).
@@ -761,7 +762,7 @@ class Application
     loop do
       IO.select([$stdin], nil, nil, input_poll_seconds)
       if @connection.ended?
-        CursesRenderer.synchronize { key_combo = handle_pending_resize(key_combo) } if @resize_due
+        CursesRenderer.synchronize { handle_pending_resize(key_combo) } if @resize_due
         end_session(@connection.take_outcome)
       end
 
@@ -771,7 +772,7 @@ class Application
         # Drag held at a window edge keeps scrolling once per tick
         drag_scrolled = @mouse_controller.tick_drag_auto_scroll
 
-        ch = read_key_after_resizes
+        ch, key_combo = read_key_after_resizes(key_combo)
         key_combo = handle_pending_resize(key_combo) if @resize_due && (ch || monotonic_now >= @resize_due)
         if ch.nil?
           @cmd_buffer.flush_screen if countdown_updated || drag_scrolled
@@ -808,16 +809,26 @@ class Application
 
   # Read the next key that is not a terminal resize (see {#read_key}).
   # Each KEY_RESIZE read on the way (a terminal drag queues several) makes
-  # the resize pending, due {RESIZE_QUIET_SECONDS} from now.
+  # the resize pending, due {RESIZE_QUIET_SECONDS} from now. The exception
+  # is a KEY_RESIZE read while a key combo is pending and the settings file
+  # binds the resize key: it goes to {#handle_key} at once, where the combo
+  # takes it (and ends), as every such KEY_RESIZE did before bursts were
+  # coalesced; the resizes after it make the resize pending.
   #
-  # @return [Integer, String, nil] the key, or nil when no other key is
-  #   waiting
-  def read_key_after_resizes
+  # @param key_combo [Hash, nil] the pending key-combo map
+  # @return [Array] +[key, key_combo]+: the key (Integer or String), or nil
+  #   when no other key is waiting, and the key-combo map (Hash or nil) to
+  #   use for it
+  def read_key_after_resizes(key_combo)
     loop do
       ch = read_key
-      return ch unless ch == Curses::KEY_RESIZE
+      return [ch, key_combo] unless ch == Curses::KEY_RESIZE
 
-      @resize_due = monotonic_now + RESIZE_QUIET_SECONDS
+      if key_combo && @key_binding.key?(ch)
+        key_combo = handle_key(ch, key_combo)
+      else
+        @resize_due = monotonic_now + RESIZE_QUIET_SECONDS
+      end
     end
   end
 
