@@ -117,6 +117,18 @@ class Application
   # server disconnects before the client exits anyway.
   EXIT_KEY_TIMEOUT = 30
 
+  # Seconds each pass of {#input_loop} waits for a key before it ticks the
+  # countdowns again.
+  INPUT_POLL_SECONDS = 0.1
+
+  # Seconds with no further terminal resize (KEY_RESIZE) after which
+  # {#input_loop} re-fits the layout. A terminal drag sends a burst of
+  # resizes; the layout (and the re-wrap of every text window's lines)
+  # follows once, at the final size, when the burst stops. One input poll
+  # long, so a single resize is fitted 0.1-0.2 s after the terminal changed
+  # size, and no burst is fitted more often than one resize per poll.
+  RESIZE_QUIET_SECONDS = 0.1
+
   # Seconds to wait for the TCP connection to the game server before giving
   # up (see {ServerConnection::CONNECT_TIMEOUT}).
   CONNECT_TIMEOUT = ServerConnection::CONNECT_TIMEOUT
@@ -726,21 +738,32 @@ class Application
   end
 
   # Read and dispatch keys until the session ends. Each pass waits up to
-  # 0.1 s for input, ends the session (see {#end_session}) once the server
-  # thread reports the connection over, and then, holding the render lock,
-  # ticks the countdown windows and the drag auto-scroll and hands one key
-  # to {#handle_key}. Ctrl+C (Interrupt) returns quietly; any other error
-  # is logged and ends the session through {#fatal_error}. Either way the
-  # connection and the curses screen are closed on the way out.
+  # {INPUT_POLL_SECONDS} for input, ends the session (see {#end_session})
+  # once the server thread reports the connection over, and then, holding
+  # the render lock, ticks the countdown windows and the drag auto-scroll
+  # and hands one key to {#handle_key}. Ctrl+C (Interrupt) returns quietly;
+  # any other error is logged and ends the session through {#fatal_error}.
+  # Either way the connection and the curses screen are closed on the way
+  # out.
+  #
+  # Terminal resizes (KEY_RESIZE) are handled once per burst: every resize
+  # already queued is read at once, and the resize key is handled when
+  # {RESIZE_QUIET_SECONDS} pass with no further resize, or at once when
+  # another key or mouse event comes first (before it, so input keeps its
+  # order), or when the session ends.
   #
   # @return [nil] only after Ctrl+C; otherwise it leaves through +exit+
   def input_loop
     key_combo = nil
+    @resize_due = nil
     @cmd_buffer.window.nodelay = true
 
     loop do
-      IO.select([$stdin], nil, nil, 0.1)
-      end_session(@connection.take_outcome) if @connection.ended?
+      IO.select([$stdin], nil, nil, input_poll_seconds)
+      if @connection.ended?
+        CursesRenderer.synchronize { key_combo = handle_pending_resize(key_combo) } if @resize_due
+        end_session(@connection.take_outcome)
+      end
 
       CursesRenderer.synchronize do
         # Tick countdowns on every iteration (~100ms), regardless of input
@@ -748,7 +771,8 @@ class Application
         # Drag held at a window edge keeps scrolling once per tick
         drag_scrolled = @mouse_controller.tick_drag_auto_scroll
 
-        ch = read_key
+        ch = read_key_after_resizes
+        key_combo = handle_pending_resize(key_combo) if @resize_due && (ch || monotonic_now >= @resize_due)
         if ch.nil?
           @cmd_buffer.flush_screen if countdown_updated || drag_scrolled
           next
@@ -770,6 +794,42 @@ class Application
   ensure
     @connection.close
     Curses.close_screen
+  end
+
+  # How long this pass of {#input_loop} waits for a key: {INPUT_POLL_SECONDS},
+  # or less when a pending terminal resize is due sooner.
+  #
+  # @return [Float] seconds
+  def input_poll_seconds
+    return INPUT_POLL_SECONDS unless @resize_due
+
+    (@resize_due - monotonic_now).clamp(0, INPUT_POLL_SECONDS)
+  end
+
+  # Read the next key that is not a terminal resize (see {#read_key}).
+  # Each KEY_RESIZE read on the way (a terminal drag queues several) makes
+  # the resize pending, due {RESIZE_QUIET_SECONDS} from now.
+  #
+  # @return [Integer, String, nil] the key, or nil when no other key is
+  #   waiting
+  def read_key_after_resizes
+    loop do
+      ch = read_key
+      return ch unless ch == Curses::KEY_RESIZE
+
+      @resize_due = monotonic_now + RESIZE_QUIET_SECONDS
+    end
+  end
+
+  # Handle the pending terminal resize once: the resize key goes to
+  # {#handle_key}, which fits the layout to the terminal's current size (or
+  # runs the settings file's binding for the key).
+  #
+  # @param key_combo [Hash, nil] the pending key-combo map
+  # @return [Hash, nil] the key-combo map to use for the next key
+  def handle_pending_resize(key_combo)
+    @resize_due = nil
+    handle_key(Curses::KEY_RESIZE, key_combo)
   end
 
   # Dispatch one key press: a mouse event, a step through a key combo, a

@@ -180,15 +180,19 @@ RSpec.describe 'The input loop' do
       end
     end
 
+    # A keyboard step: no key until the main window has the size it has at
+    # 40x150 (the layout waits for the terminal to stop resizing first).
+    def until_fitted = wait_until { [main.maxy, main.maxx] == main_size_at_40x150 }
+
     it 'fits the layout to the new size when the settings file does not bind the resize key' do
-      run_client(keyboard(resize_terminal))
+      run_client(keyboard(resize_terminal, until_fitted))
 
       expect(main_size_before_resize).to eq main_size_at_60x200
       expect([main.maxy, main.maxx]).to eq main_size_at_40x150
     end
 
     it 'still fits the layout after a .reload' do
-      run_client(keyboard(".reload\n", resize_terminal))
+      run_client(keyboard(".reload\n", resize_terminal, until_fitted))
 
       expect([main.maxy, main.maxx]).to eq main_size_at_40x150
     end
@@ -205,10 +209,107 @@ RSpec.describe 'The input loop' do
       let(:settings) { super().sub('</settings>', "<key id='resize' macro='look\\r'/></settings>") }
 
       it 'runs that binding instead' do
-        run_client(keyboard(resize_terminal))
+        run_client(keyboard(resize_terminal, wait_until { game_server.commands.any? }))
 
         expect(game_server.commands).to eq ['look']
         expect([main.maxy, main.maxx]).to eq main_size_at_60x200
+      end
+    end
+
+    # A terminal drag sends a burst of resizes. The layout (and every text
+    # window's re-wrap of its lines) waits until no resize has come for
+    # 0.1 s, then fits once, at the final size. Time is the input loop's
+    # monotonic clock, moved only by the keyboard steps below.
+    describe 'a burst of resizes (a terminal drag)' do
+      let(:clock) { [100.0] }
+      # The main window's [maxy, maxx] at each step that records it
+      let(:layout_seen) { [] }
+      # The terminal's [lines, cols] each time the layout was fitted to it,
+      # first when the client started
+      let(:fitted_at) { [] }
+      let(:main_size_at_50x180) { [48, 119] }
+      let(:main_size_at_45x165) { [43, 109] }
+
+      before do
+        allow(Process).to receive(:clock_gettime).and_call_original
+        allow(Process).to receive(:clock_gettime).with(Process::CLOCK_MONOTONIC) { clock[0] }
+        allow(app.window_mgr).to receive(:resize).and_wrap_original do |resize, *args|
+          fitted_at << [Curses.lines, Curses.cols]
+          resize.call(*args)
+        end
+      end
+
+      # A keyboard step: record the main window's size, then resize the
+      # terminal and deliver the key ncurses sends for it.
+      def resize_to(lines, cols)
+        press_after(Curses::KEY_RESIZE) do
+          layout_seen << [main.maxy, main.maxx]
+          terminal.merge!(lines: lines, cols: cols)
+        end
+      end
+
+      # A keyboard step: +seconds+ pass with no key pressed; then record
+      # the main window's size.
+      def pause(seconds)
+        lambda do
+          clock[0] += seconds
+          layout_seen << [main.maxy, main.maxx]
+        end
+      end
+
+      it 'fits the layout once, at the final size, after resizes less than 0.1 s apart' do
+        run_client(keyboard(resize_to(50, 180), pause(0.09), resize_to(45, 165), pause(0.09),
+                            resize_to(40, 150), pause(0.09), pause(0.02), pause(0)))
+
+        expect(layout_seen).to eq [main_size_at_60x200] * 7 + [main_size_at_40x150]
+        expect(fitted_at).to eq [[60, 200], [40, 150]]
+      end
+
+      it 'fits the layout 0.1 s after a single resize' do
+        run_client(keyboard(resize_to(40, 150), pause(0.09), pause(0.02), pause(0)))
+
+        expect(layout_seen).to eq [main_size_at_60x200] * 3 + [main_size_at_40x150]
+        expect(fitted_at).to eq [[60, 200], [40, 150]]
+      end
+
+      it 'fits the layout once for resizes already queued when it reads them' do
+        run_client(keyboard(resize_to(50, 180), resize_to(45, 165), resize_to(40, 150), pause(0.2), pause(0)))
+
+        expect(layout_seen).to eq [main_size_at_60x200] * 4 + [main_size_at_40x150]
+        expect(fitted_at).to eq [[60, 200], [40, 150]]
+      end
+
+      it 'fits the layout before a key typed in the burst, then handles the keys in order' do
+        command_line_seen = []
+        see_command_line = -> { command_line_seen << command_line.row(0) }
+
+        run_client(keyboard(resize_to(50, 180), resize_to(45, 165), 'a', see_command_line,
+                            resize_to(40, 150), 'b', see_command_line, pause(0.2)))
+
+        # fitted at 45x165 before "a", at 40x150 before "b"
+        expect(layout_seen).to eq [main_size_at_60x200, main_size_at_60x200, main_size_at_45x165,
+                                   main_size_at_40x150]
+        expect(command_line_seen).to eq %w[a ab]
+        expect(fitted_at).to eq [[60, 200], [45, 165], [40, 150]]
+      end
+
+      it 'fits the layout when the game hangs up before the burst is over' do
+        status, = run_client(keyboard(resize_to(40, 150), -> { game_server.hang_up }, idle: true))
+
+        expect(status).to eq 0
+        expect(fitted_at).to eq [[60, 200], [40, 150]]
+        expect([main.maxy, main.maxx]).to eq main_size_at_40x150
+      end
+
+      context 'when the settings file binds the resize key' do
+        let(:settings) { super().sub('</settings>', "<key id='resize' macro='look\\r'/></settings>") }
+
+        it 'runs that binding once for the burst' do
+          run_client(keyboard(resize_to(50, 180), pause(0.05), resize_to(45, 165), pause(0.05),
+                              resize_to(40, 150), pause(0.2)))
+
+          expect(game_server.commands).to eq ['look']
+        end
       end
     end
   end
