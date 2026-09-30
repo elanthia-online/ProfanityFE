@@ -246,6 +246,13 @@ RSpec.describe 'Inline room lines' do
 
       expect(room_rows.first).to eq 'Before'
     end
+
+    # Characterization: a roomDesc style whose own text is only spaces
+    # shows no description (the text before it stays in main).
+    it 'shows no description for a roomDesc style whose own text is only spaces' do
+      expect(desc_shown_for(%(Before <style id="roomDesc"/> <style id=""/>))).to eq []
+      expect(main_rows.first).to eq 'Before'
+    end
   end
 
   describe 'inline "You also see" objects' do

@@ -336,17 +336,17 @@ class RoomAssembler
 
   # The description a roomDesc capture takes from +text+: the text from
   # where the capture started (see #start_capture), with its links. When
-  # that has no text (a roomDesc style with nothing after it), the whole
-  # of +text+, without links, as the description has always been then.
+  # nothing follows that (a roomDesc style with no text after it), the
+  # whole of +text+, without links, as the description has always been
+  # then; text of only spaces is an empty description.
   #
   # @param text [String] non-empty game text
   # @param marks [Array<Hash>] the room marks for +text+
   # @return [RoomPart]
   def captured_desc(text, marks)
-    part = RoomPart.from_chunk(text, marks, from: @capture_at)
-    return part unless part.text.empty?
+    return RoomPart.new(text: text.strip, links: [], creatures: []) if text.length <= @capture_at
 
-    RoomPart.new(text: text.strip, links: [], creatures: [])
+    RoomPart.from_chunk(text, marks, from: @capture_at)
   end
 
   # Reset all pending room data slots to nil.
