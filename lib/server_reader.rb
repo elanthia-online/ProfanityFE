@@ -92,9 +92,14 @@ class ServerReader
   # Process one line from the server, then flush the screen if no more
   # server data is waiting.
   #
+  # A line the handler drops is not processed and writes no terminal
+  # title, but the flush still runs: the dropped line may end a burst whose
+  # earlier lines staged text.
+  #
   # An error in one line is logged and the line is skipped, so a bad line
   # (or a failing window handler) cannot end the session. Connection errors
-  # propagate to {#run}, which handles the disconnect.
+  # propagate to {#run}, which handles the disconnect. The log names the
+  # line as the handler kept it, or the raw line if the handler dropped it.
   #
   # @param line [String] raw line read from the server
   # @return [void]
@@ -107,16 +112,18 @@ class ServerReader
     # the UTF-8 gag and highlight patterns loaded from settings.
     line.force_encoding(Encoding::UTF_8).scrub!
     line.chomp!
-    line = @line_handler.prepare_line(line)
-    return if line.nil?
+    kept = @line_handler.prepare_line(line)
 
     # Synchronize all curses operations (noutrefresh calls from indicator,
     # text, countdown, and room window updates) with the final doupdate so
     # that timer and input threads cannot flush a half-updated virtual screen.
     CursesRenderer.synchronize do
-      @line_handler.process_line(line)
+      @line_handler.process_line(kept) unless kept.nil?
+      # A dropped line can end a burst: flush what the lines before it staged.
       flush_if_idle
     end
+    return if kept.nil?
+
     # Flush terminal title AFTER curses operations complete.
     # Writing escape sequences to $stdout inside the synchronize block
     # interleaves with curses output, causing visible artifacts.
@@ -124,7 +131,7 @@ class ServerReader
   rescue IOError, SystemCallError
     raise
   rescue StandardError => e
-    ProfanityLog.write('game_text_processor', "error processing line #{line.inspect}: #{e.message}", backtrace: e.backtrace)
+    ProfanityLog.write('game_text_processor', "error processing line #{(kept || line).inspect}: #{e.message}", backtrace: e.backtrace)
   end
 
   # Flush the screen update unless more game lines are waiting (batch
