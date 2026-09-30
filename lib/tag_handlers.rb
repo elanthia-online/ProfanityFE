@@ -577,8 +577,7 @@ module TagHandlers
     end
     # An empty name is no title: it hides the title row, and the terminal
     # title and the room indicator keep naming the last room.
-    @event_bus.emit(:room_title, text: title.to_s)
+    @room.show_title(title.to_s)
     @pending_render.request_update
-    @pending_render.request_room_render
   end
 end

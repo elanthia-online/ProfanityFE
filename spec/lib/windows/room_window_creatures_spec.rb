@@ -30,6 +30,7 @@ RSpec.describe RoomWindow do
   def show_objects(text, creatures)
     window.update_objects(text, creatures: creatures)
     window.update_exits('Obvious paths: north.')
+    window.render
   end
 
   # Columns of the objects row drawn in the creature color.

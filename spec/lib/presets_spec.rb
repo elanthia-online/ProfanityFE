@@ -238,6 +238,7 @@ RSpec.describe Presets do
     def show_objects(window, text, creatures)
       window.update_objects(text, creatures: creatures)
       window.update_exits('Obvious paths: north.')
+      window.render
     end
 
     it "doesn't highlight creatures when there is no monsterbold preset" do
@@ -272,11 +273,12 @@ RSpec.describe Presets do
       window = room_window
       window.update_title('[Town Square]')
       window.update_exits('Obvious paths: north.')
+      window.render
       expect(window.rows[0]).to eq '[Town Square]'
       expect(drawn_in(window, 0, 2)).to eq ''
 
       PRESET['roomName'] = ['00ff00', nil]
-      window.update_exits('Obvious paths: north.')
+      window.render
 
       expect(drawn_in(window, 0, 2)).to eq '[Town Square]'
     end
@@ -285,10 +287,11 @@ RSpec.describe Presets do
       window = room_window
       window.shared_state.blue_links = true
       window.update_exits('Obvious paths: north.', links: [{ start: 15, end: 20, cmd: 'north' }])
+      window.render
       expect(drawn_in(window, 0, 3)).to eq 'north'
 
       PRESET['links'] = ['00ff00', nil]
-      window.update_exits('Obvious paths: north.', links: [{ start: 15, end: 20, cmd: 'north' }])
+      window.render
 
       expect(drawn_in(window, 0, 2)).to eq 'north'
     end

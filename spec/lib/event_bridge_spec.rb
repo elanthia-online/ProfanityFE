@@ -201,14 +201,15 @@ RSpec.describe EventBridge do
   end
 
   describe 'room events' do
-    it 'shows every part of the room once the exits arrive' do
+    it 'shows every part of the room when the room is rendered, not before' do
       event_bus.emit(:room_title, text: '[Town Square]')
       event_bus.emit(:room_desc, text: 'Old stones.')
       event_bus.emit(:room_objects, text: 'You also see a rock.')
       event_bus.emit(:room_players, text: 'Also here: Bob.')
+      event_bus.emit(:room_exits, text: 'Obvious paths: north.')
       expect(room.rows).to all(eq '')
 
-      event_bus.emit(:room_exits, text: 'Obvious paths: north.')
+      event_bus.emit(:room_render)
 
       expect(room.rows).to eq ['[Town Square]', 'Old stones.', 'You also see a rock.', 'Also here: Bob.',
                                'Obvious paths: north.', '']
@@ -219,6 +220,8 @@ RSpec.describe EventBridge do
       event_bus.emit(:room_lich_exits, text: 'Room Exits: go gate')
       event_bus.emit(:room_number, text: 'Room Number: 1234')
       event_bus.emit(:room_stringprocs, text: 'StringProcs: climb wall')
+      expect(room.rows).to all(eq '')
+      event_bus.emit(:room_render)
       shown = room.rows
 
       event_bus.emit(:room_supplemental_clear)
@@ -330,6 +333,7 @@ RSpec.describe EventBridge do
 
     stream_text('death', 'Bob died.')
     event_bus.emit(:room_exits, text: 'Obvious paths: none.')
+    event_bus.emit(:room_render)
 
     expect(wm.stream['death']).to be_a TabbedTextWindow
     expect(wm.stream['death'].rows[1]).to eq 'Bob died.'

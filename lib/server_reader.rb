@@ -74,9 +74,14 @@ class ServerReader
   # Show the "Connection closed / Press any key to exit" notice in the
   # main window and flush it to the screen.
   #
+  # This is the flush the last burst never got: a closed connection reads
+  # as ready, so {#flush_if_idle} skipped it. A room render that burst
+  # asked for is drawn here.
+  #
   # @return [void]
   def show_disconnect_message
     CursesRenderer.render do
+      render_pending_room
       @event_bus.emit(:disconnect)
       @cmd_buffer.window&.noutrefresh
     end
@@ -132,15 +137,24 @@ class ServerReader
     return unless @pending.update_requested? && !IO.select([@server], nil, nil, 0.001)
 
     @pending.clear_update
-    if @pending.room_render_requested?
-      @event_bus.emit(:room_render)
-      @pending.clear_room_render
-    end
+    render_pending_room
     @cmd_buffer.window&.noutrefresh
     Curses.doupdate
     return unless @first_render && @boot_profiler.enabled?
 
     @boot_profiler.log_elapsed('first screen render')
     @first_render = false
+  end
+
+  # Draw the room window if a room render was asked for since the last
+  # flush.
+  #
+  # @return [void]
+  # @api private
+  def render_pending_room
+    return unless @pending.room_render_requested?
+
+    @event_bus.emit(:room_render)
+    @pending.clear_room_render
   end
 end

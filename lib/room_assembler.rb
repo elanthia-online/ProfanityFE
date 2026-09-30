@@ -19,8 +19,14 @@ require_relative 'room_title'
 #   the raw line so their markup is kept, and committed as one batch when
 #   the exits arrive.
 #
-# UI updates are emitted on the event bus. The window manager is only asked
-# whether the layout has a RoomWindow (see #room_window?).
+# UI updates are emitted on the event bus. Every room part this class sends
+# to the room window also asks for the window to be rendered at the next
+# flush (see {#show_title} and {PendingRender#request_room_render}), so a
+# burst of room parts is drawn once. The one room part sent elsewhere is
+# the subtitle on a room stream's opening tag
+# (TagHandlers#handle_stream_open): it asks for no render and shows with
+# the next one. The window manager is only asked whether the layout has a
+# RoomWindow (see #room_window?).
 class RoomAssembler
   # Element names of the tags stripped from inline "You also see" text.
   COMPONENT_TAGS = %w[component compDef].freeze
@@ -167,7 +173,8 @@ class RoomAssembler
                               text.strip
                             end
       room_data_captured = true
-      # Trigger room render since exits are typically last
+      # The exits line ends an inline room: commit it (drawn at the next
+      # flush)
       commit_room_data_batch
     end
 
@@ -178,15 +185,15 @@ class RoomAssembler
             else
               text.strip
             end
-      @event_bus.emit(:room_lich_exits, text: raw)
+      show(:room_lich_exits, text: raw)
       room_data_captured = true
       @pending_render.request_update
     elsif text =~ /^Room Number:\s*\d+/
-      @event_bus.emit(:room_number, text: text.strip)
+      show(:room_number, text: text.strip)
       room_data_captured = true
       @pending_render.request_update
     elsif text =~ /^StringProcs:/
-      @event_bus.emit(:room_stringprocs, text: text.strip)
+      show(:room_stringprocs, text: text.strip)
       room_data_captured = true
       @pending_render.request_update
     end
@@ -234,34 +241,40 @@ class RoomAssembler
     links = extract_sax_links(line_colors, left_offset)
     clean = text.strip
 
+    # Another room stream (DR's room extra) changes nothing in the room
+    # window, so it asks for no room render.
     case stream
     when Streams::ROOM, Streams::ROOM_TITLE
       @room_pending_title = title
-      @event_bus.emit(:room_title, text: title)
+      show_title(title)
     when Streams::ROOM_DESC, Streams::ROOM_DESC_ALT
       @room_pending_desc = clean
       @component_desc_room = @state.room_title
-      @event_bus.emit(:room_desc, text: clean, links: links)
+      show(:room_desc, text: clean, links: links)
     when Streams::ROOM_OBJS
       creatures = extract_sax_creatures(line_colors, text, left_offset)
       @room_pending_objects = clean
-      @event_bus.emit(:room_objects, text: clean, links: links, creatures: creatures)
+      show(:room_objects, text: clean, links: links, creatures: creatures)
     when Streams::ROOM_PLAYERS
       @room_pending_players = clean
-      @event_bus.emit(:room_players, text: clean, links: links)
+      show(:room_players, text: clean, links: links)
     when Streams::ROOM_EXITS
       @room_pending_exits = clean
-      @event_bus.emit(:room_exits, text: clean, links: links)
+      show(:room_exits, text: clean, links: links)
       clear_pending_room_data
     end
-
-    # Defer room window render to the IO.select flush point to reduce
-    # curses operation frequency (update_exits already renders internally)
-    @pending_render.request_room_render unless stream == Streams::ROOM_EXITS
 
     @pending_render.request_update
     # Don't skip for room players - let the indicator handler also process it
     stream == Streams::ROOM_PLAYERS ? :continue : :consumed
+  end
+
+  # Show +text+ as the room window's title row, drawn at the next flush.
+  #
+  # @param text [String] the title row's text (see {RoomWindow#update_title})
+  # @return [void]
+  def show_title(text)
+    show(:room_title, text: text)
   end
 
   # Update the 'room players' indicator window with parsed player names.
@@ -290,6 +303,18 @@ class RoomAssembler
   end
 
   private
+
+  # Send a room part to the room window and ask for the window to be
+  # rendered at the next flush. The window only stores the part (see
+  # {RoomWindow#update_exits}), so the parts of a burst are drawn once.
+  #
+  # @param event [Symbol] the room event (+:room_desc+, +:room_exits+, ...)
+  # @param data [Hash] the event's data
+  # @return [void]
+  def show(event, **data)
+    @event_bus.emit(event, **data)
+    @pending_render.request_room_render
+  end
 
   # Whether the layout has a RoomWindow.
   #
@@ -506,7 +531,7 @@ class RoomAssembler
 
     # Only update if we have pending data (avoid double-updates clearing data)
     if @room_pending_title || @room_pending_desc || @room_pending_objects || @room_pending_players
-      @event_bus.emit(:room_title, text: @room_pending_title || '')
+      show_title(@room_pending_title || '')
 
       # Inline path stores raw XML — convert to structured data at emission time.
       # Without a roomDesc (DR leaves it out when room descriptions are off,
@@ -515,18 +540,18 @@ class RoomAssembler
       # the component didn't describe gets none, not the last room's.
       if @room_pending_desc || @component_desc_room != @state.room_title
         desc_clean, desc_links = structurize_text(@room_pending_desc || '')
-        @event_bus.emit(:room_desc, text: desc_clean, links: desc_links)
+        show(:room_desc, text: desc_clean, links: desc_links)
       end
 
       obj_raw = @room_pending_objects || ''
       obj_clean, obj_links = structurize_text(obj_raw)
       creatures = extract_inline_creatures(obj_raw)
-      @event_bus.emit(:room_objects, text: obj_clean, links: obj_links, creatures: creatures)
+      show(:room_objects, text: obj_clean, links: obj_links, creatures: creatures)
 
       player_clean, player_links = structurize_text(@room_pending_players || '')
-      @event_bus.emit(:room_players, text: player_clean, links: player_links)
+      show(:room_players, text: player_clean, links: player_links)
 
-      @event_bus.emit(:room_supplemental_clear)
+      show(:room_supplemental_clear)
 
       # Also update the room players indicator (fallback for games that don't use streams)
       update_room_players_indicator(@room_pending_players)
@@ -535,9 +560,8 @@ class RoomAssembler
     end
 
     # Always update exits (even on subsequent exit lines).
-    # update_exits triggers render internally.
     exits_clean, exits_links = structurize_text(exits_raw)
-    @event_bus.emit(:room_exits, text: exits_clean, links: exits_links)
+    show(:room_exits, text: exits_clean, links: exits_links)
     @pending_render.request_update
   end
 

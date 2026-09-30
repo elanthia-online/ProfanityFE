@@ -83,6 +83,7 @@ RSpec.describe 'The active scrollbar across resizes' do
     # scrollbar (spec/lib/tabbed_inactive_scrollbar_spec.rb).
     tabbed.route_string('You swing.', [], 'combat')
     room.update_exits('Obvious paths: north.')
+    room.render
   end
 
   it 'keeps the marker on the current window after a terminal resize' do
