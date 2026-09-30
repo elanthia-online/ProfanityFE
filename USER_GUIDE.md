@@ -1658,7 +1658,9 @@ The active window is indicated by:
 - A bold vertical line scrollbar character
 - A right-pointing triangle at the top of the scrollbar
 
-Inactive windows have a plain pipe (`|`) scrollbar.
+An inactive text window's scrollbar, when it is drawn (a resize draws the
+first text window's), is a plain pipe (`|`). An inactive tabbed window shows
+no scrollbar; it gets one when it becomes the active window.
 
 ### Scrollbar Behavior
 
