@@ -354,10 +354,11 @@ RSpec.describe 'Room carriers' do
       receive_from_server(*fixture('dr_look_after_players'))
 
       expect(indicator).to eq ['Holdigor, Catheroine, Fidon, Evro, Mahtra, Quilsilgas, Ytter', 'yellow']
-      expect(main_rows.last(3)).to eq [
+      expect(main_rows.last(4)).to eq [
         'Also here: Holdigor who is emanating a benevolent holy aura, Paintress Catheroine who is blurred',
         'by hazy afterimages, Traveler Fidon who is awash in Xibar-blue light, Meraud\'s Hand Evro who is',
-        'emanating a bright holy aura, Emerald Knight Mahtra, Quilsilgas and Druid Ytterby.'
+        'emanating a bright holy aura, Emerald Knight Mahtra, Quilsilgas and Druid Ytterby.',
+        'Obvious paths: north, south.'
       ]
     end
   end
