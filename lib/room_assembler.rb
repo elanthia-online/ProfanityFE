@@ -29,7 +29,9 @@ require_relative 'games'
 # flush (see {PendingRender#request_room_render}), so a burst of room parts
 # is drawn once; for the subtitle the tag parser asks (a room streamWindow)
 # or doesn't (a room stream's opening tag, which shows with the next
-# render; see TagHandlers#handle_stream_open). The window manager is only
+# render; see TagHandlers#handle_stream_open). The inline commit's clearing
+# of Lich's lines asks only when some are shown, so a commit that sends
+# nothing new doesn't draw the window again. The window manager is only
 # asked whether the layout has a RoomWindow (see #room_window?).
 class RoomAssembler
   # The part a room field shows when nothing was staged for it: no text.
@@ -73,6 +75,9 @@ class RoomAssembler
     # in this burst, which the inline commit doesn't send again (see
     # #commit_view): field => the title row's text or the part
     @delivered = {}
+    # Whether Lich's lines (Room Exits, Room Number, StringProcs) are in the
+    # room window, for the inline commit, which clears them
+    @lich_lines_shown = false
   end
 
   # A prompt arrived: it ends the burst, so the fields the components
@@ -206,17 +211,14 @@ class RoomAssembler
     # Detect Lich-injected supplemental lines (come after game exits)
     if text =~ /^Room Exits:/
       exits = RoomPart.from_chunk(text, marks)
-      show(:room_lich_exits, text: exits.text, links: exits.links)
+      show_lich_line(:room_lich_exits, text: exits.text, links: exits.links)
       room_data_captured = true
-      @pending_render.request_update
     elsif text =~ /^Room Number:\s*\d+/
-      show(:room_number, text: text.strip)
+      show_lich_line(:room_number, text: text.strip)
       room_data_captured = true
-      @pending_render.request_update
     elsif text =~ /^StringProcs:/
-      show(:room_stringprocs, text: text.strip)
+      show_lich_line(:room_stringprocs, text: text.strip)
       room_data_captured = true
-      @pending_render.request_update
     end
 
     room_data_captured
@@ -357,6 +359,19 @@ class RoomAssembler
     @pending_render.request_room_render
   end
 
+  # Show one of the lines Lich adds after a room in the room window (see
+  # #show), and note that the window holds Lich lines for the inline commit
+  # to clear.
+  #
+  # @param event [Symbol] +:room_lich_exits+, +:room_number+ or +:room_stringprocs+
+  # @param data [Hash] the event's data
+  # @return [void]
+  def show_lich_line(event, **data)
+    show(event, **data)
+    @lich_lines_shown = true
+    @pending_render.request_update
+  end
+
   # Whether the layout has a RoomWindow.
   #
   # @return [Boolean]
@@ -464,7 +479,11 @@ class RoomAssembler
         emit(:players, view[:players] || EMPTY_PART)
       end
 
-      show(:room_supplemental_clear)
+      # Lich's lines go with the room they followed. Clearing them changes
+      # the window only when some are shown, so only then is it drawn again.
+      @event_bus.emit(:room_supplemental_clear)
+      @pending_render.request_room_render if @lich_lines_shown
+      @lich_lines_shown = false
 
       # Also update the room players indicator (fallback for games that
       # don't use streams); players a component delivered updated it already
