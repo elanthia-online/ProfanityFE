@@ -167,6 +167,18 @@ RSpec.describe 'Room ownership' do
     end
   end
 
+  # Characterization (passes on the base by design): a roomDesc read on
+  # another stream (a familiar's view) is staged, and the room exits
+  # component drops it, so a later brief move doesn't show it.
+  it "doesn't show a familiar's room description on a brief move with an exits component" do
+    receive_from_server("<pushStream id='familiar'/><preset id='roomDesc'>The familiar's room.</preset>", '<popStream/>', prompt,
+                        "<streamWindow id='room' title='Room' subtitle=\" - [A] (1)\" location='center' target='drop' ifClosed='' resident='true'/>",
+                        "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>",
+                        '<resource picture="0"/><style id="roomName" />[A] (1)', '<style id=""/>  ', 'Obvious paths: <d>north</d>.', prompt)
+
+    expect(room_screen).to eq ['[A] (1)', 'Obvious paths: [north](north).']
+  end
+
   # Characterization (passes on the base by design): a second room's
   # subtitle starts a new burst, so the first room's components don't own
   # the second room's inline lines.

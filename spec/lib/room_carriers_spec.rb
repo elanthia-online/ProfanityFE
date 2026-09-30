@@ -337,7 +337,6 @@ RSpec.describe 'Room carriers' do
 
   describe 'a LOOK after a trailing players component' do
     it "shows the LOOK's own players line" do
-      pending 'a LOOK re-sends the players the component staged, not its own line (PLAN §5 f; flips in commit 10)'
       load_layout
 
       receive_from_server(*fixture('dr_look_after_players'))
@@ -704,7 +703,7 @@ RSpec.describe 'Room carriers' do
       expect(main_rows[1]).to eq 'You also see a <red> box.'
     end
 
-    it 'keeps the links of players a component staged when the inline commit re-sends them (GemStone)' do
+    it 'keeps the links of players a component delivered, over the inline line of the same burst (GemStone)' do
       load_layout
 
       receive_from_server("<component id='room exits'>Obvious paths: out</component>",
@@ -714,7 +713,7 @@ RSpec.describe 'Room carriers' do
       expect(room_screen).to eq ['[A] (1)', 'Also here: [Bob](look #-4).', 'Obvious paths: out']
     end
 
-    it 'keeps the links of a description a component staged when the inline commit re-sends it (GemStone)' do
+    it 'keeps the links of a description a component delivered when the inline commit follows (GemStone)' do
       load_layout
 
       receive_from_server(%(<component id='room desc'>A <a exist="7" noun="gate">gate</a> here.</component>),
@@ -723,7 +722,7 @@ RSpec.describe 'Room carriers' do
       expect(room_screen).to eq ['[A] (1)', 'A [gate](look #7) here.', 'Obvious paths: out']
     end
 
-    it 'keeps the creatures of objects a component staged when the inline commit re-sends them' do
+    it 'keeps the creatures of objects a component delivered when the inline commit follows' do
       load_layout
 
       receive_from_server("<component id='room exits'>Obvious paths: out</component>",
