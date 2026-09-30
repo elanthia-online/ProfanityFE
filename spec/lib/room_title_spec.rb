@@ -211,11 +211,16 @@ RSpec.describe 'Room title' do
     end
   end
 
-  it "hides the last room's title row for a room streamWindow with an empty subtitle" do
+  # A blank subtitle sends no title and changes nothing; a subtitle that
+  # sends only the " - " before a name has an empty name.
+  it "keeps the last room's title row for a blank room streamWindow subtitle, and hides it for an empty name" do
     receive_from_server(*lines_for(:stream_window, '[Old Room] (1)'))
 
+    receive_from_server(*lines_for(:stream_window, '  '))
+    after_blank = title_row
     receive_from_server(*lines_for(:stream_window, ' - '))
 
+    expect(after_blank).to eq '[Old Room] (1)'
     expect(title_row).to be_nil
     expect(terminal_title).to eq 'Mahtra [[Old Room] (1)]'
   end

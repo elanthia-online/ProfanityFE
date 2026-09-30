@@ -402,7 +402,7 @@ module TagHandlers
       @event_bus.emit(:exp_set_current, skill: exp_match[:skill])
     else
       stream = new_stream
-      if new_stream == Streams::ROOM && (subtitle = attrs['subtitle'])
+      if new_stream == Streams::ROOM && (subtitle = attrs['subtitle']) && !subtitle.strip.empty?
         title = RoomTitle.parse(unescape_entities(subtitle))
         @state.room_title = title.to_s if title
         # An empty name is no title: it hides the title row, and the
@@ -566,7 +566,8 @@ module TagHandlers
   # @return [void]
   def handle_stream_window(xml, _text_buffer)
     id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
-    return unless id == Streams::ROOM && subtitle
+    # A blank subtitle sends no title at all: it changes nothing.
+    return unless id == Streams::ROOM && subtitle && !subtitle.strip.empty?
 
     title = RoomTitle.parse(unescape_entities(subtitle))
     if title
