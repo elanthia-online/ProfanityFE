@@ -5,7 +5,7 @@ require_relative 'xml_tokenizer'
 require_relative 'link_extractor'
 require_relative 'streams'
 require_relative 'presets'
-require_relative 'room_assembler'
+require_relative 'room_title'
 
 # Tag dispatch and handler methods for game server XML processing.
 #
@@ -403,7 +403,7 @@ module TagHandlers
     else
       stream = new_stream
       if new_stream == Streams::ROOM && (subtitle = attrs['subtitle'])
-        title = RoomAssembler.parse_subtitle(subtitle)
+        title = RoomTitle.text(unescape_entities(subtitle))
         unless title.empty?
           @state.room_title = title
           @event_bus.emit(:room_title, text: title)
@@ -568,7 +568,7 @@ module TagHandlers
     id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
     return unless id == Streams::ROOM && subtitle
 
-    room = RoomAssembler.parse_subtitle(subtitle)
+    room = RoomTitle.text(unescape_entities(subtitle))
     return if room.empty?
 
     @state.room_title = room

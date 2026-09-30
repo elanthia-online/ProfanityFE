@@ -4,6 +4,7 @@ require_relative 'xml_tokenizer'
 require_relative 'streams'
 require_relative 'presets'
 require_relative 'link_extractor'
+require_relative 'room_title'
 
 # Assembles the room window's data (title, description, objects, players,
 # exits) from the two ways the game sends it, and updates the room players
@@ -31,26 +32,11 @@ class RoomAssembler
   # @return [Symbol, nil]
   attr_reader :capture_mode
 
-  # Parse a room subtitle attribute into a clean room title string.
-  #
-  # Handles both GemStone and DragonRealms subtitle formats:
-  # - GS: +" - [Town Square, Center]"+ → +"Town Square, Center"+
-  # - DR: +" - [Bosque Deriel, Shacks] (230008)"+ → +"Bosque Deriel, Shacks (230008)"+
-  #
-  # @param subtitle [String] raw subtitle attribute value
-  # @return [String] cleaned room title (may be empty)
-  def self.parse_subtitle(subtitle)
-    # Strip leading " - " prefix
-    text = subtitle.sub(/^\s*-\s*/, '')
-    # DR format: [Room Title] (RoomNum) — strip brackets, keep room number
-    # GS format: [Room Title]          — strip brackets
-    text.sub(/^\[(.+?)\]/, '\1').strip
-  end
-
   # @param window_mgr [WindowManager] asked whether the layout has a RoomWindow
   # @param event_bus [EventBus] receives the room and indicator events
   # @param pending_render [PendingRender] asked for flushes and room renders
-  # @param shared_state [SharedState] its +room_title+ is set from roomName text
+  # @param shared_state [SharedState] its +room_title+ is set from roomName
+  #   text and room title component text
   def initialize(window_mgr:, event_bus:, pending_render:, shared_state:)
     @wm = window_mgr
     @event_bus = event_bus
@@ -224,6 +210,11 @@ class RoomAssembler
   def process_room_stream(text, stream, line_colors)
     return nil unless stream&.start_with?(Streams::ROOM)
 
+    # The room title names the room in the terminal title, with or without
+    # a RoomWindow (as roomName text does).
+    title = RoomTitle.text(text) if [Streams::ROOM, Streams::ROOM_TITLE].include?(stream)
+    @state.room_title = title unless title.nil? || title.empty?
+
     # Without a RoomWindow, only handle room players for the indicator
     unless room_window?
       return stream == Streams::ROOM_PLAYERS ? :continue : nil
@@ -242,8 +233,8 @@ class RoomAssembler
 
     case stream
     when Streams::ROOM, Streams::ROOM_TITLE
-      @room_pending_title = clean
-      @event_bus.emit(:room_title, text: clean)
+      @room_pending_title = title
+      @event_bus.emit(:room_title, text: title)
     when Streams::ROOM_DESC, Streams::ROOM_DESC_ALT
       @room_pending_desc = clean
       @component_desc_room = @state.room_title
@@ -317,15 +308,10 @@ class RoomAssembler
     captured = false
     case @capture_mode
     when :title
-      room_title = self.class.parse_subtitle(text)
+      room_title = RoomTitle.text(text)
       @state.room_title = room_title unless room_title.empty?
       if room_window?
-        # Strip the title's brackets so RoomWindow#render can re-add them exactly once.
-        # The closing bracket takes two forms: "[Room] (230008)" (RealID appended, the
-        # bracket precedes the "(") and "[Room - 2071]" or plain "[Room]" (no RealID, the
-        # bracket is trailing). Handle the trailing case too - dropping only the "] (" form
-        # left the trailing "]" behind, which render then doubled into "[Room - 2071]]".
-        @room_pending_title = text.sub(/^\[/, '').sub(/\]\s*\(/, ' (').sub(/\]\s*\z/, '').strip
+        @room_pending_title = room_title
         captured = true
       end
       @capture_mode = nil

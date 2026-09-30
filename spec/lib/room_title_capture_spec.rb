@@ -62,7 +62,7 @@ RSpec.describe 'Room title capture' do
       receive_from_server(*town_square)
 
       expect(room_rows.first).to eq '[Town Square] (1)'
-      expect(state.room_title).to eq 'Town Square (1)'
+      expect(state.room_title).to eq '[Town Square] (1)'
     end
 
     it 'does not take the next line as the title when the roomName style is empty' do
@@ -73,7 +73,7 @@ RSpec.describe 'Room title capture' do
 
       expect(room_rows).not_to include(a_string_including('goblin'))
       expect(room_rows.first).to eq 'You also see a rock.'
-      expect(state.room_title).to eq 'Town Square (1)'
+      expect(state.room_title).to eq '[Town Square] (1)'
       expect(main_rows).to include 'A goblin arrives.'
     end
 
@@ -82,7 +82,7 @@ RSpec.describe 'Room title capture' do
                           'A goblin arrives.', 'You also see a rock.', 'Obvious paths: <d>south</d>.')
 
       expect(room_rows.first).to eq 'You also see a rock.'
-      expect(state.room_title).to eq 'Town Square (1)'
+      expect(state.room_title).to eq '[Town Square] (1)'
     end
 
     it 'still takes a title that comes on the line after the roomName style, before the style closes' do
@@ -90,7 +90,7 @@ RSpec.describe 'Room title capture' do
                           'You also see a bench.', 'Obvious paths: <d>north</d>.')
 
       expect(room_rows.first).to eq '[Town Square] (1)'
-      expect(state.room_title).to eq 'Town Square (1)'
+      expect(state.room_title).to eq '[Town Square] (1)'
     end
 
     it 'does not take the objects after an empty roomDesc preset as the description' do
@@ -134,7 +134,7 @@ RSpec.describe 'Room title capture' do
       receive_from_server(*town_square, '<resource picture="0"/><style id="roomName" /><style id=""/>',
                           'A goblin arrives.')
 
-      expect(state.room_title).to eq 'Town Square (1)'
+      expect(state.room_title).to eq '[Town Square] (1)'
       expect(main_rows).to include 'A goblin arrives.'
     end
   end

@@ -50,6 +50,8 @@ RSpec.describe 'Room capture' do
   def main_rows = @wm.stream['main'].rows.reject(&:empty?)
   def room_rows = @wm.room['room'].rows.reject(&:empty?)
 
+  # The title doesn't start with its bracket, so RoomTitle takes all of it
+  # as the room's name and brackets it.
   describe 'text before a roomName style on the same line' do
     let(:lines) { ['You arrive.<style id="roomName" />[Town Square]<style id=""/>', 'Obvious exits: north.'] }
 
@@ -58,8 +60,8 @@ RSpec.describe 'Room capture' do
 
       receive_from_server(*lines)
 
-      expect(room_rows).to eq ['[You arrive.[Town Square]', 'Obvious exits: north.']
-      expect(state.room_title).to eq 'You arrive.[Town Square]'
+      expect(room_rows).to eq ['[You arrive.[Town Square]]', 'Obvious exits: north.']
+      expect(state.room_title).to eq '[You arrive.[Town Square]]'
       expect(main_rows).to eq ['You arrive.[Town Square]', 'Obvious exits: north.']
     end
 
@@ -69,7 +71,7 @@ RSpec.describe 'Room capture' do
 
       receive_from_server(*lines)
 
-      expect(room_rows.first).to eq '[You arrive.[Town Square]'
+      expect(room_rows.first).to eq '[You arrive.[Town Square]]'
       expect(main_rows).to be_empty
     end
 
@@ -78,7 +80,7 @@ RSpec.describe 'Room capture' do
 
       receive_from_server(*lines)
 
-      expect(state.room_title).to eq 'You arrive.[Town Square]'
+      expect(state.room_title).to eq '[You arrive.[Town Square]]'
       expect(main_rows).to eq ['You arrive.[Town Square]', 'Obvious exits: north.']
     end
   end
@@ -145,7 +147,7 @@ RSpec.describe 'Room capture' do
     receive_from_server(%(<style id="roomName" />[Town <preset id='speech'>Square</preset>]<style id=""/>), 'Obvious exits: north.')
 
     expect(room_rows.first).to eq '[Town Square]'
-    expect(state.room_title).to eq 'Town Square'
+    expect(state.room_title).to eq '[Town Square]'
     expect(main_rows).to be_empty
   end
 

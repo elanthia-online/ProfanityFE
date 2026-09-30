@@ -75,7 +75,9 @@ class RoomWindow < BaseWindow
 
   # Update the room title text.
   #
-  # @param text [String] clean title text
+  # @param text [String] the title row's text, shown as it is: the room's
+  #   title as {RoomTitle#to_s} gives it (+"[Town Square] (1234)"+), or an
+  #   empty string for no title row
   # @return [void]
   def update_title(text)
     @title = text.strip
@@ -190,14 +192,7 @@ class RoomWindow < BaseWindow
     rows = []
 
     # Room title with preset
-    unless @title.empty?
-      if (match = @title.match(/^(?<room_name>.+?)\s+\((?<room_id>\d+)\)$/))
-        formatted_title = "[#{match[:room_name]}] (#{match[:room_id]})"
-        rows.concat(section_rows(formatted_title, @title_preset))
-      else
-        rows.concat(section_rows("[#{@title}]", @title_preset))
-      end
-    end
+    rows.concat(section_rows(@title, @title_preset)) unless @title.empty?
 
     # Room description
     rows.concat(section_rows_with_links(@description, @desc_links, @desc_preset)) unless @description.empty?

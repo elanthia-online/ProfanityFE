@@ -1942,8 +1942,10 @@ The process name and terminal title show:
 CharName [prompt:room]
 ```
 
-For DragonRealms, the room includes the room number (e.g.,
-`Charname [H:Bosque Deriel, Shacks (230008)]`). The screen/tmux window
+The room is the room window's title row, exactly as it shows there: the
+room's name in brackets, then whatever the game sends after it. For
+DragonRealms that includes the room number (e.g.,
+`Charname [H:[Bosque Deriel, Shacks] (230008)]`). The screen/tmux window
 name shows only the character name to keep the window list compact.
 
 Title escape sequences are written via a forked `printf` subprocess to

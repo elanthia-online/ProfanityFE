@@ -609,7 +609,7 @@ RSpec.describe 'Window contracts' do
       event_bus.emit(:room_desc, text: 'Old stones.')
       event_bus.emit(:room_exits, text: 'Obvious paths: north.')
 
-      expect(room.rows).to eq ['[[Town Square]]', 'Old stones.', 'Obvious paths: north.', '']
+      expect(room.rows).to eq ['[Town Square]', 'Old stones.', 'Obvious paths: north.', '']
     end
 
     it 'shows the disconnect notice in the main window' do
