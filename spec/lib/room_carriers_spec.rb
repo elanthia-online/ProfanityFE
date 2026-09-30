@@ -365,6 +365,7 @@ RSpec.describe 'Room carriers' do
 
   describe "DR's cut-short objs component, then the full inline list in the same move" do
     it 'shows the full inline list, with every creature' do
+      pending 'the cut-short objs component owns the objects (PLAN Q1 b; flips in the cut-short commit)'
       load_layout
 
       receive_from_server(*fixture('dr_cut_short_objs'))
@@ -539,7 +540,6 @@ RSpec.describe 'Room carriers' do
     end
 
     it "keeps the component's description on a brief move with a Lich room id in the title" do
-      pending 'the inline commit wipes it: #194 compares the rewritten title with the subtitle (PLAN §5 j; flips in commit 11)'
       load_layout
 
       receive_from_server(*move('[A - 55] (1)', desc: '  '), prompt)
@@ -577,7 +577,9 @@ RSpec.describe 'Room carriers' do
       ]
       expect(main_rows).to eq ['[Wayside Inn, Lobby]', 'Some text. A cozy fire warms the lobby.', 'You also see a bench and a rat.',
                                'Also here: Bob.', 'Obvious paths: out']
-      expect(indicator).to eq %w[Bob yellow]
+      # The players component delivered the players: the indicator keeps its
+      # link's color, which the inline line doesn't have.
+      expect(indicator).to eq %w[Bob link]
       expect(state.room_title).to eq 'Wayside Inn, Lobby'
     end
 

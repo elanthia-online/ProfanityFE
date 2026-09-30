@@ -102,6 +102,7 @@ module TagHandlers
       resync_streams_at_prompt(text_buffer)
       @spans.prompt
       @marks.prompt
+      @room.prompt_seen
     end
 
     table = closing ? CLOSING_TAG_DISPATCH : TAG_DISPATCH
@@ -426,7 +427,7 @@ module TagHandlers
         @state.room_title = title.plain if title
         # An empty name is no title: it hides the title row, and the
         # terminal title keeps naming the last room.
-        @event_bus.emit(:room_title, text: title.to_s)
+        @room.subtitle(title.to_s)
       end
     end
     @router.open_stream(stream, push: XmlTokenizer.start_tag_name(xml) == 'pushStream')
@@ -609,7 +610,8 @@ module TagHandlers
     end
     # An empty name is no title: it hides the title row, and the terminal
     # title and the room indicator keep naming the last room.
-    @room.show_title(title.to_s)
+    @room.subtitle(title.to_s)
+    @pending_render.request_room_render
     @pending_render.request_update
   end
 end

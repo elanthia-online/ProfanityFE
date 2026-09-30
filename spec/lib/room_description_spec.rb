@@ -145,18 +145,31 @@ RSpec.describe 'Room description' do
     end
   end
 
-  it 'shows an inline roomDesc in place of the component description' do
-    inline_desc = 'In the darkness, the forms of ancient trees appear to coalesce into a single malevolent entity.'
+  context 'when the inline lines carry a description that differs from the component' do
+    let(:inline_desc) { 'In the darkness, the forms of ancient trees appear to coalesce into a single malevolent entity.' }
+    let(:inline_desc_rows) do
+      [edge_name,
+       'In the darkness, the forms of ancient trees appear to coalesce into a single',
+       'malevolent entity.',
+       'Obvious paths: southwest.']
+    end
 
-    receive_from_server(*room_components(edge_name, edge_desc, edge_exits),
-                        "<resource picture=\"0\"/><style id=\"roomName\" />#{edge_name}",
-                        "<style id=\"\"/><preset id='roomDesc'>#{inline_desc}</preset>  ", edge_exits)
+    # The inline lines of a room with a description.
+    def full_inline(name, desc, exits)
+      ["<resource picture=\"0\"/><style id=\"roomName\" />#{name}", "<style id=\"\"/><preset id='roomDesc'>#{desc}</preset>  ",
+       exits, '<prompt time="1787783856">&gt;</prompt>']
+    end
 
-    expect(room_rows).to eq [
-      edge_name,
-      'In the darkness, the forms of ancient trees appear to coalesce into a single',
-      'malevolent entity.',
-      'Obvious paths: southwest.'
-    ]
+    it "keeps the component's description when the inline one comes in the same burst" do
+      receive_from_server(*room_components(edge_name, edge_desc, edge_exits), *full_inline(edge_name, inline_desc, edge_exits))
+
+      expect(room_rows).to eq edge_rows
+    end
+
+    it 'shows the inline description of a LOOK after the prompt' do
+      receive_from_server(*edge_room, *full_inline(edge_name, inline_desc, edge_exits))
+
+      expect(room_rows).to eq inline_desc_rows
+    end
   end
 end
