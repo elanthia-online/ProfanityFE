@@ -6,12 +6,12 @@
 # the exits arrive. Every example reads the events the assembler emits,
 # which is all the room window ever receives.
 #
-# The RoomWindow re-brackets whatever bare title it is handed (see
-# RoomWindow#render: "[#{@title}]"), so the assembler must hand it a title
-# with ITS OWN brackets already stripped. The tricky part is that the game's
-# closing bracket appears in two shapes: "[Room] (230008)" (a RealID follows the
-# bracket) and "[Room - 2071]" / "[Room]" (the bracket is trailing). Missing the
-# trailing case leaves a stray "]" that render then doubles into "]]".
+# The room window shows the title it is handed as it is, so the assembler
+# hands it the title row's text (see RoomTitle): the name in its brackets
+# and whatever the game sent after the closing bracket. The game's closing
+# bracket appears in two shapes: "[Room] (230008)" (a RealID follows the
+# bracket) and "[Room - 2071]" / "[Room]" (the bracket is trailing); neither
+# may lose or double a bracket.
 
 require_relative '../../lib/event_bus'
 require_relative '../../lib/pending_render'
@@ -61,35 +61,35 @@ RSpec.describe RoomAssembler do
       emitted[:room_title].last[:text]
     end
 
-    it 'strips the brackets and keeps the RealID when the game appends one' do
+    it 'keeps the brackets and the RealID when the game appends one' do
       expect(title_shown_for('[Bosque Deriel, Hermit\'s Shacks] (230008)'))
-        .to eq('Bosque Deriel, Hermit\'s Shacks (230008)')
+        .to eq('[Bosque Deriel, Hermit\'s Shacks] (230008)')
     end
 
-    it 'strips a trailing bracket when the title carries a lich id but no RealID' do
-      # BUG (fixed): the old ".sub(/\\]\\s*\\(/, ' (')" only removed the bracket
-      # before a "(", so "[Room - 2071]" kept its "]" and render produced "]]".
+    it 'keeps one closing bracket when the title carries a lich id but no RealID' do
+      # BUG (fixed): an old bracket strip only removed the bracket before a
+      # "(", so "[Room - 2071]" kept its "]" and the window showed "]]".
       expect(title_shown_for('[Bosque Deriel, Hermit\'s Shacks - 2071]'))
-        .to eq('Bosque Deriel, Hermit\'s Shacks - 2071')
+        .to eq('[Bosque Deriel, Hermit\'s Shacks - 2071]')
     end
 
-    it 'strips a trailing bracket for a plain title with no id at all' do
-      expect(title_shown_for('[Town Square]')).to eq('Town Square')
+    it 'keeps a plain title with no id at all as it is' do
+      expect(title_shown_for('[Town Square]')).to eq('[Town Square]')
     end
 
     it 'keeps both the lich id and the RealID (GS-parity title from Lich)' do
       expect(title_shown_for('[Bosque Deriel, Hermit\'s Shacks - 2071] (230008)'))
-        .to eq('Bosque Deriel, Hermit\'s Shacks - 2071 (230008)')
+        .to eq('[Bosque Deriel, Hermit\'s Shacks - 2071] (230008)')
     end
 
-    it 'leaves no bracket that RoomWindow#render would double into "]]"' do
+    it 'neither doubles nor drops a bracket' do
       titles = %w([Room] [Room-2071] [Room](5)).map { |sample| title_shown_for(sample) }
 
-      expect(titles).to eq ['Room', 'Room-2071', 'Room (5)']
+      expect(titles).to eq ['[Room]', '[Room-2071]', '[Room](5)']
     end
 
-    it 'preserves interior punctuation while stripping only the outer brackets' do
-      expect(title_shown_for('[Warrens, Alcove - 1234]')).to eq('Warrens, Alcove - 1234')
+    it 'preserves interior punctuation' do
+      expect(title_shown_for('[Warrens, Alcove - 1234]')).to eq('[Warrens, Alcove - 1234]')
     end
 
     # The title still names the terminal title without a room window. It

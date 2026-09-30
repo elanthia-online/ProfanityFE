@@ -5,7 +5,7 @@ require_relative 'xml_tokenizer'
 require_relative 'link_extractor'
 require_relative 'streams'
 require_relative 'presets'
-require_relative 'room_assembler'
+require_relative 'room_title'
 
 # Tag dispatch and handler methods for game server XML processing.
 #
@@ -402,12 +402,12 @@ module TagHandlers
       @event_bus.emit(:exp_set_current, skill: exp_match[:skill])
     else
       stream = new_stream
-      if new_stream == Streams::ROOM && (subtitle = attrs['subtitle'])
-        title = RoomAssembler.parse_subtitle(subtitle)
-        unless title.empty?
-          @state.room_title = title
-          @event_bus.emit(:room_title, text: title)
-        end
+      if new_stream == Streams::ROOM && (subtitle = attrs['subtitle']) && !subtitle.strip.empty?
+        title = RoomTitle.parse(unescape_entities(subtitle))
+        @state.room_title = title.plain if title
+        # An empty name is no title: it hides the title row, and the
+        # terminal title keeps naming the last room.
+        @event_bus.emit(:room_title, text: title.to_s)
       end
     end
     @router.open_stream(stream, push: XmlTokenizer.start_tag_name(xml) == 'pushStream')
@@ -566,14 +566,18 @@ module TagHandlers
   # @return [void]
   def handle_stream_window(xml, _text_buffer)
     id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
-    return unless id == Streams::ROOM && subtitle
+    # A blank subtitle sends no title at all: it changes nothing.
+    return unless id == Streams::ROOM && subtitle && !subtitle.strip.empty?
 
-    room = RoomAssembler.parse_subtitle(subtitle)
-    return if room.empty?
-
-    @state.room_title = room
-    @event_bus.emit(:indicator_update, id: 'room', label: room, value: 1)
-    @event_bus.emit(:room_title, text: room)
+    title = RoomTitle.parse(unescape_entities(subtitle))
+    if title
+      @state.room_title = title.plain
+      # The room indicator names the room without its brackets, as before.
+      @event_bus.emit(:indicator_update, id: 'room', label: title.plain, value: 1)
+    end
+    # An empty name is no title: it hides the title row, and the terminal
+    # title and the room indicator keep naming the last room.
+    @event_bus.emit(:room_title, text: title.to_s)
     @pending_render.request_update
     @pending_render.request_room_render
   end

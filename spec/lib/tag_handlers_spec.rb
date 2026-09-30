@@ -420,7 +420,7 @@ RSpec.describe TagHandlers do
 
       receive_from_server(%q{<component id="room" subtitle=" - [Town Square]"></component>})
 
-      expect(events).to eq [{ type: :room_title, text: 'Town Square' }]
+      expect(events).to eq [{ type: :room_title, text: '[Town Square]' }]
       expect(state.room_title).to eq 'Town Square'
     end
 
@@ -805,7 +805,7 @@ RSpec.describe TagHandlers do
 
       expect(state.room_title).to eq 'Town Square'
       expect(events).to eq [{ type: :indicator_update, id: 'room', label: 'Town Square', value: 1 },
-                            { type: :room_title, text: 'Town Square' }]
+                            { type: :room_title, text: '[Town Square]' }]
     end
 
     it 'keeps the DragonRealms room number after the title' do

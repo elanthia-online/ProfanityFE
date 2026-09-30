@@ -270,7 +270,7 @@ RSpec.describe Presets do
 
     it 'colors the title with the roomName preset only when there is one' do
       window = room_window
-      window.update_title('Town Square')
+      window.update_title('[Town Square]')
       window.update_exits('Obvious paths: north.')
       expect(window.rows[0]).to eq '[Town Square]'
       expect(drawn_in(window, 0, 2)).to eq ''

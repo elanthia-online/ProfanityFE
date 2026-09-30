@@ -210,7 +210,7 @@ RSpec.describe EventBridge do
 
       event_bus.emit(:room_exits, text: 'Obvious paths: north.')
 
-      expect(room.rows).to eq ['[[Town Square]]', 'Old stones.', 'You also see a rock.', 'Also here: Bob.',
+      expect(room.rows).to eq ['[Town Square]', 'Old stones.', 'You also see a rock.', 'Also here: Bob.',
                                'Obvious paths: north.', '']
     end
 
@@ -225,7 +225,7 @@ RSpec.describe EventBridge do
       event_bus.emit(:room_render)
 
       expect(shown.join("\n")).to include('go gate', '1234', 'climb wall')
-      expect(room.rows).to eq ['[[Town Square]]', '', '', '', '', '']
+      expect(room.rows).to eq ['[Town Square]', '', '', '', '', '']
     end
 
     it 'shows room events nowhere when the layout has no room window' do

@@ -182,7 +182,7 @@ RSpec.describe WindowManager, '#resize geometry' do
         atmo: [' 1:atmo | 2:arrivals'],
         exp: ['Parry Ability: 1709 59% [34/3', '4]', '', '', ''],
         spells: ['Shadows (2 roisaen)', '', '', '', ''],
-        room: ['[[Town Square]]', 'A wide square paved with old stones.', 'Obvious paths: north, south.'] + [''] * 13,
+        room: ['[Town Square]', 'A wide square paved with old stones.', 'Obvious paths: north, south.'] + [''] * 13,
         # The bar and the countdown fill their new widths.
         health: ["HP#{'50'.rjust(28)}"], roundtime: ["RT#{'?'.rjust(58)}"], kneeling: ['Kneeling'],
         prompt: ['H>'], command: ['look at the stones']

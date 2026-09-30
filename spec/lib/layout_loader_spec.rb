@@ -465,7 +465,7 @@ RSpec.describe LayoutLoader do
         wm.stream['exp'].component_opened('Evasion')
         wm.stream['exp'].add_string('Evasion:  123 45%  [12/34]')
         wm.stream['percWindow'].add_string('Shadows (2 roisaen)')
-        wm.room['room'].update_title('Town Square')
+        wm.room['room'].update_title('[Town Square]')
         wm.room['room'].update_exits('Obvious paths: north.')
       end
 
