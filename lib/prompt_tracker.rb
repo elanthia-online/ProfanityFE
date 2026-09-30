@@ -175,11 +175,8 @@ class PromptTracker
     main_window = @wm.stream[MAIN_STREAM]
     if main_window.is_a?(TabbedTextWindow)
       # Check all tabs for recent movement (movement could be in main, combat, etc.)
-      main_window.tabs.each_value do |tab_buffer|
-        last_entry = tab_buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
-        return true if last_entry && last_entry[0] =~ MOVEMENT_PATTERN
-      end
-      false
+      last_entries = main_window.newest_rows { |entry| entry[0] && !entry[0].strip.empty? }
+      last_entries.any? { |entry| entry[0] =~ MOVEMENT_PATTERN }
     elsif main_window.respond_to?(:buffer) && !main_window.buffer.empty?
       last_entry = main_window.buffer.find { |entry| entry[0] && !entry[0].strip.empty? }
       last_entry && last_entry[0] =~ MOVEMENT_PATTERN
