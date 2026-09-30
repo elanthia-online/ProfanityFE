@@ -804,7 +804,7 @@ RSpec.describe TagHandlers do
       receive_from_server(%q{<streamWindow id='room' subtitle=" - [Town Square]"/>})
 
       expect(state.room_title).to eq '[Town Square]'
-      expect(events).to eq [{ type: :indicator_update, id: 'room', label: '[Town Square]', value: 1 },
+      expect(events).to eq [{ type: :indicator_update, id: 'room', label: 'Town Square', value: 1 },
                             { type: :room_title, text: '[Town Square]' }]
     end
 

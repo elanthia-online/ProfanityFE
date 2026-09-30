@@ -21,7 +21,9 @@ RoomTitle = Data.define(:name, :suffix)
 #   RoomTitle.parse('[] (1234)')                  #=> nil
 #
 # @!attribute [r] name
-#   @return [String] the room's name, without the brackets around it
+#   @return [String] the room's name, without the brackets around it or
+#     the whitespace just inside them (+"[ Town Square ]"+ names
+#     +"Town Square"+)
 # @!attribute [r] suffix
 #   @return [String] what follows the name's closing bracket, as sent,
 #     with the whitespace right after the bracket shortened to one space
@@ -43,11 +45,11 @@ class RoomTitle
   def self.parse(text)
     title = text.strip.sub(/\A-\s*/, '')
     match = BRACKETED.match(title) || NUMBERED.match(title)
-    name = match ? match[:name] : title
+    name = (match ? match[:name] : title).strip
     rest = match ? match[:rest] : ''
     suffix = rest.lstrip
     suffix = " #{suffix}" unless suffix.empty? || suffix.length == rest.length
-    new(name: name, suffix: suffix) unless name.strip.empty?
+    new(name: name, suffix: suffix) unless name.empty?
   end
 
   # The title row's text for a title as the game sends it (see {.parse}),

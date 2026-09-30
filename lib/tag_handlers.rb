@@ -403,11 +403,11 @@ module TagHandlers
     else
       stream = new_stream
       if new_stream == Streams::ROOM && (subtitle = attrs['subtitle'])
-        title = RoomTitle.text(unescape_entities(subtitle))
-        unless title.empty?
-          @state.room_title = title
-          @event_bus.emit(:room_title, text: title)
-        end
+        title = RoomTitle.parse(unescape_entities(subtitle))
+        @state.room_title = title.to_s if title
+        # An empty name is no title: it hides the title row, and the
+        # terminal title keeps naming the last room.
+        @event_bus.emit(:room_title, text: title.to_s)
       end
     end
     @router.open_stream(stream, push: XmlTokenizer.start_tag_name(xml) == 'pushStream')
@@ -568,12 +568,15 @@ module TagHandlers
     id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
     return unless id == Streams::ROOM && subtitle
 
-    room = RoomTitle.text(unescape_entities(subtitle))
-    return if room.empty?
-
-    @state.room_title = room
-    @event_bus.emit(:indicator_update, id: 'room', label: room, value: 1)
-    @event_bus.emit(:room_title, text: room)
+    title = RoomTitle.parse(unescape_entities(subtitle))
+    if title
+      @state.room_title = title.to_s
+      # The room indicator names the room without its brackets, as before.
+      @event_bus.emit(:indicator_update, id: 'room', label: "#{title.name}#{title.suffix}", value: 1)
+    end
+    # An empty name is no title: it hides the title row, and the terminal
+    # title and the room indicator keep naming the last room.
+    @event_bus.emit(:room_title, text: title.to_s)
     @pending_render.request_update
     @pending_render.request_room_render
   end
