@@ -10,6 +10,10 @@
 
 require 'rexml/document'
 require_relative '../../lib/window_manager'
+require_relative '../../lib/prompt_tracker'
+require_relative '../../lib/pending_render'
+require_relative '../../lib/shared_state'
+require_relative '../../lib/event_bus'
 
 RSpec.describe TabbedTextWindow, 'resized with hidden tabs' do
   subject(:wm) { WindowManager.new }
@@ -82,6 +86,40 @@ RSpec.describe TabbedTextWindow, 'resized with hidden tabs' do
     window.max_buffer_size = 2
 
     expect(wrapped).to be_empty
+  end
+
+  it 'wraps only the newest line of each hidden tab for the movement check at a blank line' do
+    3.times { |i| window.add_string_to_tab('combat', "combat #{i}") }
+    2.times { |i| window.add_string_to_tab('assess', "assess #{i}") }
+    resize_to(48)
+    wrapped = wrapped_lines
+    event_bus = EventBus.new
+    prompts = []
+    event_bus.on(:add_prompt) { |data| prompts << data[:text] }
+    state = SharedState.new.tap do |shared|
+      shared.prompt_text = 'H>'
+      shared.need_prompt = true
+    end
+
+    PromptTracker.new(shared_state: state, event_bus: event_bus, pending_render: PendingRender.new,
+                      window_mgr: wm).blank_line
+
+    expect(prompts).to eq ['H>']
+    expect(wrapped).to eq ['combat 2', 'assess 1']
+  end
+
+  it 'wraps only the newest line of a hidden main tab to check for a repeated prompt' do
+    3.times { |i| window.add_string_to_tab('main', "main #{i}") }
+    window.switch_tab('combat')
+    resize_to(48)
+    wrapped = wrapped_lines
+
+    wm.add_prompt(window, 'H>')
+    wm.add_prompt(window, 'H>')
+
+    expect(wrapped).to eq ['main 2', 'H>']
+    window.switch_tab('main')
+    expect(text_rows).to eq ['main 1', 'main 2', 'H>']
   end
 
   it 'shows a hidden tab wrapped to the width at the time it is shown' do
