@@ -31,7 +31,8 @@ class RoomPart
   # Build a part from the text after +from+ in a chunk of parsed text.
   #
   # The part's text is that text with surrounding whitespace removed; the
-  # marks that start at or after +from+ are moved to match it.
+  # marks that start at or after +from+ are moved to match it, and cut to
+  # it where they cover some of the removed whitespace.
   #
   # @param text [String] the chunk: game text, tags removed and entities
   #   decoded
@@ -44,12 +45,24 @@ class RoomPart
     body = tail.strip
     shift = from + tail.length - tail.lstrip.length
     marks = marks.select { |mark| mark[:start] >= from }
+                 .map { |mark| within(mark, shift, body.length) }
     links = marks.select { |mark| mark[:mark] == :link && mark[:cmd] }
-                 .map { |mark| { start: mark[:start] - shift, end: mark[:end] - shift, cmd: mark[:cmd] } }
+                 .map { |mark| { start: mark[:start], end: mark[:end], cmd: mark[:cmd] } }
     creatures = marks.select { |mark| mark[:mark] == :bold }
-                     .filter_map { |mark| body[(mark[:start] - shift)...(mark[:end] - shift)]&.strip }
+                     .map { |mark| body[mark[:start]...mark[:end]].strip }
                      .reject(&:empty?)
                      .uniq
     new(text: body, links: links, creatures: creatures)
   end
+
+  # A mark moved back by +shift+ and cut to the part's text.
+  #
+  # @param mark [Hash] a room mark
+  # @param shift [Integer] where the part's text starts in the chunk
+  # @param length [Integer] the length of the part's text
+  # @return [Hash] the moved mark
+  def self.within(mark, shift, length)
+    mark.merge(start: (mark[:start] - shift).clamp(0, length), end: (mark[:end] - shift).clamp(0, length))
+  end
+  private_class_method :within
 end

@@ -610,6 +610,26 @@ RSpec.describe 'Room carriers' do
       expect(room_screen).to eq ['You also see  a box and {a rat:red}.']
     end
 
+    # Characterization: a creature is its bold span's text without the
+    # spaces around it.
+    it 'takes a bold span that starts with a space in an objs component for the creature without it' do
+      load_layout
+
+      receive_from_server("<component id='room objs'>You also see<pushBold/> a rat<popBold/>.</component>")
+
+      expect(room_screen).to eq ['You also see {a rat:red}.']
+    end
+
+    # The component's text starts inside the bold span, on spaces the row
+    # leaves out; the creature is still the span's text (it was lost).
+    it 'takes a bold span over the leading spaces of an objs component for a creature' do
+      load_layout
+
+      receive_from_server("<component id='room objs'><pushBold/>  a rat<popBold/> and a tall rat.</component>")
+
+      expect(room_screen).to eq ['{a rat:red} and a tall rat.']
+    end
+
     it "P3b: doesn't take a preset in monsterbold's color inside an objs component for a creature" do
       PRESET['speech'] = ['ff0000', nil]
       load_layout

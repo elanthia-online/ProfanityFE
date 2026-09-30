@@ -363,5 +363,26 @@ RSpec.describe 'Inline room lines' do
       expect(room_rows[1]).to eq 'You also see a rat and a box.'
       expect(red_runs('You also see')).to eq ['You also see a rat']
     end
+
+    # DR sends the objects of a LOOK as "  You also see": the carried span
+    # starts on the spaces the room row leaves out, and the creature is
+    # still the span's text (it was lost, or cut from the row's end).
+    describe 'in objects that start with spaces' do
+      it 'draws a carried bold span that ends in the objects' do
+        load_layout
+        receive_from_server('<style id="roomName" />[A]', '<pushBold/>A glint', '  You also see a rat<popBold/> and a box.', exits_line)
+
+        expect(room_rows[1]).to eq 'You also see a rat and a box.'
+        expect(red_runs('You also see')).to eq ['You also see a rat']
+      end
+
+      it 'draws a carried bold span that covers all the objects' do
+        load_layout
+        receive_from_server('<style id="roomName" />[A]', '<pushBold/>A glint', '  You also see a box and a t.<popBold/>', exits_line)
+
+        expect(room_rows[1]).to eq 'You also see a box and a t.'
+        expect(red_runs('You also see')).to eq ['You also see a box and a t.']
+      end
+    end
   end
 end
