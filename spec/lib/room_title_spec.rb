@@ -190,22 +190,12 @@ RSpec.describe 'Room title' do
           expect(shown(carrier, sent)).to eq(row: nil, terminal: nil)
         end
 
-        it "keeps the terminal title for #{sent.inspect} when sent as #{carrier}" do
+        it "hides the last room's title row and keeps its terminal title for #{sent.inspect} when sent as #{carrier}" do
           receive_from_server(*lines_for(carrier, '[Old Room] (1)'))
 
           receive_from_server(*lines_for(carrier, sent))
 
-          expect(terminal_title).to eq 'Mahtra [[Old Room] (1)]'
-        end
-      end
-
-      title_row_carriers.each do |carrier|
-        it "hides the last room's title row for #{sent.inspect} when sent as #{carrier}" do
-          receive_from_server(*lines_for(carrier, '[Old Room] (1)'))
-
-          receive_from_server(*lines_for(carrier, sent))
-
-          expect(title_row).to be_nil
+          expect(row: title_row, terminal: terminal_title).to eq(row: nil, terminal: 'Mahtra [[Old Room] (1)]')
         end
       end
     end
