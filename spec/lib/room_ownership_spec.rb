@@ -301,6 +301,50 @@ RSpec.describe 'Room ownership' do
     end
   end
 
+  # Two inline lines for one field in one view: the first roomDesc and the
+  # first "Also here:" line stay (as the base's guards gave); the last
+  # roomName and "You also see" line win.
+  describe 'two inline lines for one field in a view' do
+    let(:look_desc) { ['<resource picture="0"/><style id="roomName" />[A] (1)', "<style id=\"\"/><preset id='roomDesc'>Main desc.</preset>  You also see a box."] }
+    let(:familiar_desc) { ["<pushStream id='familiar'/><preset id='roomDesc'>The familiar's room.</preset>", '<popStream/>'] }
+
+    it "keep main's roomDesc over a familiar's that arrives before the exits line" do
+      receive_from_server(prompt, *look_desc, *familiar_desc, 'Obvious paths: <d>north</d>.', prompt)
+
+      expect(room_screen).to eq ['[A] (1)', 'Main desc.', 'You also see a box.', 'Obvious paths: [north](north).']
+    end
+
+    # Kept as on the base: a roomDesc on another stream is staged too (PLAN
+    # F2), so a familiar's read before the view's own is the one shown.
+    it "keep a familiar's roomDesc read before the view's own" do
+      receive_from_server(prompt, *familiar_desc, *inline('[A] (1)'), prompt)
+
+      expect(room_screen[1]).to eq "The familiar's room."
+    end
+
+    it 'keep the first "Also here:" line' do
+      receive_from_server(prompt, *inline('[A] (1)', players: ['Also here: Ann.', 'Also here: Bob.']), prompt)
+
+      expect(room_screen[3]).to eq 'Also here: Ann.'
+      expect(indicator_label).to eq 'Ann'
+    end
+
+    # Characterization (passes on the base by design).
+    it 'take the last roomName' do
+      receive_from_server(prompt, *look_desc, "<pushStream id='familiar'/><style id=\"roomName\" />[F] (9)", '<style id=""/><popStream/>',
+                          'Obvious paths: <d>north</d>.', prompt)
+
+      expect(room_screen.first).to eq '[F] (9)'
+    end
+
+    # Characterization (passes on the base by design).
+    it 'take the last "You also see" line' do
+      receive_from_server(prompt, *inline('[A] (1)', players: '  You also see a rat.'), prompt)
+
+      expect(room_screen[2]).to eq 'You also see a rat.'
+    end
+  end
+
   # Characterization (passes on the base by design): an "Also here:" line
   # alone before the exits line commits a view, as a title, description or
   # objects line does.

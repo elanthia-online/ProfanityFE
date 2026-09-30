@@ -66,7 +66,8 @@ class RoomAssembler
     # The inline view being read, committed when its exits arrive (see
     # #commit_view): field => the title row's text (+:title+) or a
     # RoomPart (+:desc+, +:objects+, +:players+, +:exits+). Only the inline
-    # lines write it.
+    # lines write it; the first description and players line stay, the
+    # last of the other lines wins.
     @view = {}
     # The room (its SharedState#room_title) the room desc component last
     # described
@@ -210,9 +211,9 @@ class RoomAssembler
       room_data_captured = true
     end
 
-    # Detect "Also here:" for players
+    # Detect "Also here:" for players; the view keeps the first one
     if text =~ /^Also here:\s*(.+)$/
-      @view[:players] = RoomPart.from_chunk(text, marks)
+      @view[:players] ||= RoomPart.from_chunk(text, marks)
       room_data_captured = true
     end
 
@@ -414,7 +415,9 @@ class RoomAssembler
       end
     when :desc
       if room_window?
-        @view[:desc] = captured_desc(text, marks)
+        # The view keeps the first description it read (a later one, a
+        # familiar's roomDesc before the exits line, doesn't replace it)
+        @view[:desc] ||= captured_desc(text, marks)
         captured = true
       end
     end
