@@ -21,7 +21,10 @@ module LineBuffered
   # Bold vertical line character used for the scrollbar when the window is active.
   ACTIVE_SCROLLBAR_CHAR = "\u2503" # bold vertical line
 
-  # Plain pipe character used for the scrollbar when the window is inactive.
+  # Plain pipe character {#render_scrollbar} uses for the bar when the
+  # window is inactive. The app never draws an inactive window's
+  # scrollbar ({#update_scrollbar} draws only the active one), so it
+  # is seen only when render_scrollbar is called directly.
   INACTIVE_SCROLLBAR_CHAR = '|'
 
   # Right-pointing triangle shown at the top of the scrollbar for the active window.
