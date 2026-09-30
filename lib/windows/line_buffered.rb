@@ -206,6 +206,12 @@ module LineBuffered
   # cells from row +top+ of the scrollbar window. A content area with no
   # rows gets no scrollbar.
   #
+  # The thumb (a reverse-video blank) marks the scroll position. Every
+  # other cell shows the bar, except the active window's top cell, which
+  # shows the active marker whenever the thumb isn't on it. The first
+  # call after {#reset_scrollbar} draws every cell; later calls redraw
+  # only the cell the thumb left and the one it moved to.
+  #
   # @param buffer_length [Integer] total number of lines in the buffer
   # @param buffer_pos [Integer] current scroll offset from the bottom
   # @param visible_height [Integer] number of visible rows in the content area
@@ -221,8 +227,7 @@ module LineBuffered
 
     if last_scrollbar_pos
       unless last_scrollbar_pos == @scrollbar_pos
-        @scrollbar.setpos(top + last_scrollbar_pos, 0)
-        @scrollbar.addstr scrollbar_char
+        draw_scrollbar_bar_cell(last_scrollbar_pos, top, scrollbar_char)
         @scrollbar.setpos(top + @scrollbar_pos, 0)
         @scrollbar.attron(Curses::A_REVERSE) do
           @scrollbar.addch ' '
@@ -231,20 +236,34 @@ module LineBuffered
       end
     else
       (0...visible_height).each do |num|
-        @scrollbar.setpos(top + num, 0)
         if num == @scrollbar_pos
+          @scrollbar.setpos(top + num, 0)
           @scrollbar.attron(Curses::A_REVERSE) do
             @scrollbar.addch ' '
           end
-        elsif num == 0 && @active
-          @scrollbar.attron(Curses::A_BOLD) do
-            @scrollbar.addstr ACTIVE_INDICATOR
-          end
         else
-          @scrollbar.addstr scrollbar_char
+          draw_scrollbar_bar_cell(num, top, scrollbar_char)
         end
       end
       @scrollbar.noutrefresh
+    end
+  end
+
+  # Draw one scrollbar cell without the thumb: the active marker (bold) on
+  # the top row of the active window's scrollbar, else the bar glyph.
+  #
+  # @param row [Integer] content-area row of the cell
+  # @param top [Integer] window row where the content area starts
+  # @param scrollbar_char [String] the bar glyph for the window's state
+  # @return [void]
+  private def draw_scrollbar_bar_cell(row, top, scrollbar_char)
+    @scrollbar.setpos(top + row, 0)
+    if row.zero? && @active
+      @scrollbar.attron(Curses::A_BOLD) do
+        @scrollbar.addstr ACTIVE_INDICATOR
+      end
+    else
+      @scrollbar.addstr scrollbar_char
     end
   end
 
