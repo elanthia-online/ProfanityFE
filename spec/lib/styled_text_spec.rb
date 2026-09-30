@@ -595,6 +595,23 @@ RSpec.describe StyledText do
         ]
       end
 
+      it 'drops a run from the row after a cut once the cut and a dropped space have passed its end' do
+        expect(rows('ab cd', [{ start: 0, end: 3, fg: 'aa0000' }], 2, indent: false)).to eq [
+          ['ab', [{ start: 0, end: 2, fg: 'aa0000' }]],
+          ['cd', []]
+        ]
+      end
+
+      it 'shows no run that ends before the line begins' do
+        runs = [{ start: -4, end: -1, fg: 'aa0000' }, { start: 0, end: 0, fg: '00bb00' }, { start: 1, end: 2, fg: '0000cc' }]
+
+        expect(rows('abcdefg', runs, 3, indent: false)).to eq [
+          ['abc', [{ start: 1, end: 2, fg: '0000cc' }]],
+          ['def', []],
+          ['g', []]
+        ]
+      end
+
       it 'adds no row for a line ending left after a cut, but keeps one for two of them' do
         expect(rows("abc\r\n", [], 3, indent: false)).to eq [['abc', []]]
         expect(rows("abcd efgh\r\n", [{ start: 5, end: 11, fg: 'aa0000' }], 5, indent: true)).to eq [
@@ -618,8 +635,12 @@ RSpec.describe StyledText do
       end
 
       # A resize re-wraps every stored line; at width 1 a long line with
-      # many links used to walk all the runs still ahead on every row.
-      it 'reads each run a bounded number of times, not once per row' do
+      # many links used to walk every run still ahead of the cut on every
+      # row (rows x runs). Two operation counts, no clock: how often the
+      # runs are read, and how many lines of the wrap's own file run in
+      # all (the per-row walk over already-read runs reads no run, but
+      # each run it visits still runs a line).
+      it 'does work proportional to rows plus runs, not rows times runs' do
         reads = 0
         counting_run = Class.new(Hash) do
           define_method(:[]) do |key|
@@ -630,12 +651,16 @@ RSpec.describe StyledText do
         text = 'x ' * 1000
         runs = (0...200).map { |i| counting_run[start: i * 10, end: (i * 10) + 2, cmd: "look #{i}"] }
         styled = described_class.new(text, runs)
+        wrap_file = described_class.instance_method(:wrap).source_location.first
+        lines_run = 0
+        line_counter = TracePoint.new(:line) { |event| lines_run += 1 if event.path == wrap_file }
         reads = 0
 
-        row_count = styled.wrap(1, indent: false).length
+        row_count = line_counter.enable { styled.wrap(1, indent: false).length }
 
         expect(row_count).to eq 1000
         expect(reads).to be <= 4 * (row_count + runs.length)
+        expect(lines_run).to be <= 40 * (row_count + runs.length)
       end
     end
   end
