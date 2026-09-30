@@ -80,6 +80,39 @@ RSpec.describe PromptTracker do
     end
   end
 
+  context 'with a tabbed main window the terminal width sizes' do
+    # 50 wide at 100 columns (wrapping at 48), 24 wide at 48 (wrapping at
+    # 22): the movement line fits on one row only at the wider width
+    let(:layout) do
+      "<layout><window class='tabbed' top='0' left='0' height='5' width='cols/2' tabs='main,combat'/></layout>"
+    end
+    let(:movement) { 'You go through the gate in the old wall.' }
+
+    # Change the terminal width and resize the windows.
+    def resize_to(cols)
+      allow(Curses).to receive(:cols).and_return(cols)
+      window_mgr.resize(nil)
+    end
+
+    it "skips the prompt when a hidden tab's newest row is movement once a resize widens it" do
+      resize_to(48)
+      window_mgr.stream['main'].add_string_to_tab('combat', movement)
+      resize_to(100)
+      blank_line_with_prompt_pending
+
+      expect(prompts).to be_empty
+    end
+
+    it "shows the prompt when a resize wraps a hidden tab's movement line onto two rows" do
+      resize_to(100)
+      window_mgr.stream['main'].add_string_to_tab('combat', movement)
+      resize_to(48)
+      blank_line_with_prompt_pending
+
+      expect(prompts).to eq ['H>']
+    end
+  end
+
   describe '#stream_text_copy?' do
     it "is true only for the next main line with the stream line's text, and uses the text up" do
       tracker.stream_text_sent('  Ytterby whispers, "Done!" ')

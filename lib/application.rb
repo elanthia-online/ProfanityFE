@@ -341,7 +341,7 @@ class Application
       write_to_client('* No tabbed windows configured')
     elsif arg.nil? || arg.empty?
       lines = TabbedTextWindow.list.map do |win|
-        tabs_info = win.tabs.keys.each_with_index.map do |name, i|
+        tabs_info = win.tab_names.each_with_index.map do |name, i|
           "#{i + 1}:#{name}#{name == win.active_tab ? '*' : ''}"
         end.join(' ')
         "* Tabs: #{tabs_info}"

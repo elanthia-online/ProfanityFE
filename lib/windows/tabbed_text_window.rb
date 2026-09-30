@@ -66,12 +66,31 @@ class TabbedTextWindow < BaseWindow
     cap_line_buffers(@max_buffer_size)
   end
 
-  # Each tab's display rows.
+  # Each tab's display rows. A hidden tab whose re-wrap to the window's
+  # width was put off (see {#redraw_after_resize}) is re-wrapped first.
   #
   # @return [Hash{String => Array}] tab name to rows (newest first)
   #   mapping, in tab order
   def tabs
     @tab_buffers.transform_values(&:lines)
+  end
+
+  # @return [Array<String>] the tab names, in tab order
+  def tab_names
+    @tab_buffers.keys
+  end
+
+  # Each tab's newest row that the block accepts, as
+  # {LineBuffer#newest_row} finds it, without re-wrapping a hidden tab
+  # whose re-wrap was put off.
+  #
+  # @yieldparam row [Array(String, Array<Hash>, Boolean)] a row (text,
+  #   runs, wrap-continuation flag), newest first
+  # @yieldreturn [Boolean] whether this is the row wanted
+  # @return [Array<Array(String, Array<Hash>, Boolean)>] one row per tab
+  #   that has one, in tab order
+  def newest_rows(&)
+    @tab_buffers.values.filter_map { |line_buffer| line_buffer.newest_row(&) }
   end
 
   # Give the window exactly these tabs, in this order. A tab it already
@@ -206,10 +225,11 @@ class TabbedTextWindow < BaseWindow
   end
 
   # Show the window again after {#move_to_layout} moved it: move its
-  # scrollbar, if it has one, beside it, re-wrap every tab's lines to the
-  # new width, clear the scrollbar and redraw the tab bar and text. The
-  # scrollbar is drawn again if the window is the active one, whatever its
-  # shown tab holds (see {#redraw}).
+  # scrollbar, if it has one, beside it, re-wrap the shown tab's lines to
+  # the new width, clear the scrollbar and redraw the tab bar and text.
+  # The hidden tabs are re-wrapped when shown (see {LineBuffered#rewrap}).
+  # The scrollbar is drawn again if the window is the active one,
+  # whatever its shown tab holds (see {#redraw}).
   #
   # @return [void]
   # @api private

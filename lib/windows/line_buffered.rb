@@ -386,9 +386,11 @@ module LineBuffered
   # Fit every buffer to the window's current size, after a resize.
   # Stored lines are re-wrapped to the new width, keeping the logical
   # line on each buffer's bottom row there, and a view scrolled back past
-  # the oldest row of a taller text area moves down onto it. A re-wrap
-  # clears the selection: its row IDs no longer exist. The caller
-  # repaints.
+  # the oldest row of a taller text area moves down onto it (see
+  # {LineBuffer#fit}). Only the shown buffer is re-wrapped now; the
+  # others are re-wrapped when they are next read, when shown, to what
+  # they would have been. A re-wrap clears the selection: its row IDs no
+  # longer exist. The caller repaints.
   #
   # @return [void]
   def rewrap
@@ -396,8 +398,7 @@ module LineBuffered
     height = content_height
     rewrapping = line_buffers.any? { |line_buffer| line_buffer.width != width }
     line_buffers.each do |line_buffer|
-      line_buffer.width = width
-      line_buffer.pos = line_buffer.pos.clamp(0, [line_buffer.length - height, 0].max)
+      line_buffer.fit(width, height, later: !line_buffer.equal?(shown_buffer))
     end
     return unless rewrapping
 
@@ -479,16 +480,18 @@ module LineBuffered
   private def append_string(line_buffer, string, string_colors, indent:, shown:)
     string = buffer_text(string, @time_stamp)
     effective_indent = indent.nil? ? @indent_word_wrap : indent
+    unless shown
+      # Draw nothing; a view scrolled back keeps its place, as on the
+      # shown path below, and evictions may have dropped rows it reached
+      line_buffer.push_unseen(string, string_colors, indent: effective_indent, height: content_height)
+      yield if block_given?
+      return
+    end
+
     length_before = line_buffer.length
     added = line_buffer.push(string, string_colors, indent: effective_indent)
     height = content_height
-    if !shown
-      # Scrolled back: keep the view in place, as the shown path below
-      # does, but draw nothing. Evictions may have dropped rows it reached.
-      line_buffer.pos += added unless line_buffer.live?
-      line_buffer.pos = line_buffer.pos.clamp(0, [line_buffer.length - height, 0].max)
-      yield if block_given?
-    elsif line_buffer.live?
+    if line_buffer.live?
       if line_buffer.length < [length_before + added, height].min
         # An eviction left too few rows to fill the text area, so every
         # row moved up: redraw them all
@@ -501,7 +504,7 @@ module LineBuffered
       keep_view_on_stored_rows(line_buffer, height)
       update_scrollbar
     end
-    return unless shown && line_buffer.live?
+    return unless line_buffer.live?
 
     noutrefresh
   end
@@ -547,13 +550,18 @@ module LineBuffered
   private def cap_line_buffers(cap)
     height = content_height
     line_buffers.each do |line_buffer|
+      unless line_buffer.equal?(shown_buffer)
+        # Not shown: keep its view in place, re-wrap put off or not
+        line_buffer.cap = cap
+        line_buffer.fit(line_buffer.width, height, later: true)
+        next
+      end
+
       length_before = line_buffer.length
       line_buffer.cap = cap
       next if line_buffer.length == length_before
 
-      if !line_buffer.equal?(shown_buffer)
-        line_buffer.pos = line_buffer.pos.clamp(0, [line_buffer.length - height, 0].max)
-      elsif line_buffer.live?
+      if line_buffer.live?
         paint_content if line_buffer.length < [length_before, height].min
       else
         keep_view_on_stored_rows(line_buffer, height)

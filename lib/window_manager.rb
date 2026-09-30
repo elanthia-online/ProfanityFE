@@ -207,8 +207,9 @@ class WindowManager
   # afterward. Nothing is resized while the terminal is under 3 lines or
   # 10 columns.
   #
-  # Text and tabbed windows re-wrap their stored lines, every tab's, to
-  # the new width and repaint (see {LineBuffered#rewrap}). The current
+  # Text and tabbed windows re-wrap their stored lines to the new width
+  # and repaint (see {LineBuffered#rewrap}): a tabbed window re-wraps its
+  # shown tab now and each hidden tab when it is next shown. The current
   # scroll window keeps its active scrollbar; every other text or tabbed
   # window's scrollbar is left blank.
   #

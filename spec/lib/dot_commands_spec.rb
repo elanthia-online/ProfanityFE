@@ -154,6 +154,32 @@ RSpec.describe 'Dot-commands typed on the command line' do
       expect(shown.last).to eq '* Tabs: 1:thoughts* 2:logons'
     end
 
+    it '.tab lists the tabs without re-wrapping a hidden tab a narrower layout left stale' do
+      tabbed.add_string_to_tab('logons', 'Someone joins the adventure today.')
+      LAYOUT['narrow'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='0' height='lines-10' width='120' value='main'/>
+          <window class='tabbed' top='0' left='121' height='5' width='16' tabs='thoughts,logons'/>
+          <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+        </layout>
+      XML
+      wrapped = []
+      allow_any_instance_of(StyledText).to receive(:wrap).and_wrap_original do |original, *args, **opts|
+        wrapped << original.receiver.text
+        original.call(*args, **opts)
+      end
+
+      app.execute_command('.layout narrow')
+      app.execute_command('.tab')
+
+      expect(shown.last).to eq '* Tabs: 1:thoughts* 2:logons'
+      expect(wrapped).not_to include('Someone joins the adventure today.')
+      app.execute_command('.tab 2')
+      # 16 wide: wrapping at 14
+      expect(tabbed.rows.drop(TabbedTextWindow::TAB_BAR_HEIGHT).map(&:rstrip))
+        .to eq ['Someone joins', '  the', '  adventure', '  today.']
+    end
+
     it '.tab <N> switches to the tab with that number' do
       app.execute_command('.tab 2')
       expect(tabbed.active_tab).to eq 'logons'

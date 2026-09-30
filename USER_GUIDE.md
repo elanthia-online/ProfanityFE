@@ -2070,7 +2070,9 @@ standard Lich script command prefix. For example, typing `.e echo hello` sends
   startup phase to the log file. Useful for diagnosing slow launches.
 - The `buffer-size` attribute controls how many game lines each text window
   retains. Very large values (10000+) may increase memory usage, and make a
-  terminal resize slower, since every stored line is re-wrapped.
+  terminal resize slower, since every stored line is re-wrapped (a tabbed
+  window's hidden tab is re-wrapped the first time it is shown after the
+  resize, so that switch can pause too).
 - ProfanityFE batches screen updates and delays rendering when more server data
   is available, reducing flicker during heavy output.
 - Curses rendering is synchronized via `CursesRenderer` (a reentrant `Monitor`)
