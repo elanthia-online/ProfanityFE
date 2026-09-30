@@ -139,7 +139,8 @@ module AnchoredSelection
 
   # Text of the buffer line with the given stable ID.
   #
-  # @param buffer [Array<Array(String, Array<Hash>)>] line buffer, newest first
+  # @param buffer [Array<Array>] line buffer, newest first; only each
+  #   entry's text (index 0) is read
   # @param lines_appended [Integer] monotonic append counter
   # @param id [Integer] stable line ID
   # @return [String, nil] line text, or nil if evicted / never appended

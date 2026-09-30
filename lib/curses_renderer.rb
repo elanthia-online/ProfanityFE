@@ -92,12 +92,21 @@ module CursesRenderer
 
   # Hold the lock for the block, then run the blocks {.outside_lock}
   # deferred once this thread no longer holds it.
+  #
+  # @yield the operations to run while holding the lock
+  # @return [Object] the block's return value
   def hold(&block)
     @monitor.synchronize(&block)
   ensure
     run_deferred unless @monitor.mon_owned?
   end
 
+  # Run, in the order they were deferred, the blocks {.outside_lock}
+  # deferred on this thread, and forget them. Called by {.hold} once the
+  # thread no longer holds the lock. A block that raises stops the rest,
+  # which are dropped.
+  #
+  # @return [void]
   def run_deferred
     return unless (deferred = Thread.current[DEFERRED_KEY])
 

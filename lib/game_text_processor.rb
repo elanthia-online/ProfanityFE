@@ -65,7 +65,7 @@ class GameTextProcessor
   # Create a new processor wired to the given window manager and shared state.
   #
   # @param window_mgr [WindowManager] provides handler hashes for stream/indicator/progress/countdown/room windows
-  # @param shared_state [OpenStruct] mutable state shared with the input thread (need_prompt, prompt_text, skip_server_time_offset)
+  # @param shared_state [SharedState] state shared with the input thread (need_prompt, prompt_text, skip_server_time_offset)
   # @param cmd_buffer [CommandBuffer] the command-line input buffer (its window is refreshed with each screen flush)
   # @param xml_escapes [Hash<String, String>] XML entity to character mappings (e.g. +"&gt;"+ => +">"+)
   # @param event_bus [EventBus] event bus for decoupled UI updates

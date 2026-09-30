@@ -11,6 +11,20 @@ require 'digest'
 class CachedElement
   attr_reader :name, :attributes, :text, :children
 
+  # @!attribute [r] name
+  #   @return [String] the element's tag name
+  # @!attribute [r] attributes
+  #   @return [Hash{String => String}] the element's attributes by name
+  # @!attribute [r] text
+  #   @return [String, nil] the element's first text node, as
+  #     REXML::Element#text gives it; nil when it has none
+  # @!attribute [r] children
+  #   @return [Array<CachedElement>] the child elements, in document order
+
+  # @param name [String] the element's tag name
+  # @param attributes [Hash{String => String}] the element's attributes
+  # @param text [String, nil] the element's first text node
+  # @param children [Array<CachedElement>] the child elements
   def initialize(name, attributes, text, children)
     @name = name
     @attributes = attributes
@@ -69,7 +83,8 @@ module SettingsLoader
   # @param filename [String] path to the .profanity.xml configuration file
   # @param key_binding [Hash] mutable hash of key bindings, replaced in place
   # @param key_action [Hash<String, Proc>] named action procs available for key binding
-  # @param do_macro [Proc] proc that executes a macro string when called
+  # @param do_macro [#call] runs a macro; called with the macro string
+  #   (Application passes its +do_macro+ Method)
   # @param reload [Boolean] when true, skip PRESET/LAYOUT population and only refresh dynamic settings
   # @param keep_highlights [Hash{Regexp => Array}] highlights to keep on top
   #   of the file's (e.g. those added with +.highlight+), applied in the same
@@ -96,7 +111,7 @@ module SettingsLoader
   #
   # @param xml_root [CachedElement] root element of the parsed settings
   # @param key_action [Hash<String, Proc>] named action procs available for key binding
-  # @param do_macro [Proc] proc that executes a macro string when called
+  # @param do_macro [#call] runs a macro; called with the macro string
   # @param reload [Boolean] when true, presets and layouts are not collected
   # @return [Hash] the settings, for {apply}: +:highlight+, +:perc_transforms+,
   #   +:notification_stream+, +:history_size+, +:gags+ (keyword arguments for
@@ -338,7 +353,7 @@ module SettingsLoader
   # and creates closures that late-bind to +do_macro+.
   #
   # @param key_action [Hash<String, Proc>] named action procs available for key binding
-  # @param do_macro [Proc] proc that executes a macro string when called
+  # @param do_macro [#call] runs a macro; called with the macro string
   # @return [Proc] a proc accepting (xml_element, binding_hash) that populates bindings
   # @api private
   def build_setup_key(key_action, do_macro)

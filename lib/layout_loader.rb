@@ -94,7 +94,7 @@ class LayoutLoader
   # a BaseWindow gets the element's {WindowLayout} as its +layout+, and
   # one reused from the previous layout is placed and drawn again there.
   #
-  # @param element [REXML::Element] a +<window>+ element of the layout
+  # @param element [CachedElement] a +<window>+ element of the layout
   # @return [void]
   def build(element)
     if element.attributes['class'] == 'sink'

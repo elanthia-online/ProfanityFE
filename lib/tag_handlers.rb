@@ -152,15 +152,27 @@ module TagHandlers
   # testing without curses.
 
   # Explicitly ignored game protocol tags (dialog data, labels, etc.).
+  #
+  # @param _xml [String] the tag (unused)
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_ignored_tag(_xml, _text_buffer); end
 
   # Handle <prompt time='...'>text&gt;</prompt> paired tag (see
   # PromptTracker#prompt_tag).
+  #
+  # @param xml [String] the paired tag, its content included
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_prompt_tag(xml, _text_buffer)
     @prompts.prompt_tag(xml)
   end
 
   # Handle <spell>name</spell> paired tag.
+  #
+  # @param xml [String] the paired tag, its content included
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_spell_tag(xml, _text_buffer)
     return unless (spell = XmlTokenizer.content(xml))
 
@@ -170,6 +182,10 @@ module TagHandlers
   end
 
   # Handle <right>item</right> or <left>item</left> paired tag.
+  #
+  # @param xml [String] the paired tag, its content included
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_hand_tag(xml, _text_buffer)
     return unless (item = XmlTokenizer.content(xml))
 
@@ -181,6 +197,10 @@ module TagHandlers
   # Handle <roundTime value='N'/> tag. Sets the countdown end time.
   # The countdown display is polled by Application#tick_countdowns
   # on every input loop iteration (~100ms).
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_roundtime_tag(xml, _text_buffer)
     return unless (value = countdown_value(xml))
 
@@ -191,6 +211,10 @@ module TagHandlers
   # Handle <castTime value='N'/> tag. Sets the secondary countdown end time.
   # The countdown display is polled by Application#tick_countdowns
   # on every input loop iteration (~100ms).
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_casttime_tag(xml, _text_buffer)
     return unless (value = countdown_value(xml))
 
@@ -208,6 +232,10 @@ module TagHandlers
   end
 
   # Handle <compass>...<dir value="n"/>...</compass> paired tag.
+  #
+  # @param xml [String] the paired tag, its content included
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_compass_tag(xml, _text_buffer)
     current_dirs = XmlTokenizer.tags(xml, paired: false).filter_map do |tag|
       XmlTokenizer.attrs(tag)['value'] if XmlTokenizer.start_tag_name(tag) == 'dir'
@@ -218,6 +246,10 @@ module TagHandlers
 
   # Handle <progressBar .../> tags for vitals, stance, encumbrance, mind.
   # Dispatches to game-specific sub-patterns based on id and text format.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_progress_bar_tag(xml, _text_buffer)
     id, value, text = XmlTokenizer.attrs(xml).values_at('id', 'value', 'text')
     return unless id && value
@@ -246,6 +278,10 @@ module TagHandlers
   end
 
   # Handle <arbProgress id='...' max='...' current='...'/> user-defined progress bars.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_arb_progress_tag(xml, _text_buffer)
     id, max, cur, label, colors = XmlTokenizer.attrs(xml).values_at('id', 'max', 'current', 'label', 'colors')
     return unless id&.match?(/\A[a-zA-Z0-9]+\z/) && max&.match?(/\A\d+\z/) && cur&.match?(/\A\d+\z/)
@@ -263,16 +299,28 @@ module TagHandlers
   end
 
   # Handle <pushBold/> or <b> tag. Opens a monster bold color region.
+  #
+  # @param _xml [String] the tag (unused)
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_push_bold(_xml, text_buffer)
     @spans.open(:bold, text_buffer.length, **Presets.colors(Presets::MONSTERBOLD).to_h)
   end
 
   # Handle <popBold/> or </b> tag. Closes the most recent monster bold region.
+  #
+  # @param _xml [String] the tag (unused)
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_pop_bold(_xml, text_buffer)
     @spans.close(:bold, text_buffer.length)
   end
 
   # Handle <preset id='...'> opening tag.
+  #
+  # @param xml [String] the tag
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_open_preset(xml, text_buffer)
     return if xml.end_with?('/>') # an empty preset has nothing to color
     return unless (preset_id = XmlTokenizer.attrs(xml)['id'])
@@ -283,12 +331,20 @@ module TagHandlers
   end
 
   # Handle </preset> closing tag.
+  #
+  # @param _xml [String] the tag (unused)
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_close_preset(_xml, text_buffer)
     @room.end_capture(:desc) { flush_text_buffer(text_buffer) }
     @spans.close(:preset, text_buffer.length)
   end
 
   # Handle <color fg='...' bg='...' ul='...'> opening tag.
+  #
+  # @param xml [String] the tag
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_open_color(xml, text_buffer)
     attrs = XmlTokenizer.attrs(xml)
     colors = %w[fg bg ul].filter_map { |name| [name.to_sym, attrs[name].downcase] if attrs[name] }.to_h
@@ -296,12 +352,20 @@ module TagHandlers
   end
 
   # Handle </color> closing tag.
+  #
+  # @param _xml [String] the tag (unused)
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_close_color(_xml, text_buffer)
     @spans.close(:color, text_buffer.length)
   end
 
   # Handle <style id='...'> tag (both opening and "closing" via empty id).
   # The game protocol uses <style id=""> as a close marker rather than </style>.
+  #
+  # @param xml [String] the tag
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_style_tag(xml, text_buffer)
     return unless (style_id = XmlTokenizer.attrs(xml)['id'])
 
@@ -324,6 +388,10 @@ module TagHandlers
   # Handle <pushStream>, <component>, or <compDef> stream-opening tag.
   # Flushes accumulated text and switches the current stream (see
   # StreamRouter#open_stream: only a pushStream nests).
+  #
+  # @param xml [String] the tag
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_stream_open(xml, text_buffer)
     attrs = XmlTokenizer.attrs(xml)
     return unless (new_stream = attrs['id'])
@@ -348,6 +416,10 @@ module TagHandlers
   # Handle <popStream.../>, </component>, or </compDef> stream-closing tag.
   # Flushes accumulated text, then returns to the innermost pushStream
   # still open (the main window when none is; see StreamRouter#close_stream).
+  #
+  # @param xml [String] the tag
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_stream_close(xml, text_buffer)
     stream = @router.current_stream
     if text_buffer.empty? && stream&.start_with?(Streams::ROOM)
@@ -379,11 +451,19 @@ module TagHandlers
   end
 
   # Handle <clearStream id="percWindow"/> tag.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_clear_stream(xml, _text_buffer)
     @event_bus.emit(:clear_spells) if XmlTokenizer.attrs(xml)['id'] == Streams::PERC
   end
 
   # Handle <a ...> or <d ...> link opening tag.
+  #
+  # @param xml [String] the tag
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_open_link(xml, text_buffer)
     # Always track links for room component streams — the RoomWindow needs
     # pre-computed link positions even when .links is off, so they're ready
@@ -396,6 +476,10 @@ module TagHandlers
   end
 
   # Handle </a> or </d> link closing tag.
+  #
+  # @param _xml [String] the tag (unused)
+  # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
+  # @return [void]
   def handle_close_link(_xml, text_buffer)
     @spans.close(:link, text_buffer.length) do |h|
       # For tags without cmd/exist (e.g., exit directions),
@@ -405,6 +489,10 @@ module TagHandlers
   end
 
   # Handle <indicator id='IconXXX' visible='y|n'/> tag.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_indicator_tag(xml, _text_buffer)
     id, visible = XmlTokenizer.attrs(xml).values_at('id', 'visible')
     return unless (m = id&.match(/\AIcon(?<icon>[A-Z]+)\z/)) && visible&.match?(/\A[yn]\z/)
@@ -417,6 +505,10 @@ module TagHandlers
   end
 
   # Handle <image id='...' name='...'/> body part/injury tag.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_image_tag(xml, _text_buffer)
     id, name = XmlTokenizer.attrs(xml).values_at('id', 'name')
     return unless IMAGE_IDS.include?(id) && name
@@ -437,6 +529,10 @@ module TagHandlers
   # that would make the result point anywhere other than
   # +https://www.play.net/+ (e.g. +@evil.example/+, which becomes userinfo,
   # or +.evil.example/+, which extends the host) is logged and ignored.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_launch_url(xml, _text_buffer)
     src = XmlTokenizer.attrs(xml)['src']
     return if src.nil? || src.empty?
@@ -464,6 +560,10 @@ module TagHandlers
   end
 
   # Handle <streamWindow id='room' subtitle='...'/> tag.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
   def handle_stream_window(xml, _text_buffer)
     id, subtitle = XmlTokenizer.attrs(xml).values_at('id', 'subtitle')
     return unless id == Streams::ROOM && subtitle

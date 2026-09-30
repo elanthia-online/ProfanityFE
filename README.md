@@ -40,9 +40,19 @@ See the **[User Guide](USER_GUIDE.md)** for full documentation including setting
 - Gems for development (the `test` group):
   - [rspec](https://rubygems.org/gems/rspec) (~> 3.13): the test suite
   - [rubocop](https://rubygems.org/gems/rubocop) (~> 1.75): style checks; CI runs the version locked in `Gemfile.lock`
-  - [yard](https://rubygems.org/gems/yard) (~> 0.9): API documentation; CI fails on YARD warnings or undocumented public objects
+  - [yard](https://rubygems.org/gems/yard) (~> 0.9): API documentation; CI fails on YARD warnings, on any undocumented object (private methods included), and on YARD tags that don't match the code (see below)
 
 Install all dependencies with `bundle install`, or only the ones needed to run the client with `bundle config set --local without test && bundle install`.
+
+To run the YARD checks CI runs:
+
+```bash
+bundle exec yard doc --private --fail-on-warning --no-save --no-stats --output-dir /tmp/yard
+bundle exec yard stats --private --list-undoc --no-save  # must not list "Undocumented Objects:"
+bundle exec ruby script/check_yard_tags.rb
+```
+
+`script/check_yard_tags.rb` checks every method in the files listed in `.yardopts`: a typed `@param` for each parameter and none for a parameter it doesn't have, a `@return`, a `@yield` or `@yieldparam` if it yields, and a `@raise` if it raises. It prints each gap as `file:line Path: gap` and exits 1 if there is any. Pass file names to check only those files, or `--self-test` to check the checker.
 
 ## Terminal
 

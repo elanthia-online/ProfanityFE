@@ -65,7 +65,8 @@ module LineBuffered
 
   # The shown buffer's display rows.
   #
-  # @return [Array<Array(String, Array<Hash>)>] rows, newest first (empty
+  # @return [Array<Array(String, Array<Hash>, Boolean)>] rows (text, runs,
+  #   wrap-continuation flag; see {LineBuffer#lines}), newest first (empty
   #   when no buffer is shown)
   def buffer
     shown_buffer&.lines || []
@@ -73,7 +74,8 @@ module LineBuffered
 
   # Return the shown buffer's display rows for selection support.
   #
-  # @return [Array<Array(String, Array<Hash>)>] rows, newest first (empty
+  # @return [Array<Array(String, Array<Hash>, Boolean)>] rows (text, runs,
+  #   wrap-continuation flag; see {LineBuffer#lines}), newest first (empty
   #   when no buffer is shown)
   def buffer_content
     shown_buffer&.lines || []
@@ -418,6 +420,7 @@ module LineBuffered
   #
   # @abstract
   # @return [LineBuffer, nil] the buffer, or nil when nothing is shown
+  # @raise [NotImplementedError] unless the including class defines it
   private def shown_buffer
     raise NotImplementedError, "#{self.class} must implement shown_buffer"
   end
@@ -426,6 +429,7 @@ module LineBuffered
   #
   # @abstract
   # @return [Array<LineBuffer>]
+  # @raise [NotImplementedError] unless the including class defines it
   private def line_buffers
     raise NotImplementedError, "#{self.class} must implement line_buffers"
   end
@@ -539,7 +543,8 @@ module LineBuffered
   # No newline follows the last line: on the bottom row of the scrolling
   # region it would scroll the text up and blank that row.
   #
-  # @param buffer [Array<Array(String, Array<Hash>)>] line buffer (newest first)
+  # @param buffer [Array<Array(String, Array<Hash>, Boolean)>] the rows of a
+  #   {LineBuffer} (newest first)
   # @param from_index [Integer] buffer index of the first (oldest) line to draw
   # @param count [Integer] number of lines to draw
   # @return [void]

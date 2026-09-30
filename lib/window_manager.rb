@@ -25,6 +25,14 @@ require_relative 'shared_state'
 class WindowManager
   attr_reader :command_window, :command_window_layout
 
+  # @!attribute [r] command_window
+  #   @return [Curses::Window, nil] the command-line window, created by the
+  #     first layout that has one (see {#install_command_window}); nil
+  #     until then
+  # @!attribute [r] command_window_layout
+  #   @return [WindowLayout, nil] where the current layout puts the command
+  #     window; nil until a layout has one
+
   # The clock read by the windows this manager builds and by stun
   # countdowns.
   #
@@ -59,7 +67,9 @@ class WindowManager
 
   # Returns the live stream handler hash mapping stream names to window objects.
   #
-  # @return [Hash<String, TextWindow>] the stream handler hash (not a copy)
+  # @return [Hash{String => TextWindow, TabbedTextWindow, ExpWindow, PercWindow, SinkWindow}]
+  #   the stream handler hash (not a copy): a {StreamWindow} per stream, or
+  #   the {SinkWindow} that swallows it
   # @note Returns the live hash, not a copy. Mutations affect routing.
   attr_reader :stream
 
@@ -176,6 +186,7 @@ class WindowManager
   # buffer draws into, and only replace its layout.
   #
   # @param layout [WindowLayout] where the layout puts the command line
+  # @yield once, only when there is no command window yet
   # @yieldreturn [Curses::Window] a new command window, called only when
   #   there isn't one yet
   # @return [Curses::Window] the command window

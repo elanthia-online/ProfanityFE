@@ -88,11 +88,11 @@ module GagPatterns
       publish { defaults_snapshot }
     end
 
-    # Add a combat stream gag pattern.
+    # Add a combat stream gag pattern. An invalid pattern string is warned
+    # about and not added.
     #
     # @param pattern [String, Regexp] pattern to match against combat text
     # @return [void]
-    # @raise [RegexpError] logged as warning if pattern string is invalid
     def add_combat_pattern(pattern)
       regexp = compile_pattern(pattern, 'combat gag')
       return unless regexp
@@ -100,11 +100,11 @@ module GagPatterns
       publish { |current| rebuild(current, combat: current.combat_patterns + [regexp]) }
     end
 
-    # Add a general gag pattern (applies to all streams).
+    # Add a general gag pattern (applies to all streams). An invalid
+    # pattern string is warned about and not added.
     #
     # @param pattern [String, Regexp] pattern to match against incoming text
     # @return [void]
-    # @raise [RegexpError] logged as warning if pattern string is invalid
     def add_general_pattern(pattern)
       regexp = compile_pattern(pattern, 'gag')
       return unless regexp
@@ -116,12 +116,13 @@ module GagPatterns
     # and every following line are suppressed until either +end_pattern+
     # matches (that end line is also suppressed) or, if no end pattern is
     # given, the next game prompt is reached (the prompt is not suppressed).
+    # If either pattern string is invalid, it is warned about and the gag is
+    # not added.
     #
     # @param start_pattern [String, Regexp] pattern that begins the block
     # @param end_pattern [String, Regexp, nil] optional pattern that ends the
     #   block; when nil the block is terminated by the next prompt
     # @return [void]
-    # @raise [RegexpError] logged as warning if a pattern string is invalid
     def add_multiline_gag(start_pattern, end_pattern = nil)
       gag = compile_multiline_gag(start_pattern, end_pattern)
       return unless gag

@@ -27,7 +27,8 @@ require_relative 'styled_text'
 # the window's job (see {LineBuffered}).
 class LineBuffer
   # @return [Array<Array(String, Array<Hash>, Boolean)>] the display rows,
-  #   newest first
+  #   newest first: each is its text, its color runs, and whether it
+  #   continues the row before it (a wrapped line's second and later rows)
   attr_reader :lines
 
   # @return [Integer] monotonic count of rows ever added. Gives each row
