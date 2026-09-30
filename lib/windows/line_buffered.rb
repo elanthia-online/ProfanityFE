@@ -506,10 +506,10 @@ module LineBuffered
   # highlight where it falls in the selection. The rows already shown
   # aren't drawn again: they keep their cells, highlight included, as
   # the text area scrolls them up. That holds only while they show the
-  # current selection as {#paint_content} drew it; otherwise (a tabbed
-  # window's redraw shows no highlight, or the selection changed without
-  # a repaint) every row is repainted with the highlight after the new
-  # rows are drawn.
+  # current selection as {#paint_content} (or a tabbed window's redraw)
+  # drew it; otherwise (rows drawn without the highlight, or the selection
+  # changed without a repaint) every row is repainted with the highlight
+  # after the new rows are drawn.
   #
   # @param line_buffer [LineBuffer] the shown buffer, live
   # @param added [Integer] rows the line was wrapped to
@@ -637,14 +637,15 @@ module LineBuffered
   end
 
   # The selection the text area shows, when it is the current one: the
-  # one {#paint_content} last drew, as long as every row drawn since was
-  # drawn with it.
+  # one the text area was last painted with in full (see
+  # {#painted_with_selection}), as long as every row drawn since was drawn
+  # with it.
   #
   # @return [Array<Integer>, nil] the normalized selection, or nil when
   #   there is none or the rows shown may not carry it
   private def painted_selection
     return nil unless has_highlight? && @painted_selection
-    return nil unless @painted_selection == normalize_selection(*@selection_start, *@selection_end)
+    return nil unless @painted_selection == current_selection
 
     @painted_selection
   end
@@ -658,13 +659,32 @@ module LineBuffered
     @painted_selection = nil
   end
 
+  # Note that every row of the text area was just drawn with +selection+
+  # (none, when nil), so a line arriving while it is still the current
+  # selection draws only its new rows (see {#draw_new_rows}).
+  #
+  # @param selection [Array<Integer>, nil] the normalized selection the
+  #   rows were drawn with (see {#current_selection})
+  # @return [void]
+  private def painted_with_selection(selection)
+    @painted_selection = selection
+  end
+
+  # The current selection, normalized (see {#normalize_selection}).
+  #
+  # @return [Array<Integer>, nil] [start_id, start_x, end_id, end_x], or
+  #   nil when there is no selection
+  private def current_selection
+    normalize_selection(*@selection_start, *@selection_end) if has_highlight?
+  end
+
   # Clear and redraw every row of the text area from the shown buffer,
   # with the selected region, if any, in reverse video.
   #
   # @return [void]
   private def paint_content
     line_buffer = shown_buffer
-    selection = normalize_selection(*@selection_start, *@selection_end) if has_highlight?
+    selection = current_selection
     height = content_height
 
     (0...height).each do |row|
@@ -676,7 +696,7 @@ module LineBuffered
       line_text, line_colors = entry
       draw_row(id, line_text, line_colors, selection)
     end
-    @painted_selection = selection
+    painted_with_selection(selection)
     noutrefresh
   end
 
