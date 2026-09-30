@@ -228,9 +228,11 @@ class RoomAssembler
   #
   # Shows the text of a room component stream (room title, room desc, room
   # objs, room players, room exits) in the RoomWindow at once, and records
-  # its field as delivered in this burst (see #commit_view). An empty
-  # component delivers an empty field: it clears it. The room exits
-  # component also drops the inline view read so far.
+  # its field as delivered in this burst (see #commit_view), except a room
+  # objs list the game cut short (see Games::Rules#room_list_cut_short?),
+  # which leaves the objects to the inline line. An empty component
+  # delivers an empty field: it clears it. The room exits component also
+  # drops the inline view read so far.
   #
   # @param text [String] component text content
   # @param stream [String, nil] the current stream
@@ -324,7 +326,8 @@ class RoomAssembler
   # @param field [Symbol] +:title+, +:desc+, +:objects+, +:players+ or +:exits+
   # @param part [String, RoomPart] the title row's text for +:title+, else the part
   # @param render [Boolean] whether to ask for a room render at the next
-  #   flush (a room stream's opening tag's subtitle doesn't; see #subtitle)
+  #   flush (#subtitle never does; for a room streamWindow the tag parser
+  #   asks itself)
   # @return [void]
   def emit(field, part, render: true)
     data = case field
@@ -347,27 +350,17 @@ class RoomAssembler
     emit(field, part)
   end
 
-  # Send a room part to the room window and ask for the window to be
-  # rendered at the next flush. The window only stores the part (see
-  # {RoomWindow#update_exits}), so the parts of a burst are drawn once.
-  #
-  # @param event [Symbol] the room event (+:room_desc+, +:room_exits+, ...)
-  # @param data [Hash] the event's data
-  # @return [void]
-  def show(event, **data)
-    @event_bus.emit(event, **data)
-    @pending_render.request_room_render
-  end
-
-  # Show one of the lines Lich adds after a room in the room window (see
-  # #show), and note that the window holds Lich lines for the inline commit
-  # to clear.
+  # Show one of the lines Lich adds after a room in the room window, asking
+  # for the window to be rendered at the next flush (the window only stores
+  # the line, so the parts of a burst are drawn once), and note that the
+  # window holds Lich lines for the inline commit to clear.
   #
   # @param event [Symbol] +:room_lich_exits+, +:room_number+ or +:room_stringprocs+
   # @param data [Hash] the event's data
   # @return [void]
   def show_lich_line(event, **data)
-    show(event, **data)
+    @event_bus.emit(event, **data)
+    @pending_render.request_room_render
     @lich_lines_shown = true
     @pending_render.request_update
   end
