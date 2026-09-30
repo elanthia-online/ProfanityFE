@@ -1,10 +1,11 @@
 # frozen_string_literal: true
 
-# The inline room lines ("You also see", "Also here:", "Obvious paths:")
-# are room data only when the game sends them to main. The same words on
-# another stream (a familiar's view, a script's window) are that stream's
-# text. The lines are driven through the real server loop into windows
-# built from layout XML.
+# The inline room lines (roomName, roomDesc, "You also see", "Also here:",
+# "Obvious paths:") are room data only when the game sends them to main.
+# The same lines on another stream (a familiar's view, a script's window)
+# are that stream's text: they name no room in the terminal title and
+# stay in their window. The lines are driven through the real server loop
+# into windows built from layout XML.
 
 require_relative '../spec_helper'
 require 'rexml/document'
@@ -61,6 +62,26 @@ RSpec.describe 'Inline room lines on other streams' do
     ['<style id="roomName" />[Town Square] (1)', '<style id=""/>You also see a bench.', 'Obvious paths: <d>north</d>.']
   end
 
+  # A familiar's view of its room, in the form Lich's
+  # process_room_information (lich-5 lib/games.rb) matches: the familiar
+  # stream pushed before the roomName, popped after the view.
+  def familiar_view
+    ['<pushStream id="familiar" ifClosedStyle="watching"/><resource picture="0"/><style id="roomName" />[Misty Glade] (9)',
+     "<style id=\"\"/><preset id='roomDesc'>Mist hangs low.</preset>", 'Obvious paths: east.', '<popStream/>']
+  end
+
+  # Record the terminal titles the client writes (OSC 0), as the terminal
+  # gets them after each server line.
+  def record_terminal_titles
+    @titles = []
+    state.char_name = 'Mahtra'
+    allow(Process).to receive(:setproctitle)
+    allow($stdout).to receive(:flush)
+    allow($stdout).to receive(:write) { |bytes| @titles << bytes[/\A\e\]0;([^\a]*)\a/, 1] }
+  end
+
+  def terminal_title = @titles.compact.last
+
   context 'with a room window' do
     before { load_layout }
 
@@ -84,6 +105,36 @@ RSpec.describe 'Inline room lines on other streams' do
 
       expect(room_rows).to eq ['[Town Square] (1)', 'You also see a bench.', 'Obvious paths: north.']
     end
+
+    it "keeps naming the player's room in the terminal title and the room window when a familiar sees its room" do
+      record_terminal_titles
+
+      receive_from_server(*town_square, *familiar_view)
+
+      expect(terminal_title).to eq 'Mahtra [Town Square (1)]'
+      expect(room_rows).to eq ['[Town Square] (1)', 'You also see a bench.', 'Obvious paths: north.']
+      expect(familiar_rows).to eq ['[Misty Glade] (9)', 'Mist hangs low.', 'Obvious paths: east.']
+    end
+
+    it "keeps a familiar's room name and description in its window under --room-window-only" do
+      state.room_window_only = true
+
+      receive_from_server(*town_square, *familiar_view)
+
+      expect(familiar_rows).to eq ['[Misty Glade] (9)', 'Mist hangs low.', 'Obvious paths: east.']
+      expect(main_rows).to be_empty
+    end
+
+    it 'keeps text pushed to another stream inside a roomDesc style in its window, not in the description' do
+      state.room_window_only = true
+
+      receive_from_server('<style id="roomName" />[Town Square] (1)',
+                          %(<style id="roomDesc"/><pushStream id="familiar"/>Mist hangs low.<popStream/><style id=""/>),
+                          'Obvious paths: <d>north</d>.')
+
+      expect(room_rows).to eq ['[Town Square] (1)', 'Obvious paths: north.']
+      expect(familiar_rows).to eq ['Mist hangs low.']
+    end
   end
 
   context 'without a room window' do
@@ -102,6 +153,15 @@ RSpec.describe 'Inline room lines on other streams' do
       receive_from_server('<pushStream id="main"/>Also here: Bob.', '<popStream/>')
 
       expect(players_indicator).to eq 'Bob'
+    end
+
+    it "keeps naming the player's room in the terminal title when a familiar sees its room" do
+      record_terminal_titles
+
+      receive_from_server(*town_square, *familiar_view)
+
+      expect(terminal_title).to eq 'Mahtra [Town Square (1)]'
+      expect(familiar_rows).to eq ['[Misty Glade] (9)', 'Mist hangs low.', 'Obvious paths: east.']
     end
   end
 end
