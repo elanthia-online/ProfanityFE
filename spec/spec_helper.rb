@@ -282,4 +282,16 @@ RSpec.configure do |config|
     # a symlink at that path (clipboard_file_spec).
     FileUtils.rm_f(File.join(SPEC_HOME, '.profanity', 'selection.txt'))
   end
+
+  # RSpec never rescues SystemExit: an example that lets `exit` escape (a
+  # dot-command regression making a command match .quit, say) ends the
+  # whole run there, and rspec exits 0 with only the examples run so far
+  # counted, all passing. Turn the escape into a failure of that example,
+  # so the rest of the suite still runs and the run fails. Examples that
+  # expect an exit catch it themselves (raise_error(SystemExit)).
+  config.around do |example|
+    example.run
+  rescue SystemExit => e
+    raise "the example let exit(#{e.status}) escape; it would have ended the test run"
+  end
 end
