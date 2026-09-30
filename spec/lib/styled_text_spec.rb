@@ -502,6 +502,167 @@ RSpec.describe StyledText do
       expect(lines.map(&:text)).to eq %w[日本語 テスト]
       expect(lines.map(&:runs)).to eq [[{ start: 0, end: 3, fg: 'ff0000' }], [{ start: 0, end: 3, fg: 'ff0000' }]]
     end
+
+    # Exact rows (text and runs) at the narrow widths a resize can ask for.
+    context 'at narrow widths' do
+      def rows(text, runs, width, indent:)
+        described_class.new(text, runs).wrap(width, indent: indent).map { |row| [row.text, row.runs] }
+      end
+
+      it 'cuts one character per row at width 1 and lists each row\'s runs in the order they were added' do
+        runs = [{ start: 1, end: 4, fg: 'aa0000' }, { start: 0, end: 5, fg: '00bb00' }]
+
+        expect(rows('ab cd', runs, 1, indent: true)).to eq [
+          ['a', [{ start: 0, end: 1, fg: '00bb00' }]],
+          ['b', [{ start: 0, end: 1, fg: 'aa0000' }, { start: 0, end: 1, fg: '00bb00' }]],
+          ['c', [{ start: 0, end: 1, fg: 'aa0000' }, { start: 0, end: 1, fg: '00bb00' }]],
+          ['d', [{ start: 0, end: 1, fg: '00bb00' }]]
+        ]
+      end
+
+      it 'drops the space at a cut at width 2 and moves the runs after it' do
+        runs = [{ start: 6, end: 8, fg: 'ee0000' }, { start: 2, end: 4, ul: 'true' }]
+
+        expect(rows('ab cd ef', runs, 2, indent: true)).to eq [
+          ['ab', []],
+          ['cd', [{ start: 0, end: 1, ul: 'true' }]],
+          ['ef', [{ start: 0, end: 2, fg: 'ee0000' }]]
+        ]
+      end
+
+      it 'indents continuation rows at width 5 and keeps a run far along the line on its word' do
+        runs = [{ start: 15, end: 19, fg: 'dd0000' }, { start: 5, end: 9, fg: 'bb0000' },
+                { start: 4, end: 5, bg: '0000ff' }, { start: 0, end: 19, cmd: 'look' }]
+
+        expect(rows('aaaa bbbb cccc dddd', runs, 5, indent: true)).to eq [
+          ['aaaa ', [{ start: 4, end: 5, bg: '0000ff' }, { start: 0, end: 5, cmd: 'look' }]],
+          ['  bbb', [{ start: 2, end: 5, fg: 'bb0000' }, { start: 2, end: 5, cmd: 'look' }]],
+          ['  b ', [{ start: 2, end: 3, fg: 'bb0000' }, { start: 2, end: 4, cmd: 'look' }]],
+          ['  ccc', [{ start: 2, end: 5, cmd: 'look' }]],
+          ['  c ', [{ start: 2, end: 4, cmd: 'look' }]],
+          ['  ddd', [{ start: 2, end: 5, fg: 'dd0000' }, { start: 2, end: 5, cmd: 'look' }]],
+          ['  d', [{ start: 2, end: 3, fg: 'dd0000' }, { start: 2, end: 3, cmd: 'look' }]]
+        ]
+      end
+
+      it 'moves a run that starts right at a cut past the indent of a row that starts with a space' do
+        runs = [{ start: 5, end: 6, bg: '0000ff' }, { start: 6, end: 10, fg: 'bb0000' }, { start: 4, end: 10, ul: 'true' }]
+
+        expect(rows('aaaa  bbbb', runs, 5, indent: true)).to eq [
+          ['aaaa ', [{ start: 4, end: 5, ul: 'true' }]],
+          ['  bbb', [{ start: 2, end: 2, bg: '0000ff' }, { start: 2, end: 5, fg: 'bb0000' }, { start: 2, end: 5, ul: 'true' }]],
+          ['  b', [{ start: 2, end: 3, fg: 'bb0000' }, { start: 2, end: 3, ul: 'true' }]]
+        ]
+      end
+
+      it 'keeps the second space of a double space at a cut without indent at width 7' do
+        runs = [{ start: 9, end: 14, fg: 'cc0000' }, { start: 7, end: 9, bg: '0000ff' }, { start: 15, end: 19, fg: 'ff00ff' }]
+
+        expect(rows('one two  three four', runs, 7, indent: false)).to eq [
+          ['one ', []],
+          ['two  ', [{ start: 3, end: 5, bg: '0000ff' }]],
+          ['three ', [{ start: 0, end: 5, fg: 'cc0000' }]],
+          ['four', [{ start: 0, end: 4, fg: 'ff00ff' }]]
+        ]
+      end
+
+      it 'keeps a row that starts with a space whole when its only space is that first one' do
+        expect(rows(' abcdef', [{ start: 0, end: 7, fg: 'aa0000' }], 3, indent: false)).to eq [
+          [' ab', [{ start: 0, end: 3, fg: 'aa0000' }]],
+          ['cde', [{ start: 0, end: 3, fg: 'aa0000' }]],
+          ['f', [{ start: 0, end: 1, fg: 'aa0000' }]]
+        ]
+      end
+
+      it 'treats a missing or nil run start as 0 and drops a run without an end' do
+        runs = [{ end: 3, fg: 'aa0000' }, { start: nil, end: 5, fg: '00bb00' }, { start: 5, fg: '0000cc' }]
+
+        expect(rows('abcdefg', runs, 3, indent: false)).to eq [
+          ['abc', [{ start: 0, end: 3, fg: 'aa0000' }, { start: 0, end: 3, fg: '00bb00' }]],
+          ['def', [{ start: 0, end: 2, fg: '00bb00' }]],
+          ['g', []]
+        ]
+      end
+
+      it 'drops a run that ends before it starts once a cut passes its end' do
+        runs = [{ start: 4, end: 6, fg: 'aa0000' }, { start: 4, end: 2, fg: '00bb00' }]
+
+        expect(rows('ab cd ef gh', runs, 4, indent: true)).to eq [
+          ['ab ', []],
+          ['  cd', [{ start: 3, end: 4, fg: 'aa0000' }]],
+          ['  ef', [{ start: 2, end: 2, fg: 'aa0000' }]],
+          ['  gh', []]
+        ]
+      end
+
+      it 'drops a run from the row after a cut once the cut and a dropped space have passed its end' do
+        expect(rows('ab cd', [{ start: 0, end: 3, fg: 'aa0000' }], 2, indent: false)).to eq [
+          ['ab', [{ start: 0, end: 2, fg: 'aa0000' }]],
+          ['cd', []]
+        ]
+      end
+
+      it 'shows no run that ends before the line begins' do
+        runs = [{ start: -4, end: -1, fg: 'aa0000' }, { start: 0, end: 0, fg: '00bb00' }, { start: 1, end: 2, fg: '0000cc' }]
+
+        expect(rows('abcdefg', runs, 3, indent: false)).to eq [
+          ['abc', [{ start: 1, end: 2, fg: '0000cc' }]],
+          ['def', []],
+          ['g', []]
+        ]
+      end
+
+      it 'adds no row for a line ending left after a cut, but keeps one for two of them' do
+        expect(rows("abc\r\n", [], 3, indent: false)).to eq [['abc', []]]
+        expect(rows("abcd efgh\r\n", [{ start: 5, end: 11, fg: 'aa0000' }], 5, indent: true)).to eq [
+          ['abcd ', []],
+          ['  efg', [{ start: 2, end: 5, fg: 'aa0000' }]],
+          ["  h\r\n", [{ start: 2, end: 5, fg: 'aa0000' }]]
+        ]
+        expect(rows("ab\n\n", [], 2, indent: false)).to eq [['ab', []], ["\n\n", []]]
+        expect(rows("a\nb", [], 1, indent: false)).to eq [['a', []], ["\n", []], ['b', []]]
+      end
+
+      it 'returns rows that share no text or run with the line or with each other' do
+        styled = described_class.new('abcdef', [{ start: 0, end: 6, fg: 'aa0000' }])
+        first, second = styled.wrap(3, indent: false)
+
+        first.text << 'X'
+        first.runs.first[:fg] = 'changed'
+
+        expect([styled.text, styled.runs]).to eq ['abcdef', [{ start: 0, end: 6, fg: 'aa0000' }]]
+        expect([second.text, second.runs]).to eq ['def', [{ start: 0, end: 3, fg: 'aa0000' }]]
+      end
+
+      # A resize re-wraps every stored line; at width 1 a long line with
+      # many links used to walk every run still ahead of the cut on every
+      # row (rows x runs). Two operation counts, no clock: how often the
+      # runs are read, and how many lines of the wrap's own file run in
+      # all (the per-row walk over already-read runs reads no run, but
+      # each run it visits still runs a line).
+      it 'does work proportional to rows plus runs, not rows times runs' do
+        reads = 0
+        counting_run = Class.new(Hash) do
+          define_method(:[]) do |key|
+            reads += 1
+            super(key)
+          end
+        end
+        text = 'x ' * 1000
+        runs = (0...200).map { |i| counting_run[start: i * 10, end: (i * 10) + 2, cmd: "look #{i}"] }
+        styled = described_class.new(text, runs)
+        wrap_file = described_class.instance_method(:wrap).source_location.first
+        lines_run = 0
+        line_counter = TracePoint.new(:line) { |event| lines_run += 1 if event.path == wrap_file }
+        reads = 0
+
+        row_count = line_counter.enable { styled.wrap(1, indent: false).length }
+
+        expect(row_count).to eq 1000
+        expect(reads).to be <= 4 * (row_count + runs.length)
+        expect(lines_run).to be <= 40 * (row_count + runs.length)
+      end
+    end
   end
 
   describe '#dup_with_runs' do

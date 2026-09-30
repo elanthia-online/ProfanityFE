@@ -123,6 +123,57 @@ RSpec.describe WindowManager, '#resize re-wrapping' do
     end
   end
 
+  context 'with a text window only a few columns wide' do
+    # 7 rows high, a quarter of the terminal wide: 80 columns wrap at 18,
+    # 28 at 5, 16 at 2 and 12 at 1 (one column of text).
+    let(:window) { build("<window class='text' top='0' left='0' height='7' width='cols/4' value='main'/>") }
+
+    # Color pair number per foreground color, so a cell's color can be
+    # read back from its attributes.
+    let(:pairs) { { 'ff0000' => 1, '00ff00' => 2 } }
+
+    before { allow(HighlightProcessor).to receive(:get_color_pair_id) { |fg, _bg| pairs.fetch(fg, 0) } }
+
+    # Each shown row with the color pair of each of its characters.
+    def colored_rows
+      window.rows.each_with_index.map do |text, y|
+        [text, (0...text.length).map { |x| window.attrs_at(y, x) >> 8 }]
+      end
+    end
+
+    before do
+      window.add_string('see a rat and bob', [{ start: 6, end: 9, fg: 'ff0000' }, { start: 14, end: 17, fg: '00ff00' }])
+    end
+
+    it 'shows the line re-wrapped at 5 columns with each word in its color' do
+      resize_to(28)
+
+      expect(colored_rows).to eq [
+        ['see', [0, 0, 0]], ['  a', [0, 0, 0]], ['  rat', [0, 0, 1, 1, 1]],
+        ['  and', [0, 0, 0, 0, 0]], ['  bob', [0, 0, 2, 2, 2]], ['', []], ['', []]
+      ]
+    end
+
+    it 'shows the newest rows re-wrapped at 2 columns without indent, colors on their letters' do
+      resize_to(16)
+
+      expect(colored_rows).to eq [
+        ['a', [0]], ['ra', [1, 1]], ['t', [1]], ['an', [0, 0]], ['d', [0]], ['bo', [2, 2]], ['b', [2]]
+      ]
+    end
+
+    it 'shows one letter per row at 1 column and joins the line back up when widened' do
+      resize_to(12)
+      expect(colored_rows).to eq [['t', [1]], ['a', [0]], ['n', [0]], ['d', [0]], ['b', [2]], ['o', [2]], ['b', [2]]]
+      window.scroll_lines(-6)
+      expect(colored_rows).to eq [['s', [0]], ['e', [0]], ['e', [0]], ['a', [0]], ['r', [1]], ['a', [1]], ['t', [1]]]
+
+      resize_to(80)
+
+      expect(colored_rows.first).to eq ['see a rat and bob', [0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 2, 2, 2]]
+    end
+  end
+
   context 'with a tabbed window' do
     # The tab bar on row 0 and 3 rows of text below it; 40 wide at 80
     # columns (wrapping at 38) and 24 wide at 48 (wrapping at 22), so the
