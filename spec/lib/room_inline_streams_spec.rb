@@ -135,6 +135,24 @@ RSpec.describe 'Inline room lines on other streams' do
       expect(room_rows).to eq ['[Town Square] (1)', 'Obvious paths: north.']
       expect(familiar_rows).to eq ['Mist hangs low.']
     end
+
+    it "keeps the player's room name on the title row when a familiar's roomName arrives before the exits" do
+      receive_from_server('<style id="roomName" />[Town Square] (1)', '<style id=""/>You also see a bench.',
+                          '<pushStream id="familiar"/><style id="roomName" />[Misty Glade] (9)', '<style id=""/><popStream/>',
+                          'Obvious paths: <d>north</d>.')
+
+      expect(room_rows).to eq ['[Town Square] (1)', 'You also see a bench.', 'Obvious paths: north.']
+      expect(familiar_rows).to eq ['[Misty Glade] (9)']
+    end
+
+    it 'does not take the next main line as the description after text pushed inside an unclosed roomDesc style' do
+      receive_from_server('<style id="roomName" />[Town Square] (1)',
+                          '<style id=""/><style id="roomDesc"/><pushStream id="familiar"/>Mist hangs low.<popStream/>',
+                          'Obvious paths: <d>north</d>.')
+
+      expect(room_rows).to eq ['[Town Square] (1)', 'Obvious paths: north.']
+      expect(familiar_rows).to eq ['Mist hangs low.']
+    end
   end
 
   context 'without a room window' do
