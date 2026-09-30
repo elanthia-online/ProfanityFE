@@ -82,6 +82,9 @@ RSpec.describe 'Inline room lines' do
   # The room window's rows, blank rows and trailing blanks left out.
   def room_rows = room.rows.map(&:rstrip).reject(&:empty?)
 
+  # The main window's rows, blank rows and trailing blanks left out.
+  def main_rows = @window_manager.stream['main'].rows.map(&:rstrip).reject(&:empty?)
+
   # The room window's row showing +text+, and the column it starts at.
   def locate(text)
     y = room.rows.index { |row| row.include?(text) }
@@ -104,8 +107,14 @@ RSpec.describe 'Inline room lines' do
 
   # The command a click on each character of +text+ sends, without repeats.
   def commands_under(text)
+    command_runs(text).uniq
+  end
+
+  # The command a click on each character of +text+ sends, once for each
+  # run of characters that send the same one.
+  def command_runs(text)
     y, x = locate(text)
-    (x...(x + text.length)).map { |col| room.link_cmd_at(y, col) }.uniq
+    (x...(x + text.length)).map { |col| room.link_cmd_at(y, col) }.chunk_while { |a, b| a == b }.map(&:first)
   end
 
   describe 'the room title' do
@@ -208,6 +217,34 @@ RSpec.describe 'Inline room lines' do
       expect(room_rows.first).to eq 'A door.'
       expect(commands_under('door')).to eq ['go door']
       expect(commands_under('A ')).to eq [nil]
+    end
+
+    it 'keeps the links of a description after other text on its line, and not the links before it' do
+      desc_shown_for(%(Before <d cmd='x'>x</d>. <style id="roomDesc"/>A <d cmd='go door'>door</d>.<style id=""/>))
+
+      expect(room_rows.first).to eq 'A door.'
+      expect(command_runs('A door.')).to eq [nil, 'go door', nil]
+      expect(main_rows.first).to eq 'Before x. A door.'
+    end
+
+    it 'decodes entities in the description' do
+      desc_shown_for(%(<preset id='roomDesc'>A &lt;red&gt; door &amp; a gate.</preset>))
+
+      expect(room_rows.first).to eq 'A <red> door & a gate.'
+    end
+
+    it 'pairs nested links in the description by nesting, the innermost winning' do
+      desc_shown_for(%(<preset id='roomDesc'>A <d cmd='a'>x<d cmd='b'>y</d>z</d>.</preset>))
+
+      expect(command_runs('xyz')).to eq %w[a b a]
+    end
+
+    # Characterization: a roomDesc style with no text of its own takes the
+    # text before it on its line, as the description always has then.
+    it 'takes the text before a roomDesc style that has no text of its own' do
+      desc_shown_for(%(Before <style id="roomDesc"/><style id=""/>))
+
+      expect(room_rows.first).to eq 'Before'
     end
   end
 

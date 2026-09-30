@@ -151,13 +151,16 @@ RSpec.describe 'Room capture' do
     expect(main_rows).to be_empty
   end
 
-  it 'ends a roomDesc style capture at any preset close inside it' do
+  # Decided (PLAN §9 Q2 (a)): the description is the text the capture
+  # took, so the room window loses the text after the preset, and main is
+  # unchanged.
+  it 'ends a roomDesc style capture at any preset close inside it, with the text before the close' do
     load_layout
     state.room_window_only = true
 
     receive_from_server(%(<style id='roomDesc'/>A <preset id='speech'>b</preset> c.<style id=''/>), 'Obvious paths: north.')
 
-    expect(room_rows).to eq ['A b c.', 'Obvious paths: north.']
+    expect(room_rows).to eq ['A b', 'Obvious paths: north.']
     expect(main_rows).to eq [' c.']
   end
 end

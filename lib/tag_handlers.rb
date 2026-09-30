@@ -400,7 +400,7 @@ module TagHandlers
       return if line_gagged?
 
       @room.start_capture(:title) if style_id == Presets::ROOM_NAME
-      @room.start_capture(:desc) if style_id == Presets::ROOM_DESC
+      @room.start_capture(:desc, at: text_buffer.length) if style_id == Presets::ROOM_DESC
     end
   end
 

@@ -2,7 +2,6 @@
 
 require_relative 'xml_tokenizer'
 require_relative 'streams'
-require_relative 'presets'
 require_relative 'link_extractor'
 require_relative 'room_title'
 require_relative 'room_part'
@@ -15,10 +14,11 @@ require_relative 'room_part'
 #   +room exits+, ...), with the links and creatures the tag parser's room
 #   marks show (see RoomPart), is emitted as it arrives.
 # - The inline path: roomName/roomDesc styled text (captured between
-#   {#start_capture} and {#end_capture}, which the tag parser calls) and
-#   "You also see" / "Also here:" / "Obvious exits:" lines are staged, from
-#   the raw line so their markup is kept, and committed as one batch when
-#   the exits arrive.
+#   {#start_capture} and {#end_capture}, which the tag parser calls; the
+#   description with the links its room marks show) and "You also see" /
+#   "Also here:" / "Obvious exits:" lines (from the raw line so their
+#   markup is kept) are staged, and committed as one batch when the exits
+#   arrive.
 #
 # UI updates are emitted on the event bus. Every room part this class sends
 # to the room window also asks for the window to be rendered at the next
@@ -51,6 +51,9 @@ class RoomAssembler
     @state = shared_state
 
     @capture_mode = nil
+    # Where the description being captured starts in the text handed off
+    # (see #start_capture)
+    @capture_at = 0
     # Inline-path staging, committed as one batch when the exits arrive
     @room_pending_title = nil
     @room_pending_desc = nil
@@ -72,16 +75,22 @@ class RoomAssembler
   # The title also names the room in the terminal title, so it is captured
   # without a room window; the description only with one. Yields before the
   # capture starts, and only if it starts, so the caller can first flush
-  # the text before the tag (a roomDesc preset does; a style doesn't).
+  # the text before the tag (a roomDesc preset does; a style doesn't, so
+  # the main window shows that text with the description, and it says where
+  # the description starts instead).
   #
   # @param kind [Symbol] +:title+ or +:desc+
+  # @param at [Integer] where the description starts in the text the tag
+  #   parser will hand off (the length of the text before a roomDesc style
+  #   on its line); the title always takes all of it
   # @yield before the capture starts
   # @return [void]
-  def start_capture(kind)
+  def start_capture(kind, at: 0)
     return if kind == :desc && !room_window?
 
     yield if block_given?
     @capture_mode = kind
+    @capture_at = at
   end
 
   # End a capture of one of +kinds+ (a style or preset closed): yields so
@@ -98,6 +107,7 @@ class RoomAssembler
 
     yield if block_given?
     @capture_mode = nil
+    @capture_at = 0
   end
 
   # Start a new server line: the inline path reads room markup from it.
@@ -118,17 +128,17 @@ class RoomAssembler
   #
   # @param text [String] the current line of game text (XML-unescaped)
   # @param stream [String, nil] the stream the text is routed to
-  # @param _marks [Array<Hash>] the room marks for +text+ (see
-  #   SpanTracker::ROOM_MARKS); not read yet
+  # @param marks [Array<Hash>] the room marks for +text+ (see
+  #   SpanTracker::ROOM_MARKS): the description's links
   # @return [Boolean] true if this line was consumed by the RoomWindow
   #   (caller should not route it to the main window).  Returns false
   #   when title/desc text is captured for the terminal title but the
   #   template has no RoomWindow — the text must still flow to the
   #   main text window for display.
-  def process_room_data(text, stream, _marks)
+  def process_room_data(text, stream, marks)
     return false if text.empty?
 
-    room_data_captured = take_captured_text(text)
+    room_data_captured = take_captured_text(text, marks)
 
     # The inline lines are room data only on main. Component stream data
     # (room objs, room players, room exits) is handled by
@@ -326,8 +336,9 @@ class RoomAssembler
   # the text is not consumed: it must still flow to the main text window.
   #
   # @param text [String] non-empty game text
+  # @param marks [Array<Hash>] the room marks for +text+
   # @return [Boolean] whether the text was captured for the RoomWindow
-  def take_captured_text(text)
+  def take_captured_text(text, marks)
     captured = false
     case @capture_mode
     when :title
@@ -337,20 +348,31 @@ class RoomAssembler
         @room_pending_title = room_title.to_s
         captured = true
       end
-      @capture_mode = nil
     when :desc
       if room_window?
-        # Don't overwrite if already set by component stream (preserves raw XML for links)
-        unless @room_pending_desc
-          # Extract from raw line to preserve <d>/<a> link tags for room window.
-          raw_desc = extract_styled_desc(@current_raw_line) if @current_raw_line
-          @room_pending_desc = (raw_desc || text).strip
-        end
+        # Don't overwrite a description the room desc component staged
+        @room_pending_desc ||= captured_desc(text, marks)
         captured = true
       end
-      @capture_mode = nil
     end
+    @capture_mode = nil
+    @capture_at = 0
     captured
+  end
+
+  # The description a roomDesc capture takes from +text+: the text from
+  # where the capture started (see #start_capture), with its links. When
+  # that has no text (a roomDesc style with nothing after it), the whole
+  # of +text+, without links, as the description has always been then.
+  #
+  # @param text [String] non-empty game text
+  # @param marks [Array<Hash>] the room marks for +text+
+  # @return [RoomPart]
+  def captured_desc(text, marks)
+    part = RoomPart.from_chunk(text, marks, from: @capture_at)
+    return part unless part.text.empty?
+
+    RoomPart.new(text: text.strip, links: [], creatures: [])
   end
 
   # Reset all pending room data slots to nil.
@@ -380,53 +402,6 @@ class RoomAssembler
         .compact
   end
 
-  # Extract the raw roomDesc content from a styled text line.
-  # Preserves <d>/<a> link tags that would otherwise be stripped by tag handlers.
-  #
-  # @param raw_line [String] the full raw server line
-  # @return [String, nil] raw description content, or nil if not found
-  def extract_styled_desc(raw_line)
-    segments = XmlTokenizer.tokenize(raw_line)
-    # DR: <style id="roomDesc"/>...content...<style id=""/> (or the line's end)
-    desc = text_between(segments, ->(tag) { id_tag?(tag, 'style', Presets::ROOM_DESC) }, ->(tag) { id_tag?(tag, 'style', '') })
-    return desc if desc
-
-    # GS/alt: <preset id='roomDesc'>...content...</preset>
-    text_between(segments, ->(tag) { id_tag?(tag, 'preset', Presets::ROOM_DESC) && !tag.end_with?('/>') },
-                 ->(tag) { tag == '</preset>' }, close_required: true)
-  end
-
-  # Whether a tag is an opening or self-closing +name+ tag whose id is +id+.
-  #
-  # @param tag [String] a tag segment from {XmlTokenizer.tokenize}
-  # @param name [String] the element name
-  # @param id [String] the id attribute's value
-  # @return [Boolean]
-  def id_tag?(tag, name, id)
-    !tag.start_with?('</') && XmlTokenizer.tag_name(tag) == name && XmlTokenizer.attrs(tag)['id'] == id
-  end
-
-  # The raw text, tags kept, from just after the first opening tag up to the
-  # closing tag that follows it.
-  #
-  # @param segments [Array<Array(Symbol, String)>] a line, from {XmlTokenizer.tokenize}
-  # @param opening [Proc] whether a tag is the opening tag
-  # @param closing [Proc] whether a tag is the closing tag
-  # @param close_required [Boolean] when false, the line's end also closes
-  # @return [String, nil] the text, or nil if there is no opening tag, no
-  #   closing tag where one is required, or no text between them
-  def text_between(segments, opening, closing, close_required: false)
-    start = segments.index { |type, s| type == :tag && opening.call(s) }
-    return unless start
-
-    rest = segments.drop(start + 1)
-    stop = rest.index { |type, s| type == :tag && closing.call(s) }
-    return if stop.nil? && close_required
-
-    text = rest.take(stop || rest.length).map(&:last).join
-    text unless text.empty?
-  end
-
   # Convert raw XML text to structured data: clean text + link regions.
   # Used by the inline path (commit_room_data_batch) where pending data
   # may contain raw XML from @current_raw_line.
@@ -439,6 +414,19 @@ class RoomAssembler
     clean, colors = LinkExtractor.extract_links(raw_text, links_enabled: true)
     links = colors.map { |c| { start: c[:start], end: c[:end], cmd: c[:cmd] } }
     [clean.strip, links]
+  end
+
+  # A staged room part as a RoomPart: the inline description is staged as
+  # one; component text and the other inline lines as text, raw XML
+  # included for the lines.
+  #
+  # @param value [RoomPart, String] the staged part
+  # @return [RoomPart]
+  def staged_part(value)
+    return value if value.is_a?(RoomPart)
+
+    text, links = structurize_text(value)
+    RoomPart.new(text: text, links: links, creatures: [])
   end
 
   # Extract creature names from pushBold regions in raw XML text.
@@ -501,8 +489,8 @@ class RoomAssembler
       # desc component, sent with every room change, gave this room. A room
       # the component didn't describe gets none, not the last room's.
       if @room_pending_desc || @component_desc_room != @state.room_title
-        desc_clean, desc_links = structurize_text(@room_pending_desc || '')
-        show(:room_desc, text: desc_clean, links: desc_links)
+        desc = staged_part(@room_pending_desc || '')
+        show(:room_desc, text: desc.text, links: desc.links)
       end
 
       obj_raw = @room_pending_objects || ''
