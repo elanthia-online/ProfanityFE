@@ -81,6 +81,23 @@ RSpec.describe ServerReader do
     expect(timeline).to eq [[:process, 'one'], :title, :doupdate]
   end
 
+  it 'draws a pending room render with the flush after a dropped line' do
+    read_lines(%w[room drop], waiting: [true, false])
+
+    expect(timeline).to eq [[:process, 'room'], :title, :room_render, :doupdate]
+    expect(pending_render.room_render_requested?).to be false
+  end
+
+  it 'names the dropped line when the flush after it fails' do
+    event_bus.on(:room_render) { raise 'room window broke' }
+    log = []
+    allow(ProfanityLog).to receive(:write) { |context, message, **| log << message if context == 'game_text_processor' }
+
+    read_lines(%w[room drop], waiting: [true, false])
+
+    expect(log).to eq ['error processing line "drop": room window broke']
+  end
+
   it 'reports a disconnect at the end of the stream' do
     expect(read_lines(%w[one])).to eq :disconnected
   end
