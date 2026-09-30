@@ -57,8 +57,6 @@ RSpec.describe 'GameTextProcessor gagged lines' do
     server = Object.new
     server.define_singleton_method(:gets) { queue.shift&.dup }
     allow(IO).to receive(:select).and_return(nil)
-    allow(processor).to receive(:show_disconnect_message)
-    allow(processor).to receive(:exit)
     processor.run(server)
   end
 
@@ -187,8 +185,9 @@ RSpec.describe 'GameTextProcessor gagged lines' do
         GagPatterns.load_defaults
         GagPatterns.add_multiline_gag('^START')
         fresh = LineFilter.new(shared_state: state)
-        fresh.send(:multiline_gag?, 'START')
-        expect(fresh.send(:multiline_gag?, line)).to eq(gagged), line
+        fresh.filter('START')
+        fresh.filter(line)
+        expect(fresh.gagged?).to eq(gagged), line
       end
     end
   end

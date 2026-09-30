@@ -86,6 +86,20 @@ RSpec.describe 'The terminal cursor after an input-path flush' do
     app.send(:handle_key, Curses::KEY_MOUSE, nil)
   end
 
+  # Run the real input loop for one tick with no key pressed (the command
+  # window reads no key), then end it as Ctrl+C would. getch answers like
+  # get_char (what read_key reads), so a read_key that stopped calling
+  # get_char still ends the loop instead of reading the virtual screen's
+  # nil getch forever.
+  def run_input_loop_for_one_tick
+    allow(IO).to receive(:select).and_return(nil)
+    keys = [nil]
+    %i[get_char getch].each do |reader|
+      cmd_window.define_singleton_method(reader) { keys.empty? ? raise(Interrupt) : keys.shift }
+    end
+    app.send(:input_loop)
+  end
+
   it 'starts in main, off the command line' do
     expect(cursor).to eq [main.cury, main.curx]
     expect(cursor.first).not_to eq cmd_window.begy
@@ -180,11 +194,8 @@ RSpec.describe 'The terminal cursor after an input-path flush' do
       mouse(Curses::REPORT_MOUSE_POSITION, 0, 45)
       main.noutrefresh
       Curses.doupdate
-      allow(IO).to receive(:select).and_return(nil)
-      keys = [nil]
-      allow(app).to receive(:read_key) { keys.empty? ? raise(Interrupt) : keys.shift }
 
-      expect { app.send(:input_loop) }.to(change { thoughts.rows })
+      expect { run_input_loop_for_one_tick }.to(change { thoughts.rows })
       expect(cursor).to eq [9, 1]
     end
   end
@@ -192,28 +203,48 @@ RSpec.describe 'The terminal cursor after an input-path flush' do
   # The input loop's tick flushes when a countdown changes (and when a
   # drag held at an edge scrolls, above). This one already refreshed the
   # command line on main; the refresh moved into the shared flush.
-  it 'is on the command line after the input loop redraws a countdown' do
-    countdown = Curses::Window.new(1, 10, 7, 0)
-    ticks = 0
-    countdown.define_singleton_method(:tick) do
-      next false unless (ticks += 1) == 1
-
-      addstr('5')
-      noutrefresh
-      true
+  context 'with a roundtime countdown' do
+    let(:layout) do
+      <<~XML
+        <layout>
+          <window class='text' top='0' left='0' height='6' width='42' value='main'/>
+          <window class='countdown' top='7' left='0' height='1' width='10' value='roundtime' label='RT'/>
+          <window class='indicator' top='9' left='0' height='1' width='1' value='prompt' label='&gt;'/>
+          <window class='command' top='9' left='1' height='1' width='20'/>
+        </layout>
+      XML
     end
-    app.window_mgr.instance_variable_set(:@countdown, { 'roundtime' => countdown })
-    type('ab')
-    main.noutrefresh
-    Curses.doupdate
-    allow(IO).to receive(:select).and_return(nil)
-    keys = [nil]
-    allow(app).to receive(:read_key) { keys.empty? ? raise(Interrupt) : keys.shift }
+    let(:countdown) { app.window_mgr.countdown['roundtime'] }
+    let(:now) { Time.at(1_000_000) }
 
-    app.send(:input_loop)
+    before { allow(Time).to receive(:now).and_return(now) }
 
-    expect(countdown.rows).to eq ['5']
-    expect(cursor).to eq [9, 1 + 2]
+    it 'is on the command line after the input loop redraws a countdown' do
+      countdown.end_time = now.to_f + 5
+      type('ab')
+      main.noutrefresh
+      Curses.doupdate
+
+      run_input_loop_for_one_tick
+
+      expect(countdown.rows).to eq ["RT#{'5'.rjust(8)}"]
+      expect(cursor).to eq [9, 1 + 2]
+    end
+
+    # The loop polls ten times a second; a tick that changes no countdown
+    # (and scrolls no drag) must not flush the screen.
+    it 'stays in main when the input loop ticks within the second the countdown already shows' do
+      countdown.end_time = now.to_f + 5
+      countdown.tick
+      type('ab')
+      main.noutrefresh
+      Curses.doupdate
+
+      run_input_loop_for_one_tick
+
+      expect(countdown.rows).to eq ["RT#{'5'.rjust(8)}"]
+      expect(cursor).to eq [main.cury, main.curx]
+    end
   end
 
   describe 'after a key action' do

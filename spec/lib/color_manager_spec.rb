@@ -6,20 +6,24 @@
 # allocation into other specs.
 original_get_color_pair_id = Object.private_method_defined?(:get_color_pair_id) &&
                              Object.instance_method(:get_color_pair_id)
-Object.send(:remove_method, :get_color_pair_id) if original_get_color_pair_id # avoid redefinition warnings
+Object.remove_method(:get_color_pair_id) if original_get_color_pair_id # avoid redefinition warnings
 require_relative '../../lib/color_manager'
 if original_get_color_pair_id
-  Object.send(:remove_method, :get_color_pair_id)
-  Object.send(:define_method, :get_color_pair_id, original_get_color_pair_id)
-  Object.send(:private, :get_color_pair_id)
+  Object.remove_method(:get_color_pair_id)
+  Object.define_method(:get_color_pair_id, original_get_color_pair_id)
+  Object.class_exec { private :get_color_pair_id }
 end
 
 RSpec.describe ColorManager do
   let(:color_pairs) { 32_767 } # what ncurses reports for TERM=xterm-256color
   let(:init_pair_calls) { [] }
 
-  # Distinct fg codes from the fixed 256-color palette (247 unique entries).
-  let(:palette) { ColorManager.instance_variable_get(:@color_code).uniq }
+  # The 216 colors of the xterm 6x6x6 color cube. Each is an exact entry
+  # of the fixed 256-color palette, so each gets a color id of its own.
+  let(:palette) do
+    levels = %w[00 5f 87 af d7 ff]
+    levels.product(levels, levels).map(&:join)
+  end
 
   before do
     allow(Curses).to receive_messages(colors: 256, color_pairs: color_pairs, color_content: [0, 0, 0])

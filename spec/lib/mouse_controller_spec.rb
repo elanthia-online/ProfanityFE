@@ -722,13 +722,25 @@ RSpec.describe MouseController do
         (1..8).each { |n| thoughts.add_string("t#{n}") }
       end
 
-      # Runs the real input loop for two ticks with no key pressed, then
-      # ends it as Ctrl+C would. An error raised in the loop is logged
-      # and ends it (and the client) at once.
+      # How many times the input loop read a key from the command window.
+      let(:key_reads) { [0] }
+
+      # Runs the real input loop for two ticks with no key pressed (the
+      # command window reads no key), then ends it as Ctrl+C would. An
+      # error raised in the loop is logged and ends it (and the client) at
+      # once, before the second read. getch answers like get_char (what
+      # read_key reads), so a read_key that stopped calling get_char still
+      # ends the loop instead of reading the virtual screen's nil getch
+      # forever.
       def run_input_loop_for_two_ticks
         allow(IO).to receive(:select).and_return(nil)
-        keys = [nil]
-        allow(app).to receive(:read_key) { keys.empty? ? raise(Interrupt) : keys.shift }
+        reads = key_reads
+        %i[get_char getch].each do |reader|
+          app.cmd_buffer.window.define_singleton_method(reader) do
+            reads[0] += 1
+            reads[0] == 1 ? nil : raise(Interrupt)
+          end
+        end
         app.send(:input_loop)
       end
 
@@ -742,7 +754,7 @@ RSpec.describe MouseController do
         run_input_loop_for_two_ticks
 
         expect(logged.select { |source, _| source == 'main' }).to eq []
-        expect(app).to have_received(:read_key).twice
+        expect(key_reads.first).to eq 2
         expect(SelectionManager.selecting).to be false
       end
 

@@ -61,7 +61,8 @@ RSpec.describe 'The active scrollbar across resizes' do
 
   def terminal_resize = app.send(:handle_key, Curses::KEY_RESIZE, nil)
 
-  def switch_window = app.send(:handle_key, KeyCodes::FALLBACK.fetch('tab'), nil)
+  # Press Tab, which the settings file binds to switch_current_window.
+  def switch_window = app.key_binding.fetch(KeyCodes::FALLBACK.fetch('tab')).call
 
   around do |example|
     Dir.mktmpdir { |dir| @dir = dir; example.run }

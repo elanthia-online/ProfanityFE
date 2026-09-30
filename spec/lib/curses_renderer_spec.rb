@@ -13,7 +13,10 @@ RSpec.describe 'CursesRenderer.outside_lock' do
   end
   let(:events) { [] }
 
-  def lock_held? = renderer.instance_variable_get(:@monitor).mon_owned?
+  # Whether this thread holds the render lock: another thread (the server
+  # thread) can't take it. The other thread gets 5 seconds, so a busy
+  # machine doesn't read as a held lock.
+  def lock_held? = !Thread.new { renderer.synchronize { true } }.join(5)
 
   it 'runs the block at once when the lock is not held' do
     result = renderer.outside_lock { events << [:ran, lock_held?]; :value }
