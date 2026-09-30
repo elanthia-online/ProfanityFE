@@ -7,10 +7,11 @@ RoomPart = Data.define(:text, :links, :creatures)
 # it names.
 #
 # A part is built from a chunk of parsed game text and the room marks the
-# tag parser recorded for it (see SpanTracker::ROOM_MARKS). The marks are
-# where the game's links and bold text are, so a creature is the text of a
-# bold span, whatever color bold is drawn in, and nested links are paired
-# as they nest.
+# tag parser recorded for it (see SpanTracker::ROOM_MARKS), whichever way
+# the room arrived: a room component's text, an inline room line, or a
+# line Lich adds. The marks are where the game's links and bold text are,
+# so a creature is the text of a bold span, whatever color bold is drawn
+# in, and nested links are paired as they nest.
 #
 # @example
 #   marks = [{ start: 13, mark: :bold, end: 18 }, { start: 23, mark: :link, cmd: 'look box', end: 28 }]

@@ -51,8 +51,9 @@ class RoomAssembler
     # Where the description being captured starts in the text handed off
     # (see #start_capture)
     @capture_at = 0
-    # Inline-path staging, committed as one batch when the exits arrive:
-    # the title row's text, and a RoomPart for each other field
+    # Staging for the inline commit when the exits arrive (the components
+    # stage here too): the title row's text, and a RoomPart for each other
+    # field
     @room_pending_title = nil
     @room_pending_desc = nil
     @room_pending_objects = nil
@@ -61,8 +62,6 @@ class RoomAssembler
     # The room (its SharedState#room_title) the room desc component last
     # described
     @component_desc_room = nil
-    # Raw line with XML tags preserved for room object extraction
-    @current_raw_line = nil
   end
 
   # Start capturing styled text for the room: +:title+ when a roomName
@@ -106,14 +105,6 @@ class RoomAssembler
     yield if block_given?
     @capture_mode = nil
     @capture_at = 0
-  end
-
-  # Start a new server line: the inline path reads room markup from it.
-  #
-  # @param raw_line [String] the server line, tags intact
-  # @return [void]
-  def line_started(raw_line)
-    @current_raw_line = raw_line
   end
 
   # Process room-related text from inline game text and update RoomWindow

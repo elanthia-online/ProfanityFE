@@ -148,7 +148,6 @@ class GameTextProcessor
     if line.empty?
       @prompts.blank_line if @router.current_stream.nil?
     else
-      @room.line_started(line.dup)
       process_line_tags(line)
     end
   end
