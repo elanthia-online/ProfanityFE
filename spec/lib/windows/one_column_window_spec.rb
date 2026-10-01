@@ -69,6 +69,16 @@ RSpec.describe 'A window one column wide' do
       expect(window.rows).to eq %w[e f g h]
     end
 
+    it 'keeps blank rows in place when scrolled back and forward across them' do
+      ['a', 'b', 'c', 'd', '', 'e', '', 'f', 'g', 'h'].each { |line| window.add_string(line) }
+
+      window.scroll_lines(-4)
+      expect(window.rows).to eq ['c', 'd', '', 'e']
+
+      window.scroll_lines(2)
+      expect(window.rows).to eq ['', 'e', '', 'f']
+    end
+
     it 'keeps the highlighted text on its row' do
       %w[a b c d].each { |line| window.add_string(line) }
       first_id = window.lines_appended - 3
