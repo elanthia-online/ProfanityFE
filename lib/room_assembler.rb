@@ -71,7 +71,7 @@ class RoomAssembler
     @view = {}
     # The room the room desc component last described (see #room_key)
     @component_desc_room = nil
-    # The room id of DR's last <nav rm='NNN'/> (see #nav); nil before any,
+    # The room id of the last <nav rm='NNN'/> (see #nav); nil before any,
     # and after a <nav/> without one
     @nav_room = nil
     # The fields the components (and the subtitle, for the title) delivered
@@ -110,9 +110,10 @@ class RoomAssembler
     @next_burst = {}
   end
 
-  # DR named the room the player is in: <nav rm='NNN'/>, which comes
-  # before the room subtitle and components of every room change (with
-  # +rm+ left out for a room without an id, such as The Heavens). A LOOK
+  # The game named the room the player is in: <nav rm='NNN'/>. DragonRealms
+  # sends it before the room subtitle and components of every room change
+  # (with +rm+ left out for a room without an id, such as The Heavens); per
+  # Lich, GemStone sends it too. A LOOK
   # sends none. While the last one has an id, it is what tells the room
   # the room desc component described from the room an inline view names
   # (see #room_key).
@@ -446,10 +447,10 @@ class RoomAssembler
   end
 
   # The room the player is in, as the inline commit compares it with the
-  # room the room desc component described: DR's room id from the last
-  # <nav rm='NNN'/> (see #nav) while it has one, else the room's
-  # SharedState#room_title (GemStone, a log without nav tags, a room
-  # without an id). The title alone can name one room two ways: Lich
+  # room the room desc component described: the room id from the last
+  # <nav rm='NNN'/> (see #nav; DragonRealms sends it, and per Lich so does
+  # GemStone) while it has one, else the room's SharedState#room_title (a
+  # session without nav tags, a room without an id). The title alone can name one room two ways: Lich
   # rewrites the inline roomName (its room id or uid in the name) but not
   # the subtitle, and DR's flag showroomid adds or drops the id a LOOK
   # shows.
