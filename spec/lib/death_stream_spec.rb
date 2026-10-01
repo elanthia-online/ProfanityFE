@@ -54,6 +54,14 @@ RSpec.describe 'GameTextProcessor death stream (GemStone)' do
     expect(death_window_lines).to contain_exactly(match(/\A\d\d:\d\d Bob RED\z/))
   end
 
+  # Characterization (decided 2026-10-01): a death cry with no area code
+  # passes through to the death window as the game sent it.
+  it 'shows a death cry with no area code as the game sent it' do
+    receive_from_server('<pushStream id="death"/> * Bob fell into a bottomless pit!', '<popStream/>')
+
+    expect(death_window_lines).to eq [' * Bob fell into a bottomless pit!']
+  end
+
   it 'shows a rough-start "bit the dust" death as "HH:MM Bob WL"' do
     receive_from_server('<pushStream id="death"/> * Bob is off to a rough start!  He just bit the dust!', '<popStream/>')
 

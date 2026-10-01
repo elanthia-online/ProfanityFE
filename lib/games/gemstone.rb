@@ -76,15 +76,17 @@ module Games
     # GS death messages that should be suppressed (no area code)
     DEATH_SUPPRESS_PATTERN = /^\s\*\s(?:The death cry of )?[A-Z][a-z]+(?:['s]*) (?:has been vaporized!|was just incinerated!)/.freeze
 
-    # Resolve a death area message to its short area code.
+    # Resolve a death area message to its short area code: the code of the
+    # first DEATH_AREA_CODES key it matches. {DEATH_PATTERN} only takes an
+    # area that a key matches, so {death_summary} always gets a code. A death
+    # cry with no code isn't a death line here at all: the death window shows
+    # it as the game sent it.
     #
     # @param area_text [String] the area-specific portion of the death message
-    # @return [String] short area code (e.g. 'WL', 'RIFT') or the original text
+    # @return [String, nil] short area code (e.g. 'WL', 'RIFT'); nil when no
+    #   key matches
     def self.resolve_death_area(area_text)
-      DEATH_AREA_CODES.each do |pattern, code|
-        return code if area_text.match?(pattern)
-      end
-      area_text
+      DEATH_AREA_CODES.find { |pattern, _code| area_text.match?(pattern) }&.last
     end
 
     # GS logon/logoff/disconnect message patterns mapped to display colors.
