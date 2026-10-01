@@ -145,6 +145,58 @@ RSpec.describe 'Room description' do
     end
   end
 
+  # DR names the room of every room change with <nav rm='NNN'/> (<nav/> for
+  # a room without an id), before its subtitle and components; a LOOK
+  # sends none. The roomName of a LOOK can name the same room differently:
+  # Lich's ";display roomid title" puts its room id in it (lich-5
+  # games.rb, "[Town Square - 1234] (230008)"), and DR's flag showroomid
+  # adds or drops the game's id.
+  context "when DR's nav tag names the room" do
+    let(:lich_name) { "[The Edge of the Forest, Before the Dragon's Breath - 1234] (2030003)" }
+    let(:lich_edge_room) do
+      ["<nav rm='2030003'/>", *room_components(edge_name, edge_desc, edge_exits),
+       *brief_inline(lich_name, '  ', edge_exits)]
+    end
+
+    it "keeps the description on a brief LOOK whose roomName carries Lich's room id" do
+      receive_from_server(*lich_edge_room, *brief_inline(lich_name, '  ', edge_exits))
+
+      expect(room_rows).to eq [lich_name, *edge_rows.drop(1)]
+    end
+
+    it 'keeps it on a brief LOOK after flag showroomid off drops the id from the roomName' do
+      plain_name = "[The Edge of the Forest, Before the Dragon's Breath]"
+
+      receive_from_server("<nav rm='2030003'/>", *edge_room,
+                          'You will no longer see room IDs when LOOKing in the game and room windows.',
+                          '<prompt time="1787783857">&gt;</prompt>', *brief_inline(plain_name, '  ', edge_exits))
+
+      expect(room_rows).to eq [plain_name, *edge_rows.drop(1)]
+    end
+
+    it 'drops the old description for a room with another id that arrives without components' do
+      receive_from_server(*lich_edge_room, 'You run southwest.', "<nav rm='2105206'/>",
+                          *brief_inline(lich_name, '  ', rest_exits))
+
+      expect(room_rows).to eq [lich_name, 'Obvious paths: northeast, west.']
+    end
+
+    it 'compares room titles again after a nav tag without an id' do
+      receive_from_server(*lich_edge_room, 'You run southwest.', '<nav/>', *brief_inline(rest_name, '  ', rest_exits))
+
+      expect(room_rows).to eq [rest_name, 'Obvious paths: northeast, west.']
+    end
+
+    it 'tells two rooms without an id apart by their titles' do
+      receive_from_server('<nav/>', *edge_room, 'You will no longer see room descriptions.',
+                          *brief_inline(edge_name, '  ', edge_exits))
+      expect(room_rows).to eq edge_rows
+
+      receive_from_server('You run southwest.', '<nav/>', *brief_inline(rest_name, '  ', rest_exits))
+      expect(room_rows).to eq [rest_name, 'Obvious paths: northeast, west.']
+    end
+  end
+
   context 'when the inline lines carry a description that differs from the component' do
     let(:inline_desc) { 'In the darkness, the forms of ancient trees appear to coalesce into a single malevolent entity.' }
     let(:inline_desc_rows) do

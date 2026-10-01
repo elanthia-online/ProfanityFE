@@ -69,9 +69,11 @@ class RoomAssembler
     # lines write it; the first description and players line stay, the
     # last of the other lines wins.
     @view = {}
-    # The room (its SharedState#room_title) the room desc component last
-    # described
+    # The room the room desc component last described (see #room_key)
     @component_desc_room = nil
+    # The room id of the last <nav rm='NNN'/> (see #nav); nil before any,
+    # and after a <nav/> without one
+    @nav_room = nil
     # The fields the components (and the subtitle, for the title) delivered
     # in this burst, which the inline commit doesn't send again (see
     # #commit_view): field => the title row's text or the part
@@ -106,6 +108,20 @@ class RoomAssembler
   # @return [void]
   def prompt_seen
     @next_burst = {}
+  end
+
+  # The game named the room the player is in: <nav rm='NNN'/>. DragonRealms
+  # sends it before the room subtitle and components of every room change
+  # (with +rm+ left out for a room without an id, such as The Heavens); per
+  # Lich, GemStone sends it too. A LOOK
+  # sends none. While the last one has an id, it is what tells the room
+  # the room desc component described from the room an inline view names
+  # (see #room_key).
+  #
+  # @param room_id [String, nil] the tag's +rm+ value; nil when it has none
+  # @return [void]
+  def nav(room_id)
+    @nav_room = room_id
   end
 
   # A server line has been parsed and its text handed off: if a prompt was
@@ -321,7 +337,7 @@ class RoomAssembler
     when Streams::ROOM, Streams::ROOM_TITLE
       deliver(:title, title)
     when Streams::ROOM_DESC, Streams::ROOM_DESC_ALT
-      @component_desc_room = @state.room_title
+      @component_desc_room = room_key
       deliver(:desc, part)
     when Streams::ROOM_OBJS
       if @game_rules.room_list_cut_short?(part.text)
@@ -428,6 +444,20 @@ class RoomAssembler
     @pending_render.request_room_render
     @lich_lines_shown = true
     @pending_render.request_update
+  end
+
+  # The room the player is in, as the inline commit compares it with the
+  # room the room desc component described: the room id from the last
+  # <nav rm='NNN'/> (see #nav; DragonRealms sends it, and per Lich so does
+  # GemStone) while it has one, else the room's SharedState#room_title (a
+  # session without nav tags, a room without an id). The title alone can name one room two ways: Lich
+  # rewrites the inline roomName (its room id or uid in the name) but not
+  # the subtitle, and DR's flag showroomid adds or drops the id a LOOK
+  # shows.
+  #
+  # @return [Array(Symbol, String)] +[:nav, id]+ or +[:title, title]+
+  def room_key
+    @nav_room ? [:nav, @nav_room] : [:title, @state.room_title]
   end
 
   # Whether the layout has a RoomWindow.
@@ -544,7 +574,7 @@ class RoomAssembler
       # and so does a brief LOOK) the lines keep the description the room
       # desc component, sent with every room change, gave this room. A room
       # the component didn't describe gets none, not the last room's.
-      if !@delivered.key?(:desc) && (view[:desc] || @component_desc_room != @state.room_title)
+      if !@delivered.key?(:desc) && (view[:desc] || @component_desc_room != room_key)
         emit(:desc, view[:desc] || EMPTY_PART)
       end
 
