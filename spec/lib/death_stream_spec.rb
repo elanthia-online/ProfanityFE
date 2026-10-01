@@ -59,4 +59,11 @@ RSpec.describe 'GameTextProcessor death stream (GemStone)' do
 
     expect(death_window_lines).to contain_exactly(match(/\A\d\d:\d\d Bob WL\z/))
   end
+
+  # A real line from GemStone session logs
+  it %(shows a "hopes just sank in Sailor's Grief" death as "HH:MM Pandin SG") do
+    receive_from_server(%(<pushStream id="death"/> * Pandin's hopes just sank in Sailor's Grief!), '<popStream/>')
+
+    expect(death_window_lines).to contain_exactly(match(/\A\d\d:\d\d Pandin SG\z/))
+  end
 end
