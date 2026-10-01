@@ -101,6 +101,16 @@ RSpec.describe Games::GemStone do
     end
   end
 
+  describe '.resolve_death_area' do
+    it 'gives the code of the first key the area matches' do
+      expect(described_class.resolve_death_area('just bit the dust!')).to eq 'WL'
+    end
+
+    it 'gives nil for an area no key matches' do
+      expect(described_class.resolve_death_area('fell into a bottomless pit!')).to be_nil
+    end
+  end
+
   describe '.logon' do
     it 'gives an arrival the name and green' do
       expect(described_class.logon(' * Mahtra joins the adventure.')).to eq %w[Mahtra 007700]
