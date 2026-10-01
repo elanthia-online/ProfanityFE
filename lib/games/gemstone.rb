@@ -58,6 +58,12 @@ module Games
       /was just defeated in the Arena of the Abyss!/                             => 'EG-A',
       /failed to bring a shrubbery to the Night at the Academy!/                 => 'NATA',
       /has just returned to Gosaena!/                                            => '??',
+      /hopes just sank in Sailor's Grief!/                                       => 'SG',
+      /just perished defending a fortress within Reim!/                          => 'REIM',
+      /just .+ the Elemental Confluence!/                                        => 'EC',
+      /is going home from the Elemental Confluence on (?:his|her) shield!/       => 'EC',
+      /is dust in the winds of the Elemental Confluence!/                        => 'EC',
+      /has gone to feed the fishes in the Elemental Confluence!/                 => 'EC',
     }.freeze
 
     # GS death message pattern — matches the full death cry line and captures

@@ -47,6 +47,18 @@ RSpec.describe Games::GemStone do
       ' * Mahtra was just defeated in the Arena of the Abyss!'                 => 'Mahtra EG-A',
       ' * Mahtra failed to bring a shrubbery to the Night at the Academy!'     => 'Mahtra NATA',
       ' * Mahtra has just returned to Gosaena!'                                => 'Mahtra ??',
+      # Real lines from GemStone session logs (108 Sailor's Grief deaths
+      # from three characters)
+      " * Pandin's hopes just sank in Sailor's Grief!"                         => 'Pandin SG',
+      " * Linus's hopes just sank in Sailor's Grief!"                          => 'Linus SG',
+      # The messages gs-scripts' messaging.lic knows (no GemStone log here
+      # has them; the Elemental Confluence lines follow its patterns, the
+      # first of which takes any "just ... the Elemental Confluence!")
+      ' * Mahtra just perished defending a fortress within Reim!'              => 'Mahtra REIM',
+      ' * Mahtra just perished in the Elemental Confluence!'                   => 'Mahtra EC',
+      ' * Mahtra is going home from the Elemental Confluence on her shield!'   => 'Mahtra EC',
+      ' * Mahtra is dust in the winds of the Elemental Confluence!'            => 'Mahtra EC',
+      ' * Mahtra has gone to feed the fishes in the Elemental Confluence!'     => 'Mahtra EC',
     }.freeze
 
     death_lines.each do |line, entry|
