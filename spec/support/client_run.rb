@@ -82,6 +82,16 @@ module ClientRun
     def commands = @received.drop(1)
   end
 
+  # What the input loop did, in order, while {#run_client} ran:
+  # +[:wait, seconds]+ for each wait for a key (IO.select on stdin, with
+  # its timeout) and +[:key, key]+ for each key the keyboard (see
+  # {#keyboard}) handed it.
+  #
+  # @return [Array<Array(Symbol, Object)>]
+  def input_log
+    @input_log ||= []
+  end
+
   # The game server +Socket.tcp+ returns in {#run_client}.
   #
   # @return [GameServer]
@@ -117,6 +127,10 @@ module ClientRun
   #   same read.
   # - A {#wait_until} step returns no key until its condition holds.
   #
+  # The keys are what curses already holds: stdin has nothing waiting
+  # (unless {#run_client} is told otherwise), so a read finds the next key
+  # without the input loop waiting for one first.
+  #
   # When the keys run out, the next read raises Interrupt (Ctrl+C), which
   # ends the input loop. With +idle: true+ the reads return no key
   # instead, until the session ends, or for at most {DEADLINE} seconds.
@@ -133,6 +147,7 @@ module ClientRun
   def keyboard(*keys, idle: false, exit_keys: [])
     reads = keys.flat_map { |key| key.is_a?(String) ? key.chars : [key] }
     idle_until = nil
+    log = input_log
     Curses::Window.new(1, 80, 0, 0).tap do |window|
       window.define_singleton_method(:get_char) do
         if reads.empty?
@@ -151,15 +166,17 @@ module ClientRun
         end
 
         reads.shift
-        case key
-        when Proc
-          key.call
-          nil
-        when PressAfter
-          key.action.call
-          key.key
-        else key
-        end
+        key = case key
+              when Proc
+                key.call
+                nil
+              when PressAfter
+                key.action.call
+                key.key
+              else key
+              end
+        log << [:key, key] unless key.nil?
+        key
       end
       window.define_singleton_method(:getch) do
         key = exit_keys.shift
@@ -198,21 +215,28 @@ module ClientRun
   #   connects for real
   # @param connect_error [Exception, Class, nil] what +Socket.tcp+ raises
   #   instead, when given
+  # @param stdin_ready [Boolean] whether stdin has input waiting, so each
+  #   wait for a key ends at once with stdin readable (keys typed faster
+  #   than the input loop reads them); otherwise the keys are all in curses
+  #   and stdin has nothing waiting
   # @return [Array(Integer, String), Array(nil, String), Array(Symbol, String)]
   #   the exit status (nil when the client returned without exiting,
   #   :interrupt when Interrupt escaped it) and what it printed to stderr
-  def run_client(command_window, server: game_server, connect_error: nil)
+  def run_client(command_window, server: game_server, connect_error: nil, stdin_ready: false)
     if connect_error
       allow(Socket).to receive(:tcp).and_raise(connect_error)
     elsif server
       allow(Socket).to receive(:tcp).and_return(server)
     end
     # The input loop's 0.1 s wait for a key becomes a short pause, taken
-    # outside the render lock as in the client; the server thread's check
-    # for more data finds none.
-    allow(IO).to receive(:select) do |readers, *|
-      sleep 0.0002 if readers == [$stdin]
-      nil
+    # outside the render lock as in the client, and is recorded in
+    # input_log; the server thread's check for more data finds none.
+    allow(IO).to receive(:select) do |readers, _writers, _errors, timeout|
+      next nil unless readers == [$stdin]
+
+      input_log << [:wait, timeout]
+      sleep 0.0002
+      [[$stdin], [], []] if stdin_ready
     end
     # The layout keeps the command window it finds (it is created once)
     app.window_mgr.install_command_window(nil) { command_window }
