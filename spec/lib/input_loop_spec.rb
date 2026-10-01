@@ -2,8 +2,9 @@
 
 # Tests the input loop of the real client (Application#run) on the
 # virtual screen, fed by a scripted keyboard: key bindings and key combos,
-# typing non-ASCII characters, terminal resizes, the countdowns it ticks
-# on every poll, and how an error outside a key handler ends the client.
+# typing non-ASCII characters, keys curses already holds, terminal
+# resizes, the countdowns it ticks on every poll, and how an error outside
+# a key handler ends the client.
 
 require 'rexml/document'
 require_relative '../../lib/shared_state'
@@ -47,6 +48,15 @@ RSpec.describe 'The input loop' do
     XML
   end
 
+  # The waits for a key (their timeouts, in seconds) from the first key the
+  # keyboard handed the input loop to the last; a zero timeout only looks
+  # whether stdin has input and is not counted.
+  def waits_between_keys
+    first = input_log.index { |kind, _| kind == :key }
+    last = input_log.rindex { |kind, _| kind == :key }
+    input_log[first..last].filter_map { |kind, seconds| seconds if kind == :wait && seconds.positive? }
+  end
+
   around do |example|
     Dir.mktmpdir { |dir| @dir = dir; example.run }
   end
@@ -82,6 +92,58 @@ RSpec.describe 'The input loop' do
       run_client(keyboard("\e", '2'))
 
       expect(tabbed.active_tab).to eq 'logons'
+    end
+  end
+
+  # BUG FOUND (fixed here): after each key the input loop waited up to 0.1 s
+  # for input on stdin before reading the next, even when curses already
+  # held that key, so each such key came 0.1 s late. Curses reads an
+  # alt+N's Escape and digit together (to tell it from a lone Escape) and
+  # keeps the digit: every alt+N took 0.1 s (measured in a PTY: 100-105 ms
+  # per alt+N on 42c9bce, 0.1 ms with the fix). Keys still on stdin take
+  # one pass of the loop each, as before.
+  describe 'keys curses already holds' do
+    before do
+      File.write(settings_path, settings_binding(<<~XML))
+        <key id='enter' action='send_command'/>
+        <key id='alt+2' action='switch_tab_2'/>
+      XML
+    end
+
+    it 'handles them in order without waiting for input before each' do
+      run_client(keyboard("look\n"))
+
+      expect(game_server.commands).to eq ['look']
+      expect(waits_between_keys).to eq []
+    end
+
+    it 'fires alt+2 without waiting for input between the Escape and the digit' do
+      run_client(keyboard("\e", '2'))
+
+      expect(tabbed.active_tab).to eq 'logons'
+      expect(waits_between_keys).to eq []
+    end
+
+    it 'polls stdin before each key, as before, while stdin has input waiting' do
+      run_client(keyboard("look\n"), stdin_ready: true)
+
+      expect(game_server.commands).to eq ['look']
+      expect(waits_between_keys).to eq [Application::INPUT_POLL_SECONDS] * 4
+    end
+
+    it 'ends the session, as before, without handling the keys after the game hung up' do
+      hang_up = lambda do
+        game_server.hang_up
+        deadline = Time.now + ClientRun::DEADLINE
+        sleep 0.001 until app.connection.ended? || Time.now > deadline
+      end
+
+      status, = run_client(keyboard(press_after('a', &hang_up), "b\n"))
+
+      expect(status).to eq 0
+      expect(main.rows).to include('* Connection closed')
+      expect(command_line.row(0)).to eq 'a'
+      expect(game_server.commands).to eq []
     end
   end
 
@@ -389,6 +451,17 @@ RSpec.describe 'The input loop' do
                                    main_size_at_40x150]
         expect(command_line_seen).to eq %w[a ab]
         expect(fitted_at).to eq [[60, 200], [45, 165], [40, 150]]
+      end
+
+      it 'fits the layout before a key curses holds behind a resize, without waiting for input first' do
+        seen_after_b = []
+        see_after_b = -> { seen_after_b << [command_line.row(0), main.maxy, main.maxx] }
+
+        run_client(keyboard('a', resize_to(40, 150), 'b', see_after_b, pause(0.2), pause(0)))
+
+        expect(seen_after_b).to eq [['ab', *main_size_at_40x150]]
+        expect(fitted_at).to eq [[60, 200], [40, 150]]
+        expect(waits_between_keys).to eq []
       end
 
       it 'fits the layout when the game hangs up before the burst is over' do

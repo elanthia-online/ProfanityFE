@@ -756,7 +756,8 @@ class Application
   # {INPUT_POLL_SECONDS} for input, ends the session (see {#end_session})
   # once the server thread reports the connection over, and then, holding
   # the render lock, ticks the countdown windows and the drag auto-scroll
-  # and hands one key to {#handle_key}. Ctrl+C (Interrupt) returns quietly;
+  # and hands one key to {#handle_key}, then any keys curses already holds
+  # (see {#handle_queued_keys}). Ctrl+C (Interrupt) returns quietly;
   # any other error is logged and ends the session through {#fatal_error}.
   # Either way the connection and the curses screen are closed on the way
   # out.
@@ -786,14 +787,13 @@ class Application
         # Drag held at a window edge keeps scrolling once per tick
         drag_scrolled = @mouse_controller.tick_drag_auto_scroll
 
-        ch, key_combo = read_key_after_resizes(key_combo)
-        key_combo = handle_pending_resize(key_combo) if @resize_due && (ch || monotonic_now >= @resize_due)
+        ch, key_combo = handle_next_key(key_combo)
         if ch.nil?
           @cmd_buffer.flush_screen if countdown_updated || drag_scrolled
           next
         end
 
-        key_combo = handle_key(ch, key_combo)
+        key_combo = handle_queued_keys(key_combo)
       end # CursesRenderer.synchronize
     end
   rescue Interrupt
@@ -819,6 +819,44 @@ class Application
     return INPUT_POLL_SECONDS unless @resize_due
 
     (@resize_due - monotonic_now).clamp(0, INPUT_POLL_SECONDS)
+  end
+
+  # Read the next key (see {#read_key_after_resizes}) and hand it to
+  # {#handle_key}, first handling the pending terminal resize if a key came
+  # or the resize is due.
+  #
+  # @param key_combo [Hash, nil] the pending key-combo map
+  # @return [Array] +[key, key_combo]+: the key handled (Integer or
+  #   String), or nil when no key was waiting, and the key-combo map
+  #   (Hash or nil) to use for the next key
+  def handle_next_key(key_combo)
+    ch, key_combo = read_key_after_resizes(key_combo)
+    key_combo = handle_pending_resize(key_combo) if @resize_due && (ch || monotonic_now >= @resize_due)
+    key_combo = handle_key(ch, key_combo) if ch
+    [ch, key_combo]
+  end
+
+  # After a key has been handled, hand {#handle_key} each further key that
+  # curses already holds, in order, until it holds none (see
+  # {#handle_next_key}). Waiting on stdin first would cost a whole
+  # {INPUT_POLL_SECONDS} for each such key: curses reads an alt+N's Escape
+  # and digit together (to tell an alt key from a lone Escape) and keeps
+  # the digit, so stdin has nothing left to wait for.
+  #
+  # Stops while stdin has input waiting, so keys still on stdin go one per
+  # pass of {#input_loop}, as before (with the countdowns and the drag
+  # auto-scroll ticked and the render lock released between them), and
+  # once the server thread reports the connection over, so the session
+  # ends before any later key is handled, as before.
+  #
+  # @param key_combo [Hash, nil] the pending key-combo map
+  # @return [Hash, nil] the key-combo map to use for the next key
+  def handle_queued_keys(key_combo)
+    until @connection.ended? || IO.select([$stdin], nil, nil, 0)
+      ch, key_combo = handle_next_key(key_combo)
+      break if ch.nil?
+    end
+    key_combo
   end
 
   # Read the next key that is not a terminal resize (see {#read_key}).
