@@ -82,6 +82,14 @@ RSpec.describe Curses::Window do
       expect(screen(win)).to eq(rows: ['', '', '1', '2'], cursor: [3, 1])
     end
 
+    it 'scrl moves nothing while scrollok is off' do
+      win = window(4, 5)
+      win.addstr("1\n2\n3\n4")
+      win.scrl(1)
+      win.scrl(-1)
+      expect(screen(win)).to eq(rows: %w[1 2 3 4], cursor: [3, 1])
+    end
+
     it 'scrl only moves the scrolling region set by setscrreg' do
       win = window(4, 5)
       win.scrollok(true)
@@ -176,6 +184,7 @@ RSpec.describe Curses::Window do
   describe 'resizing with a scrolling region' do
     # Number each row, then scroll once: the rows that moved show the region.
     def scroll_once(win)
+      win.scrollok(true)
       (0...win.maxy).each do |y|
         win.setpos(y, 0)
         win.addstr(y.to_s)

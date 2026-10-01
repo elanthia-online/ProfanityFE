@@ -43,7 +43,8 @@ module Curses
   # - "\n" clears to the end of the line and moves to the next line;
   # - moving past the bottom of the scrolling region scrolls it when
   #   scrollok is on, and otherwise leaves the cursor on the bottom line;
-  # - scrl scrolls only the scrolling region (the whole window by default);
+  # - scrl scrolls only the scrolling region (the whole window by default),
+  #   and only while scrollok is on;
   # - after #close, every curses call, a second #close and the size,
   #   position and cursor readers included, raises RuntimeError "already
   #   closed window", as the curses gem does. The inspection helpers
@@ -197,8 +198,11 @@ module Curses
     end
 
     # Scroll the scrolling region up by +lines+ (down when negative).
+    # Like wscrl, does nothing while scrollok is off.
     def scrl(lines)
       log(:scrl, lines)
+      return nil unless @scrollok
+
       top, bottom = region
       lines.abs.times do
         if lines.positive?

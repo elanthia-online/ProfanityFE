@@ -249,8 +249,10 @@ RSpec.describe WindowManager, '#resize geometry' do
         health: [0, 0, 1, 2], roundtime: [0, 0, 1, 1], kneeling: [18, 70, 1, 10],
         prompt: [2, 0, 1, 2], command: [2, 2, 1, 8]
       )
+      # thoughts is one column wide: its one row shows the newest row of
+      # its lines wrapped to that column, the 3 of t3.
       expect(screens).to eq(
-        main: ['dow'], thoughts: [''], combat: [''], atmo: [''],
+        main: ['dow'], thoughts: ['3'], combat: [''], atmo: [''],
         exp: ['P', 'a', 'r', 'r', ''], spells: ['S', 'h', 'a', 'd', ''], room: ['Obvio'],
         health: ['H5'], roundtime: ['T'], kneeling: ['Kneeling'],
         prompt: ['H>'], command: [' stones']
