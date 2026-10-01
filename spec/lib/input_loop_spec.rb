@@ -99,9 +99,10 @@ RSpec.describe 'The input loop' do
   # for input on stdin before reading the next, even when curses already
   # held that key, so each such key came 0.1 s late. Curses reads an
   # alt+N's Escape and digit together (to tell it from a lone Escape) and
-  # keeps the digit: every alt+N took 0.1 s (measured in a PTY: 100-105 ms
-  # per alt+N on 42c9bce, 0.1 ms with the fix). Keys still on stdin take
-  # one pass of the loop each, as before.
+  # keeps the digit: every alt+N took 0.1 s (measured in a PTY under
+  # xterm-256color and screen-256color: 101-105 ms for 10 of 10 alt+N on
+  # 42c9bce, 0.1 ms with the fix). Keys still on stdin take one pass of the
+  # loop each, as before.
   describe 'keys curses already holds' do
     before do
       File.write(settings_path, settings_binding(<<~XML))
@@ -122,6 +123,29 @@ RSpec.describe 'The input loop' do
 
       expect(tabbed.active_tab).to eq 'logons'
       expect(waits_between_keys).to eq []
+    end
+
+    # A key combo still pending when curses holds no more keys carries over
+    # to the next pass: an Escape typed slowly, then the digit, is alt+N
+    it 'fires alt+2, as before, when the digit comes in a later pass than the Escape' do
+      run_client(keyboard("\e", -> {}, '2'))
+
+      expect(tabbed.active_tab).to eq 'logons'
+      expect(command_line.row(0)).to eq ''
+    end
+
+    it 'types the key that follows alt+2, as before, when it comes in a later pass' do
+      run_client(keyboard("\e", '2', -> {}, 'x'))
+
+      expect(tabbed.active_tab).to eq 'logons'
+      expect(command_line.row(0)).to eq 'x'
+    end
+
+    it 'types the key that curses holds behind alt+2, as before' do
+      run_client(keyboard("\e", '2', 'x'))
+
+      expect(tabbed.active_tab).to eq 'logons'
+      expect(command_line.row(0)).to eq 'x'
     end
 
     it 'polls stdin before each key, as before, while stdin has input waiting' do
@@ -453,7 +477,7 @@ RSpec.describe 'The input loop' do
         expect(fitted_at).to eq [[60, 200], [45, 165], [40, 150]]
       end
 
-      it 'fits the layout before a key curses holds behind a resize, without waiting for input first' do
+      it 'fits the layout and handles a key curses holds behind a resize, without waiting for input first' do
         seen_after_b = []
         see_after_b = -> { seen_after_b << [command_line.row(0), main.maxy, main.maxx] }
 
