@@ -602,9 +602,15 @@ module LineBuffered
   # @return [void]
   private def draw_buffer_lines(buffer, from_index, count)
     painted_without_selection
+    top = cury
     from_index.downto(from_index - count + 1).each_with_index do |index, drawn|
-      addstr "\n" if drawn.positive?
-      add_line(buffer[index][0], buffer[index][1])
+      if drawn.positive?
+        # A one-column row that isn't blank fills the window, so drawing
+        # it moved the cursor down a row already (a blank one didn't),
+        # and a newline would skip a row: place each row instead
+        one_column? ? setpos(top + drawn, 0) : addstr("\n")
+      end
+      without_scrolling { add_line(buffer[index][0], buffer[index][1]) }
     end
   end
 
@@ -710,10 +716,44 @@ module LineBuffered
   #   (see {#normalize_selection}), or nil to draw the row plain
   # @return [void]
   private def draw_row(id, line_text, line_colors, selection)
-    if selection && id.between?(selection[0], selection[2])
-      draw_line_with_selection(id, line_text, line_colors || [], *selection)
-    else
-      add_line(line_text, line_colors || [])
+    without_scrolling do
+      if selection && id.between?(selection[0], selection[2])
+        draw_line_with_selection(id, line_text, line_colors || [], *selection)
+      else
+        add_line(line_text, line_colors || [])
+      end
+    end
+  end
+
+  # Whether the text area is one column wide. Rows are wrapped one column
+  # narrower than the window (see {#wrap_width}), so they never reach its
+  # last column, except here: there is only one column, and every row
+  # that isn't blank fills it.
+  #
+  # @return [Boolean]
+  private def one_column?
+    maxx == 1
+  end
+
+  # Run the block, which draws a row of the text area at the cursor, so
+  # that it can't scroll the text area. Writing a scrolling window's
+  # bottom-right cell scrolls it up a row in ncurses, which only a window
+  # one column wide does here: its scrolling is turned off while the row
+  # is drawn, so the cell is written and the cursor stays on it, and
+  # turned on again after (text and tabbed windows always scroll: their
+  # builders turn it on, and {#scroll_lines} needs it). Other windows
+  # draw as they are.
+  #
+  # @yield draws the row
+  # @return [void]
+  private def without_scrolling
+    return yield unless one_column?
+
+    begin
+      scrollok(false)
+      yield
+    ensure
+      scrollok(true)
     end
   end
 
