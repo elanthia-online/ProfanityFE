@@ -205,7 +205,8 @@ module LineBuffered
   # Render the active window's scrollbar for a buffer with the given
   # metrics. {#update_scrollbar} calls this, only while the window is
   # active, with the shown buffer's length and scroll position and the
-  # text area's height.
+  # text area's height. It always draws the active look, so it is
+  # private: call {#update_scrollbar}, which skips inactive windows.
   # The scrollbar covers the content area's rows only: +visible_height+
   # cells from row +top+ of the scrollbar window. A content area with no
   # rows gets no scrollbar.
@@ -221,7 +222,7 @@ module LineBuffered
   # @param visible_height [Integer] number of visible rows in the content area
   # @param top [Integer] window row where the content area starts
   # @return [void]
-  def render_scrollbar(buffer_length, buffer_pos, visible_height, top: 0)
+  private def render_scrollbar(buffer_length, buffer_pos, visible_height, top: 0)
     return unless @scrollbar && visible_height.positive?
 
     last_scrollbar_pos = @scrollbar_pos
