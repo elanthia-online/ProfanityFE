@@ -186,6 +186,15 @@ RSpec.describe 'Room description' do
 
       expect(room_rows).to eq [rest_name, 'Obvious paths: northeast, west.']
     end
+
+    it 'tells two rooms without an id apart by their titles' do
+      receive_from_server('<nav/>', *edge_room, 'You will no longer see room descriptions.',
+                          *brief_inline(edge_name, '  ', edge_exits))
+      expect(room_rows).to eq edge_rows
+
+      receive_from_server('You run southwest.', '<nav/>', *brief_inline(rest_name, '  ', rest_exits))
+      expect(room_rows).to eq [rest_name, 'Obvious paths: northeast, west.']
+    end
   end
 
   context 'when the inline lines carry a description that differs from the component' do
