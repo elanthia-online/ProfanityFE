@@ -1,0 +1,7 @@
+<nav rm='-4216801'/><streamWindow id='main' title='Story' subtitle=" - The Darkness Within - -4216801" location='center' target='drop'/><streamWindow id='room' title='Room' subtitle=" - The Darkness Within - -4216801" location='center' target='drop' ifClosed='' resident='true'/><clearStream id='room'/><pushStream id='room'/><compDef id='room desc'>A bloody haze obscures the surroundings, spinning in dizzy spirals.  All is not right with the world.</compDef><compDef id='room objs'></compDef>
+<compDef id='room players'></compDef>
+<compDef id='room exits'>Obvious paths: none</compDef>
+<compDef id='sprite'></compDef><popStream id='room'/>
+<component id='room players'></component>
+<pushBold/>A <a exist="561081575" noun="shaper">pale scaled shaper</a><popBold/> stoops and places a hand on your chest.  Green-tinged light spews from <pushBold/><a exist="561081575" noun="shaper">his</a><popBold/> hand, suffusing your flesh.  For a moment, you feel nothing but incredible heat and power flowing through you, but something goes terribly wrong, and a cold hand tugs at your soul.  Your last living sight is that of your flesh sloughing away like serpentskin, giving rise to something shambling and heinous.
+<prompt time="1790915240">DEAD&gt;</prompt>

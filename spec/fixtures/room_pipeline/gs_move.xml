@@ -1,0 +1,9 @@
+<nav rm='4216047'/><streamWindow id='main' title='Story' subtitle=" - Walk of the Unliving, Statuary - 4216047" location='center' target='drop'/><streamWindow id='room' title='Room' subtitle=" - Walk of the Unliving, Statuary - 4216047" location='center' target='drop' ifClosed='' resident='true'/><clearStream id='room'/><pushStream id='room'/><compDef id='room desc'>Long beds of dark loam stretch to either side of the walk, filling the air with a damply fresh smell.  This is accompanied by undertones of another odor, sweeter and fouler, that of rot run rampant.  <a exist="-436470" noun="limbs">Greying limbs</a> breach up from the earthen depths, planted there as if in grisly parody of a garden, grasping and twitching and never tiring.</compDef><compDef id='room objs'>  You also see a <a exist="561064361" noun="cutlass">patterned bronze cutlass</a>.</compDef>
+<compDef id='room players'></compDef>
+<compDef id='room exits'>Obvious exits: <d>north</d>, <d>south</d></compDef>
+<compDef id='sprite'></compDef><popStream id='room'/>
+<component id='room players'></component>
+<resource picture="0"/><style id="roomName" />[Walk of the Unliving, Statuary] (4216047)
+<style id=""/><style id="roomDesc"/>Long beds of dark loam stretch to either side of the walk, filling the air with a damply fresh smell.  This is accompanied by undertones of another odor, sweeter and fouler, that of rot run rampant.  <a exist="-436470" noun="limbs">Greying limbs</a> breach up from the earthen depths, planted there as if in grisly parody of a garden, grasping and twitching and never tiring.  <style id=""/>You also see a <a exist="561064361" noun="cutlass">patterned bronze cutlass</a>.
+Obvious exits: <a exist="-11230837" coord="2524,1864" noun="north">north</a>, <a exist="-11230837" coord="2524,1864" noun="south">south</a>
+<compass><dir value="n"/><dir value="s"/></compass><prompt time="1790915907">&gt;</prompt>
