@@ -23,6 +23,7 @@ require_relative 'room_title'
 # - @pending_render (a PendingRender: screen updates to flush)
 # - @room (a RoomAssembler)
 # - @prompts (a PromptTracker)
+# - @coord_commands (a CoordCommands: the game's commands for coord links)
 # - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
 #   leaving only its kept tags; see LineFilter#gagged?)
@@ -68,6 +69,8 @@ module TagHandlers
     'label'        => :handle_ignored_tag,
     'skin'         => :handle_ignored_tag,
     'output'       => :handle_ignored_tag,
+    'cmdlist'      => :handle_cmdlist_open,
+    'cli'          => :handle_ignored_tag,
   }.freeze
 
   # Dispatch table for closing tags (</tagname>).
@@ -79,6 +82,7 @@ module TagHandlers
     'd'         => :handle_close_link,
     'component' => :handle_stream_close,
     'compDef'   => :handle_stream_close,
+    'cmdlist'   => :handle_ignored_tag,
   }.freeze
 
   # Dispatch an XML tag to its handler method.
@@ -90,6 +94,8 @@ module TagHandlers
   def dispatch_tag(xml, text_buffer)
     name = XmlTokenizer.tag_name(xml)
     closing = xml.start_with?('</')
+    # Inside a <cmdlist>, its entries are read and other tags ignored.
+    return if @coord_commands.reading? && read_cmdlist_tag(xml, name, closing)
 
     # Combat tracking: reset flag on any <popStream> tag, bare or with an id.
     # A combat block closed by a bare <popStream/> must not leave later
@@ -499,13 +505,48 @@ module TagHandlers
     @event_bus.emit(:clear_spells) if XmlTokenizer.attrs(xml)['id'] == Streams::PERC
   end
 
-  # Handle <a ...> or <d ...> link opening tag.
+  # Handle <cmdlist ...>, the start of the game's command table for coord
+  # links (see CoordCommands): its entries are read until </cmdlist>. An
+  # empty <cmdlist/> has none.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
+  def handle_cmdlist_open(xml, _text_buffer)
+    @coord_commands.start unless xml.end_with?('/>')
+  end
+
+  # Read a tag inside a <cmdlist>: a <cli> is an entry, </cmdlist> keeps
+  # the table, and a prompt discards it (a table cut short) and is then
+  # handled as usual. Any other tag is ignored, as the text is (see
+  # GameTextProcessor#process_line_tags).
+  #
+  # @param xml [String] the tag
+  # @param name [String, nil] its element name
+  # @param closing [Boolean] whether it is an end tag
+  # @return [Boolean] true if the tag was read here, false for a prompt
+  def read_cmdlist_tag(xml, name, closing)
+    if closing
+      @coord_commands.finish if name == 'cmdlist'
+    elsif name == 'cli'
+      attrs = XmlTokenizer.attrs(xml)
+      @coord_commands.add(coord: attrs['coord'], command: attrs['command'])
+    elsif name == 'prompt'
+      @coord_commands.discard
+      return false
+    end
+    true
+  end
+
+  # Handle <a ...> or <d ...> link opening tag. A coord link with no
+  # command (see LinkExtractor.extract_cmd) is not a link: it gets no
+  # link color and no command, so a click on it sends nothing.
   #
   # @param xml [String] the tag
   # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
   # @return [void]
   def handle_open_link(xml, text_buffer)
-    cmd = LinkExtractor.extract_cmd(xml)
+    cmd = LinkExtractor.extract_cmd(xml, coord_commands: @coord_commands)
     # The room marks record every link: the room window keeps its links
     # while .links is off, so they work once it is turned on.
     @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd)
@@ -515,7 +556,8 @@ module TagHandlers
     # marks). Room stream text never reaches main.
     return unless @state.blue_links || @router.current_stream&.start_with?(Streams::ROOM)
 
-    colors = Presets.colors(Presets::LINKS, LinkExtractor::DEFAULT_LINK_COLOR)
+    # An uncolored span records no run, but still pairs with its </a>.
+    colors = cmd == false ? {} : Presets.colors(Presets::LINKS, LinkExtractor::DEFAULT_LINK_COLOR)
     @spans.open(:link, text_buffer.length, fg: colors[:fg], bg: colors[:bg], cmd: cmd)
   end
 
@@ -530,15 +572,18 @@ module TagHandlers
     @marks.close(:link, text_buffer.length) { |span| link_text_cmd(span, text_buffer) }
   end
 
-  # Give a link without a cmd or exist attribute (e.g. an exit direction)
-  # its text as its command.
+  # Give a link without a cmd, coord or exist attribute (e.g. an exit
+  # direction) its text as its command. A coord link with no command
+  # (+:cmd+ false) keeps none.
   #
   # @param span [Hash] the closed link span, with +:start+, +:end+ and
   #   +:cmd+
   # @param text_buffer [String] the text collected so far on the line
   # @return [void]
   def link_text_cmd(span, text_buffer)
-    span[:cmd] ||= text_buffer[span[:start]...span[:end]] if span[:start] && span[:end] > span[:start]
+    return unless span[:cmd].nil? && span[:start] && span[:end] > span[:start]
+
+    span[:cmd] = text_buffer[span[:start]...span[:end]]
   end
 
   # Handle <indicator id='IconXXX' visible='y|n'/> tag.

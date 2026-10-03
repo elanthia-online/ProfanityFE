@@ -207,7 +207,10 @@ RSpec.describe 'Room component lines' do
       expect(commands_under('Grand Lord ')).to eq [nil]
     end
 
-    it 'shows exits without the compass markup, and opens the exit when it is clicked (GemStone XML)' do
+    # The exit link is a coord link whose exist is the player's own id: it
+    # used to send "look #-11230837". With no command table from the
+    # server it has no command (spec/lib/coord_links_spec.rb).
+    it 'shows exits without the compass markup, and leaves a coord exit unclickable (GemStone XML)' do
       state.blue_links = true
 
       receive_from_server(<<~'XML'.chomp)
@@ -215,7 +218,7 @@ RSpec.describe 'Room component lines' do
       XML
 
       expect(room_rows).to eq ['Obvious paths: out']
-      expect(commands_under('out')).to eq ['look #-11230837']
+      expect(commands_under('out')).to eq [nil]
     end
   end
 

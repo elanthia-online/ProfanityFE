@@ -16,6 +16,7 @@ require_relative 'server_reader'
 require_relative 'line_filter'
 require_relative 'prompt_tracker'
 require_relative 'stream_router'
+require_relative 'coord_commands'
 
 # Processes game server output in a dedicated thread: parses each line's
 # markup and hands its text to the collaborators that route and assemble it.
@@ -106,6 +107,8 @@ class GameTextProcessor
     # Where the line's bold text and links are, whatever their colors (the
     # room marks, handed off with the color runs; see TagHandlers#split_spans)
     @marks = SpanTracker.new(SpanTracker::ROOM_MARKS)
+    # The game's commands for coord links, from the server's <cmdlist>
+    @coord_commands = CoordCommands.new
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
@@ -229,7 +232,9 @@ class GameTextProcessor
     segments.each do |type, content|
       case type
       when :text
-        text_buffer << unescape_entities(content)
+        # The text inside a <cmdlist> (see TagHandlers#read_cmdlist_tag)
+        # is shown nowhere.
+        text_buffer << unescape_entities(content) unless @coord_commands.reading?
       when :tag
         dispatch_tag(content, text_buffer)
       end

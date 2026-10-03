@@ -1876,6 +1876,18 @@ text sends the associated command to the game server. In DragonRealms, this
 executes the `cmd` attribute (e.g., `get #40872332`). The command is echoed
 to the main window as if you had typed it.
 
+**GemStone coord links:** some GemStone links carry a `coord` attribute
+(the exits in "Obvious paths:", ACCEPT/DECLINE on an offer, a merchant's pay
+link, TARGET RANDOM and TARGET CLEAR). Their command is the one the game's
+command table (`<cmdlist>`) gives that coord, with the link's noun and object
+id put in. Profanity uses the table if the server sends one, but doesn't ask
+for it and has no table of its own, and the servers seen so far haven't sent
+one. Until one arrives, such a link isn't highlighted and a click on it sends
+nothing; type the command instead. The room window's exits stay clickable
+when they come from the game's room exits component (`<d>` links), as on
+most moves; when only the "Obvious paths:" line brings them (for example
+after a LOOK with no move), they are coord links too.
+
 **Text selection:** When `.links` (or `.select`) is on, you can drag to
 select text within any window. The selection is clamped to the window
 boundary — dragging in the main window won't bleed into adjacent windows.
