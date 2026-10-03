@@ -152,8 +152,9 @@ RSpec.describe 'tysong.xml thoughts' do
       allow(Curses).to receive_messages(lines: 55, cols: 234)
     end
 
-    # Only the fallback to main uses the stream's preset; a stream window
-    # shows the line in its tag colors and highlights.
+    # The thoughts window doesn't apply the stream's preset (only the
+    # fallback to main and the spell window do); it shows the line in its
+    # tag colors and highlights.
     it 'shows a thought in the thoughts window without the background, and nothing in main' do
       build
 

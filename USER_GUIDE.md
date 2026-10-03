@@ -1636,7 +1636,7 @@ your settings file:
 <preset id='monsterbold' fg='ffff00'/>
 <preset id='speech' fg='00ff00'/>
 <preset id='whisper' fg='00ffff'/>
-<preset id='thought' fg='00ffff'/>
+<preset id='thoughts' fg='00ffff'/>
 <preset id='voln' fg='3ea4a3'/>
 <preset id='percWindow' fg='00ffff'/>
 ```
@@ -1650,7 +1650,7 @@ Common preset IDs used by the game:
 | `monsterbold` | Creature names in room objects (also used by room window) |
 | `speech` | Spoken text |
 | `whisper` | Whispered text |
-| `thought` | Thought network text |
+| `thoughts` | Thought network text |
 | `voln` | Voln network text |
 | `percWindow` | Active spells display color |
 
