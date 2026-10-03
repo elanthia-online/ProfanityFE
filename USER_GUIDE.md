@@ -644,7 +644,11 @@ DragonRealms sends a room twice when you move: as room components, then as
 the lines the story window shows. The room window keeps what the components
 sent for that room; the lines fill in only what the components left out (a
 LOOK, which shows its own lines, brief mode, or a room sent without
-components). An objects list the game cut short ("... and some other
+components). The description is the exception: it follows DR's room
+description setting, as the lines do. With descriptions off (`FLAG
+DESCRIPTION OFF`), the room window shows none, on a move and from the room
+view DR sends when you turn them off; with them on, it shows the
+description again. An objects list the game cut short ("... and some other
 stuff.") is replaced by the full list from the lines. When Lich adds a room
 id to the room name (`;display roomid title`), the title row shows it.
 

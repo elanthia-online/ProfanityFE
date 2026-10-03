@@ -22,7 +22,8 @@ require_relative 'games'
 # subtitle ({#subtitle}) or a prompt ({#prompt_seen}) to the next prompt,
 # whose burst ends when its line does ({#end_line}); the inline commit
 # doesn't send again a field a component (or the subtitle, for the title)
-# delivered in the burst, and fills the rest (see #commit_view).
+# delivered in the burst, and fills the rest, except that a view without a
+# roomDesc clears the description (see #commit_view).
 #
 # UI updates are emitted on the event bus. Every room part this class sends
 # to the room window also asks for the window to be rendered at the next
@@ -69,11 +70,6 @@ class RoomAssembler
     # lines write it; the first description and players line stay, the
     # last of the other lines wins.
     @view = {}
-    # The room the room desc component last described (see #room_key)
-    @component_desc_room = nil
-    # The room id of the last <nav rm='NNN'/> (see #nav); nil before any,
-    # and after a <nav/> without one
-    @nav_room = nil
     # The fields the components (and the subtitle, for the title) delivered
     # in this burst, which the inline commit doesn't send again (see
     # #commit_view): field => the title row's text or the part
@@ -108,20 +104,6 @@ class RoomAssembler
   # @return [void]
   def prompt_seen
     @next_burst = {}
-  end
-
-  # The game named the room the player is in: <nav rm='NNN'/>. DragonRealms
-  # sends it before the room subtitle and components of every room change
-  # (with +rm+ left out for a room without an id, such as The Heavens); per
-  # Lich, GemStone sends it too. A LOOK
-  # sends none. While the last one has an id, it is what tells the room
-  # the room desc component described from the room an inline view names
-  # (see #room_key).
-  #
-  # @param room_id [String, nil] the tag's +rm+ value; nil when it has none
-  # @return [void]
-  def nav(room_id)
-    @nav_room = room_id
   end
 
   # A server line has been parsed and its text handed off: if a prompt was
@@ -337,7 +319,6 @@ class RoomAssembler
     when Streams::ROOM, Streams::ROOM_TITLE
       deliver(:title, title)
     when Streams::ROOM_DESC, Streams::ROOM_DESC_ALT
-      @component_desc_room = room_key
       deliver(:desc, part)
     when Streams::ROOM_OBJS
       if @game_rules.room_list_cut_short?(part.text)
@@ -446,20 +427,6 @@ class RoomAssembler
     @pending_render.request_update
   end
 
-  # The room the player is in, as the inline commit compares it with the
-  # room the room desc component described: the room id from the last
-  # <nav rm='NNN'/> (see #nav; DragonRealms sends it, and per Lich so does
-  # GemStone) while it has one, else the room's SharedState#room_title (a
-  # session without nav tags, a room without an id). The title alone can name one room two ways: Lich
-  # rewrites the inline roomName (its room id or uid in the name) but not
-  # the subtitle, and DR's flag showroomid adds or drops the id a LOOK
-  # shows.
-  #
-  # @return [Array(Symbol, String)] +[:nav, id]+ or +[:title, title]+
-  def room_key
-    @nav_room ? [:nav, @nav_room] : [:title, @state.room_title]
-  end
-
   # Whether the layout has a RoomWindow.
   #
   # @return [Boolean]
@@ -550,10 +517,12 @@ class RoomAssembler
   # subtitle, for the title) delivered in this burst is not sent again (a
   # prompt on the exits line ends the burst after this commit, see
   # #prompt_seen), and the view fills only the fields the burst didn't
-  # deliver (a LOOK, brief mode, a room without components). The title row
-  # is the one exception: it takes the roomName's text when that differs
-  # from the row shown (Lich's room ids, or an earlier view of the burst),
-  # so the row and the terminal title name the room alike.
+  # deliver (a LOOK, brief mode, a room without components). Two fields
+  # are exceptions. The title row takes the roomName's text when that
+  # differs from the row shown (Lich's room ids, or an earlier view of the
+  # burst), so the row and the terminal title name the room alike. A view
+  # without a roomDesc clears the description, so the room window follows
+  # DR's room description setting (see #commit_desc).
   #
   # A room objs list the game cut short owns nothing, so the view's "You
   # also see" line replaces it; without one the list stays shown, as a
@@ -570,13 +539,7 @@ class RoomAssembler
     if view.key?(:title) || view.key?(:desc) || view.key?(:objects) || view.key?(:players)
       commit_title(view[:title])
 
-      # Without a roomDesc (DR leaves it out when room descriptions are off,
-      # and so does a brief LOOK) the lines keep the description the room
-      # desc component, sent with every room change, gave this room. A room
-      # the component didn't describe gets none, not the last room's.
-      if !@delivered.key?(:desc) && (view[:desc] || @component_desc_room != room_key)
-        emit(:desc, view[:desc] || EMPTY_PART)
-      end
+      commit_desc(view[:desc])
 
       unless @delivered.key?(:objects) || (cut_objects_shown && !view.key?(:objects))
         emit(:objects, view[:objects] || EMPTY_PART)
@@ -600,6 +563,26 @@ class RoomAssembler
     # Update exits on every exits line, unless a component delivered them.
     emit(:exits, view[:exits] || EMPTY_PART) unless @delivered.key?(:exits)
     @pending_render.request_update
+  end
+
+  # Send the view's description at the inline commit. The description is
+  # the one field the inline view always decides: the room window follows
+  # DR's room description setting. A view without a roomDesc (DR leaves it
+  # out while room descriptions are off: on a move in brief mode, on the
+  # view it sends in place after FLAG DESCRIPTION OFF, on a LOOK) clears
+  # the description, even one the room desc component delivered in this
+  # burst, which DR sends with every room change whatever the setting. A view with one shows it, unless the
+  # burst delivered the description (component data owns the room).
+  #
+  # @param desc [RoomPart, nil] the view's description; nil without a
+  #   roomDesc
+  # @return [void]
+  def commit_desc(desc)
+    if desc.nil?
+      emit(:desc, EMPTY_PART)
+    elsif !@delivered.key?(:desc)
+      emit(:desc, desc)
+    end
   end
 
   # Send the view's title row at the inline commit: the roomName's text,

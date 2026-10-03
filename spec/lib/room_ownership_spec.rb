@@ -396,14 +396,14 @@ RSpec.describe 'Room ownership' do
     end
   end
 
-  # Characterization (passes on the base by design): an "Also here:" line
-  # alone before the exits line commits a view, as a title, description or
-  # objects line does.
+  # An "Also here:" line alone before the exits line commits a view, as a
+  # title, description or objects line does: the view has no roomDesc, so
+  # the description goes with the title and objects it lacks.
   it 'shows an "Also here:" line that comes alone before the exits line, and hides what it lacks' do
     receive_from_server(*components('[A] (1)'), *inline('[A] (1)'), prompt,
                         'Also here: Ann.', 'Obvious paths: <d>north</d>.', prompt)
 
-    expect(room_screen).to eq ['Desc of [A] (1).', 'Also here: Ann.', 'Obvious paths: [north](north).']
+    expect(room_screen).to eq ['Also here: Ann.', 'Obvious paths: [north](north).']
     expect(indicator_label).to eq 'Ann'
   end
 
