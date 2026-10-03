@@ -625,7 +625,7 @@ class Application
     @window_mgr.load_layout(layout_id)
     @cmd_buffer.window = @window_mgr.command_window
     TextWindow.list.each do |window|
-      window.maxy.times { window.add_string "\n".dup } unless kept.any? { |old| old.equal?(window) }
+      window.fill_with_blank_lines unless kept.any? { |old| old.equal?(window) }
     end
     @window_mgr.resize(@cmd_buffer)
     @cmd_buffer.flush_screen
