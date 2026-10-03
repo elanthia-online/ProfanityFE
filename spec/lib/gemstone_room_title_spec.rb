@@ -209,6 +209,7 @@ RSpec.describe 'GemStone room title' do
       ' - A - 12 - 4216057'            => ['[A - 12] (4216057)', 'A - 12 (4216057)'],
       # Not an id after a dash: all name.
       ' - Subterrain, Pit -4216057'    => ['[Subterrain, Pit -4216057]', 'Subterrain, Pit -4216057'],
+      ' - Subterrain, Pit- 4216057'    => ['[Subterrain, Pit- 4216057]', 'Subterrain, Pit- 4216057'],
       ' - Subterrain, Pit - 4216057a'  => ['[Subterrain, Pit - 4216057a]', 'Subterrain, Pit - 4216057a'],
       ' - Subterrain, Pit - 42 16057'  => ['[Subterrain, Pit - 42 16057]', 'Subterrain, Pit - 42 16057'],
       ' - Subterrain, Pit - --4216057' => ['[Subterrain, Pit - --4216057]', 'Subterrain, Pit - --4216057'],
