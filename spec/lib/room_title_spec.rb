@@ -341,7 +341,7 @@ RSpec.describe 'Room title' do
       expect(rows[pop_line - 1]).to start_with('[The Darkness Within')
       expect(rows.uniq).to eq [rows[pop_line - 1]]
       expect(terminal_title).to eq "Mahtra [#{state.room_title}]"
-      expect(rows.last).to eq "[#{state.room_title}]"
+      expect(RoomTitle.parse(rows.last).plain).to eq state.room_title
     end
 
     it 'shows the death room as a whole: title, description and exits' do
@@ -409,7 +409,9 @@ RSpec.describe 'Room title' do
 
     # The room components' empty closes keep clearing (59328ea): Nodens
     # arrives and leaves in place (GSF-Pickasso 2026-10-02_00-27-14.xml:226-230,
-    # after the death room's push).
+    # after the death room's push). Only his row goes; the description
+    # stays. The death examples above pin the title row, so this one
+    # passes before and after the fix.
     it "still clears the room players when an empty room players component follows the push's pop" do
       receive_from_server(*fixture('gs_death_no_view'))
       receive_from_server("<component id='room players'>Also here: <a exist=\"-11219547\" noun=\"Nodens\">Nodens</a></component>")
@@ -419,7 +421,7 @@ RSpec.describe 'Room title' do
 
       expect(with_nodens).to include('Also here: Nodens')
       expect(room_rows).not_to include('Also here: Nodens')
-      expect(room_rows.first).to start_with('[The Darkness Within')
+      expect(room_rows).to include(start_with('A bloody haze obscures the surroundings'))
     end
 
     it 'keeps the title row for a bare <popStream/> closing the room push' do
