@@ -170,6 +170,32 @@ RSpec.describe 'GemStone custom logon messages' do
         expect(lines_on('logons')).to eq ['21:04 Dirvy']
       end
 
+      # Built from GSIV-Ilten/2026-10-02_08-14-14.xml:1640, the second link
+      # naming Rohese (her link at :3413): no real custom line names two
+      # characters, so this pins which one the rule takes.
+      it 'takes the first of two different player links, not the last' do
+        receive_logon(code, ' * <a exist="-11232803" noun="Cessaty">Cessaty</a> has left ' \
+                            '<a exist="-10153477" noun="Rohese">Rohese</a> in her library and joined the rest of the world!')
+
+        expect(lines_on('logons')).to eq ['21:04 Cessaty']
+      end
+
+      # Built: no real logons line nests links. The marks come in the order
+      # the links close, the inner one first.
+      it 'takes an outer link that starts before the link nested in it' do
+        receive_logon(code, ' * <a exist="-11232803" noun="Cessaty">Cessaty, with ' \
+                            '<a exist="-10153477" noun="Rohese">Rohese</a></a>, wanders off.')
+
+        expect(lines_on('logons')).to eq ['21:04 Cessaty']
+      end
+
+      it 'takes the outer of two links that start at the same place, as it opens first' do
+        receive_logon(code, ' * <a exist="-11232803" noun="Cessaty"><a exist="-10153477" noun="Rohese">Rohese</a></a> ' \
+                            'wanders off.')
+
+        expect(lines_on('logons')).to eq ['21:04 Cessaty']
+      end
+
       it 'shows a custom message whose only link is an item as sent' do
         receive_logon(code, ' * Clutching <a exist="12345" noun="lantern">a lantern</a>, Dirvy wanders off.')
 

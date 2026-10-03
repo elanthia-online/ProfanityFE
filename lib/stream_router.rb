@@ -421,7 +421,13 @@ class StreamRouter
   end
 
   # The nouns of the links in a piece of text, in the order the links
-  # start (a GS link's noun names what it links to).
+  # open (a GS link's noun names what it links to).
+  #
+  # The marks come in the order the links closed, so a nested link comes
+  # before the link around it. Of two links starting at the same place,
+  # the one that closed later opened first: it is the outer one. (An empty
+  # link followed by a link at the same place can't be told from one
+  # nested at its start; it sorts after.)
   #
   # @param marks [Array<Hash>] the text's room marks, in the order they
   #   closed
@@ -430,7 +436,7 @@ class StreamRouter
   def link_nouns(marks)
     marks.each_with_index
          .select { |mark, _| mark[:mark] == :link && mark[:noun] }
-         .sort_by { |mark, index| [mark[:start], index] }
+         .sort_by { |mark, index| [mark[:start], -index] }
          .map { |mark, _| mark[:noun] }
   end
 end

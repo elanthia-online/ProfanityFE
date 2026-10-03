@@ -160,6 +160,14 @@ RSpec.describe Games::GemStone do
       expect(described_class.logon(line, link_nouns: ['lantern', '', 'DIRVY', 'Dirvy Bob', "Dirvy's", 'Dirvy'])).to eq ['Dirvy', nil]
     end
 
+    # Built: no real custom line names two characters (0 of 219).
+    it 'takes the first of two different names, not the last' do
+      line = ' * Cessaty has left Rohese in her library.'
+
+      expect(described_class.logon(line, link_nouns: %w[Cessaty Rohese])).to eq ['Cessaty', nil]
+      expect(described_class.logon(line, link_nouns: %w[lantern Rohese Cessaty])).to eq ['Rohese', nil]
+    end
+
     it 'is nil for a custom message with no noun shaped like a name' do
       line = ' * Clutching a lantern, Dirvy wanders off.'
 
