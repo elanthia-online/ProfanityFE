@@ -263,8 +263,10 @@ A window whose top or left falls off the screen, or that gets no rows or
 columns, isn't built when the layout loads. It is built as soon as the
 terminal is large enough (on the next resize or `.resize`), where the layout
 puts it and serving its streams, so a client started in a small terminal and
-enlarged later shows the whole layout. Once built, a window stays when the
-terminal shrinks again.
+enlarged later shows the whole layout. If you haven't switched windows with
+Tab, the layout's first text or tabbed window becomes the current window once
+it is built, as in a client started at that size. Once built, a window stays
+when the terminal shrinks again.
 
 ### Window Types
 

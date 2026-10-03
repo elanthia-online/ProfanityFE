@@ -44,7 +44,9 @@ class LayoutLoader
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
   # See {WindowManager#load_layout} for what is reused and what is closed.
   # The elements whose windows don't fit on the terminal are kept for
-  # {#build_skipped_windows}, in place of the previous layout's.
+  # {#build_skipped_windows}, in place of the previous layout's. A
+  # current window the user chose with Tab stays chosen if this layout
+  # keeps it current.
   #
   # An unknown ID warns and changes nothing.
   #
@@ -60,6 +62,7 @@ class LayoutLoader
     @old_windows = BaseWindow.all_windows
     @previous_windows = @old_windows.dup
     @previous = REGISTRIES.to_h { |registry| [registry, @wm.public_send(registry)] }
+    chosen = SCROLL_WINDOW[0] if @current_window_chosen
     @wm.reset_registries
     forget_layout_order
 
@@ -67,6 +70,7 @@ class LayoutLoader
 
     @old_windows.each { |window| close_window(window) }
     forget_previous_layout
+    @current_window_chosen = !chosen.nil? && SCROLL_WINDOW[0].equal?(chosen)
 
     SCROLL_WINDOW[0]&.set_active(true)
 
@@ -89,21 +93,36 @@ class LayoutLoader
   #   overlap, the same one shows;
   # - a text or tabbed window joins the switch-window (Tab) cycle after
   #   the window the layout lists before it, so the cycle keeps the
-  #   layout's order, and the current window stays current (with no
-  #   current window, the first one built becomes it).
+  #   layout's order;
+  # - when the cycle was empty, or the user didn't choose the current
+  #   window with Tab ({#current_window_switched}) and it is the one the
+  #   layout lists first in the cycle, the window the layout lists first
+  #   becomes current, as at load. Otherwise the current window stays
+  #   current.
   #
   # @return [Array<BaseWindow>] the windows built, in layout order (empty
   #   when none was)
   def build_skipped_windows
-    current = SCROLL_WINDOW[0]
+    first_current = SCROLL_WINDOW.empty? ||
+                    (!@current_window_chosen && SCROLL_WINDOW[0].equal?(first_listed_in_scroll_cycle))
     built = []
     @skipped = @skipped.reject do |position, element|
       window = build_in_order(element, position)
       built << window if window.is_a?(BaseWindow)
       window
     end
-    SCROLL_WINDOW[0].set_active(true) if current.nil? && SCROLL_WINDOW[0]
+    make_current(first_listed_in_scroll_cycle) if first_current
     built
+  end
+
+  # Note that the user chose the current window with Tab: from now on, a
+  # window {#build_skipped_windows} builds doesn't become the current
+  # window. A {#load} keeps the choice only while the window stays
+  # current.
+  #
+  # @return [void]
+  def current_window_switched
+    @current_window_chosen = true
   end
 
   # Take a window of the previous layout for a builder to reuse: trying
@@ -260,6 +279,29 @@ class LayoutLoader
     SCROLL_WINDOW.insert(order.index(before) + 1, window)
   end
 
+  # The window of the switch-window cycle (SCROLL_WINDOW) that the layout
+  # lists first.
+  #
+  # @return [BaseWindow, nil] nil when the cycle is empty
+  def first_listed_in_scroll_cycle
+    SCROLL_WINDOW.min_by { |window| @positions.fetch(window, 0) }
+  end
+
+  # Rotate the switch-window cycle (SCROLL_WINDOW) so that +window+ is
+  # the current window, as that many Tab presses would, and mark it as
+  # the active one in place of the window that was current.
+  #
+  # @param window [BaseWindow, nil] a window of the cycle; nil (an empty
+  #   cycle) changes nothing
+  # @return [void]
+  def make_current(window)
+    return if window.nil? || (SCROLL_WINDOW[0].equal?(window) && window.active?)
+
+    SCROLL_WINDOW[0].set_active(false)
+    SCROLL_WINDOW.rotate!(SCROLL_WINDOW.index { |other| other.equal?(window) })
+    window.set_active(true)
+  end
+
   # Close a window the new layout did not reuse, and remove it from every
   # list that could still hit-test, repaint, or scroll it, and from the
   # mouse selection (see {SelectionManager.forget_window}).
@@ -284,11 +326,13 @@ class LayoutLoader
     @previous = REGISTRIES.to_h { |registry| [registry, {}] }
   end
 
-  # Forget the current layout's order: the elements left to build and
-  # each window's place in the layout (see {#build_skipped_windows}).
+  # Forget the current layout's order: the elements left to build, each
+  # window's place in the layout and whether the user chose the current
+  # window (see {#build_skipped_windows}).
   #
   # @return [void]
   def forget_layout_order
+    @current_window_chosen = false
     @position = 0
     @skipped = []
     @positions = {}.compare_by_identity

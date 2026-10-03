@@ -420,6 +420,82 @@ RSpec.describe 'Windows off the screen when the layout loads' do
     end
   end
 
+  # tysong.xml's main and death windows start on row 14: on a 14-line
+  # terminal familiar is the only text window, and the current one.
+  describe 'tysong.xml started at 14x80' do
+    before { start(template('tysong'), 14, 80) }
+
+    it 'makes main the current window once it is built, as a client started large has it' do
+      familiar = wm.stream['familiar']
+      expect(wm.stream['main']).to be_nil
+      expect(SCROLL_WINDOW).to eq [familiar]
+
+      terminal_resize(55, 234)
+      main = wm.stream['main']
+
+      expect(SCROLL_WINDOW[0]).to be main
+      expect([main.active?, familiar.active?]).to eq [true, false]
+      expect(main.scrollbar.rows.first).to eq LineBuffered::ACTIVE_INDICATOR
+      expect(familiar.scrollbar.rows).to eq [''] * 12
+    end
+
+    it 'keeps familiar current while only windows listed after it are built' do
+      familiar = wm.stream['familiar']
+
+      # lnet (column 81) is listed after familiar; main is still too low.
+      terminal_resize(14, 161)
+      expect(wm.stream['lnet']).to be_a TextWindow
+      expect(SCROLL_WINDOW[0]).to be familiar
+
+      terminal_resize(15, 161)
+      expect(SCROLL_WINDOW[0]).to be wm.stream['main']
+      expect(familiar.active?).to be false
+    end
+
+    it 'ends up as the same layout as a client started at 55x234, with the same lines after it' do
+      terminal_resize(55, 234)
+      receive_from_server(gs_room, gs_speech, gs_thought)
+      grown = layout_state
+
+      restart_client
+      start(template('tysong'), 55, 234)
+      receive_from_server(gs_room, gs_speech, gs_thought)
+
+      expect(grown).to eq layout_state
+    end
+
+    # Tab with familiar alone in the cycle changes nothing on the screen.
+    it 'keeps familiar current once Tab was pressed' do
+      familiar = wm.stream['familiar']
+      app.key_action.fetch('switch_current_window').call
+
+      terminal_resize(15, 80)
+
+      expect(SCROLL_WINDOW[0]).to be familiar
+      expect(TextWindow.list.select(&:active?)).to eq [familiar]
+    end
+
+    it 'keeps familiar current after Tab and a .layout that keeps it current' do
+      familiar = wm.stream['familiar']
+      app.key_action.fetch('switch_current_window').call
+      app.execute_command('.layout default')
+      expect(wm.stream['familiar']).to be familiar
+
+      terminal_resize(55, 234)
+
+      expect(TextWindow.list.select(&:active?)).to eq [familiar]
+    end
+
+    it 'makes main current after a .layout with no Tab, as a client started large has it' do
+      app.execute_command('.layout default')
+
+      terminal_resize(55, 234)
+
+      expect(SCROLL_WINDOW[0]).to be wm.stream['main']
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['main']]
+    end
+  end
+
   # mahtra.xml at 24x80: the conversation and familiar windows (rows 33
   # and 39), the room players indicator, the vitals bars (columns
   # 105-121) and the moon window (column 125) are off the screen.
@@ -546,6 +622,94 @@ RSpec.describe 'Windows off the screen when the layout loads' do
     end
   end
 
+  # A layout whose first text window, speech, is off an 80-column
+  # terminal: built late, it comes before every window in the Tab cycle.
+  describe 'a text window built late that the layout lists before the whole Tab cycle' do
+    let(:layout) do
+      "<settings><layout id='default'>" \
+        "<window class='text' top='0' left='100' height='5' width='30' value='speech'/>" \
+        "<window class='text' top='0' left='0' height='5' width='40' value='main'/>" \
+        "<window class='text' top='6' left='0' height='5' width='40' value='familiar'/>" \
+        "<window class='text' top='12' left='0' height='5' width='40' value='thoughts'/>" \
+        "<window class='command' top='lines-1' left='0' height='1' width='cols'/></layout></settings>"
+    end
+
+    def cycle = SCROLL_WINDOW.map { |window| wm.stream.key(window) }
+
+    def press_tab(times) = times.times { app.key_action.fetch('switch_current_window').call }
+
+    before { start(layout, 24, 80) }
+
+    it 'goes first in the cycle and becomes the current window when Tab was never pressed, as at load' do
+      expect(cycle).to eq %w[main familiar thoughts]
+
+      terminal_resize(24, 200)
+
+      expect(cycle).to eq %w[speech main familiar thoughts]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['speech']]
+    end
+
+    it 'goes last in the cycle after Tab moved the current window, which stays current' do
+      press_tab(1)
+
+      terminal_resize(24, 200)
+
+      # At load, the cycle is speech, main, familiar, thoughts.
+      expect(cycle).to eq %w[familiar thoughts speech main]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['familiar']]
+    end
+
+    it 'becomes the current window after a .layout closed the window Tab chose' do
+      press_tab(1)
+      LAYOUT['nofamiliar'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='100' height='5' width='30' value='speech'/>
+          <window class='text' top='12' left='0' height='5' width='40' value='thoughts'/>
+          <window class='text' top='0' left='0' height='5' width='40' value='main'/>
+          <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+        </layout>
+      XML
+      app.execute_command('.layout nofamiliar')
+      expect(cycle).to eq %w[thoughts main]
+
+      terminal_resize(24, 200)
+
+      expect(cycle).to eq %w[speech thoughts main]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['speech']]
+    end
+
+    # A .layout keeps the reused windows in the order they had in the
+    # cycle, so main, current before, stays current, as at load.
+    it 'leaves the current window current after a .layout that lists another window first' do
+      LAYOUT['thoughtsfirst'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='100' height='5' width='30' value='speech'/>
+          <window class='text' top='12' left='0' height='5' width='40' value='thoughts'/>
+          <window class='text' top='0' left='0' height='5' width='40' value='main'/>
+          <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+        </layout>
+      XML
+      app.execute_command('.layout thoughtsfirst')
+      expect(cycle).to eq %w[main thoughts]
+
+      terminal_resize(24, 200)
+
+      # speech comes after main, the window the layout lists last.
+      expect(cycle).to eq %w[main speech thoughts]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['main']]
+    end
+
+    it 'leaves main current when Tab went round the whole cycle back to it' do
+      press_tab(3)
+      expect(cycle).to eq %w[main familiar thoughts]
+
+      terminal_resize(24, 200)
+
+      expect(cycle).to eq %w[main familiar thoughts speech]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['main']]
+    end
+  end
+
   describe 'sizes and positions that do not fit' do
     def start_with(windows, lines: 24, cols: 80)
       start("<settings><layout id='default'>#{windows}" \
@@ -596,6 +760,19 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       expect(wm.stream['main'].active?).to be true
       expect(wm.stream['main'].scrollbar.rows.first).to eq LineBuffered::ACTIVE_INDICATOR
       expect(wm.stream['thoughts'].scrollbar.rows).to eq [''] * 5
+    end
+
+    it 'makes the first text window built late the current window even after Tab on the empty cycle' do
+      start_with(<<~XML)
+        <window class='text' top='0' left='100' height='5' width='20' value='main'/>
+        <window class='text' top='0' left='120' height='5' width='20' value='thoughts'/>
+      XML
+      app.key_action.fetch('switch_current_window').call
+
+      terminal_resize(24, 140)
+
+      expect(SCROLL_WINDOW).to eq [wm.stream['main'], wm.stream['thoughts']]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['main']]
     end
 
     it 'never builds a window whose place is always off the screen' do

@@ -155,6 +155,21 @@ class WindowManager
     @layout_loader.load(layout_id)
   end
 
+  # Make the next window of the switch-window cycle (SCROLL_WINDOW) the
+  # current one, the +switch_current_window+ key action, and tell the
+  # layout loader that the user chose the current window, so a window
+  # built later doesn't take it over (see
+  # {LayoutLoader#build_skipped_windows}). With no window in the cycle,
+  # only the loader is told.
+  #
+  # @return [void]
+  def switch_current_window
+    SCROLL_WINDOW[0]&.set_active(false)
+    SCROLL_WINDOW.rotate!
+    SCROLL_WINDOW[0]&.set_active(true)
+    @layout_loader.current_window_switched
+  end
+
   # Point each handler hash (stream, indicator, progress, countdown, room)
   # at a new, empty hash. The old hashes are left as they were, so the
   # layout loader can still read the previous layout's windows from them.
