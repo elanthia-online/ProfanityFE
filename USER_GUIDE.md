@@ -1978,7 +1978,11 @@ CharName [prompt:room]
 The room is the room window's title row without the brackets around the
 room's name: the name, then whatever the game sends after it. For
 DragonRealms that includes the room number (e.g.,
-`Charname [H:Bosque Deriel, Shacks (230008)]`). The screen/tmux window
+`Charname [H:Bosque Deriel, Shacks (230008)]`). GemStone's room number
+(ShowRoomID), which its room subtitle sends after a dash
+(`Subterrain, Pit - 4216057`), is shown the same way, in the room window's
+title row (`[Subterrain, Pit] (4216057)`) and in the terminal title
+(`Charname [Subterrain, Pit (4216057)]`). The screen/tmux window
 name shows only the character name to keep the window list compact.
 
 Title escape sequences are written to standard output after each game

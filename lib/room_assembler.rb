@@ -128,7 +128,9 @@ class RoomAssembler
   # when +text+ differs both from the last subtitle and from the title row
   # shown: a subtitle re-sent for the room shown clears nothing, when the
   # row shows Lich's form of the roomName (its room id in the name) or a
-  # LOOK's roomName before any subtitle too. An empty name is no title
+  # LOOK's roomName before any subtitle too (in either game: GemStone's
+  # subtitle and roomName give one text for a room, its room id included;
+  # see RoomTitle). An empty name is no title
   # (see TagHandlers#handle_stream_window), so it names no new room.
   # Adjacent rooms of the same name look alike without room ids (DR's
   # showroomid off), and so does a return to the last subtitle's room
