@@ -1,0 +1,10 @@
+<nav rm='4216031'/><streamWindow id='main' title='Story' subtitle=" - Sanctum Tower, First Floor - 4216031" location='center' target='drop'/><streamWindow id='room' title='Room' subtitle=" - Sanctum Tower, First Floor - 4216031" location='center' target='drop' ifClosed='' resident='true'/><clearStream id='room'/><pushStream id='room'/><compDef id='room desc'>Drastically unfurling from the narrow halls, the arc-shaped room expands into a sizeable foyer.</compDef><compDef id='room objs'>  You also see<crtrStatus exist="559065931" health="240" maxhealth="240" hostile="1"/><b> <pushBold/>a <a exist="559065931" noun="shaper">pale scaled shaper</a><popBold/></b> and a <a exist="559057546" noun="runestaff">long acacia runestaff</a> capped with a carved ivory serpent.</compDef>
+<compDef id='room players'></compDef>
+<compDef id='room exits'>Obvious exits: <d>southeast</d>, <d>southwest</d>, <d>up</d></compDef>
+<compDef id='sprite'></compDef><popStream id='room'/>
+<roommeta weather="0" bonfire="0" inside="1" water="0" sanctuary="0" realm="57" climate="12" terrain="1"/>
+<component id='room players'></component>
+<resource picture="0"/><style id="roomName" />[Sanctum Tower, First Floor] (4216031)
+<style id=""/><style id="roomDesc"/>Drastically unfurling from the narrow halls, the arc-shaped room expands into a sizeable foyer.  <style id=""/>You also see <crtrStatus exist="559065931" health="240" maxhealth="240" hostile="1"/><pushBold/><pushBold/>a <a exist="559065931" noun="shaper">pale scaled shaper</a><popBold/><popBold/> and a <a exist="559057546" noun="runestaff">long acacia runestaff</a> capped with a carved ivory serpent.
+Obvious exits: <a exist="-11223064" coord="2524,1864" noun="southeast">southeast</a>, <a exist="-11223064" coord="2524,1864" noun="southwest">southwest</a>, <a exist="-11223064" coord="2524,1864" noun="up">up</a>
+<compass><dir value="se"/><dir value="sw"/><dir value="up"/></compass><prompt time="1790907182">&gt;</prompt>
