@@ -635,4 +635,95 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       expect(RoomWindow.list.size).to eq 1
     end
   end
+
+  # The input thread resizes between two server lines, so a grow can land
+  # in the middle of a room change or of a stream push.
+  describe 'a grow in the middle of what the game sends' do
+    # DragonRealms (Catheroine 2026-09-26 14:45:47, lines 5608-5619, the
+    # description cut after its first sentence): a room change, its
+    # components and then the inline view on main.
+    let(:dr_room) do
+      desc = 'The oppressive darkness of the canopy yields slightly, allowing a glimpse of the night sky above.'
+      [
+        "<nav rm='4219304'/>",
+        "<streamWindow id='main' title='Story' subtitle=\" - [Kaal Utewg, Clearing] (4219304)\" location='center' " \
+        "target='drop'/>",
+        "<streamWindow id='room' title='Room' subtitle=\" - [Kaal Utewg, Clearing] (4219304)\" location='center' " \
+        "target='drop' ifClosed='' resident='true'/>",
+        "<component id='room desc'>#{desc}</component>",
+        "<component id='room objs'>You also see a steep trail leading uphill.</component>",
+        "<component id='room players'></component>",
+        "<component id='room exits'>Obvious paths: <d>southwest</d>, <d>west</d>, <d>northwest</d>.<compass></compass>" \
+        '</component>',
+        "<component id='room extra'></component>",
+        '<resource picture="0"/><style id="roomName" />[Kaal Utewg, Clearing] (4219304)',
+        "<style id=\"\"/><preset id='roomDesc'>#{desc}</preset>  You also see a steep trail leading uphill.",
+        'Obvious paths: <d>southwest</d>, <d>west</d>, <d>northwest</d>.',
+        '<prompt time="1790917547">&gt;</prompt>'
+      ]
+    end
+    let(:dr_room_view) do
+      [
+        '[Kaal Utewg, Clearing] (4219304)',
+        'The oppressive darkness of the canopy yields slightly, allowing a',
+        'glimpse of the night sky above.',
+        'You also see a steep trail leading uphill.',
+        'Obvious paths: southwest, west, northwest.'
+      ]
+    end
+
+    # mahtra.xml's room window starts on row 17: a 17-line terminal has no
+    # room for it.
+    it 'shows the next DR room whole, wherever in a room change the grow landed' do
+      (0..dr_room.size).each do |cut|
+        restart_client
+        start(template('mahtra'), 17, 80)
+        receive_from_server(dr_room.first(cut), game: 'DR')
+        expect(wm.room).to be_empty
+
+        terminal_resize(60, 200)
+        receive_from_server(dr_room.drop(cut), dr_room, game: 'DR')
+
+        expect([cut, text_of(wm.room['room'])]).to eq [cut, dr_room_view]
+      end
+    end
+
+    it 'shows the next GS room whole, wherever in a room push the grow landed' do
+      (0..gs_room.size).each do |cut|
+        restart_client
+        start(template('tysong'), 24, 80)
+        receive_from_server(gs_room.first(cut))
+
+        terminal_resize(55, 234)
+        receive_from_server(gs_room.drop(cut), gs_room)
+
+        expect([cut, text_of(wm.room['room'])]).to eq [cut, [
+          '[Sanctum of Scales, Columns] (4216017)',
+          'A huge copper-paneled sandstone wall stretches from east to west along',
+          'the northern edge of the antechamber.',
+          'Obvious exits: north, east, west'
+        ]]
+      end
+    end
+
+    # mahtra.xml's familiar window starts on row 39. Until it is built, the
+    # familiar stream falls back to main.
+    it 'splits a familiar push the grow landed in between main and the new window, losing and repeating nothing' do
+      allow(Time).to receive(:now).and_return(Time.new(2026, 8, 27, 16, 29, 0))
+      report = ["Tenuk's injuries include...", 'Wounds to the ABDOMEN:',
+                '  Fresh External:  light scratches -- insignificant']
+      (0..dr_familiar.size).each do |cut|
+        restart_client
+        start(template('mahtra'), 24, 80)
+        receive_from_server(dr_familiar.first(cut), game: 'DR')
+
+        terminal_resize(60, 200)
+        receive_from_server(dr_familiar.drop(cut), game: 'DR')
+
+        before_grow = report.first((cut - 1).clamp(0, 3))
+        expect([cut, text_of(wm.stream['main']).drop(1), text_of(wm.stream['familiar'])])
+          .to eq [cut, before_grow, (report - before_grow).map { |line| "#{line} [16:29]" }]
+      end
+    end
+  end
 end
