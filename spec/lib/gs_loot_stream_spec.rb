@@ -77,12 +77,16 @@ RSpec.describe 'GemStone loot results (the loot stream)' do
   end
 
   # Load tysong.xml's layout, with +extra_windows+ (layout XML) added to
-  # it in a copy of the file, and subscribe the windows to the bus.
+  # it in a copy of the file, and subscribe the windows to the bus. The
+  # copy goes in a directory of its own, removed after loading, so it
+  # doesn't stay in the home directory every example shares.
   def load_layout(extra_windows = nil)
     if extra_windows
-      path = File.join(Dir.home, 'tysong_plus.xml')
-      File.write(path, File.read(tysong).sub('</layout>', "#{extra_windows}</layout>"))
-      expect(SettingsLoader.load(path, {}, {}, proc {})).to be_nil
+      Dir.mktmpdir('tysong-plus') do |dir|
+        path = File.join(dir, 'tysong_plus.xml')
+        File.write(path, File.read(tysong).sub('</layout>', "#{extra_windows}</layout>"))
+        expect(SettingsLoader.load(path, {}, {}, proc {})).to be_nil
+      end
     end
     wm.load_layout('default')
     wm.subscribe_to_events(event_bus)
