@@ -14,6 +14,10 @@ module Games
   #   rules = Games::CombinedRules.new(Games::DragonRealms, Games::GemStone)
   #   rules.death_summary(' * Mahtra just bit the dust!')  #=> "Mahtra WL"
   module Rules
+    # The shape of a character's name in a game line: a capital and then
+    # lowercase letters.
+    NAME = /[A-Z][a-z]+/
+
     # A pattern for the " * Name <message>" line a game sends when a
     # character arrives or leaves; it captures +name+ and the message as
     # +type+. Messages are tried in the order given.
@@ -21,7 +25,7 @@ module Games
     # @param messages [Array<String>] the literal messages that follow the name
     # @return [Regexp]
     def self.logon_regexp(messages)
-      /^\s\*\s(?<name>[A-Z][a-z]+) (?<type>#{messages.map { |k| Regexp.escape(k) }.join('|')})/
+      /^\s\*\s(?<name>#{NAME.source}) (?<type>#{messages.map { |k| Regexp.escape(k) }.join('|')})/
     end
 
     # The death window entry for a line on the death stream, shown after the
@@ -36,9 +40,13 @@ module Games
     # stream.
     #
     # @param text [String] the line, tags removed
-    # @return [Array(String, String), nil] the character's name and the hex
-    #   color of the time; nil when it isn't one of the game's logon lines
-    def logon(text); end
+    # @param link_nouns [Array<String>] the +noun+ of each link on the line
+    #   that has one, in the order the links appear
+    # @return [Array(String, String), Array(String, nil), nil] the
+    #   character's name and the hex color of the time (nil when the line
+    #   doesn't say whether the character arrived or left); nil when it
+    #   isn't one of the game's logon lines
+    def logon(text, link_nouns: []); end
 
     # How long a game line stuns the character, for the stun countdown.
     #

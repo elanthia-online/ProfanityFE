@@ -46,6 +46,13 @@ RSpec.describe Games::CombinedRules do
       expect(Games::GemStone.logon(line)).to be_nil
     end
 
+    it 'names a custom logon message from its links only in GemStone' do
+      line = ' * A drunken Maylan falls to the ground.'
+
+      expect(Games::DragonRealms.logon(line, link_nouns: %w[Maylan])).to be_nil
+      expect(Games::GemStone.logon(line, link_nouns: %w[Maylan])).to eq ['Maylan', nil]
+    end
+
     it 'has no stun or spell-name rules in GemStone' do
       expect(Games::GemStone.stun_seconds('Deep and resonating, you feel the chant that falls from your lips')).to be_nil
       expect(Games::GemStone.spell_abbreviation('Aesandry Darlaeth')).to be_nil
@@ -65,6 +72,11 @@ RSpec.describe Games::CombinedRules do
 
     it 'asks the next game when the first has no answer' do
       expect(both.death_summary(' * Mahtra just bit the dust!')).to eq 'Mahtra WL'
+    end
+
+    it "passes a logon line's link nouns on to each game" do
+      expect(both.logon(' * A drunken Maylan falls to the ground.', link_nouns: %w[Maylan])).to eq ['Maylan', nil]
+      expect(both.logon(' * A drunken Maylan falls to the ground.')).to be_nil
     end
 
     it 'counts an empty entry as an answer' do

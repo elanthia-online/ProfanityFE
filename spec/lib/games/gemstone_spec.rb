@@ -139,6 +139,42 @@ RSpec.describe Games::GemStone do
     it 'is nil for a message that is not in LOGON_PATTERNS (synthetic)' do
       expect(described_class.logon(' * Mahtra tiptoes into the adventure.')).to be_nil
     end
+
+    # Custom messages: GSIV-Ilten/2026-10-01_21-00-59.xml:13795 and :7271
+    # with their link tags removed and their links' nouns.
+    it 'gives a custom message the first noun shaped like a name, and no color' do
+      line = ' * A drunken Maylan falls to the ground with a belch and crawls off, her mop-fringed pegleg ...'
+
+      expect(described_class.logon(line, link_nouns: %w[Maylan Maylan Maylan])).to eq ['Maylan', nil]
+    end
+
+    it 'takes the name from the noun, not from the text it reads as' do
+      line = ' * Gathering the folds of her bloodstained cloak, Dirvy tiredly climbs a nearby tree for a nap.'
+
+      expect(described_class.logon(line, link_nouns: %w[Dirvy Dirvy])).to eq ['Dirvy', nil]
+    end
+
+    it 'skips nouns that are not shaped like a name' do
+      line = ' * Clutching a lantern, Dirvy wanders off.'
+
+      expect(described_class.logon(line, link_nouns: ['lantern', '', 'DIRVY', 'Dirvy Bob', "Dirvy's", 'Dirvy'])).to eq ['Dirvy', nil]
+    end
+
+    it 'is nil for a custom message with no noun shaped like a name' do
+      line = ' * Clutching a lantern, Dirvy wanders off.'
+
+      expect(described_class.logon(line)).to be_nil
+      expect(described_class.logon(line, link_nouns: %w[lantern])).to be_nil
+    end
+
+    it 'is nil for a line without the " * " in front, even with a name noun' do
+      expect(described_class.logon('Dirvy wanders off.', link_nouns: %w[Dirvy])).to be_nil
+      expect(described_class.logon('* Dirvy wanders off.', link_nouns: %w[Dirvy])).to be_nil
+    end
+
+    it "keeps a standard message's name and color whatever the links say" do
+      expect(described_class.logon(' * Mahtra joins the adventure.', link_nouns: %w[Bob])).to eq %w[Mahtra 007700]
+    end
   end
 
   describe '.room_list_cut_short?' do
