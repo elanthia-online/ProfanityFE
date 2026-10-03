@@ -250,6 +250,9 @@ class StreamRouter
   # @return [void]
   # @api private
   def to_stream_window(text, colors)
+    # The text the game's main copy is compared with: as sent, without
+    # the --speech-ts timestamp the window shows
+    copy_text = nil
     if @current_stream == Streams::DEATH
       # "HH:MM Name ..." (e.g. DR "Name MF", GS "Name AREA"); an
       # empty entry hides the line (GS vaporized/incinerated)
@@ -266,6 +269,7 @@ class StreamRouter
         text, colors = time_prefixed(name, fg)
       end
     elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && @speech_timestamps
+      copy_text = text
       text = append_speech_timestamp(text)
     end
 
@@ -275,7 +279,7 @@ class StreamRouter
     @event_bus.emit(:stream_text, stream: @current_stream, text: text, colors: colors)
     @pending_render.request_update
     # Remembered so the game's main copy of it, if next, is dropped
-    @prompts.stream_text_sent(text)
+    @prompts.stream_text_sent(copy_text || text)
   end
 
   # Show text of a stream without a window in main (see

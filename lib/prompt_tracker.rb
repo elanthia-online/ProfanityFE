@@ -137,7 +137,8 @@ class PromptTracker
   # Remember a line sent to a stream window, so the game's copy of it, if
   # it is the next main-bound line, is dropped.
   #
-  # @param text [String] the line as sent to the window
+  # @param text [String] the line as sent to the window, without the
+  #   --speech-ts timestamp the window adds (the game's copy has none)
   # @return [void]
   def stream_text_sent(text)
     @last_stream_text = text.strip
