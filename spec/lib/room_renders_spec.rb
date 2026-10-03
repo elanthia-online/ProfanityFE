@@ -60,8 +60,9 @@ RSpec.describe 'Room window renders' do
 
   # A DragonRealms move as the game sends it (from a real session, the
   # description shortened): the room components, then the same room as
-  # plain lines, then the prompt.
-  let(:room_change) do
+  # plain lines, then the prompt. With +desc+, room descriptions are on and
+  # the plain lines carry the roomDesc; without, they are off (brief mode).
+  def room_change_lines(desc: true)
     [
       %(<streamWindow id='room' title='Room' subtitle=" - [Seord Kerwaith, Mountainside] (4217140)" ) +
         %(location='center' target='drop' ifClosed='' resident='true'/>),
@@ -71,12 +72,13 @@ RSpec.describe 'Room window renders' do
       "<component id='room exits'>Obvious paths: <d>northeast</d>, <d>southwest</d>.<compass></compass></component>",
       "<component id='room extra'></component>",
       '<resource picture="0"/><style id="roomName" />[Seord Kerwaith, Mountainside] (4217140)',
-      '<style id=""/>  ',
+      desc ? %(<style id=""/><preset id='roomDesc'>Night covers the narrow gorge.</preset>  ) : '<style id=""/>  ',
       'Obvious paths: <d>northeast</d>, <d>southwest</d>.',
       %(<compass><dir value="ne"/><dir value="sw"/></compass><component id='room players'></component>),
       '<prompt time="1787793483">&gt;</prompt>'
     ]
   end
+  let(:room_change) { room_change_lines }
   let(:room_rows) do
     ['[Seord Kerwaith, Mountainside] (4217140)', 'Night covers the narrow gorge.',
      'Obvious paths: northeast, southwest.']
@@ -157,13 +159,13 @@ RSpec.describe 'Room window renders' do
     receive_from_server(*room_change, burst: false)
 
     # A flush after every line that changed something (not the roomName
-    # line or the line closing its style): the room grows part by part as
-    # before
+    # line): the room grows part by part as before
     expect(shown).to eq [
       room_rows.first(1),
       room_rows.first(2),
       room_rows.first(2),
       room_rows.first(2),
+      room_rows,
       room_rows,
       room_rows,
       room_rows,
@@ -175,6 +177,39 @@ RSpec.describe 'Room window renders' do
     # for the room extra component, nor for the plain exits line, whose
     # commit sends nothing the components didn't already show
     expect(room_draws - before).to eq 6
+  end
+
+  # In brief mode the plain lines' commit clears the description the desc
+  # component showed (the room window follows DR's setting).
+  it 'draws a brief-mode move that arrives in one burst once, without the description' do
+    before = room_draws
+
+    receive_from_server(*room_change_lines(desc: false), burst: true)
+
+    expect(room_draws - before).to eq 1
+    expect(shown).to eq [[room_rows.first, room_rows.last]]
+  end
+
+  it 'draws a brief-mode move that arrives line by line without the description from its exits line on' do
+    before = room_draws
+
+    receive_from_server(*room_change_lines(desc: false), burst: false)
+
+    # As a move with descriptions on (see above), but for the flush of the
+    # roomDesc line, which brief mode doesn't send, up to the plain exits
+    # line, whose commit clears the description and draws the window
+    expect(shown).to eq [
+      room_rows.first(1),
+      room_rows.first(2),
+      room_rows.first(2),
+      room_rows.first(2),
+      room_rows,
+      room_rows,
+      room_rows,
+      [room_rows.first, room_rows.last],
+      [room_rows.first, room_rows.last]
+    ]
+    expect(room_draws - before).to eq 7
   end
 
   # Lich's lines follow the room they were sent after: the next room's
@@ -190,9 +225,9 @@ RSpec.describe 'Room window renders' do
 
     receive_from_server(*room_change, burst: false)
 
-    # A flush after every line up to the roomName line still shows them;
+    # A flush after every line up to the roomDesc line still shows them;
     # the plain exits line's flush and the next don't
-    expect(shown).to eq Array.new(7, room_rows + lich) + Array.new(2, room_rows)
+    expect(shown).to eq Array.new(8, room_rows + lich) + Array.new(2, room_rows)
   end
 
   it "doesn't draw the window for the plain exits line of a room after the one whose Lich lines it cleared" do
