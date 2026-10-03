@@ -2011,6 +2011,11 @@ support title updates or you find it distracting.
 - Check that your layout expressions do not produce negative values or
   positions beyond the terminal dimensions.
 
+**A window of the layout is missing:**
+- A window whose place is off the terminal isn't built until the terminal
+  is large enough. Enlarge the terminal (or run `.resize` after enlarging
+  it) and the window appears where the layout puts it.
+
 **Terminal resize not detected:**
 - Windows re-fit on the terminal's resize event without any binding. If your
   settings file binds the `resize` key to something other than
