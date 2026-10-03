@@ -4,7 +4,9 @@
 # them, which of them get highlights there, and which get a --speech-ts
 # timestamp with and without a window of their own. The expected lists are
 # the two alternations GameTextProcessor#handle_game_text used to spell out
-# as regexes; every case is driven through the real server loop.
+# as regexes, plus GemStone's loot stream (decided 2026-10-04: loot falls
+# back to main, bounty and reserve don't); every case is driven through the
+# real server loop.
 #
 # The two timestamp lists differ on purpose (maintainer decision, audit
 # §0.2): speech is timestamped only in a speech window, never in main.
@@ -23,13 +25,15 @@ require_relative '../../lib/selection_manager'
 require_relative '../../lib/application'
 
 RSpec.describe 'Stream fallback and timestamp lists' do
-  # The routable-stream alternation, as written twice before Streams.
-  routable = %w[death logons thoughts voln familiar assess ooc shopWindow combat moonWindow atmospherics]
+  # The routable-stream alternation, as written twice before Streams, and
+  # loot.
+  routable = %w[death logons thoughts voln familiar assess ooc shopWindow combat moonWindow atmospherics loot]
   # Streams the old regex didn't match: speech (the deliberate gap), names
-  # that only contain or differ in case from a routable one, and streams
-  # other code handles by name.
+  # that only contain or differ in case from a routable one, streams other
+  # code handles by name, and GemStone's bounty and reserve updates, which
+  # Lich drops for front-ends without streams too.
   not_routable = ['speech', 'whispers', 'Death', 'deaths', 'xdeath', 'death ', ' death', 'thought', 'shop',
-                  'lnet', 'percWindow', 'exp', 'inv', 'group']
+                  'lnet', 'percWindow', 'exp', 'inv', 'group', 'bounty', 'reserve', 'Loot', 'looted']
 
   # A line with no timestamp, and one timestamp as append_speech_timestamp writes it.
   timestamp = /\A\S.* \(\d{1,2}:\d{2}:\d{2}\)\z/
