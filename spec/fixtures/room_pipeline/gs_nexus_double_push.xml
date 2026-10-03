@@ -1,0 +1,9 @@
+<nav rm='7199'/><streamWindow id='main' title='Story' subtitle=" - Shattered Nexus - 7199" location='center' target='drop'/><streamWindow id='room' title='Room' subtitle=" - Shattered Nexus - 7199" location='center' target='drop' ifClosed='' resident='true'/><clearStream id='room'/><pushStream id='room'/><clearStream id='room'/><pushStream id='room'/><compDef id='room desc'>[Room window disabled at this location.]</compDef><popStream id='room'/>
+<popStream id='room'/>
+<roommeta weather="0" bonfire="0" inside="0" water="0" sanctuary="1" realm="0" climate="6" terrain="10"/>
+<component id='room players'>Also here: <a exist="-11232955" noun="Grimgul">Grimgul</a>, <a exist="-11235912" noun="Tevye">Tevye</a></component>
+<resource picture="0"/><style id="roomName" />[Shattered Nexus] (7199)
+<style id=""/><style id="roomDesc"/>The vastness of space stretches in all directions, with no hope to find any escape other than the rift that lies outward.  <style id=""/>You also see a <a exist="18383" noun="pit">Sarlacc pit</a>.
+Also here: <a exist="-11232955" noun="Grimgul">Grimgul</a>, <a exist="-11235912" noun="Tevye">Tevye</a>
+Obvious paths: <a exist="-11230837" coord="2524,1864" noun="out">out</a>
+<compass><dir value="out"/></compass><prompt time="1790909500">!&gt;</prompt>

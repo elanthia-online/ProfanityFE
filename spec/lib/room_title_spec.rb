@@ -368,6 +368,34 @@ RSpec.describe 'Room title' do
       expect(terminal_title).to eq 'Mahtra [Walk of the Unliving, Statuary (4216047)]'
     end
 
+    # The Shattered Nexus pushes the room stream twice and pops it twice,
+    # the second pop alone on the next line (GSF-Pickasso
+    # 2026-10-01_22-27-57.xml:26563-26571, trimmed; 61 times in the GS
+    # corpus). Neither pop sends a title; the inner push's compDef still
+    # fills the description.
+    it 'keeps the title row through both pops of a nested room push, then shows the inline view' do
+      lines = fixture('gs_nexus_double_push')
+      exits_line = lines.index { |line| line.start_with?('Obvious paths:') }
+
+      rows = title_rows_after_each(lines)
+
+      expect(lines[1]).to eq "<popStream id='room'/>"
+      expect(rows[0...exits_line]).to all(start_with('[Shattered Nexus'))
+      expect(rows[1]).to eq rows[0]
+      expect(rows[exits_line..]).to all(eq('[Shattered Nexus] (7199)'))
+      expect(terminal_title).to eq 'Mahtra [Shattered Nexus (7199)]'
+    end
+
+    it "shows the nested push's description under the kept title row until the inline view" do
+      lines = fixture('gs_nexus_double_push')
+
+      receive_from_server(*lines.first(2))
+
+      expect(room_rows.first).to start_with('[Shattered Nexus')
+      expect(room_rows.drop(1)).to eq ['[Room window disabled at this location.]']
+      expect(terminal_title).to eq "Mahtra [#{state.room_title}]"
+    end
+
     it 'shows the next room the push names after a room with no inline view' do
       receive_from_server(*fixture('gs_death_no_view'))
       death_row = title_row
