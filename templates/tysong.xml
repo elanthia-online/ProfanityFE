@@ -238,7 +238,7 @@
        ================================================================
        Presets override how the game server's built-in text styles render.
        The 'id' must match a game stream name. Common GS IDs:
-         whisper, speech, roomName, monsterbold, thought, voln, rpa
+         whisper, speech, roomName, monsterbold, thoughts, voln, rpa
   -->
 
   <!-- Whisper messages (private in-room) -->
@@ -254,7 +254,7 @@
   <!-- Familiar window background (very dark blue tint) -->
   <preset id='familiar' bg='00001a'/>
   <!-- Thought net background (very dark green tint) -->
-  <preset id='thought' bg='001a00'/>
+  <preset id='thoughts' bg='001a00'/>
   <!-- Voice of the Undead (voln) channel background -->
   <preset id='voln' bg='001a00'/>
   <!-- Debug/diagnostic output -->
