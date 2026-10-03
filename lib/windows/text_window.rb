@@ -64,6 +64,15 @@ class TextWindow < BaseWindow
     append_string(@line_buffer, string, string_colors, indent: indent, shown: true)
   end
 
+  # Fill the window with blank lines, one per row, so that the text a
+  # new window gets starts on its bottom row and moves up as more comes.
+  # A layout does this to each text window it adds.
+  #
+  # @return [void]
+  def fill_with_blank_lines
+    maxy.times { add_string "\n".dup }
+  end
+
   # Prompts land in the window's one buffer.
   #
   # @return [LineBuffer]
