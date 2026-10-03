@@ -145,7 +145,9 @@ class WindowManager
   # and from SCROLL_WINDOW.
   #
   # Each window built from a BaseWindow subclass gets the element's
-  # {WindowLayout} as its +layout+, which {#resize} places it by.
+  # {WindowLayout} as its +layout+, which {#resize} places it by. An
+  # element whose window doesn't fit on the terminal now is not built;
+  # {#resize} builds it once it fits.
   #
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]

@@ -180,12 +180,20 @@ RSpec.describe 'Windows off the screen when the layout loads' do
     places.rotate(places.index(places.min) || 0)
   end
 
+  # The order a resize draws the windows in (where windows overlap, the
+  # one drawn last shows), which is also the order a click finds them in.
+  def draw_order
+    BaseWindow.window_classes_in_resize_order.flat_map { |klass| klass.list.map { |window| place_of(window) } }
+  end
+
   # Everything the layout decides, for comparing two clients: every
-  # window as shown, which window each stream and value goes to, the Tab
-  # cycle and the current window, and the command line.
+  # window as shown and the order they are drawn in, which window each
+  # stream and value goes to, the Tab cycle and the current window, and
+  # the command line.
   def layout_state
     {
       windows: BaseWindow.all_windows.map { |window| describe(window) }.sort_by(&:inspect),
+      draw_order: draw_order,
       keys: LayoutLoader::REGISTRIES.to_h do |registry|
         [registry, wm.public_send(registry).transform_values { |window| place_of(window) }]
       end,
@@ -500,6 +508,21 @@ RSpec.describe 'Windows off the screen when the layout loads' do
 
       terminal_resize(24, 120)
       expect(wm.indicator['kneeling'].rows).to eq ['B']
+    end
+
+    it 'draws a window built late before the windows of its class the layout lists after it, as at load' do
+      start_with(<<~XML)
+        <window class='text' top='0' left='85' height='5' width='20' value='thoughts'/>
+        <window class='text' top='0' left='0' height='5' width='100' value='main'/>
+        <window class='text' top='6' left='90' height='5' width='20' value='voln'/>
+      XML
+
+      terminal_resize(24, 120)
+
+      # main overlaps thoughts (columns 85-98) and is drawn after it, so it
+      # shows there; a click there finds thoughts first, as at load.
+      expect(TextWindow.list.map { |window| geometry(window).first(2) }).to eq [[0, 85], [0, 0], [6, 90]]
+      expect(BaseWindow.find_window_at(2, 90)).to be wm.stream['thoughts']
     end
 
     it 'stays with a sink listed later' do

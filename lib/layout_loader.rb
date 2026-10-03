@@ -84,6 +84,9 @@ class LayoutLoader
   # - a stream or value two elements serve goes to the one listed later
   #   in the layout, so a window built now takes over what an earlier
   #   element's window took, and nothing a later element's window took;
+  # - a window is drawn after the windows of its class the layout lists
+  #   before it and before those it lists after it, so where they
+  #   overlap, the same one shows;
   # - a text or tabbed window joins the switch-window (Tab) cycle after
   #   the window the layout lists before it, so the cycle keeps the
   #   layout's order, and the current window stays current (with no
@@ -186,7 +189,8 @@ class LayoutLoader
   # Build a skipped element's window (see {#build_window}) after the
   # layout loaded, and give it only what the layout gives it at load
   # (see {#build_skipped_windows}): the keys no element listed later
-  # took, and its place in the switch-window cycle.
+  # took, and its place in its class's list and in the switch-window
+  # cycle.
   #
   # @param element [CachedElement] the skipped +<window>+ element
   # @param position [Integer] the element's place in the layout
@@ -199,8 +203,26 @@ class LayoutLoader
 
     @positions[window] = position
     give_back_keys_listed_later(taken, position)
+    take_place_in_class_list(window, position) if window.is_a?(BaseWindow)
     take_place_in_scroll_cycle(window, position) if SCROLL_WINDOW.last.equal?(window)
     window
+  end
+
+  # Move a window built after the layout loaded from the end of its
+  # class's instance list to just after the last window of its class the
+  # layout lists before it (to the front, when none is), as at load, where
+  # each list follows the layout. A resize draws a class's windows in list
+  # order, so where they overlap the window listed later still shows, and
+  # a click finds them in that order ({BaseWindow.find_window_at}).
+  #
+  # @param window [BaseWindow] the window just built
+  # @param position [Integer] its element's place in the layout
+  # @return [void]
+  def take_place_in_class_list(window, position)
+    list = window.class.list
+    list.delete_at(list.rindex { |other| other.equal?(window) })
+    before = list.rindex { |other| @positions.fetch(other, 0) < position }
+    list.insert(before ? before + 1 : 0, window)
   end
 
   # After a skipped element's window was built, hand each key it took
