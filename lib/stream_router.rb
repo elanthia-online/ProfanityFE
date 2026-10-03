@@ -240,7 +240,7 @@ class StreamRouter
     end
 
     if @wm.stream[@current_stream]
-      to_stream_window(text, colors)
+      to_stream_window(text, colors, marks)
     elsif Streams::FALLBACK_TO_MAIN.include?(@current_stream)
       to_main_as_fallback(text, colors)
     end
@@ -251,9 +251,10 @@ class StreamRouter
   #
   # @param text [String] game text
   # @param colors [Array<Hash>] its color regions (highlights are added)
+  # @param marks [Array<Hash>] its room marks (a logon line's links)
   # @return [void]
   # @api private
-  def to_stream_window(text, colors)
+  def to_stream_window(text, colors, marks)
     # The text the game's main copy is compared with: as sent, without
     # the --speech-ts timestamp the window shows
     copy_text = nil
@@ -274,7 +275,9 @@ class StreamRouter
         end
       end
     elsif @current_stream == Streams::LOGONS
-      if (logon = @game_rules.logon(text))
+      # "HH:MM Name", the time in the message type's color (none for a GS
+      # custom message, named by its links)
+      if (logon = @game_rules.logon(text, link_nouns: link_nouns(marks)))
         name, fg = logon
         text, colors = time_prefixed(name, fg)
       end
@@ -404,7 +407,8 @@ class StreamRouter
   # line's highlights and the time drawn in +fg+.
   #
   # @param rest [String] the text after the time, e.g. the character's name
-  # @param fg [String] hex foreground color of the time
+  # @param fg [String, nil] hex foreground color of the time; nil leaves the
+  #   time in the window's own color
   # @return [Array(String, Array<Hash>)] the line, e.g. "14:35 Mahtra", and
   #   its color regions (replacing the line's own)
   # @api private
@@ -412,7 +416,27 @@ class StreamRouter
     timestamp = @clock.hh_mm
     text = "#{timestamp} #{rest}"
     colors = HighlightProcessor.apply_highlights(text, [])
-    colors.push({ start: 0, end: timestamp.length, fg: fg })
+    colors.push({ start: 0, end: timestamp.length, fg: fg }) if fg
     [text, colors]
+  end
+
+  # The nouns of the links in a piece of text, in the order the links
+  # open (a GS link's noun names what it links to).
+  #
+  # The marks come in the order the links closed, so a nested link comes
+  # before the link around it. Of two links starting at the same place,
+  # the one that closed later opened first: it is the outer one. (An empty
+  # link followed by a link at the same place can't be told from one
+  # nested at its start; it sorts after.)
+  #
+  # @param marks [Array<Hash>] the text's room marks, in the order they
+  #   closed
+  # @return [Array<String>] the nouns; links without one are left out
+  # @api private
+  def link_nouns(marks)
+    marks.each_with_index
+         .select { |mark, _| mark[:mark] == :link && mark[:noun] }
+         .sort_by { |mark, index| [mark[:start], -index] }
+         .map { |mark, _| mark[:noun] }
   end
 end

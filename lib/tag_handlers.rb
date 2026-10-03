@@ -18,7 +18,8 @@ require_relative 'room_title'
 # - @state, @xml_escapes, @event_bus
 # - @spans (a SpanTracker: the open color spans and the runs they record)
 # - @marks (a SpanTracker with SpanTracker::ROOM_MARKS: the room marks,
-#   where the line's bold text and links are, whatever their colors)
+#   where the line's bold text and links are, whatever their colors, and
+#   each link's command and noun)
 # - @router (a StreamRouter: the current stream and the open pushStreams)
 # - @pending_render (a PendingRender: screen updates to flush)
 # - @room (a RoomAssembler)
@@ -548,8 +549,10 @@ module TagHandlers
   def handle_open_link(xml, text_buffer)
     cmd = LinkExtractor.extract_cmd(xml, coord_commands: @coord_commands)
     # The room marks record every link: the room window keeps its links
-    # while .links is off, so they work once it is turned on.
-    @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd)
+    # while .links is off, so they work once it is turned on. A GS link's
+    # noun names what it links to: the logons window takes a custom logon
+    # message's character from it.
+    @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd, noun: XmlTokenizer.attrs(xml)['noun'])
     # The link's color span: with .links on, and always in a room stream,
     # whose colors go to the room players indicator and to a text window
     # showing that stream (the room window takes its links from the room

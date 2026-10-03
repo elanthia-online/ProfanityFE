@@ -71,8 +71,8 @@ class SpanTracker
   # marks cover the same text as the color runs, except that every closed
   # span records a mark, and bold records its mark at a flush even without
   # a color. A mark is a run with +mark: :bold+ or +mark: :link+ (and a
-  # link's +:cmd+), so it tells its kind even for a link without a
-  # command.
+  # link's +:cmd+ and +:noun+), so it tells its kind even for a link
+  # without a command.
   ROOM_MARKS = [
     # kind  stack record   at_flush at_last_text at_line_end
     [:bold, true, :always, :split,  :keep,       :drop],
@@ -96,7 +96,8 @@ class SpanTracker
   # @param kind [Symbol] a kind of span tracked (see {#initialize})
   # @param start [Integer] position in the text where the span starts
   # @param attrs [Hash] the span's colors (+fg+, +bg+, +ul+) and, for a
-  #   link, its +cmd+; they become the run's keys, in the order given
+  #   link, its +cmd+ (and in a room mark, its +noun+); they become the
+  #   run's keys, in the order given
   # @return [void]
   def open(kind, start, **attrs)
     span = { start: start, **attrs }

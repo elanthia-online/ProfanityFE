@@ -106,8 +106,14 @@ module Games
       end
     end
 
-    # (see Games::Rules#logon)
-    def self.logon(text)
+    # Who arrived or left, and in which color, for a line on the logons
+    # stream. Only the messages in {LOGON_PATTERNS} count, so the line's
+    # links (the +link_nouns:+ of {Games::Rules#logon}) don't matter.
+    #
+    # @param text [String] the line, tags removed
+    # @return [Array(String, String), nil] the character's name and the hex
+    #   color of the time; nil when it isn't one of the listed messages
+    def self.logon(text, **)
       match = text.match(LOGON_REGEXP) or return nil
 
       [match[:name], LOGON_PATTERNS[match[:type]]]

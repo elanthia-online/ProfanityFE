@@ -14,7 +14,8 @@ module Games
   #
   # Provides pattern matching and formatting for GS game streams:
   # death messages with area code consolidation, logon/logoff/disconnect
-  # messages with per-type preset colors.
+  # messages with per-type preset colors, and GS IV's custom logon
+  # messages named by their links.
   #
   # Ported from elanthia-online/ProfanityFE death/logon stream handling.
   # Answers the {Games::Rules} questions for GemStone; it has no stun or
@@ -103,6 +104,13 @@ module Games
     # key of {LOGON_PATTERNS}; captures +name+ and the message as +type+.
     LOGON_REGEXP = Rules.logon_regexp(LOGON_PATTERNS.keys)
 
+    # The start every logon message has, standard or custom: " * ".
+    LOGON_START = /\A\s\*\s/
+
+    # A link noun that names a character: the whole noun has the shape of
+    # a name ({Rules::NAME}). An item's noun ("lantern") doesn't.
+    PLAYER_NOUN = /\A#{Rules::NAME.source}\z/
+
     # A GS death line's entry: the name and the area code (see
     # {resolve_death_area}), or an empty entry for a death shown nowhere
     # ({DEATH_SUPPRESS_PATTERN}).
@@ -118,11 +126,28 @@ module Games
       end
     end
 
-    # (see Games::Rules#logon)
-    def self.logon(text)
-      match = text.match(LOGON_REGEXP) or return nil
-
-      [match[:name], LOGON_PATTERNS[match[:type]]]
+    # Who arrived or left, and in which color, for a line on the logons
+    # stream.
+    #
+    # A standard message ({LOGON_PATTERNS}) gives its type's color. GS IV
+    # also sends custom messages of a character's own (" * A drunken
+    # Maylan falls to the ground ..."), which don't say whether the
+    # character arrived or left: such a line gives the noun of its first
+    # link that names a character, and no color. A custom line with no
+    # such link isn't a logon line here, so it is shown as the game sent it.
+    #
+    # @param text [String] the line, tags removed
+    # @param link_nouns [Array<String>] the +noun+ of each link on the line
+    #   that has one, in the order the links appear
+    # @return [Array(String, String), Array(String, nil), nil] the name and
+    #   the hex color of the time, nil for a custom message; nil when it
+    #   isn't a logon line
+    def self.logon(text, link_nouns: [])
+      if (match = text.match(LOGON_REGEXP))
+        [match[:name], LOGON_PATTERNS[match[:type]]]
+      elsif text.match?(LOGON_START) && (name = link_nouns.find { |noun| noun.match?(PLAYER_NOUN) })
+        [name, nil]
+      end
     end
   end
 end

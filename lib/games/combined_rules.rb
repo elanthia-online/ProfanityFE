@@ -34,8 +34,8 @@ module Games
     end
 
     # (see Games::Rules#logon)
-    def logon(text)
-      first_answer { |game| game.logon(text) }
+    def logon(text, link_nouns: [])
+      first_answer { |game| game.logon(text, link_nouns: link_nouns) }
     end
 
     # (see Games::Rules#stun_seconds)
