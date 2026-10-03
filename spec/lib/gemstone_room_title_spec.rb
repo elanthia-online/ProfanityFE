@@ -9,9 +9,10 @@
 # title row and "Sanctum Tower, First Floor (4216031)" in the terminal
 # title, and name the same room for the new-room test of a subtitle.
 #
-# The lines are trimmed from real GemStone logs (gs_move.xml and
-# gs_death_room.xml in spec/fixtures/room_pipeline) and fed through the
-# real server loop into windows built from layout XML.
+# The lines are trimmed from real GemStone logs
+# (gs_sanctum_tower_move.xml and gs_death_room.xml in
+# spec/fixtures/room_pipeline) and fed through the real server loop into
+# windows built from layout XML.
 
 require_relative '../spec_helper'
 require 'rexml/document'
@@ -105,7 +106,7 @@ RSpec.describe 'GemStone room title' do
   end
 
   describe 'a move that sends the subtitle and the roomName (Tysong)' do
-    let(:move) { fixture('gs_move') }
+    let(:move) { fixture('gs_sanctum_tower_move') }
 
     it 'shows the room id after the bracketed name in the title row' do
       receive_from_server(move.first)
@@ -257,7 +258,7 @@ RSpec.describe 'GemStone room title' do
   # differs both from the last subtitle and from the title row shown (#229).
   # GemStone's subtitle and roomName now give the same row for a room.
   describe 'the new-room test of a subtitle' do
-    let(:move) { fixture('gs_move') }
+    let(:move) { fixture('gs_sanctum_tower_move') }
     # The move's inline view alone: what a LOOK in the room shows.
     let(:look) { move.drop(6) }
 
