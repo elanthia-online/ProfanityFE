@@ -261,15 +261,16 @@ RSpec.describe 'Room carriers' do
     end
   end
 
+  # The room window follows DR's room description setting: the inline
+  # view without a roomDesc clears the description the move's desc
+  # component sent (spec/lib/room_description_spec.rb).
   describe 'a brief-mode move and a brief LOOK (no inline description)' do
     let(:room) do
       ["[The Edge of the Forest, Before the Dragon's Breath] (2030003)",
-       'The lushness of the forest begins to form a living wall, the leaves of the towering trees tinted',
-       'with the dark hue of brightly-polished scales.',
        'Obvious paths: [southwest](southwest).']
     end
 
-    it "keeps the component's description" do
+    it 'shows no description, as the setting asks' do
       load_layout
 
       receive_from_server(*fixture('dr_brief_move'))
@@ -298,16 +299,15 @@ RSpec.describe 'Room carriers' do
   end
 
   describe 'a move with only the desc and extra components' do
-    it 'fills the objects and exits from the inline lines, and keeps the component description' do
+    # A brief-mode move: the inline view has no roomDesc, so it clears the
+    # component's description too.
+    it 'fills the objects and exits from the inline lines' do
       load_layout
 
       receive_from_server(*fixture('dr_partial_components'))
 
       expect(room_screen).to eq [
         '[Undergondola, Narrow Path] (2280067)',
-        'Widening and flattening out, the steep climb begins to level into a narrow path up the',
-        'mountainside.  Tall purple lupine blossoms line the trail, their fragrance mingling with the crisp',
-        'mountain air in a refreshing pause on an arduous journey.',
         'You also see a stone wall.',
         'Obvious paths: [up](up), [down](down).'
       ]
@@ -321,9 +321,9 @@ RSpec.describe 'Room carriers' do
 
       receive_from_server(*fixture('dr_look_newer_objects'))
 
+      # Brief mode: no description
       expect(room_screen).to eq [
         "[Jeol'gelvmoraen, Ice Grottos] (4217405)",
-        'Lined in an immense layer of ice, the cavern expands outward into chamber after endless chamber.',
         'You also see {a jeol moradu:red}, a huge bronze bar, {a jeol moradu:red} (prone), ' \
         '{a jeol moradu:red} (dead), {a jeol:red}',
         '{moradu:red}, a pair of burlap slippers, a small pewter bar, {a jeol moradu:red} and some junk.',
@@ -368,7 +368,8 @@ RSpec.describe 'Room carriers' do
 
       receive_from_server(*fixture('dr_cut_short_objs'))
 
-      expect(room_screen.drop(3)).to eq [
+      # Brief mode: the title row, then no description
+      expect(room_screen.drop(1)).to eq [
         'You also see a small lavender kunzite, a small moss-green bloodstone, a small yellow-green',
         'alexandrite, a small periwinkle sapphire, a small banded red-orange sunstone, a huge cinnamon piece',
         'of amber, a huge orange morganite, a small green-yellow bloodstone, a small blue moonstone, a large',
@@ -535,14 +536,6 @@ RSpec.describe 'Room carriers' do
 
       expect(room_screen).to eq ['[A - 55] (1)', 'Desc of A.', 'Obvious paths: [north](north).']
       expect(state.room_title).to eq 'A - 55 (1)'
-    end
-
-    it "keeps the component's description on a brief move with a Lich room id in the title" do
-      load_layout
-
-      receive_from_server(*move('[A - 55] (1)', desc: '  '), prompt)
-
-      expect(room_screen).to eq ['[A - 55] (1)', 'Desc of A.', 'Obvious paths: [north](north).']
     end
 
     # Lich (at least since v5.11.0) sends the room's uid alone with
@@ -762,7 +755,8 @@ RSpec.describe 'Room carriers' do
       load_layout
 
       receive_from_server(%(<component id='room desc'>A <a exist="7" noun="gate">gate</a> here.</component>),
-                          *inline_room, 'Obvious paths: out')
+                          '<resource picture="0"/><style id="roomName" />[A] (1)',
+                          "<style id=''/><style id='roomDesc'/>A gate here.<style id=''/>", 'Obvious paths: out')
 
       expect(room_screen).to eq ['[A] (1)', 'A [gate](look #7) here.', 'Obvious paths: out']
     end

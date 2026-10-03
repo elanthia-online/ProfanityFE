@@ -3,11 +3,16 @@
 # The room description reaches the room window two ways: the 'room desc'
 # component, sent with every room change, and a roomDesc preset or style
 # on the inline lines after the roomName, which DR leaves out when room
-# descriptions are off (brief mode) and on a brief LOOK. The inline lines
-# must not wipe the description the component delivered for the same
-# room, and a new room must not keep the old room's. The lines are real DR
-# lines (Gnarta's and Catheroine's logs, long descriptions shortened),
-# driven through the real server loop into windows built from layout XML.
+# descriptions are off (FLAG DESCRIPTION OFF: brief mode, and a LOOK in
+# it). The room window follows that setting, as it did before #194: an
+# inline view (roomName to "Obvious paths/exits:") without a roomDesc
+# clears the description, on a move (though the component of the same
+# burst sent one) and in place; one with a roomDesc shows the
+# description. A burst whose components come without an inline view keeps
+# the component's description. The lines are real DR lines (spec/fixtures/
+# room_pipeline: Mahtra's and Quilsilgas's logs of 2026-10-03; inline
+# Gnarta's and Catheroine's, long descriptions shortened), driven through
+# the real server loop into windows built from layout XML.
 
 require_relative '../spec_helper'
 require 'rexml/document'
@@ -24,7 +29,7 @@ RSpec.describe 'Room description' do
     LAYOUT['test'] = REXML::Document.new(<<~XML).root
       <layout>
         <window class='text' top='0' left='0' height='6' width='80' value='main'/>
-        <window class='room' top='6' left='0' height='12' width='80' value='room'/>
+        <window class='room' top='6' left='0' height='30' width='80' value='room'/>
       </layout>
     XML
     @wm = WindowManager.new
@@ -48,7 +53,119 @@ RSpec.describe 'Room description' do
     @processor.run(server)
   end
 
+  # The lines of a fixture in spec/fixtures/room_pipeline.
+  def fixture(name)
+    File.readlines(File.expand_path("../fixtures/room_pipeline/#{name}.xml", __dir__), chomp: true)
+  end
+
   def room_rows = @wm.room['room'].rows.map(&:rstrip).reject(&:empty?)
+
+  # Mahtra's log: a move into the Ice Grottos with descriptions on, then
+  # FLAG DESCRIPTION OFF and ON in place, each followed by the room's
+  # inline view (DR sends no components with it).
+  let(:grotto_title) { "[Jeol'gelvmoraen, Ice Grottos] (4217406)" }
+  let(:grotto_desc_rows) do
+    ['The expansive pale blue passage of glittering ice seems to stretch on forever,',
+     'as if viewed from within the heart of a faceted diamond.  Like the inner fire',
+     'of a gem, a luster refracts from the polished surface of the ice, bathing the',
+     'area in a shifting hue of color.  Small bits of fabric, bone, and frost-covered',
+     'wood fill the deep crevices of ice that wind around the cavern, the sign',
+     'someone or something inhabits this seemingly barren cavern.']
+  end
+  let(:grotto_exits) { 'Obvious exits: northeast, east, southeast.' }
+
+  context 'with room descriptions on' do
+    it 'shows the description on a move' do
+      receive_from_server(*fixture('dr_desc_on_move'))
+
+      expect(room_rows).to eq [
+        grotto_title, *grotto_desc_rows,
+        'You also see a large pewter bar, a plague spawn, a pair of copper cufflinks,',
+        "some ju'ladan oil, a cobalt-blue muslin gamantang, a jeol moradu (immobile), a",
+        'jeol moradu, a jeol moradu (dead), a jeol moradu, a jeol moradu, a jeol moradu,',
+        'a jeol moradu and some junk.',
+        'Also here: Master of Shadows Barrask and Shadow Priest Promithius.',
+        grotto_exits
+      ]
+    end
+
+    it 'shows it again in place when they are turned back on' do
+      receive_from_server(*fixture('dr_desc_on_move'), *fixture('dr_desc_off_look'), *fixture('dr_desc_on_look'))
+
+      expect(room_rows).to start_with(grotto_title, *grotto_desc_rows)
+      expect(room_rows).to end_with(grotto_exits)
+    end
+  end
+
+  context 'with room descriptions off' do
+    it 'clears the description in place when they are turned off after a move' do
+      receive_from_server(*fixture('dr_desc_on_move'), *fixture('dr_desc_off_look'))
+
+      expect(room_rows).to eq [
+        grotto_title,
+        'You also see a large pewter bar, a plague spawn, a pair of copper cufflinks,',
+        "some ju'ladan oil, a cobalt-blue muslin gamantang, a jeol moradu (immobile), a",
+        'jeol moradu, a jeol moradu, a jeol moradu, a jeol moradu, a jeol moradu and',
+        'some junk.',
+        'Also here: Master of Shadows Barrask and Shadow Priest Promithius.',
+        grotto_exits
+      ]
+    end
+
+    it 'clears it again when they are turned off a second time' do
+      receive_from_server(*fixture('dr_desc_on_move'), *fixture('dr_desc_off_look'), *fixture('dr_desc_on_look'),
+                          *fixture('dr_desc_off_look'))
+
+      expect(room_rows).to eq [
+        grotto_title,
+        'You also see a large pewter bar, a plague spawn, a pair of copper cufflinks,',
+        "some ju'ladan oil, a cobalt-blue muslin gamantang, a jeol moradu (immobile), a",
+        'jeol moradu, a jeol moradu, a jeol moradu, a jeol moradu, a jeol moradu and',
+        'some junk.',
+        'Also here: Master of Shadows Barrask and Shadow Priest Promithius.',
+        grotto_exits
+      ]
+    end
+
+    # Quilsilgas's log: on every move DR sends the room desc component with
+    # the description, and the inline view without one.
+    it "shows no description after a brief-mode move, though the move's desc component sent one" do
+      moves = fixture('dr_brief_moves')
+      first_move = moves.take(moves.index('You go north.'))
+
+      receive_from_server(*first_move)
+      expect(room_rows).to eq ['[Bosque Deriel, Burial Ground] (230007)', 'Obvious paths: north, southeast.']
+
+      receive_from_server(*moves.drop(first_move.size))
+      expect(room_rows).to eq ["[Bosque Deriel, Hermit's Shacks] (230008)", 'Also here: Holdigor and Druid Ytterby.',
+                               'Obvious paths: north, south.']
+    end
+
+    it 'clears a description shown with descriptions on at the next brief-mode move' do
+      receive_from_server(*fixture('dr_desc_on_move'), *fixture('dr_brief_moves'))
+
+      expect(room_rows).to eq ["[Bosque Deriel, Hermit's Shacks] (230008)", 'Also here: Holdigor and Druid Ytterby.',
+                               'Obvious paths: north, south.']
+    end
+  end
+
+  # The same move's components, with the inline lines left out (a layout or
+  # game that sends none): no inline view decides the description.
+  context 'when a burst has room components but no inline view' do
+    it "keeps the component's description" do
+      receive_from_server(*fixture('dr_brief_moves'), *fixture('dr_components_without_inline'))
+
+      expect(room_rows).to eq [
+        '[Bosque Deriel, Burial Ground] (230007)',
+        'You come upon an Elven burial ground in the shade of sacred groves.  The graves',
+        'are almost impossible to distinguish from the surrounding forest growth, save',
+        'for a slight elevation, greener cover, and saplings planted at their heads to',
+        'commemorate the departed soul.  The forest nomads also come here, and leave',
+        'their dead in the trees, to be stripped by scavenger birds.',
+        'Obvious paths: north, southeast.'
+      ]
+    end
+  end
 
   # The component block DR sends on arriving in a room: +desc+ and +objs+
   # are the component texts ('' for an empty component).
@@ -64,10 +181,16 @@ RSpec.describe 'Room description' do
   end
 
   # The inline lines of a room without a description (brief mode, or a
-  # brief LOOK): the roomName, then the line the style closes on.
+  # LOOK in it): the roomName, then the line the style closes on.
   def brief_inline(name, after_style, exits)
     ["<resource picture=\"0\"/><style id=\"roomName\" />#{name}", "<style id=\"\"/>#{after_style}", exits,
      '<prompt time="1787783856">&gt;</prompt>']
+  end
+
+  # The inline lines of a room with a description.
+  def full_inline(name, desc, exits)
+    ["<resource picture=\"0\"/><style id=\"roomName\" />#{name}", "<style id=\"\"/><preset id='roomDesc'>#{desc}</preset>  ",
+     exits, '<prompt time="1787783856">&gt;</prompt>']
   end
 
   let(:edge_name) { "[The Edge of the Forest, Before the Dragon's Breath] (2030003)" }
@@ -84,19 +207,14 @@ RSpec.describe 'Room description' do
      'to the north dwindles into the more sinister area of the harsh mountains.',
      'Obvious paths: southwest.']
   end
-  let(:edge_room) { room_components(edge_name, edge_desc, edge_exits) + brief_inline(edge_name, '  ', edge_exits) }
+  # A move into the room with descriptions on
+  let(:edge_room) { room_components(edge_name, edge_desc, edge_exits) + full_inline(edge_name, edge_desc, edge_exits) }
 
   let(:rest_name) { "[Fayrin's Rest, Telgi Mod'Sunhin] (2105206)" }
   let(:rest_exits) { 'Obvious paths: <d>northeast</d>, <d>west</d>.' }
 
-  context 'when the inline lines carry no description' do
-    it 'keeps the component description when the roomName is followed by a blank style line' do
-      receive_from_server(*edge_room)
-
-      expect(room_rows).to eq edge_rows
-    end
-
-    it 'keeps it when the style closes on the "You also see" line' do
+  context 'when a brief-mode view has another shape' do
+    it 'clears the description when the style closes on the "You also see" line' do
       name = "[Fayrin's Rest, Anloraten Crossing] (2105202)"
       desc = 'It is not much of a meeting place for roads and their travelers: a broad lane wandering through ' \
              'an impressive forest.'
@@ -107,93 +225,51 @@ RSpec.describe 'Room description' do
 
       expect(room_rows).to eq [
         "[Fayrin's Rest, Anloraten Crossing] (2105202)",
-        'It is not much of a meeting place for roads and their travelers: a broad lane',
-        'wandering through an impressive forest.',
         'You also see a signpost and a wooden bench.',
         'Obvious paths: north, east, southeast, southwest.'
       ]
     end
 
-    it 'keeps it on a brief LOOK in the same room, which sends no components' do
-      receive_from_server(*edge_room, 'You will no longer see room descriptions.', *brief_inline(edge_name, '  ', edge_exits))
-
-      expect(room_rows).to eq edge_rows
-    end
-
-    it 'shows the next room\'s description after a move' do
-      rest_desc = 'The forest is shady here, beneath towering oaks that spread their branches.'
-
-      receive_from_server(*edge_room, 'You run southwest.', "<nav rm='2105206'/>",
-                          *room_components(rest_name, rest_desc, rest_exits), *brief_inline(rest_name, '  ', rest_exits))
-
-      expect(room_rows).to eq [rest_name, rest_desc, 'Obvious paths: northeast, west.']
-    end
-  end
-
-  context 'when the room changes' do
-    it 'drops the old description for a room whose desc component is empty' do
-      receive_from_server(*edge_room, 'You run southwest.', "<nav rm='2105206'/>",
+    it "drops the old room's description for a room whose desc component is empty" do
+      receive_from_server(*edge_room, 'You run southwest.',
                           *room_components(rest_name, '', rest_exits), *brief_inline(rest_name, '  ', rest_exits))
 
       expect(room_rows).to eq [rest_name, 'Obvious paths: northeast, west.']
     end
 
-    it 'drops the old description for a room that arrives without components' do
+    it "drops the old room's description for a room that arrives without components" do
       receive_from_server(*edge_room, 'You run southwest.', *brief_inline(rest_name, '  ', rest_exits))
 
       expect(room_rows).to eq [rest_name, 'Obvious paths: northeast, west.']
     end
   end
 
-  # DR names the room of every room change with <nav rm='NNN'/> (<nav/> for
-  # a room without an id), before its subtitle and components; a LOOK
-  # sends none. The roomName of a LOOK can name the same room differently:
-  # Lich's ";display roomid title" puts its room id in it (lich-5
-  # games.rb, "[Town Square - 1234] (230008)"), and DR's flag showroomid
-  # adds or drops the game's id.
-  context "when DR's nav tag names the room" do
-    let(:lich_name) { "[The Edge of the Forest, Before the Dragon's Breath - 1234] (2030003)" }
-    let(:lich_edge_room) do
-      ["<nav rm='2030003'/>", *room_components(edge_name, edge_desc, edge_exits),
-       *brief_inline(lich_name, '  ', edge_exits)]
-    end
+  # A view without a roomDesc that clears the description a component
+  # delivered leaves the component owning nothing, so a later view's
+  # roomDesc shows. Neither case is in the logs.
+  context 'when a view clears the description a component delivered' do
+    # Two views with no prompt between
+    it 'shows the description of a later view in the burst with a roomDesc' do
+      receive_from_server(*room_components(edge_name, edge_desc, edge_exits),
+                          *brief_inline(edge_name, '  ', edge_exits).take(3),
+                          *full_inline(edge_name, edge_desc, edge_exits))
 
-    it "keeps the description on a brief LOOK whose roomName carries Lich's room id" do
-      receive_from_server(*lich_edge_room, *brief_inline(lich_name, '  ', edge_exits))
-
-      expect(room_rows).to eq [lich_name, *edge_rows.drop(1)]
-    end
-
-    it 'keeps it on a brief LOOK after flag showroomid off drops the id from the roomName' do
-      plain_name = "[The Edge of the Forest, Before the Dragon's Breath]"
-
-      receive_from_server("<nav rm='2030003'/>", *edge_room,
-                          'You will no longer see room IDs when LOOKing in the game and room windows.',
-                          '<prompt time="1787783857">&gt;</prompt>', *brief_inline(plain_name, '  ', edge_exits))
-
-      expect(room_rows).to eq [plain_name, *edge_rows.drop(1)]
-    end
-
-    it 'drops the old description for a room with another id that arrives without components' do
-      receive_from_server(*lich_edge_room, 'You run southwest.', "<nav rm='2105206'/>",
-                          *brief_inline(lich_name, '  ', rest_exits))
-
-      expect(room_rows).to eq [lich_name, 'Obvious paths: northeast, west.']
-    end
-
-    it 'compares room titles again after a nav tag without an id' do
-      receive_from_server(*lich_edge_room, 'You run southwest.', '<nav/>', *brief_inline(rest_name, '  ', rest_exits))
-
-      expect(room_rows).to eq [rest_name, 'Obvious paths: northeast, west.']
-    end
-
-    it 'tells two rooms without an id apart by their titles' do
-      receive_from_server('<nav/>', *edge_room, 'You will no longer see room descriptions.',
-                          *brief_inline(edge_name, '  ', edge_exits))
       expect(room_rows).to eq edge_rows
+    end
 
-      receive_from_server('You run southwest.', '<nav/>', *brief_inline(rest_name, '  ', rest_exits))
-      expect(room_rows).to eq [rest_name, 'Obvious paths: northeast, west.']
+    # A prompt and a room desc component before the clearing view's exits
+    # text, on its line (DR sends no such line): the component belongs to
+    # the next burst, and the view clears what it showed, so the next
+    # burst doesn't own it either and a LOOK shows its own description.
+    it 'shows a LOOK description after a view cleared one delivered after the prompt on its line' do
+      cleared = brief_inline(edge_name, '  ', edge_exits).take(3)
+      cleared[-1] = "<prompt time=\"1787783856\">&gt;</prompt><component id='room desc'>Another description.</component>" \
+                    "#{cleared[-1]}"
+
+      receive_from_server(*room_components(edge_name, edge_desc, edge_exits), *cleared,
+                          *full_inline(edge_name, edge_desc, edge_exits))
+
+      expect(room_rows).to eq edge_rows
     end
   end
 
@@ -204,12 +280,6 @@ RSpec.describe 'Room description' do
        'In the darkness, the forms of ancient trees appear to coalesce into a single',
        'malevolent entity.',
        'Obvious paths: southwest.']
-    end
-
-    # The inline lines of a room with a description.
-    def full_inline(name, desc, exits)
-      ["<resource picture=\"0\"/><style id=\"roomName\" />#{name}", "<style id=\"\"/><preset id='roomDesc'>#{desc}</preset>  ",
-       exits, '<prompt time="1787783856">&gt;</prompt>']
     end
 
     it "keeps the component's description when the inline one comes in the same burst" do

@@ -1,0 +1,10 @@
+You go south.
+<nav rm='230007'/>
+<streamWindow id='main' title='Story' subtitle=" - [Bosque Deriel, Burial Ground] (230007)" location='center' target='drop'/>
+<streamWindow id='room' title='Room' subtitle=" - [Bosque Deriel, Burial Ground] (230007)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>You come upon an Elven burial ground in the shade of sacred groves.  The graves are almost impossible to distinguish from the surrounding forest growth, save for a slight elevation, greener cover, and saplings planted at their heads to commemorate the departed soul.  The forest nomads also come here, and leave their dead in the trees, to be stripped by scavenger birds.</component>
+<component id='room objs'></component>
+<component id='room players'></component>
+<component id='room exits'>Obvious paths: <d>north</d>, <d>southeast</d>.<compass></compass></component>
+<component id='room extra'></component>
+<prompt time="1790985392">&gt;</prompt>
