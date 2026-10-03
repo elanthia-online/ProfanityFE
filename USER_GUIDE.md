@@ -1244,6 +1244,9 @@ lookahead, etc.
 ### How Highlights Are Applied
 
 - Highlights are applied to text **after** XML tags are stripped.
+- With `--speech-ts`, highlights are applied after the timestamp is added, so
+  a rule can match it (e.g. `\([0-9]?[0-9]:[0-9][0-9]:[0-9][0-9]\)$` for
+  `(9:05:07)` or `(21:00:09)`; the hour has no leading zero).
 - When multiple highlight rules match overlapping regions, the rule with the
   **smallest matching range** takes priority (most specific wins).
 - Highlight rules are checked in the order they appear in the settings file.

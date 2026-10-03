@@ -78,8 +78,8 @@
 
   <!-- Dim the prompt/command echo line (e.g., "[Town Square]> look") -->
   <highlight fg='555555'>^\[.*?\](?:>|&gt;).*$</highlight>
-  <!-- Dim timestamps in parentheses (HH:MM:SS) -->
-  <highlight fg='555555'>\([0-9][0-9]\:[0-9][0-9]\:[0-9][0-9]\)$</highlight>
+  <!-- Dim timestamps in parentheses (H:MM:SS or HH:MM:SS, the speech timestamp) -->
+  <highlight fg='555555'>\([0-9]?[0-9]\:[0-9][0-9]\:[0-9][0-9]\)$</highlight>
   <!-- Private messages (whisper channel) -->
   <highlight fg='339999'>^\[Private(?:To)?\]</highlight>
   <!-- [code] channel -->
