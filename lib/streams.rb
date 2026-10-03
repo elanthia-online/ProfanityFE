@@ -93,8 +93,8 @@ module Streams
   # Highlights apply to text on these streams even without a window.
   #
   # {LOOT} is here because Lich's conversion for front-ends without
-  # streams keeps loot text in main; it drops GemStone's bounty, reserve
-  # and inv updates, which aren't here either.
+  # streams keeps loot text in main; it drops the inv stream (both games)
+  # and GemStone's bounty and reserve updates, which aren't here either.
   FALLBACK_TO_MAIN = [DEATH, LOGONS, THOUGHTS, VOLN, FAMILIAR, ASSESS, OOC, SHOP, COMBAT, MOON, ATMOSPHERICS,
                       LOOT].freeze
 

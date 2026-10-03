@@ -1811,8 +1811,8 @@ on text and tabbed windows.
 3. Streams without a dedicated window that are in the "known" set (death,
    logons, thoughts, voln, familiar, assess, ooc, shopWindow, combat,
    moonWindow, atmospherics, loot) fall back to the `main` window with their
-   preset color applied. GemStone's `bounty`, `reserve` and `inv` updates
-   aren't shown without a window of their own.
+   preset color applied. The `inv` stream (both games) and GemStone's
+   `bounty` and `reserve` updates aren't shown without a window of their own.
 4. Room-related streams (`room`, `room title`, `room desc`, `room objs`,
    `room players`, `room exits`) are routed to the room window if one exists.
    By default, inline room text (title, description, objects, players, exits)
