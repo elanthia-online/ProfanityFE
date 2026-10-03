@@ -1799,6 +1799,7 @@ on text and tabbed windows.
 | `percWindow` | Active spells/effects (wired to perc windows) |
 | `moonWindow` | Moon data |
 | `shopWindow` | Shop inventory |
+| `loot` | GemStone loot results (what LOOT or a box search found, and where it went) |
 | `room` | Room component data (title, desc, objects, players, exits) |
 
 ### Routing Rules
@@ -1808,8 +1809,10 @@ on text and tabbed windows.
 2. For tabbed windows, the stream name is matched to a tab name. If no matching
    tab exists, text goes to the active tab.
 3. Streams without a dedicated window that are in the "known" set (death,
-   logons, thoughts, voln, familiar, assess, ooc, combat, moonWindow,
-   atmospherics) fall back to the `main` window with their preset color applied.
+   logons, thoughts, voln, familiar, assess, ooc, shopWindow, combat,
+   moonWindow, atmospherics, loot) fall back to the `main` window with their
+   preset color applied. The `inv` stream (both games) and GemStone's
+   `bounty` and `reserve` updates aren't shown without a window of their own.
 4. Room-related streams (`room`, `room title`, `room desc`, `room objs`,
    `room players`, `room exits`) are routed to the room window if one exists.
    By default, inline room text (title, description, objects, players, exits)

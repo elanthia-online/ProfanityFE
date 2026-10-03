@@ -84,10 +84,19 @@ module Streams
   # Atmospheric messages.
   ATMOSPHERICS = 'atmospherics'
 
+  # GemStone loot results: what LOOT ROOM/AREA or a box search found and
+  # where it was stowed. The game sends no copy of them in main.
+  LOOT = 'loot'
+
   # Streams shown in the main window when the layout has no window for
   # them; text on any other stream with no window isn't shown in main.
   # Highlights apply to text on these streams even without a window.
-  FALLBACK_TO_MAIN = [DEATH, LOGONS, THOUGHTS, VOLN, FAMILIAR, ASSESS, OOC, SHOP, COMBAT, MOON, ATMOSPHERICS].freeze
+  #
+  # {LOOT} is here because Lich's conversion for front-ends without
+  # streams keeps loot text in main; it drops the inv stream (both games)
+  # and GemStone's bounty and reserve updates, which aren't here either.
+  FALLBACK_TO_MAIN = [DEATH, LOGONS, THOUGHTS, VOLN, FAMILIAR, ASSESS, OOC, SHOP, COMBAT, MOON, ATMOSPHERICS,
+                      LOOT].freeze
 
   # Streams whose lines get a timestamp with --speech-ts when they go to
   # their own window.
