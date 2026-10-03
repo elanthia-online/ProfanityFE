@@ -441,12 +441,17 @@ module TagHandlers
   # Flushes accumulated text, then returns to the innermost pushStream
   # still open (the main window when none is; see StreamRouter#close_stream).
   #
+  # An empty room component clears its section (see #empty_room_close?);
+  # the empty popStream that ends a push of the bare room stream sends
+  # nothing, so it keeps the title row.
+  #
   # @param xml [String] the tag
   # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
   # @return [void]
   def handle_stream_close(xml, text_buffer)
     stream = @router.current_stream
-    if text_buffer.empty? && stream&.start_with?(Streams::ROOM)
+    pop = XmlTokenizer.start_tag_name(xml) == 'popStream'
+    if text_buffer.empty? && empty_room_close?(stream, pop)
       # Empty room components (e.g., <component id='room players'></component>)
       # are meaningful — they clear the displayed data. Since flush_text_buffer
       # skips empty text, handle this directly. Without a RoomWindow only an
@@ -457,8 +462,23 @@ module TagHandlers
       flush_text_buffer(text_buffer)
     end
     @event_bus.emit(:exp_delete_skill) if @router.current_stream == Streams::EXP
-    pop = XmlTokenizer.start_tag_name(xml) == 'popStream'
     @router.close_stream(pop: pop, id: pop ? XmlTokenizer.attrs(xml)['id'] : nil)
+  end
+
+  # Whether an empty close of +stream+ sends its room section empty, which
+  # clears it: any room stream's close does, except a popStream of the bare
+  # room stream. GemStone ends every room push with an empty
+  # <popStream id='room'/> after the room compDefs; it ends the push and
+  # sends no title, so the title row keeps the room the subtitle named.
+  # DragonRealms sends no room push.
+  #
+  # @param stream [String, nil] the stream being closed
+  # @param pop [Boolean] whether the closing tag is a popStream
+  # @return [Boolean]
+  def empty_room_close?(stream, pop)
+    return false unless stream&.start_with?(Streams::ROOM)
+
+    !(pop && stream == Streams::ROOM)
   end
 
   # Resynchronize stream routing at a <prompt>: flush text already
