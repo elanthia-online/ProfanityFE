@@ -650,9 +650,10 @@ DESCRIPTION OFF`), the room window shows none: on a move, on a LOOK, and
 from the room view DR sends when you turn them off. A move that comes with
 the components but none of the lines (DR sometimes leaves them out) still
 shows the components' description. With descriptions on, the room window
-shows the description again. An objects list the game cut short ("... and some other
-stuff.") is replaced by the full list from the lines. When Lich adds a room
-id to the room name (`;display roomid title`), the title row shows it.
+shows the description again. An objects list the game cut short ("... and
+some other stuff.") is replaced by the full list from the lines. When Lich
+adds a room id to the room name (`;display roomid title`), the title row
+shows it.
 
 By default, room data is echoed to both the room window and the story window.
 Pass `--room-window-only` to suppress room data from the story window.
