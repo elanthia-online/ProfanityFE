@@ -244,13 +244,29 @@ RSpec.describe 'Room description' do
     end
   end
 
-  # Two views with no prompt between (not seen in the logs): the first,
-  # without a roomDesc, clears the burst's component description, so the
-  # component no longer owns it and the second view's roomDesc shows.
-  context 'when a burst has two inline views' do
-    it 'shows the description of a view with a roomDesc after one without' do
+  # A view without a roomDesc that clears the description a component
+  # delivered leaves the component owning nothing, so a later view's
+  # roomDesc shows. Neither case is in the logs.
+  context 'when a view clears the description a component delivered' do
+    # Two views with no prompt between
+    it 'shows the description of a later view in the burst with a roomDesc' do
       receive_from_server(*room_components(edge_name, edge_desc, edge_exits),
                           *brief_inline(edge_name, '  ', edge_exits).take(3),
+                          *full_inline(edge_name, edge_desc, edge_exits))
+
+      expect(room_rows).to eq edge_rows
+    end
+
+    # A prompt and a room desc component before the clearing view's exits
+    # text, on its line (DR sends no such line): the component belongs to
+    # the next burst, and the view clears what it showed, so the next
+    # burst doesn't own it either and a LOOK shows its own description.
+    it 'shows a LOOK description after a view cleared one delivered after the prompt on its line' do
+      cleared = brief_inline(edge_name, '  ', edge_exits).take(3)
+      cleared[-1] = "<prompt time=\"1787783856\">&gt;</prompt><component id='room desc'>Another description.</component>" \
+                    "#{cleared[-1]}"
+
+      receive_from_server(*room_components(edge_name, edge_desc, edge_exits), *cleared,
                           *full_inline(edge_name, edge_desc, edge_exits))
 
       expect(room_rows).to eq edge_rows
