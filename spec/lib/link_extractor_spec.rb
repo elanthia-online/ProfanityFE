@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Tests LinkExtractor.extract_cmd for GS <a exist/noun> and DR <d cmd>
-# tags. Where links are found in a line is the tag parser's job (see
+# Tests LinkExtractor.extract_cmd for GS <a exist/noun>, GS coord links
+# and DR <d cmd> tags. Where links are found in a line is the tag parser's job (see
 # spec/lib/room_carriers_spec.rb and link_commands_spec.rb).
 
 require_relative '../../lib/link_extractor'
@@ -34,6 +34,37 @@ RSpec.describe LinkExtractor do
 
     it 'handles exist with large ID numbers' do
       expect(described_class.extract_cmd('<a exist="999999999" noun="thing">')).to eq 'look #999999999'
+    end
+
+    # ---- GS coord links: the game's command table ----
+
+    it 'gives a coord link no command (false) when no table arrived' do
+      tag = '<a exist="-11223064" coord="2524,1864" noun="north">'
+      expect(described_class.extract_cmd(tag)).to be false
+    end
+
+    it "gives a coord link its coord's command from the table" do
+      table = CoordCommands.new.tap do |commands|
+        commands.start
+        commands.add(coord: '2524,1864', command: 'go @')
+        commands.finish
+      end
+      tag = '<a exist="-11223064" coord="2524,1864" noun="north">'
+      expect(described_class.extract_cmd(tag, coord_commands: table)).to eq 'go north'
+      expect(described_class.extract_cmd('<a exist="1" coord="2524,1865" noun="x">', coord_commands: table)).to be false
+    end
+
+    it 'reads coord only from an attribute with exactly that name, and not when it is empty' do
+      {
+        '<a exist="1" coord="2524,1864" noun="north">'  => false,
+        "<a coord='2524,1864'>"                         => false,
+        '<a exist="1" xcoord="2524,1864" noun="north">' => 'look #1',
+        '<a exist="1" coord="" noun="north">'           => 'look #1',
+        '<a exist="1" coord="" noun="">'                => '_drag #1',
+        "<a exist='1' coord='2524,1864' cmd='go'>"      => 'go'
+      }.each do |tag, cmd|
+        expect(described_class.extract_cmd(tag)).to eq(cmd), tag
+      end
     end
 
     # ---- No cmd/exist ----
