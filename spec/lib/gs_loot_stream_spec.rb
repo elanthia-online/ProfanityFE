@@ -201,6 +201,16 @@ RSpec.describe 'GemStone loot results (the loot stream)' do
       expect(main_colors_of('   a violet sapphire')).to include(a_hash_including(start: 5, end: 20, fg: 'ff00ff'))
     end
 
+    it 'keeps the item and container links clickable with links on' do
+      state.blue_links = true
+
+      receive_from_server(*loot_room)
+
+      expect(main_colors_of('  (stowed in a sturdy dark leather gem pouch)'))
+        .to eq [{ start: 15, fg: '5555ff', bg: nil, cmd: 'look #513692462', end: 44 }]
+      expect(main_colors_of('   a violet sapphire')).to eq [{ start: 5, fg: '5555ff', bg: nil, cmd: 'look #558041195', end: 20 }]
+    end
+
     it 'adds no colour of its own: tysong.xml has no loot preset' do
       receive_from_server(*loot_room)
 
