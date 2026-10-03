@@ -51,14 +51,14 @@
        ================================================================
        Presets override how the game server's built-in text styles render.
        The 'id' must match a game stream name. Common IDs:
-         whisper, speech, roomName, monsterbold, thought, voln, percWindow
+         whisper, speech, roomName, monsterbold, thoughts, voln, percWindow
   -->
   <preset id='whisper'    fg='&cyan;'/>
   <preset id='links'      fg='5555ff'/>
   <preset id='speech'     fg='&green;'/>
   <preset id='roomName'   fg='&green;'/>
   <preset id='monsterbold' fg='&yellow;'/>
-  <preset id='thought'    fg='&cyan;'/>
+  <preset id='thoughts'   fg='&cyan;'/>
   <preset id='voln'       fg='&teal;'/>
   <preset id='percWindow' fg='&cyan;'/>
 
