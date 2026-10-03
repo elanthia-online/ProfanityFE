@@ -95,7 +95,9 @@ class CoordCommands
     template = @table[coord]
     return unless template && !(template.include?('#') && template.include?('%'))
 
-    command = template.gsub('#', "##{exist}").gsub('%', exist.to_s).gsub('@', noun.to_s)
+    # Block form: a replacement string would read a backslash in the noun
+    # or exist as a back-reference.
+    command = template.gsub('#') { "##{exist}" }.gsub('%') { exist.to_s }.gsub('@') { noun.to_s }
     command = command.gsub(/\s+/, ' ').strip
     command unless command.empty?
   end

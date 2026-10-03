@@ -6,7 +6,7 @@
 # sends the table's command; a link without a coord is unchanged.
 #
 # The exits and offer lines are real GemStone lines (GSIV-Ilten/
-# 2026-10-01_21-00-59.xml:37, two of its exits; GSF-Pickasso/
+# 2026-10-01_21-00-59.xml:36, two of its exits; GSF-Pickasso/
 # 2026-10-01_21-27-24.xml:2488, cut after DECLINE). No log has a
 # <cmdlist>: the one below is in the form Saga 6c2079e's parser reads.
 

@@ -77,6 +77,15 @@ RSpec.describe CoordCommands do
     expect(commands.command_for('1,1', exist: '-5', noun: 'a#b%c@')).to eq 'say a#b%c@'
   end
 
+  it 'puts a backslash in the noun or exist in as written, not as a back-reference' do
+    read_table(['1,1', 'go @'], ['1,2', 'look #'], ['1,3', 'tap %'])
+
+    expect(commands.command_for('1,1', exist: '-5', noun: 'a\\0b')).to eq 'go a\\0b'
+    expect(commands.command_for('1,1', exist: '-5', noun: '\\&\\1\\k<x>\\\\')).to eq 'go \\&\\1\\k<x>\\\\'
+    expect(commands.command_for('1,2', exist: '\\0', noun: 'x')).to eq 'look #\\0'
+    expect(commands.command_for('1,3', exist: "\\'", noun: 'x')).to eq "tap \\'"
+  end
+
   it 'has no command for a template with both # and %' do
     read_table(['1,1', '_dialog # %'])
 

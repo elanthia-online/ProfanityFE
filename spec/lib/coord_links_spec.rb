@@ -36,7 +36,7 @@ RSpec.describe 'Coord links' do
   let(:written) { [] }
 
   # Exits: every link carries the clicking character's own id
-  # (GSIV-Ilten/2026-10-01_21-00-59.xml:37, two of its six exits).
+  # (GSIV-Ilten/2026-10-01_21-00-59.xml:36, two of its six exits).
   let(:exits_line) do
     'Obvious paths: <a exist="-11069569" coord="2524,1864" noun="northeast">northeast</a>, ' \
       '<a exist="-11069569" coord="2524,1864" noun="east">east</a>'
@@ -255,6 +255,12 @@ RSpec.describe 'Coord links' do
       receive_from_server(cmdlist(['2524,1940', ' pay   @ ']), pay_line)
 
       expect(commands_under('Gimme 3,085 silvers')).to eq ['pay']
+    end
+
+    it 'sends a backslash in the noun as written' do
+      receive_from_server(cmdlist(['2524,1864', 'go @']), exits_line.sub('noun="east"') { 'noun="e\\0st"' })
+
+      expect(commands_under(' east')[1..]).to eq ['go e\\0st']
     end
 
     it 'makes a link unclickable when its command has both # and %' do
