@@ -130,7 +130,9 @@ RSpec.describe 'Windows off the screen when the layout loads' do
   end
 
   # Feed raw server lines through the real server loop into the app's
-  # windows, as the server thread does (one processor per app).
+  # windows, as the server thread does (one processor per app). The loop
+  # logs and skips a line that raises, so any error it logs fails the
+  # example.
   def receive_from_server(*lines, game: 'GS')
     @processors ||= {}.compare_by_identity
     processor = @processors[app] ||= begin
@@ -145,7 +147,13 @@ RSpec.describe 'Windows off the screen when the layout loads' do
     queue = lines.flatten.map { |line| "#{line}\r\n" }
     server = Object.new
     server.define_singleton_method(:gets) { queue.shift&.dup }
+    # The first prompt sends LOOK.
+    server.define_singleton_method(:puts) { |_command| nil }
+    server.define_singleton_method(:flush) { self }
+    logged = []
+    allow(ProfanityLog).to receive(:write) { |context, message, **| logged << message if context == 'game_text_processor' }
     processor.run(server)
+    expect(logged).to be_empty, "the server loop logged #{logged.size}: #{logged.first}"
   end
 
   # Forget every window and setting, as between examples, and make a new
