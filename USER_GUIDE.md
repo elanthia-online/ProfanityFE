@@ -259,6 +259,15 @@ You can combine them with `+`, `-`, `*`, `/`, and parentheses:
 
 All expressions are evaluated as integers.
 
+A window whose top or left falls off the screen, or that gets no rows or
+columns, isn't built when the layout loads. It is built as soon as the
+terminal is large enough (on the next resize or `.resize`), where the layout
+puts it and serving its streams, so a client started in a small terminal and
+enlarged later shows the whole layout. If you haven't switched windows with
+Tab, the layout's first text or tabbed window becomes the current window once
+it is built, as in a client started at that size. Once built, a window stays
+when the terminal shrinks again.
+
 ### Window Types
 
 Every window inside a layout is a `<window>` element with a `class` attribute
@@ -1418,7 +1427,10 @@ example, inside GNU Screen or tmux).
 A resize, automatic or by `.resize`, re-wraps the text already in every text
 and tabbed window (every tab) to the new width, so widening or narrowing the
 terminal loses no text. The bottom line of each window stays at the bottom,
-and any text selection is cleared.
+and any text selection is cleared. It also builds the windows of the layout
+that didn't fit on the terminal until now (see
+[Layout Math Expressions](#layout-math-expressions)); what the game sent
+before they were built stays where it went.
 
 Dragging the terminal's edge sends many resize events. ProfanityFE waits until
 none has come for 0.1 seconds, then re-fits once, at the final size (a single
@@ -2000,6 +2012,11 @@ support title updates or you find it distracting.
 - Run `.resize` to recalculate window positions.
 - Check that your layout expressions do not produce negative values or
   positions beyond the terminal dimensions.
+
+**A window of the layout is missing:**
+- A window whose place is off the terminal isn't built until the terminal
+  is large enough. Enlarge the terminal (or run `.resize` after enlarging
+  it) and the window appears where the layout puts it.
 
 **Terminal resize not detected:**
 - Windows re-fit on the terminal's resize event without any binding. If your

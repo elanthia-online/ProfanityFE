@@ -18,6 +18,12 @@ require_relative 'window_layout'
 # the new layout puts it and draws it again there
 # ({BaseWindow#place_after_reuse}).
 #
+# An element whose window doesn't fit on the terminal when the layout
+# loads (off the screen, no rows or columns, or too narrow for its
+# builder) is not built then. The loader keeps it, and
+# {#build_skipped_windows} builds it once the terminal is large enough,
+# as the layout would have built it at load at that size.
+#
 # @example
 #   loader = LayoutLoader.new(window_manager)
 #   loader.load('default')
@@ -32,10 +38,15 @@ class LayoutLoader
   def initialize(window_manager)
     @wm = window_manager
     forget_previous_layout
+    forget_layout_order
   end
 
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
   # See {WindowManager#load_layout} for what is reused and what is closed.
+  # The elements whose windows don't fit on the terminal are kept for
+  # {#build_skipped_windows}, in place of the previous layout's. A
+  # current window the user chose with Tab stays chosen if this layout
+  # keeps it current.
   #
   # An unknown ID warns and changes nothing.
   #
@@ -51,16 +62,67 @@ class LayoutLoader
     @old_windows = BaseWindow.all_windows
     @previous_windows = @old_windows.dup
     @previous = REGISTRIES.to_h { |registry| [registry, @wm.public_send(registry)] }
+    chosen = SCROLL_WINDOW[0] if @current_window_chosen
     @wm.reset_registries
+    forget_layout_order
 
-    xml.elements.each { |element| build(element) if element.name == 'window' }
+    xml.elements.each { |element| build(element, @position += 1) if element.name == 'window' }
 
     @old_windows.each { |window| close_window(window) }
     forget_previous_layout
+    @current_window_chosen = !chosen.nil? && SCROLL_WINDOW[0].equal?(chosen)
 
     SCROLL_WINDOW[0]&.set_active(true)
 
     CursesRenderer.doupdate
+  end
+
+  # Build the windows of the current layout that didn't fit on the
+  # terminal when it loaded and fit now, as {#load} builds them: each
+  # element's builder runs with the element's geometry for the current
+  # terminal, and a BaseWindow gets the element's {WindowLayout}. Those
+  # that still don't fit are kept for a later call.
+  #
+  # The result is what the layout would have built at load on a terminal
+  # of this size, for the windows already built too:
+  # - a stream or value two elements serve goes to the one listed later
+  #   in the layout, so a window built now takes over what an earlier
+  #   element's window took, and nothing a later element's window took;
+  # - a window is drawn after the windows of its class the layout lists
+  #   before it and before those it lists after it, so where they
+  #   overlap, the same one shows;
+  # - a text or tabbed window joins the switch-window (Tab) cycle after
+  #   the window the layout lists before it, so the cycle keeps the
+  #   layout's order;
+  # - when the cycle was empty, or the user didn't choose the current
+  #   window with Tab ({#current_window_switched}) and it is the one the
+  #   layout lists first in the cycle, the window the layout lists first
+  #   becomes current, as at load. Otherwise the current window stays
+  #   current.
+  #
+  # @return [Array<BaseWindow>] the windows built, in layout order (empty
+  #   when none was)
+  def build_skipped_windows
+    first_current = SCROLL_WINDOW.empty? ||
+                    (!@current_window_chosen && SCROLL_WINDOW[0].equal?(first_listed_in_scroll_cycle))
+    built = []
+    @skipped = @skipped.reject do |position, element|
+      window = build_in_order(element, position)
+      built << window if window.is_a?(BaseWindow)
+      window
+    end
+    make_current(first_listed_in_scroll_cycle) if first_current
+    built
+  end
+
+  # Note that the user chose the current window with Tab: from now on, a
+  # window {#build_skipped_windows} builds doesn't become the current
+  # window. A {#load} keeps the choice only while the window stays
+  # current.
+  #
+  # @return [void]
+  def current_window_switched
+    @current_window_chosen = true
   end
 
   # Take a window of the previous layout for a builder to reuse: trying
@@ -93,18 +155,44 @@ class LayoutLoader
   # registered builder, if it has one, when its geometry is on screen;
   # a BaseWindow gets the element's {WindowLayout} as its +layout+, and
   # one reused from the previous layout is placed and drawn again there.
+  # An element of a registered class whose window doesn't fit (see
+  # {#build_window}) is kept for {#build_skipped_windows}.
   #
   # @param element [CachedElement] a +<window>+ element of the layout
+  # @param position [Integer] the element's place among the layout's
+  #   +<window>+ elements, from 1
   # @return [void]
-  def build(element)
+  def build(element, position)
     if element.attributes['class'] == 'sink'
       sink = SinkWindow.new
+      @positions[sink] = position
       element.attributes['value']&.split(',')&.each do |str|
         @wm.stream[str.strip] = sink
       end
       return
     end
 
+    window = build_window(element)
+    if window
+      @positions[window] = position
+    elsif BaseWindow.type_registry.key?(element.attributes['class'])
+      @skipped << [position, element]
+    end
+    window.place_after_reuse if window.is_a?(BaseWindow) && @previous_windows.any? { |previous| previous.equal?(window) }
+  end
+
+  # Run the builder of the element's class with the element's geometry
+  # for the current terminal, if the window fits there: its top-left
+  # corner on the screen, at least one row and one column. A BaseWindow
+  # the builder returns gets the element's {WindowLayout} as its +layout+.
+  #
+  # @param element [CachedElement] a +<window>+ element of the layout, of
+  #   any class but +sink+
+  # @return [BaseWindow, Curses::Window, nil] what the builder returned
+  #   (the command window is a plain Curses::Window); nil when the window
+  #   doesn't fit, the builder refused it (a text or tabbed window one
+  #   column wide), or the class has no builder
+  def build_window(element)
     layout = WindowLayout.from_element(element)
     size = layout.geometry
 
@@ -113,10 +201,105 @@ class LayoutLoader
 
     builder = BaseWindow.type_registry[element.attributes['class']]
     window = builder&.call(size.height, size.width, size.top, size.left, element, @wm)
-    return unless window.is_a?(BaseWindow)
+    window.layout = layout if window.is_a?(BaseWindow)
+    window
+  end
 
-    window.layout = layout
-    window.place_after_reuse if @previous_windows.any? { |previous| previous.equal?(window) }
+  # Build a skipped element's window (see {#build_window}) after the
+  # layout loaded, and give it only what the layout gives it at load
+  # (see {#build_skipped_windows}): the keys no element listed later
+  # took, and its place in its class's list and in the switch-window
+  # cycle.
+  #
+  # @param element [CachedElement] the skipped +<window>+ element
+  # @param position [Integer] the element's place in the layout
+  # @return [BaseWindow, Curses::Window, nil] what {#build_window}
+  #   returned; nil when the window still doesn't fit
+  def build_in_order(element, position)
+    taken = REGISTRIES.to_h { |registry| [registry, @wm.public_send(registry).dup] }
+    window = build_window(element)
+    return unless window
+
+    @positions[window] = position
+    give_back_keys_listed_later(taken, position)
+    take_place_in_class_list(window, position) if window.is_a?(BaseWindow)
+    take_place_in_scroll_cycle(window, position) if SCROLL_WINDOW.last.equal?(window)
+    window
+  end
+
+  # Move a window built after the layout loaded from the end of its
+  # class's instance list to just after the last window of its class the
+  # layout lists before it (to the front, when none is), as at load, where
+  # each list follows the layout. A resize draws a class's windows in list
+  # order, so where they overlap the window listed later still shows, and
+  # a click finds them in that order ({BaseWindow.find_window_at}).
+  #
+  # @param window [BaseWindow] the window just built
+  # @param position [Integer] its element's place in the layout
+  # @return [void]
+  def take_place_in_class_list(window, position)
+    list = window.class.list
+    list.delete_at(list.rindex { |other| other.equal?(window) })
+    before = list.rindex { |other| @positions.fetch(other, 0) < position }
+    list.insert(before ? before + 1 : 0, window)
+  end
+
+  # After a skipped element's window was built, hand each key it took
+  # from a window of an element listed later in the layout back to that
+  # window, as at load, where the later element would have taken it last.
+  #
+  # @param taken [Hash{Symbol => Hash}] each handler hash as it was
+  #   before the builder ran
+  # @param position [Integer] the built element's place in the layout
+  # @return [void]
+  def give_back_keys_listed_later(taken, position)
+    taken.each do |registry, before|
+      now = @wm.public_send(registry)
+      before.each do |key, window|
+        now[key] = window if !now[key].equal?(window) && @positions.fetch(window, 0) > position
+      end
+    end
+  end
+
+  # Move a text or tabbed window its builder appended to the end of the
+  # switch-window cycle (SCROLL_WINDOW) to just after the window the
+  # layout lists before it (the last one listed, for the first window),
+  # as at load, where the cycle follows the layout. SCROLL_WINDOW[0], the
+  # current window, never moves.
+  #
+  # @param window [BaseWindow] the window just built
+  # @param position [Integer] its element's place in the layout
+  # @return [void]
+  def take_place_in_scroll_cycle(window, position)
+    SCROLL_WINDOW.pop
+    return SCROLL_WINDOW.push(window) if SCROLL_WINDOW.empty?
+
+    order = SCROLL_WINDOW.map { |other| @positions.fetch(other, 0) }
+    before = order.select { |other| other < position }.max || order.max
+    SCROLL_WINDOW.insert(order.index(before) + 1, window)
+  end
+
+  # The window of the switch-window cycle (SCROLL_WINDOW) that the layout
+  # lists first.
+  #
+  # @return [BaseWindow, nil] nil when the cycle is empty
+  def first_listed_in_scroll_cycle
+    SCROLL_WINDOW.min_by { |window| @positions.fetch(window, 0) }
+  end
+
+  # Rotate the switch-window cycle (SCROLL_WINDOW) so that +window+ is
+  # the current window, as that many Tab presses would, and mark it as
+  # the active one in place of the window that was current.
+  #
+  # @param window [BaseWindow, nil] a window of the cycle; nil (an empty
+  #   cycle) changes nothing
+  # @return [void]
+  def make_current(window)
+    return if window.nil? || (SCROLL_WINDOW[0].equal?(window) && window.active?)
+
+    SCROLL_WINDOW[0].set_active(false)
+    SCROLL_WINDOW.rotate!(SCROLL_WINDOW.index { |other| other.equal?(window) })
+    window.set_active(true)
   end
 
   # Close a window the new layout did not reuse, and remove it from every
@@ -141,5 +324,17 @@ class LayoutLoader
     @old_windows = []
     @previous_windows = []
     @previous = REGISTRIES.to_h { |registry| [registry, {}] }
+  end
+
+  # Forget the current layout's order: the elements left to build, each
+  # window's place in the layout and whether the user chose the current
+  # window (see {#build_skipped_windows}).
+  #
+  # @return [void]
+  def forget_layout_order
+    @current_window_chosen = false
+    @position = 0
+    @skipped = []
+    @positions = {}.compare_by_identity
   end
 end
