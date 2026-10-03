@@ -199,6 +199,15 @@ class WindowManager
 
   # Resize all windows to match the current terminal dimensions.
   #
+  # First, each window of the current layout that didn't fit on the
+  # terminal when the layout loaded (off the screen, no rows or columns,
+  # or a text or tabbed window one column wide) and fits now is built, as
+  # the layout would have built it at load at this size (see
+  # {LayoutLoader#build_skipped_windows}); a text window built this way
+  # starts filled with blank lines, as a layout's new text windows do.
+  # The others wait for a later resize. A window, once built, stays
+  # built when the terminal shrinks again.
+  #
   # Every registered window class ({BaseWindow.window_classes}), in
   # {BaseWindow.window_classes_in_resize_order}, resizes its own windows
   # ({BaseWindow.resize_all}): each is placed from its stored layout
@@ -230,6 +239,12 @@ class WindowManager
       # positions). The windows will be repositioned on the next resize
       # when the terminal is large enough.
       return if Curses.lines < 3 || Curses.cols < 10
+
+      # Windows of the layout that didn't fit when it loaded and fit now
+      # are built first, so they are placed and drawn with the rest.
+      @layout_loader.build_skipped_windows.each do |built|
+        built.fill_with_blank_lines if built.is_a?(TextWindow)
+      end
 
       # Each window class moves and redraws its own windows (see
       # BaseWindow.resize_all), in a fixed order: where windows overlap,
