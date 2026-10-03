@@ -244,6 +244,19 @@ RSpec.describe 'Room description' do
     end
   end
 
+  # Two views with no prompt between (not seen in the logs): the first,
+  # without a roomDesc, clears the burst's component description, so the
+  # component no longer owns it and the second view's roomDesc shows.
+  context 'when a burst has two inline views' do
+    it 'shows the description of a view with a roomDesc after one without' do
+      receive_from_server(*room_components(edge_name, edge_desc, edge_exits),
+                          *brief_inline(edge_name, '  ', edge_exits).take(3),
+                          *full_inline(edge_name, edge_desc, edge_exits))
+
+      expect(room_rows).to eq edge_rows
+    end
+  end
+
   context 'when the inline lines carry a description that differs from the component' do
     let(:inline_desc) { 'In the darkness, the forms of ancient trees appear to coalesce into a single malevolent entity.' }
     let(:inline_desc_rows) do

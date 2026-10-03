@@ -571,8 +571,11 @@ class RoomAssembler
   # out while room descriptions are off: on a move in brief mode, on the
   # view it sends in place after FLAG DESCRIPTION OFF, on a LOOK) clears
   # the description, even one the room desc component delivered in this
-  # burst, which DR sends with every room change whatever the setting. A view with one shows it, unless the
-  # burst delivered the description (component data owns the room).
+  # burst, which DR sends with every room change whatever the setting.
+  # A view with one shows it, unless the burst delivered the description
+  # (component data owns the room). A cleared description is no longer
+  # the component's, so a later view in the burst (two views with no
+  # prompt between) shows its own.
   #
   # @param desc [RoomPart, nil] the view's description; nil without a
   #   roomDesc
@@ -580,6 +583,8 @@ class RoomAssembler
   def commit_desc(desc)
     if desc.nil?
       emit(:desc, EMPTY_PART)
+      @delivered.delete(:desc)
+      @next_burst&.delete(:desc)
     elsif !@delivered.key?(:desc)
       emit(:desc, desc)
     end
