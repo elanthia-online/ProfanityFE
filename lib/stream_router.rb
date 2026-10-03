@@ -144,6 +144,8 @@ class StreamRouter
 
   # Whether text on the current stream is shown somewhere, and so gets
   # highlights: main, a stream with a window, or one that falls back to main.
+  # Room players text handed to the players indicator gets them here only
+  # when this is true.
   #
   # @return [Boolean]
   def routable?
@@ -152,7 +154,8 @@ class StreamRouter
 
   # Send a chunk of game text to the current stream's window, or to main.
   #
-  # Applies the highlights first when the stream is shown ({#routable?}).
+  # Highlights are applied once, to the text as it is shown: after a
+  # --speech-ts timestamp is added, so a highlight can match the timestamp.
   # Blank text is not shown.
   #
   # @param text [String] game text, tags removed and entities unescaped
@@ -164,13 +167,12 @@ class StreamRouter
   #   line from main text (its leading space is dropped, and it isn't indented)
   # @return [void]
   def route(text, colors, marks:, room_captured: false)
-    # Apply highlight patterns to all routable streams
-    HighlightProcessor.apply_highlights(text, colors) if routable?
     return if text.strip.empty?
 
     if @current_stream
       route_stream_text(text, colors, marks)
     elsif @wm.stream[MAIN_STREAM]
+      HighlightProcessor.apply_highlights(text, colors)
       route_main_text(text, colors, room_captured)
     end
   end
@@ -232,6 +234,7 @@ class StreamRouter
       return
     elsif room_result == :continue
       # Room players: also update the indicator, then stop
+      HighlightProcessor.apply_highlights(text, colors) if routable?
       @room.update_room_players_indicator(text, colors)
       return
     end
@@ -243,16 +246,23 @@ class StreamRouter
     end
   end
 
-  # Show text in the current stream's window, in the stream's format.
+  # Show text in the current stream's window, in the stream's format,
+  # with the highlights applied to the text as shown (timestamp included).
   #
   # @param text [String] game text
-  # @param colors [Array<Hash>] its color regions
+  # @param colors [Array<Hash>] its color regions (highlights are added)
   # @return [void]
   # @api private
   def to_stream_window(text, colors)
     # The text the game's main copy is compared with: as sent, without
     # the --speech-ts timestamp the window shows
     copy_text = nil
+    if Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && @speech_timestamps
+      copy_text = text
+      text = append_speech_timestamp(text)
+    end
+    HighlightProcessor.apply_highlights(text, colors)
+
     if @current_stream == Streams::DEATH
       # "HH:MM Name ..." (e.g. DR "Name MF", GS "Name AREA"); an
       # empty entry hides the line (GS vaporized/incinerated)
@@ -268,9 +278,6 @@ class StreamRouter
         name, fg = logon
         text, colors = time_prefixed(name, fg)
       end
-    elsif Streams::TIMESTAMPED_IN_WINDOW.include?(@current_stream) && @speech_timestamps
-      copy_text = text
-      text = append_speech_timestamp(text)
     end
 
     text, colors = shorten_spell_line(text, colors) if @current_stream == Streams::PERC
@@ -283,10 +290,11 @@ class StreamRouter
   end
 
   # Show text of a stream without a window in main (see
-  # {Streams::FALLBACK_TO_MAIN}), in the stream's preset colors.
+  # {Streams::FALLBACK_TO_MAIN}), in the stream's preset colors, with the
+  # highlights applied to the text as shown (timestamp included).
   #
   # @param text [String] game text
-  # @param colors [Array<Hash>] its color regions
+  # @param colors [Array<Hash>] its color regions (highlights are added)
   # @return [void]
   # @api private
   def to_main_as_fallback(text, colors)
@@ -295,6 +303,7 @@ class StreamRouter
     if Streams::TIMESTAMPED_IN_MAIN.include?(@current_stream) && @speech_timestamps
       text = append_speech_timestamp(text)
     end
+    HighlightProcessor.apply_highlights(text, colors)
     if (preset = Presets.colors(@current_stream))
       colors.push(start: 0, **preset, end: text.length)
     end
