@@ -231,12 +231,12 @@ RSpec.describe 'A view of another room (DR Locate)' do
   context "when Lich's ;display uid rewrites the roomName" do
     before { load_layout(main_window, room_window, familiar_window) }
 
-    # Lich ids made up for the two rooms
-    let(:lich_ids) { { '230008' => '7380', '230007' => '7379' } }
+    # The Lich ids of the two rooms: the Burial Ground's is in the process
+    # title of Fidon's client (2026-10-07 13:56), the Hermit's Shacks' made up
+    let(:lich_ids) { { '230008' => '7380', '230007' => '2072' } }
 
     # The fixture's lines as Lich sends them on with those settings
-    def lich_rewritten(lines)
-      nav = nil
+    def lich_rewritten(lines, nav: nil)
       lines.map do |line|
         nav = line[/<nav rm='(\d+)'/, 1] || nav
         next line unless line.include?('<style id="roomName" />')
@@ -252,15 +252,15 @@ RSpec.describe 'A view of another room (DR Locate)' do
     it 'shows the Locate view in the familiar window, though Lich gave it the ids of the room the player is in' do
       receive_from_server(*after_move)
 
-      expect(room_rows.first).to eq '[Bosque Deriel, Burial Ground - 7379 - (u230007)]'
+      expect(room_rows.first).to eq '[Bosque Deriel, Burial Ground - 2072 - (u230007)]'
       expect(room_rows.last).to eq 'Obvious paths: north, southeast.'
       expect(texts_on('familiar')).to match [
-        "[Bosque Deriel, Hermit's Shacks - 7379 - (u230007)]",
+        "[Bosque Deriel, Hermit's Shacks - 2072 - (u230007)]",
         a_string_starting_with('Here on the route between the sacred sites of the Observatory'),
         "Also here: Exsanguinator Nelis, Death's Messenger Gnarta, Quilsilgas and Druid Ytterby.",
         'Obvious paths: north, south.'
       ]
-      expect(state.room_title).to eq 'Bosque Deriel, Burial Ground - 7379 - (u230007)'
+      expect(state.room_title).to eq 'Bosque Deriel, Burial Ground - 2072 - (u230007)'
     end
 
     it "takes a LOOK in the player's room, Lich's ids in its name, as the player's room" do
@@ -275,8 +275,35 @@ RSpec.describe 'A view of another room (DR Locate)' do
       receive_from_server(*look.drop(1))
 
       expect(texts_on('familiar')).to be_empty
-      expect(room_rows.first).to eq '[Bosque Deriel, Burial Ground - 7379 - (u230007)]'
+      expect(room_rows.first).to eq '[Bosque Deriel, Burial Ground - 2072 - (u230007)]'
       expect(room_rows).to include('You come upon an Elven burial ground.')
+    end
+
+    # Fidon's client started at 13:56:43, after the last move, and Lich sends
+    # it no nav tag or subtitle until the next one: its first prompt sends a
+    # LOOK (PromptTracker), and the Locate comes after that
+    # (dr_locate_after_restart.xml, the log of 13:56 from the client's start;
+    # its roomName as the process title showed it).
+    def after_restart = lich_rewritten(File.readlines(
+                                         File.expand_path('../fixtures/room_pipeline/dr_locate_after_restart.xml', __dir__), chomp: true
+                                       ), nav: '230007')
+
+    it 'shows a Locate view in the familiar window before the first move, from the LOOK sent at the first prompt' do
+      receive_from_server(*after_restart)
+
+      expect(room_rows.first).to eq '[Bosque Deriel, Burial Ground - 2072 - (u230007)]'
+      expect(room_rows.last).to eq 'Obvious paths: north, southeast.'
+      expect(texts_on('familiar').first).to eq "[Bosque Deriel, Hermit's Shacks - 2072 - (u230007)]"
+      expect(texts_on('familiar').last).to eq 'Obvious paths: north, south.'
+      expect(state.room_title).to eq 'Bosque Deriel, Burial Ground - 2072 - (u230007)'
+    end
+
+    it "leaves a view before that LOOK's to the room window" do
+      locate_first = after_restart.drop(after_restart.index { |line| line.include?('You gesture.') })
+      receive_from_server(*locate_first)
+
+      expect(texts_on('familiar')).to be_empty
+      expect(room_rows.first).to eq "[Bosque Deriel, Hermit's Shacks - 2072 - (u230007)]"
     end
   end
 

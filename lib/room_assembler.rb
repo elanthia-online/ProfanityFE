@@ -106,6 +106,12 @@ class RoomAssembler
     # The room name of the last room subtitle, for #remote_title?; nil
     # before any, and after one with an empty name
     @subtitle_name = nil
+    # The name of the first view read before any nav tag or subtitle, the
+    # player's room until the first move (see #look_room); nil before
+    @look_room_name = nil
+    # The name of the last roomName taken as the player's room, for
+    # #look_room; nil before any
+    @view_room_name = nil
     # The room id of the last <nav rm='NNN'/> (see #nav); nil before any,
     # and after a <nav/> without one
     @nav_room = nil
@@ -280,6 +286,7 @@ class RoomAssembler
     return read_remote_text(text) if @remote_view || remote_title?(text)
 
     room_data_captured = take_captured_text(text, marks)
+    look_room(text)
 
     # Without a RoomWindow, only update the room players indicator from
     # inline text patterns (objects, exits, etc. are not applicable).
@@ -498,15 +505,22 @@ class RoomAssembler
   # last subtitle's (see #same_room_name?). That is the only test left
   # when Lich rewrites the roomName: its ;display uid drops the game's id
   # and adds the ids of the room the player is in, whatever room the line
-  # names. Rooms of the same name look alike to it, and before any
-  # subtitle no view is remote.
+  # names. Rooms of the same name look alike to it.
+  #
+  # Before the first nav tag and subtitle (a client started, or attached
+  # to Lich, since the last move), the room the player is in is the one
+  # the first roomName named: the view of the 'look' PromptTracker sends
+  # at the first prompt (see #look_room). Before that view no view is
+  # remote.
   #
   # @param text [String] non-empty game text on main
   # @return [Boolean]
   def remote_title?(text)
-    return false unless @capture_mode == :title && @nav_seen
+    return false unless @capture_mode == :title
     return false if @nav_in_burst || @delivered.key?(:title)
     return false unless (title = RoomTitle.parse(text))
+    return !@look_room_name.nil? && !same_room_name?(title.name, @look_room_name) if before_first_move?
+    return false unless @nav_seen
 
     id = title.suffix.match(ROOM_ID_SUFFIX)&.[](:id)
     return id != @nav_room if id && @nav_room
@@ -524,6 +538,27 @@ class RoomAssembler
   # @return [Boolean]
   def same_room_name?(name, room_name)
     name == room_name || name.start_with?("#{room_name} - ")
+  end
+
+  # Whether no nav tag and no room subtitle has come since this assembler
+  # started: no move has named the player's room yet.
+  #
+  # @return [Boolean]
+  def before_first_move?
+    !@nav_seen && @subtitle_name.nil?
+  end
+
+  # Before the first move (see #before_first_move?), take the first view
+  # of the player's room, at its exits line, as the player's room, for
+  # #remote_title?: the view of the 'look' sent at the first prompt. The
+  # view's last roomName names it, as in the room window.
+  #
+  # @param text [String] non-empty game text on main
+  # @return [void]
+  def look_room(text)
+    return unless before_first_move? && @view_room_name && text.match?(EXITS_LINE)
+
+    @look_room_name ||= @view_room_name
   end
 
   # Read a line of a view of another room (see #remote_title?): it ends
@@ -555,6 +590,7 @@ class RoomAssembler
     when :title
       room_title = RoomTitle.parse(text)
       @state.room_title = room_title.plain if room_title
+      @view_room_name = room_title.name if room_title
       if room_window?
         @view[:title] = room_title.to_s
         captured = true

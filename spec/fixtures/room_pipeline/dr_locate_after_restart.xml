@@ -1,0 +1,122 @@
+
+You feel fully rested.
+<prompt time="1791334602">&gt;</prompt>
+<clearStream id="percWindow"/>
+<pushStream id="percWindow"/>Clear Vision  (3 roisaen)
+Shadowling  (64 roisaen)
+Aura Sight  (4 roisaen)
+<popStream/><prompt time="1791334603">&gt;</prompt>
+<!-- CLIENT --><c>look<!-- ENDCLIENT -->
+<resource picture="0"/><style id="roomName" />[Bosque Deriel, Burial Ground] (230007)
+<style id=""/><preset id='roomDesc'>You come upon an Elven burial ground in the shade of sacred groves.  The graves are almost impossible to distinguish from the surrounding forest growth, save for a slight elevation, greener cover, and saplings planted at their heads to commemorate the departed soul.  The forest nomads also come here, and leave their dead in the trees, to be stripped by scavenger birds.</preset>  
+Obvious paths: <d>north</d>, <d>southeast</d>.
+<compass><dir value="n"/><dir value="se"/></compass><prompt time="1791334605">&gt;</prompt>
+<!-- CLIENT --><c>look<!-- ENDCLIENT -->
+<resource picture="0"/><style id="roomName" />[Bosque Deriel, Burial Ground] (230007)
+<style id=""/><preset id='roomDesc'>You come upon an Elven burial ground in the shade of sacred groves.  The graves are almost impossible to distinguish from the surrounding forest growth, save for a slight elevation, greener cover, and saplings planted at their heads to commemorate the departed soul.  The forest nomads also come here, and leave their dead in the trees, to be stripped by scavenger birds.</preset>  
+Obvious paths: <d>north</d>, <d>southeast</d>.
+<compass><dir value="n"/><dir value="se"/></compass><prompt time="1791334605">&gt;</prompt>
+Emerald Knight Mahtra just arrived.
+<component id='room players'>Also here: Emerald Knight Mahtra.</component>
+<prompt time="1791334605">&gt;</prompt>
+<output class="mono"/>
+
+Your role-playing award information:
+Current RP points:                  1584
+Total RP points received:           10405
+RP points received from players:    9346
+RP points given to other players:   8241
+
+   ---Active RPA---
+   None.
+<output class=""/>
+<prompt time="1791334606">&gt;</prompt>
+Emerald Knight Mahtra goes southeast.
+<component id='room players'></component>
+<prompt time="1791334606">&gt;</prompt>
+The twisted steel buckle of your thighband pulses with a soft light for a moment, and you feel more focused.
+<prompt time="1791334606">&gt;</prompt>
+<output class="mono"/>
+
+Your role-playing award information:
+Current RP points:                  1584
+Total RP points received:           10405
+RP points received from players:    9346
+RP points given to other players:   8241
+
+   ---Active RPA---
+   None.
+<output class=""/>
+<prompt time="1791334608">&gt;</prompt>
+<!-- CLIENT --><c>;mm locate Ytterby<!-- ENDCLIENT -->
+<prompt time="1791334608">&gt;</prompt>
+You aren't harnessing any mana.
+<prompt time="1791334608">&gt;</prompt>
+<spell exist='spell'>Locate</spell><castTime value='1791334629'/>
+You raise your palms skyward, chanting the equation of the Locate spell.
+<prompt time="1791334609">&gt;</prompt>
+<prompt time="1791334609">&gt;</prompt>
+<clearStream id="percWindow"/>
+<pushStream id="percWindow"/>Clear Vision  (3 roisaen)
+Shadowling  (64 roisaen)
+Aura Sight  (4 roisaen)
+<popStream/><prompt time="1791334614">&gt;</prompt>
+<prompt time="1791334615">&gt;</prompt>
+You feel fully attuned to the mana streams again.
+<prompt time="1791334621">&gt;</prompt>
+<prompt time="1791334622">&gt;</prompt>
+<clearStream id="percWindow"/>
+<pushStream id="percWindow"/>Clear Vision  (3 roisaen)
+Shadowling  (63 roisaen)
+Aura Sight  (4 roisaen)
+<popStream/><prompt time="1791334623">&gt;</prompt>
+<prompt time="1791334627">&gt;</prompt>
+<clearStream id="percWindow"/>
+<spell>None</spell>You gesture.
+<resource picture="0"/><style id="roomName" />[Bosque Deriel, Hermit's Shacks] (230008)
+<style id=""/><preset id='roomDesc'>Here on the route between the sacred sites of the Observatory and the Faery Ring is a semi-circular clearing.  At its center stands a hut made of lashed branches, roofed with broad leaves.  A certain sect of Elven clerics, who are renowned for their devotion to contemplation, are wont to retire into the solitudes of the woods and groves hereabouts.  They are not, however, renowned for their hospitality.</preset>  
+Also here: Universalist Kurtus who is blurred by hazy afterimages, Inquisitor Eylise who is emanating a bright holy aura, Quilsilgas and Druid Ytterby.
+Obvious paths: <d>north</d>, <d>south</d>.
+<compass><dir value="n"/><dir value="s"/></compass><pushStream id="percWindow"/>Clear Vision  (3 roisaen)
+Shadowling  (63 roisaen)
+Aura Sight  (4 roisaen)
+<popStream/><castTime value='1791334629'/>
+<prompt time="1791334629">&gt;</prompt>
+Chieftain Jazriel just arrived.
+<component id='room players'>Also here: Chieftain Jazriel.</component>
+<prompt time="1791334632">&gt;</prompt>
+Chieftain Jazriel runs north.
+<component id='room players'></component>
+<prompt time="1791334632">&gt;</prompt>
+<output class="mono"/>
+
+Your role-playing award information:
+Current RP points:                  1584
+Total RP points received:           10405
+RP points received from players:    9346
+RP points given to other players:   8241
+
+   ---Active RPA---
+   None.
+<output class=""/>
+<prompt time="1791334632">&gt;</prompt>
+You feel fully rested.
+<prompt time="1791334633">&gt;</prompt>
+<clearStream id="percWindow"/>
+<pushStream id="percWindow"/>Clear Vision  (3 roisaen)
+Shadowling  (63 roisaen)
+Aura Sight  (4 roisaen)
+<popStream/><prompt time="1791334633">&gt;</prompt>
+<output class="mono"/>
+
+Your role-playing award information:
+Current RP points:                  1584
+Total RP points received:           10405
+RP points received from players:    9346
+RP points given to other players:   8241
+
+   ---Active RPA---
+   None.
+<output class=""/>
+<prompt time="1791334634">&gt;</prompt>
+<prompt time="1791334639">&gt;</prompt>
