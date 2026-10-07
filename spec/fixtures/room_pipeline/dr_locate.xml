@@ -1,0 +1,7 @@
+<spell>None</spell>You gesture.
+<resource picture="0"/><style id="roomName" />[Willow Walk, Willow Tree] (84081)
+<style id=""/><preset id='roomDesc'>The massive weeping willow tree for which the garden is named spreads its trailing branches toward the ground, veiling the area and swaying with every breath of passing breeze to both reveal and conceal.  Occasionally, the leaves part enough to allow a glimpse to the south of the Sorrow Garden in which the Empath Guild Leader stands, and the tall wrought-iron fence running between there and here.</preset>  You also see a pine-trimmed home with an Elven ivy trellis along the path to the door, a white oak-shingled cottage with a weeping willow tree in the front yard, an ivy-covered hall with a crumbling brick chimney visible over the roof, a cozy blue stucco abode and a dark cedar frame house.
+Also here: Quilsilgas.
+Obvious paths: <d>north</d>, <d>east</d>, <d>west</d>.
+<compass><dir value="n"/><dir value="e"/><dir value="w"/></compass><castTime value='1791331818'/>
+<prompt time="1791331818">&gt;</prompt>

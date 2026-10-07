@@ -177,6 +177,26 @@ class StreamRouter
     end
   end
 
+  # Send a chunk of main text as +stream+'s, as if that stream were open:
+  # to its window, or to main as its fallback. The room assembler's view
+  # of another room goes to the familiar stream this way. Its leading
+  # space is dropped, as for room text captured from main (the "  You
+  # also see" left after a roomDesc).
+  #
+  # @param stream [String] the stream the text is shown as
+  # @param text [String] game text, tags removed and entities unescaped
+  # @param colors [Array<Hash>] its color regions
+  # @param marks [Array<Hash>] its room marks
+  # @return [void]
+  def route_to(stream, text, colors, marks:)
+    styled = StyledText.new(text, colors).lstrip
+    saved = @current_stream
+    @current_stream = stream
+    route(styled.text, styled.runs, marks: marks)
+  ensure
+    @current_stream = saved
+  end
+
   private
 
   # Record a pushStream as open, dropping the oldest entry beyond

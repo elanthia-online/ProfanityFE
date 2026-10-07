@@ -664,6 +664,13 @@ some other stuff.") is replaced by the full list from the lines. When Lich
 adds a room id to the room name (`;display roomid title`), the title row
 shows it.
 
+A view of another room, such as the one a Moon Mage's Locate shows, goes to
+the `familiar` window (or to the story window when the layout has none). It
+doesn't change the room window, the terminal title or the room players
+indicator. Profanity tells such a view apart by the game's room id in the
+room name, so this needs room ids on (`FLAG SHOWROOMID ON` in DragonRealms).
+Without them, the view looks like a LOOK and fills the room window.
+
 By default, room data is echoed to both the room window and the story window.
 Pass `--room-window-only` to suppress room data from the story window.
 
