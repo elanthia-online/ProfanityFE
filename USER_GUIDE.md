@@ -667,9 +667,12 @@ shows it.
 A view of another room, such as the one a Moon Mage's Locate shows, goes to
 the `familiar` window (or to the story window when the layout has none). It
 doesn't change the room window, the terminal title or the room players
-indicator. Profanity tells such a view apart by the game's room id in the
-room name, so this needs room ids on (`FLAG SHOWROOMID ON` in DragonRealms).
-Without them, the view looks like a LOOK and fills the room window.
+indicator. Profanity tells such a view apart by its room id when the room
+name shows the game's (`FLAG SHOWROOMID ON` in DragonRealms), and otherwise by
+its name: it names a room other than the one you last moved into. Lich's
+`;display` room ids in the room name don't get in the way. A view of a room
+with the same name as yours, or one before your first move since Profanity
+started, looks like a LOOK and fills the room window.
 
 By default, room data is echoed to both the room window and the story window.
 Pass `--room-window-only` to suppress room data from the story window.

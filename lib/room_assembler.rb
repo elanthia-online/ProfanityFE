@@ -103,9 +103,16 @@ class RoomAssembler
     @title_row = nil
     # The text of the last room subtitle (see #subtitle); nil before any
     @subtitle_row = nil
+    # The room name of the last room subtitle, for #remote_title?; nil
+    # before any, and after one with an empty name
+    @subtitle_name = nil
     # The room id of the last <nav rm='NNN'/> (see #nav); nil before any,
     # and after a <nav/> without one
     @nav_room = nil
+    # Whether the game has sent a nav tag (see #nav), and whether it has
+    # in this burst, for #remote_title?
+    @nav_seen = false
+    @nav_in_burst = false
     # Whether the inline lines being read are a view of another room, from
     # its roomName to its exits line (see #remote_title?)
     @remote_view = false
@@ -121,6 +128,8 @@ class RoomAssembler
   # @return [void]
   def nav(room_id)
     @nav_room = room_id
+    @nav_seen = true
+    @nav_in_burst = true
   end
 
   # A prompt arrived: it ends the burst when its line ends (see
@@ -143,7 +152,10 @@ class RoomAssembler
   #
   # @return [void]
   def end_line
-    @remote_view = false if @next_burst
+    if @next_burst
+      @remote_view = false
+      @nav_in_burst = false
+    end
     @delivered = @next_burst if @next_burst
     @next_burst = nil
   end
@@ -174,6 +186,7 @@ class RoomAssembler
   def subtitle(text)
     new_room = !text.empty? && text != @subtitle_row && text != @title_row
     @subtitle_row = text
+    @subtitle_name = RoomTitle.parse(text)&.name
     @remote_view = false
     @delivered = { title: text }
     @next_burst = { title: text } if @next_burst
@@ -474,20 +487,43 @@ class RoomAssembler
   end
 
   # Whether +text+, the roomName a title capture takes, names a room other
-  # than the player's: its room id isn't the last <nav rm='NNN'/>'s (see
-  # #nav), and no room subtitle came in this burst (a move sends its nav
-  # tag and subtitle before its roomName; a view of another room, such as
-  # DR's Locate, sends neither). Without the game's room ids in the
-  # roomName (DR's flag showroomid off, Lich's ;display uid dropping them)
-  # or before any nav tag with an id, no view is remote.
+  # than the player's. Only in a session with nav tags, where every room
+  # change sends one, before its subtitle and roomName: a roomName in a
+  # burst with neither is no room change, but a LOOK or a view of another
+  # room, such as DR's Locate. Without nav tags a room change can't be
+  # told from such a view, so no view is remote.
+  #
+  # With the game's room id in the roomName and a nav tag with an id seen,
+  # the ids decide. Otherwise the names do: the roomName's name isn't the
+  # last subtitle's (see #same_room_name?). That is the only test left
+  # when Lich rewrites the roomName: its ;display uid drops the game's id
+  # and adds the ids of the room the player is in, whatever room the line
+  # names. Rooms of the same name look alike to it, and before any
+  # subtitle no view is remote.
   #
   # @param text [String] non-empty game text on main
   # @return [Boolean]
   def remote_title?(text)
-    return false unless @capture_mode == :title && @nav_room && !@delivered.key?(:title)
+    return false unless @capture_mode == :title && @nav_seen
+    return false if @nav_in_burst || @delivered.key?(:title)
+    return false unless (title = RoomTitle.parse(text))
 
-    id = RoomTitle.parse(text)&.suffix&.match(ROOM_ID_SUFFIX)&.[](:id)
-    !id.nil? && id != @nav_room
+    id = title.suffix.match(ROOM_ID_SUFFIX)&.[](:id)
+    return id != @nav_room if id && @nav_room
+
+    !@subtitle_name.nil? && !same_room_name?(title.name, @subtitle_name)
+  end
+
+  # Whether a roomName's name names the room +room_name+ names: the same
+  # name, or that name with what Lich's ;display roomid title adds inside
+  # the brackets after it (+"Town Square - 1234 - (u230008)"+ for
+  # +"Town Square"+).
+  #
+  # @param name [String] the roomName's name (see RoomTitle#name)
+  # @param room_name [String] the room's name
+  # @return [Boolean]
+  def same_room_name?(name, room_name)
+    name == room_name || name.start_with?("#{room_name} - ")
   end
 
   # Read a line of a view of another room (see #remote_title?): it ends
