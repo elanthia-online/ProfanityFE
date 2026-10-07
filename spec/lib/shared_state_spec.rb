@@ -95,13 +95,17 @@ RSpec.describe SharedState do
 
   describe '#update_terminal_title' do
     let(:term) { 'xterm-256color' }
+    let(:tmux) { nil }
+    let(:sty) { nil }
 
     # Every example runs with file descriptor 1 redirected to a file, so
     # title bytes never reach the rspec output and tty_bytes sees whatever
     # was written, whether by this process or by a child that inherited it.
     around do |example|
-      original_term = ENV.fetch('TERM', nil)
+      original_env = ENV.to_h.slice('TERM', 'TMUX', 'STY')
       ENV['TERM'] = term
+      ENV['TMUX'] = tmux
+      ENV['STY'] = sty
       saved_stdout = $stdout.dup
       Tempfile.create('tty') do |tty|
         @tty = tty
@@ -112,7 +116,7 @@ RSpec.describe SharedState do
       end
     ensure
       saved_stdout&.close
-      ENV['TERM'] = original_term
+      %w[TERM TMUX STY].each { |key| ENV[key] = original_env[key] }
     end
 
     # Run the title update and return the bytes it wrote to the terminal.
@@ -139,8 +143,18 @@ RSpec.describe SharedState do
       expect(tty_bytes).to eq "\e]0;Mahtra [H]\a"
     end
 
-    context 'when TERM is a screen session' do
+    context 'when TERM says screen but no screen/tmux session is running' do
+      let(:term) { 'screen-256color' }
+
+      it 'emits no window-name sequence for the outer terminal to print' do
+        state.prompt_text = 'H>'
+        expect(tty_bytes).to eq "\e]0;Mahtra [H]\a"
+      end
+    end
+
+    context 'when running inside screen' do
       let(:term) { 'screen.xterm-256color' }
+      let(:sty) { '12345.pts-0.host' }
 
       it 'writes the real ESC k name ESC \\ window-name sequence' do
         state.prompt_text = 'H>'
@@ -148,8 +162,9 @@ RSpec.describe SharedState do
       end
     end
 
-    context 'when TERM is a tmux session' do
+    context 'when running inside tmux' do
       let(:term) { 'tmux-256color' }
+      let(:tmux) { '/tmp/tmux-1000/default,1234,0' }
 
       it 'writes the real ESC k name ESC \\ window-name sequence' do
         state.prompt_text = 'H>'
@@ -159,6 +174,7 @@ RSpec.describe SharedState do
 
     context 'when the title text contains terminal control characters' do
       let(:term) { 'screen' }
+      let(:sty) { '12345.pts-0.host' }
 
       it 'strips them so the title cannot end or inject a sequence' do
         state.char_name = "Mah\e\\\etra\a"
