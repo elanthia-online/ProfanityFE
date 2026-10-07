@@ -166,7 +166,7 @@ class SharedState
   # changed since the last call (dedup, matching EO behavior).
   #
   # Sets the terminal tab/window title with an OSC 0 escape sequence and,
-  # when +$TERM+ indicates a screen/tmux session, the window name with the
+  # when +$TMUX+ or +$STY+ shows a real tmux/screen session, the window name with the
   # +ESC k name ESC \+ sequence. Both are written straight to +$stdout+
   # in one flushed write; callers invoke this after curses has flushed its
   # own output (see GameTextProcessor). Control characters and backslashes
@@ -187,7 +187,7 @@ class SharedState
 
     Process.setproctitle(title_text(title))
     sequence = +"\e]0;#{title_text(title)}\a"
-    sequence << "\ek#{title_text(@char_name)}\e\\" if ENV['TERM']&.match?(/^screen|^tmux/)
+    sequence << "\ek#{title_text(@char_name)}\e\\" if ENV['TMUX'] || ENV['STY']
     $stdout.write(sequence)
     $stdout.flush
     # Clear dirty/dedup state only after the write succeeds, so a failed

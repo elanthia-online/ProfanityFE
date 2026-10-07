@@ -2023,6 +2023,14 @@ This is especially useful when running multiple characters in tmux or GNU
 Screen -- each pane/window shows which character is active. The title
 updates dynamically on every prompt and room change.
 
+The screen/tmux window name is only set when ProfanityFE itself runs
+inside screen or tmux (`$STY` or `$TMUX` is set). `$TERM` alone isn't
+trusted: a `TERM=screen-256color` exported with no multiplexer running
+would make terminals such as MobaXterm print the name as text. If you run
+screen/tmux locally and SSH to another host to start ProfanityFE, those
+variables don't cross the SSH connection, so the window name isn't set
+there; the terminal title still is.
+
 Disable this behavior with the `--no-status` flag if your terminal does not
 support title updates or you find it distracting.
 
