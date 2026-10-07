@@ -112,6 +112,10 @@ module TagHandlers
       @room.prompt_seen
     end
 
+    # <nav rm='NNN'/> names the player's room (see RoomAssembler#nav).
+    # It has no handler: below, it is still an unrecognized tag.
+    @room.nav(XmlTokenizer.attrs(xml)['rm']) if name == 'nav' && !closing
+
     table = closing ? CLOSING_TAG_DISPATCH : TAG_DISPATCH
     handler = table[name]
 

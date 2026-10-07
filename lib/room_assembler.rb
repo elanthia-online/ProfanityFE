@@ -34,9 +34,21 @@ require_relative 'games'
 # of Lich's lines asks only when some are shown, so a commit that sends
 # nothing new doesn't draw the window again. The window manager is only
 # asked whether the layout has a RoomWindow (see #room_window?).
+#
+# An inline view of another room (DR's Locate shows one on main, as a LOOK
+# would) is not the player's room: it is handed back as remote text (see
+# #process_room_data), and changes neither the room window nor the
+# terminal title.
 class RoomAssembler
   # The part a room field shows when nothing was staged for it: no text.
   EMPTY_PART = RoomPart.new(text: '', links: [], creatures: []).freeze
+
+  # The inline line that ends a view: "Obvious paths:" or "Obvious exits:".
+  EXITS_LINE = /^Obvious (?:paths|exits):/
+
+  # A title suffix that is the game's room id (DR's showroomid, GemStone's
+  # ShowRoomID; GemStone's death room's is negative): +" (230008)"+.
+  ROOM_ID_SUFFIX = /\A \((?<id>-?\d+)\)\z/
 
   # What styled text is being captured for the room: +:title+ (roomName),
   # +:desc+ (roomDesc) or nil. See {#start_capture}: the next text
@@ -91,6 +103,24 @@ class RoomAssembler
     @title_row = nil
     # The text of the last room subtitle (see #subtitle); nil before any
     @subtitle_row = nil
+    # The room id of the last <nav rm='NNN'/> (see #nav); nil before any,
+    # and after a <nav/> without one
+    @nav_room = nil
+    # Whether the inline lines being read are a view of another room, from
+    # its roomName to its exits line (see #remote_title?)
+    @remote_view = false
+  end
+
+  # The game named the room the player is in: <nav rm='NNN'/>. Both games
+  # send it before the room subtitle and components of every room change
+  # (DR with +rm+ left out for a room without an id, such as The Heavens);
+  # a LOOK, or DR's Locate, sends none. Its id is the one the roomName
+  # shows with the game's room ids on (see #remote_title?).
+  #
+  # @param room_id [String, nil] the tag's +rm+ value; nil when it has none
+  # @return [void]
+  def nav(room_id)
+    @nav_room = room_id
   end
 
   # A prompt arrived: it ends the burst when its line ends (see
@@ -108,10 +138,12 @@ class RoomAssembler
 
   # A server line has been parsed and its text handed off: if a prompt was
   # on it, its burst ends, and only the fields delivered after the prompt
-  # stay owned (see #prompt_seen).
+  # stay owned (see #prompt_seen). So does a view of another room that
+  # never sent its exits line.
   #
   # @return [void]
   def end_line
+    @remote_view = false if @next_burst
     @delivered = @next_burst if @next_burst
     @next_burst = nil
   end
@@ -142,6 +174,7 @@ class RoomAssembler
   def subtitle(text)
     new_room = !text.empty? && text != @subtitle_row && text != @title_row
     @subtitle_row = text
+    @remote_view = false
     @delivered = { title: text }
     @next_burst = { title: text } if @next_burst
     emit(:title, text, render: false)
@@ -207,11 +240,13 @@ class RoomAssembler
   # @param stream [String, nil] the stream the text is routed to
   # @param marks [Array<Hash>] the room marks for +text+ (see
   #   SpanTracker::ROOM_MARKS): its links and creatures
-  # @return [Boolean] true if this line was consumed by the RoomWindow
-  #   (caller should not route it to the main window).  Returns false
-  #   when title/desc text is captured for the terminal title but the
-  #   template has no RoomWindow — the text must still flow to the
-  #   main text window for display.
+  # @return [Boolean, Symbol] true if this line was consumed by the
+  #   RoomWindow (caller should not route it to the main window).  Returns
+  #   false when title/desc text is captured for the terminal title but
+  #   the template has no RoomWindow — the text must still flow to the
+  #   main text window for display. Returns +:remote+ for the text of a
+  #   view of another room (see #remote_title?), with or without a
+  #   RoomWindow: the caller shows it as the familiar stream's.
   def process_room_data(text, stream, marks)
     return false if text.empty?
 
@@ -228,6 +263,8 @@ class RoomAssembler
       disarm_capture
       return false
     end
+
+    return read_remote_text(text) if @remote_view || remote_title?(text)
 
     room_data_captured = take_captured_text(text, marks)
 
@@ -253,7 +290,7 @@ class RoomAssembler
     end
 
     # Detect "Obvious paths:" or "Obvious exits:" for exits (game-native)
-    if text =~ /^Obvious (?:paths|exits):/
+    if text =~ EXITS_LINE
       @view[:exits] = RoomPart.from_chunk(text, marks)
       room_data_captured = true
       # The exits line ends an inline room: commit it (drawn at the next
@@ -434,6 +471,35 @@ class RoomAssembler
   # @return [Boolean]
   def room_window?
     !@wm.room[Streams::ROOM].nil?
+  end
+
+  # Whether +text+, the roomName a title capture takes, names a room other
+  # than the player's: its room id isn't the last <nav rm='NNN'/>'s (see
+  # #nav), and no room subtitle came in this burst (a move sends its nav
+  # tag and subtitle before its roomName; a view of another room, such as
+  # DR's Locate, sends neither). Without the game's room ids in the
+  # roomName (DR's flag showroomid off, Lich's ;display uid dropping them)
+  # or before any nav tag with an id, no view is remote.
+  #
+  # @param text [String] non-empty game text on main
+  # @return [Boolean]
+  def remote_title?(text)
+    return false unless @capture_mode == :title && @nav_room && !@delivered.key?(:title)
+
+    id = RoomTitle.parse(text)&.suffix&.match(ROOM_ID_SUFFIX)&.[](:id)
+    !id.nil? && id != @nav_room
+  end
+
+  # Read a line of a view of another room (see #remote_title?): it ends
+  # any capture, takes nothing for the room window, and its exits line
+  # ends the view.
+  #
+  # @param text [String] non-empty game text on main
+  # @return [Symbol] +:remote+
+  def read_remote_text(text)
+    disarm_capture
+    @remote_view = !text.match?(EXITS_LINE)
+    :remote
   end
 
   # Take text as the room title or description if a capture is open (see
