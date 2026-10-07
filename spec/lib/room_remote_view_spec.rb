@@ -182,21 +182,101 @@ RSpec.describe 'A view of another room (DR Locate)' do
       expect(texts_on('familiar').first).to eq '[Willow Walk, Willow Tree - 1234] (84081)'
     end
 
-    # Without room ids nothing tells a view of another room from a LOOK:
-    # it is read as the player's room, as before.
-    it "takes a view without the game's room id as the player's room" do
+    # Without room ids the names decide: the view names a room other than
+    # the last subtitle's.
+    it "tells a view without the game's room id apart by its name" do
       plain_locate = locate.map { |line| line.sub(' (84081)', '') }
-      receive_from_server(*kweld_arrival, *plain_locate)
+      receive_from_server(*kweld_arrival)
+      kweld_rows = room_rows
+
+      receive_from_server(*plain_locate)
+
+      expect(room_rows).to eq kweld_rows
+      expect(texts_on('familiar').first).to eq '[Willow Walk, Willow Tree]'
+    end
+
+    it "takes a view without the game's room id of a room named like the player's as the player's room" do
+      same_name_locate = locate.map { |line| line.sub('[Willow Walk, Willow Tree] (84081)', "[Kweld Andu, Pathway's End]") }
+      receive_from_server(*kweld_arrival, *same_name_locate)
+
+      expect(texts_on('familiar')).to be_empty
+      expect(room_rows.first).to eq "[Kweld Andu, Pathway's End]"
+    end
+
+    it "takes a room that comes with a nav tag but no subtitle as the player's room" do
+      plain_locate = locate.map { |line| line.sub(' (84081)', '') }
+      receive_from_server(*kweld_arrival, 'You go east.', "<nav rm='84081'/>", *plain_locate.drop(1))
 
       expect(texts_on('familiar')).to be_empty
       expect(room_rows.first).to eq '[Willow Walk, Willow Tree]'
     end
 
-    it 'takes a view before any nav tag as the player\'s room' do
+    it 'takes a view before any nav tag or subtitle as the player\'s room' do
       receive_from_server(*locate)
 
       expect(texts_on('familiar')).to be_empty
       expect(room_rows.first).to eq '[Willow Walk, Willow Tree] (84081)'
+    end
+  end
+
+  # Lich's ;display uid with ;display roomid title (Fidon's settings)
+  # rewrites every roomName before the front-end gets it (lich-5 games.rb,
+  # DragonRealms#modify_room_display): it drops the game's " (NNN)" and
+  # adds " - <Lich id> - (u<nav id>)" inside the brackets, the ids of the
+  # room the player is in (Map.current, XMLData.room_id), whatever room
+  # the line names. The room subtitle reaches Profanity as the game sent
+  # it. Fidon's log of 13:38 (dr_locate_after_move.xml): north to the
+  # Hermit's Shacks, south to the Burial Ground, then a Locate of Ytterby,
+  # in the Hermit's Shacks.
+  context "when Lich's ;display uid rewrites the roomName" do
+    before { load_layout(main_window, room_window, familiar_window) }
+
+    # Lich ids made up for the two rooms
+    let(:lich_ids) { { '230008' => '7380', '230007' => '7379' } }
+
+    # The fixture's lines as Lich sends them on with those settings
+    def lich_rewritten(lines)
+      nav = nil
+      lines.map do |line|
+        nav = line[/<nav rm='(\d+)'/, 1] || nav
+        next line unless line.include?('<style id="roomName" />')
+
+        line.sub(/\] \((?:\d+|\*\*)\)/, ']').sub(']') { " - #{lich_ids.fetch(nav)} - (u#{nav})]" }
+      end
+    end
+
+    def after_move = lich_rewritten(File.readlines(
+                                      File.expand_path('../fixtures/room_pipeline/dr_locate_after_move.xml', __dir__), chomp: true
+                                    ))
+
+    it 'shows the Locate view in the familiar window, though Lich gave it the ids of the room the player is in' do
+      receive_from_server(*after_move)
+
+      expect(room_rows.first).to eq '[Bosque Deriel, Burial Ground - 7379 - (u230007)]'
+      expect(room_rows.last).to eq 'Obvious paths: north, southeast.'
+      expect(texts_on('familiar')).to match [
+        "[Bosque Deriel, Hermit's Shacks - 7379 - (u230007)]",
+        a_string_starting_with('Here on the route between the sacred sites of the Observatory'),
+        "Also here: Exsanguinator Nelis, Death's Messenger Gnarta, Quilsilgas and Druid Ytterby.",
+        'Obvious paths: north, south.'
+      ]
+      expect(state.room_title).to eq 'Bosque Deriel, Burial Ground - 7379 - (u230007)'
+    end
+
+    it "takes a LOOK in the player's room, Lich's ids in its name, as the player's room" do
+      look = lich_rewritten(["<nav rm='230007'/>",
+                             '<resource picture="0"/><style id="roomName" />[Bosque Deriel, Burial Ground] (230007)',
+                             %(<style id=""/><preset id='roomDesc'>You come upon an Elven burial ground.</preset>),
+                             'Obvious paths: <d>north</d>, <d>southeast</d>.',
+                             '<prompt time="1791333520">&gt;</prompt>'])
+      receive_from_server(*after_move)
+      shown.clear
+
+      receive_from_server(*look.drop(1))
+
+      expect(texts_on('familiar')).to be_empty
+      expect(room_rows.first).to eq '[Bosque Deriel, Burial Ground - 7379 - (u230007)]'
+      expect(room_rows).to include('You come upon an Elven burial ground.')
     end
   end
 
