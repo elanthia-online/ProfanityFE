@@ -110,7 +110,8 @@ RSpec.describe 'Shipped templates on small terminals' do
     'default'  => [[24, 80], [25, 80], [30, 100], [40, 120], [50, 160], [57, 157], [57, 200], [63, 130]],
     'mahtra'   => [[24, 80], [30, 100], [40, 120], [57, 213]],
     'tysong'   => [[24, 80], [25, 80], [30, 100], [36, 120], [40, 120], [45, 160], [52, 233], [55, 200], [63, 213]],
-    'original' => [[20, 80], [24, 80], [25, 80], [28, 80], [28, 200]]
+    'original' => [[20, 80], [24, 80], [25, 80], [28, 80], [28, 200]],
+    'eleazzar' => [[24, 80], [30, 100], [40, 120], [50, 189], [63, 175]]
   }
 
   small_sizes.each do |name, sizes|
@@ -120,6 +121,11 @@ RSpec.describe 'Shipped templates on small terminals' do
         expect(problems).to eq []
       end
     end
+  end
+
+  it 'covers every shipped template' do
+    shipped = Dir[File.expand_path('../../templates/*.xml', __dir__)].map { |path| File.basename(path, '.xml') }
+    expect(small_sizes.keys).to match_array shipped
   end
 
   # The known cases: tysong's main window (37 rows from row 14) covered the
@@ -189,6 +195,16 @@ RSpec.describe 'Shipped templates on small terminals' do
       expect(rect_of(wm.indicator['leftEye'])).to eq [6, 1, 1, 1]
       expect(rect_of(wm.indicator['leftLeg'])).to eq [10, 1, 2, 2]
     end
+
+    it 'eleazzar.xml at 50x190 (its design size)' do
+      load_template('eleazzar', 50, 190)
+      expect(problems).to eq []
+      expect(rect_of(wm.stream['main'])).to eq [12, 45, 36, 114]
+      expect(rect_of(wm.room['room'])).to eq [1, 45, 10, 114]
+      expect(rect_of(wm.command_window)).to eq [49, 46, 1, 112]
+      expect(rect_of(wm.progress['buff0'])).to eq [1, 160, 1, 30]
+      expect(rect_of(wm.progress['spell29'])).to eq [47, 160, 1, 30]
+    end
   end
 
   # Boundaries: one row or column less than the fixed number needs.
@@ -215,6 +231,15 @@ RSpec.describe 'Shipped templates on small terminals' do
       wm2.load_layout('default')
       logons = wm2.stream['logons']
       expect([logons.begy, logons.maxy]).to eq [22, 7]
+    end
+
+    it "ends eleazzar.xml's buff panel at the right edge from 189 columns down, and drops it at 160" do
+      load_template('eleazzar', 50, 189)
+      expect(rect_of(wm.progress['buff0'])).to eq [1, 160, 1, 29]
+      wm2 = WindowManager.new
+      terminal(50, 160)
+      wm2.load_layout('default')
+      expect(wm2.progress['buff0']).to be_nil
     end
   end
 
