@@ -74,7 +74,7 @@ class Application
                    help: ['.layout <name>     Switch to a named window layout'],
                    handler: proc { |layout| apply_layout(layout) }),
     DotCommand.new(name: 'resize',
-                   help: ['.resize            Recalculate window sizes for terminal'],
+                   help: ['.resize            Re-fit windows now (automatic on resize)'],
                    handler: proc { @key_action['resize'].call }),
     DotCommand.new(name: 'tab',
                    args: :optional,

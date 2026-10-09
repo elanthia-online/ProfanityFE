@@ -494,7 +494,7 @@ RSpec.describe 'Dot-commands typed on the command line' do
         '.resync            Reset server time offset for timers',
         '.reload            Hot-reload settings XML file',
         '.layout <name>     Switch to a named window layout',
-        '.resize            Recalculate window sizes for terminal',
+        '.resize            Re-fit windows now (automatic on resize)',
         '.tab               List tabs (active marked with *)',
         '.tab <N|name>      Switch tab by number or name',
         '.arrow             Cycle arrow keys: history/page/line',
