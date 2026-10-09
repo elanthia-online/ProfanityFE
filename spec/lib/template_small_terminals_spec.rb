@@ -107,9 +107,10 @@ RSpec.describe 'Shipped templates on small terminals' do
   # one it fits unchanged (default/mahtra 58x158, tysong 53x234, original
   # 29 rows, eleazzar 190 columns).
   small_sizes = {
-    'default' => [[24, 80], [25, 80], [30, 100], [40, 120], [50, 160], [57, 157], [57, 200], [63, 130]],
-    'mahtra'  => [[24, 80], [30, 100], [40, 120], [57, 213]],
-    'tysong'  => [[24, 80], [25, 80], [30, 100], [36, 120], [40, 120], [45, 160], [52, 233], [55, 200], [63, 213]]
+    'default'  => [[24, 80], [25, 80], [30, 100], [40, 120], [50, 160], [57, 157], [57, 200], [63, 130]],
+    'mahtra'   => [[24, 80], [30, 100], [40, 120], [57, 213]],
+    'tysong'   => [[24, 80], [25, 80], [30, 100], [36, 120], [40, 120], [45, 160], [52, 233], [55, 200], [63, 213]],
+    'original' => [[20, 80], [24, 80], [25, 80], [28, 80], [28, 200]]
   }
 
   small_sizes.each do |name, sizes|
@@ -181,6 +182,13 @@ RSpec.describe 'Shipped templates on small terminals' do
         expect(rect_of(wm.command_window)).to eq [61, 1, 1, 104]
       end
     end
+
+    it 'original.xml at 29x80, the smallest size its sidebar fits under the chat strip' do
+      load_template('original', 29, 80)
+      expect(problems).to eq []
+      expect(rect_of(wm.indicator['leftEye'])).to eq [6, 1, 1, 1]
+      expect(rect_of(wm.indicator['leftLeg'])).to eq [10, 1, 2, 2]
+    end
   end
 
   # Boundaries: one row or column less than the fixed number needs.
@@ -191,6 +199,12 @@ RSpec.describe 'Shipped templates on small terminals' do
       terminal(57, 200)
       wm.resize(CommandBuffer.new)
       expect(rect_of(wm.stream['familiar'])).to eq [39, 133, 16, 66]
+    end
+
+    it "builds original.xml's top sidebar row from 29 rows, not at 28" do
+      load_template('original', 28, 80)
+      expect(wm.indicator['leftEye']).to be_nil
+      expect(wm.indicator['poisoned']).not_to be_nil
     end
 
     it "keeps tysong.xml's logon window whole at 53 rows and shortens it at 52" do
