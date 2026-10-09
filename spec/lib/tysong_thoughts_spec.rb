@@ -9,7 +9,8 @@
 # SettingsLoader, and its own 'default' layout is built on the virtual
 # screen. At the specs' 80x24 terminal that layout's lnet/thoughts/voln
 # window (left='81') is off-screen and not built, so thoughts fall back to
-# main, as they do for a GemStone player on an 80-column terminal. The
+# main, as they do for a GemStone player on an 80-column terminal. Main is
+# 60 columns wide there (min(140, cols-20)), so long lines wrap. The
 # lines are real GemStone IV server lines (GSIV-Ilten, 2026-10-01), driven
 # through the real server loop.
 
@@ -56,6 +57,17 @@ RSpec.describe 'tysong.xml thoughts' do
      '<a exist="600164029" noun="spikestar">golvern spikestar</a> as the violet flames surrounding it gain new life.']
   end
   let(:help_text) { '[Help] Jezrien: "Maybe you should then."' }
+
+  # The [General] thought and the main line as 80 columns wrap them: a
+  # continuation row starts with the 2-space wrap indent.
+  let(:general_rows) do
+    ['[General] Jazmeena thinks, "Why would I want to be a',
+     '  citizen of Zul Logoth?  It seems so  isolated."']
+  end
+  let(:main_rows) do
+    ["A blast of heat explodes from Ajerain's golvern spikestar",
+     '  as the violet flames surrounding it gain new life.']
+  end
   let(:main_text) do
     "A blast of heat explodes from Ajerain's golvern spikestar as the violet flames surrounding it gain new life."
   end
@@ -112,10 +124,16 @@ RSpec.describe 'tysong.xml thoughts' do
 
       receive_from_server(general)
 
-      expect(shown_in('main')).to eq [general_text]
-      expect(color_runs('main', general_text)).to eq [
+      expect(general_rows.join.squeeze(' ')).to eq general_text.squeeze(' ')
+      expect(shown_in('main')).to eq general_rows
+      expect(color_runs('main', general_rows[0])).to eq [
         [[channel_fg, thoughts_bg], '[General]'.length],
-        [[nil, thoughts_bg], general_text.length - '[General]'.length]
+        [[nil, thoughts_bg], general_rows[0].length - '[General]'.length]
+      ]
+      # The wrap indent isn't part of the line, so it isn't colored.
+      expect(color_runs('main', general_rows[1])).to eq [
+        [[nil, nil], 2],
+        [[nil, thoughts_bg], general_rows[1].length - 2]
       ]
     end
 
@@ -124,13 +142,14 @@ RSpec.describe 'tysong.xml thoughts' do
 
       receive_from_server(general, help_then_main)
 
-      expect(shown_in('main')).to eq [general_text, help_text, 's>', main_text]
+      expect(shown_in('main')).to eq [*general_rows, help_text, 's>', *main_rows]
       expect(color_runs('main', help_text)).to eq [
         [[channel_fg, thoughts_bg], '[Help]'.length],
         [[nil, thoughts_bg], help_text.length - '[Help]'.length]
       ]
       expect(color_runs('main', 's>')).to eq [[[prompt_fg, nil], 2]]
-      expect(color_runs('main', main_text)).to eq [[[nil, nil], main_text.length]]
+      expect(main_rows.join.squeeze(' ')).to eq main_text.squeeze(' ')
+      main_rows.each { |row| expect(color_runs('main', row)).to eq [[[nil, nil], row.length]] }
     end
 
     it 'extends the background over the --speech-ts timestamp' do
