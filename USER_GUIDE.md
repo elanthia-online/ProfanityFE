@@ -1441,9 +1441,10 @@ window starts empty.
 
 ### .resize
 
-Manually recalculate all window positions and sizes for the current terminal
-dimensions. Use this when automatic resize detection does not fire (for
-example, inside GNU Screen or tmux).
+Windows re-fit to the terminal automatically whenever its size changes; no
+command or binding is needed. `.resize` re-fits them by hand, as a fallback:
+for a terminal or multiplexer that doesn't report a size change, or a settings
+file that binds the `resize` key to something other than `action='resize'`.
 
 A resize, automatic or by `.resize`, re-wraps the text already in every text
 and tabbed window (every tab) to the new width, so widening or narrowing the
@@ -2057,7 +2058,8 @@ support title updates or you find it distracting.
   `xterm-256color` or `screen-256color`).
 
 **Windows are misaligned or overlapping:**
-- Run `.resize` to recalculate window positions.
+- Windows re-fit automatically on every terminal resize; `.resize` re-fits
+  them by hand if the terminal didn't report the change.
 - Check that your layout expressions do not produce negative values or
   positions beyond the terminal dimensions.
 
@@ -2070,8 +2072,8 @@ support title updates or you find it distracting.
 - Windows re-fit on the terminal's resize event without any binding. If your
   settings file binds the `resize` key to something other than
   `action='resize'`, that binding runs instead.
-- If automatic resize still does not work (common in GNU Screen or tmux),
-  type `.resize` manually after resizing.
+- If the terminal or multiplexer doesn't report the change, type `.resize`
+  after resizing.
 
 **Countdown timers are wrong:**
 - Type `.resync` to reset the server time offset.
@@ -2112,7 +2114,8 @@ Check the log file if something goes wrong.
 
 When running inside Screen or tmux:
 - Use `--custom-colors=off` if colors look wrong.
-- Bind `.resize` to a key and use it after resizing the outer terminal.
+- Windows re-fit automatically when the outer terminal resizes; if they
+  don't, run `.resize` (or bind it to a key).
 - Some key combinations (especially Alt+key) may be intercepted by the
   multiplexer. Adjust your Screen/tmux configuration or use alternative
   bindings.
