@@ -54,16 +54,25 @@ module Curses
       # @param y [Integer] screen row
       # @param x [Integer] screen column
       # @param cell [Array(String, Integer)] character and attributes
-      def stage(y, x, cell)
-        return if y.negative? || x.negative? || y >= Curses.lines || x >= Curses.cols
+      # @param lines [Integer] the screen's height (read once per window
+      #   by the caller: specs often stub Curses.lines, and a stubbed call
+      #   per cell made every refresh slow)
+      # @param cols [Integer] the screen's width
+      def stage(y, x, cell, lines = Curses.lines, cols = Curses.cols)
+        return if y.negative? || x.negative? || y >= lines || x >= cols
 
-        staged[[y, x]] = cell
+        (staged[y] ||= {})[x] = cell
+        changed_rows[y] = true
       end
 
       # Show the next frame and move the terminal cursor (see
       # TerminalCursor), as Curses.doupdate does.
       def doupdate
-        @shown = staged.dup
+        # Only the rows staged since the last doupdate are copied, so a
+        # frame costs what changed in it, not the whole screen.
+        @shown ||= {}
+        changed_rows.each_key { |y| @shown[y] = staged[y].dup }
+        changed_rows.clear
         TerminalCursor.flush
       end
 
@@ -91,16 +100,23 @@ module Curses
       def reset
         @staged = {}
         @shown = {}
+        @changed_rows = {}
       end
 
       private
 
+      # The next frame: row => { column => cell } for every cell staged.
       def staged
         @staged ||= {}
       end
 
+      # The rows staged since the last doupdate.
+      def changed_rows
+        @changed_rows ||= {}
+      end
+
       def cell(y, x)
-        (@shown || {}).fetch([y, x], Window::BLANK)
+        (@shown || {}).dig(y, x) || Window::BLANK
       end
     end
   end
@@ -436,10 +452,12 @@ module Curses
     # Copy each line's changed range to the terminal's next frame, forget
     # the changes, and stage the cursor.
     def stage_changes
+      lines = Curses.lines
+      cols = Curses.cols
       (@changed || []).each_with_index do |range, y|
         next unless range
 
-        range.each { |x| TerminalScreen.stage(@begy + y, @begx + x, @cells[y][x]) if x < @maxx }
+        range.each { |x| TerminalScreen.stage(@begy + y, @begx + x, @cells[y][x], lines, cols) if x < @maxx }
       end
       @changed = []
       TerminalCursor.stage(@begy + @cury, @begx + @curx)
