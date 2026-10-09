@@ -200,7 +200,8 @@ class WindowManager
 
   # Take the command window a layout asks for. The first layout creates
   # it with the block; later layouts keep that window, which the command
-  # buffer draws into, and only replace its layout.
+  # buffer draws into, and only replace its layout. The window is kept on
+  # top of any window that overlaps it (see {OnTopWindow}).
   #
   # @param layout [WindowLayout] where the layout puts the command line
   # @yield once, only when there is no command window yet
@@ -209,7 +210,7 @@ class WindowManager
   # @return [Curses::Window] the command window
   # @api private
   def install_command_window(layout)
-    @command_window ||= yield
+    @command_window ||= yield.extend(OnTopWindow)
     @command_window_layout = layout
     @command_window
   end
@@ -319,6 +320,42 @@ class WindowManager
     end
     prompt_window.label = @prompt_text
     true
+  end
+end
+
+# Keeps a window on top of the windows that overlap it: whatever the
+# layout says, their text never shows in its cells. The command window is
+# extended with it (see {WindowManager#install_command_window}).
+#
+# ncurses' wnoutrefresh copies to the screen only the lines a window
+# changed since it was last refreshed. Every screen update refreshes the
+# command window last, so that the cursor ends on the command line (see
+# {CommandBuffer#flush_screen}), but an unchanged command window copied
+# nothing: a window that wrote over the command line's cells earlier in
+# the same update (main scrolling under it at 80x24, say) kept them on the
+# screen until a resize redrew the command line. A window extended with
+# this module marks all of its lines changed before each refresh, so it
+# is copied whole and wins every cell it covers. The cost is one copy of
+# the window's cells per refresh; doupdate sends the terminal only the
+# cells that differ from what it already shows, so nothing more is sent
+# where no window overlaps.
+module OnTopWindow
+  # Copy the whole window to the next screen update, not just its changed
+  # lines (see the module docs), and leave the cursor there.
+  #
+  # @return [void]
+  def noutrefresh
+    touch
+    super
+  end
+
+  # Copy the whole window to the screen at once, as {#noutrefresh} does,
+  # then update the terminal.
+  #
+  # @return [void]
+  def refresh
+    touch
+    super
   end
 end
 
