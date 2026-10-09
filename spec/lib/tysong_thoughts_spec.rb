@@ -58,8 +58,8 @@ RSpec.describe 'tysong.xml thoughts' do
   end
   let(:help_text) { '[Help] Jezrien: "Maybe you should then."' }
 
-  # The [General] thought and the main line as 80 columns wrap them: a
-  # continuation row starts with the 2-space wrap indent.
+  # The [General] thought and the main line as main's 60 columns wrap
+  # them: a continuation row starts with the 2-space wrap indent.
   let(:general_rows) do
     ['[General] Jazmeena thinks, "Why would I want to be a',
      '  citizen of Zul Logoth?  It seems so  isolated."']
