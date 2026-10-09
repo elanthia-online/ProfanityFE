@@ -8,11 +8,12 @@
 # WindowManager#load_layout on the virtual screen
 # (spec/support/virtual_screen.rb). On a small terminal no window may run
 # past the bottom or right edge, cover the command line, or share a cell
-# with another window. The one exception is the right column of
-# default.xml and mahtra.xml: its windows are placed and sized in thirds
-# and sixths of the width, which round so that they end up to 4 columns
-# past the right edge on most widths, the design size (200 columns)
-# included; that is left as it is.
+# with another window. That includes the right column of default.xml and
+# mahtra.xml, placed and sized in thirds and sixths of the width: before
+# min(a, b) the rounding took it up to 4 columns past the right edge on
+# most widths, the design size (200 columns) and the user's 213 included,
+# where ncurses then refused to move it on a resize (mvwin), so the room
+# window stayed out of sight after growing to 63x213.
 #
 # Geometry values are written [begy, begx, maxy, maxx]: the window's top
 # row and left column on the screen, then its height and width. A text
@@ -28,10 +29,6 @@ require_relative '../../lib/command_buffer'
 
 RSpec.describe 'Shipped templates on small terminals' do
   subject(:wm) { WindowManager.new }
-
-  # Columns past the right edge the default.xml/mahtra.xml right column's
-  # thirds and sixths reach (cols/6*6 + 4 - cols, at most 4).
-  let(:max_proportional_overshoot) { 4 }
 
   def template(name) = File.expand_path("../../templates/#{name}.xml", __dir__)
 
@@ -68,11 +65,6 @@ RSpec.describe 'Shipped templates on small terminals' do
     t1 < t2 + h2 && t2 < t1 + h1 && l1 < l2 + w2 && l2 < l1 + w1
   end
 
-  # Placed and sized in fractions of the width (the right column).
-  def proportional?(window)
-    window[:layout] && window[:layout].left.include?('cols') && window[:layout].width.include?('cols')
-  end
-
   # Everything wrong with the layout on the current terminal.
   def problems
     lines = Curses.lines
@@ -83,10 +75,7 @@ RSpec.describe 'Shipped templates on small terminals' do
       top, left, height, width = window[:rect]
       found << "#{window[:name]} runs past the bottom" if top + height > lines
       over = left + width - cols
-      next unless over.positive?
-      next if proportional?(window) && over <= max_proportional_overshoot
-
-      found << "#{window[:name]} runs #{over} past the right edge"
+      found << "#{window[:name]} runs #{over} past the right edge" if over.positive?
     end
     others = windows.reject { |window| window[:command] }
     others.each { |window| found << "#{window[:name]} covers the command line" if command && overlap?(window[:rect], command[:rect]) }
@@ -171,9 +160,12 @@ RSpec.describe 'Shipped templates on small terminals' do
     %w[default mahtra].each do |name|
       it "#{name}.xml at 60x200 and at 63x213 (the user's screen pane)" do
         load_template(name, 60, 200)
+        expect(problems).to eq []
         expect(rect_of(wm.stream['death'])).to eq [0, 133, 17, 33]
-        # The spell window leaves the last column of its layout width unused
-        expect(rect_of(wm.stream['percWindow'])).to eq [0, 169, 17, 33 - PercWindow.right_margin]
+        # The spell window leaves the last column of its layout width
+        # unused. Its sixth (33 columns from column 169) used to end 2
+        # past the edge; it ends at the edge now.
+        expect(rect_of(wm.stream['percWindow'])).to eq [0, 169, 17, 31 - PercWindow.right_margin]
         expect(rect_of(wm.room['room'])).to eq [17, 133, 16, 66]
         expect(rect_of(wm.stream['conversation'])).to eq [33, 133, 6, 66]
         expect(rect_of(wm.stream['familiar'])).to eq [39, 133, 17, 66]
@@ -181,11 +173,46 @@ RSpec.describe 'Shipped templates on small terminals' do
         expect(rect_of(wm.indicator['spell'])).to eq [59, 70, 1, 25]
         expect(rect_of(wm.stream['moonWindow'])).to eq [59, 125, 1, 33]
 
+        # A third of 213 columns from column 143 used to end 1 past the
+        # edge; the right column is 70 columns wide now.
         terminal(63, 213)
         wm.resize(CommandBuffer.new)
-        expect(rect_of(wm.room['room'])).to eq [17, 143, 16, 71]
-        expect(rect_of(wm.stream['familiar'])).to eq [39, 143, 17, 71]
+        expect(problems).to eq []
+        expect(rect_of(wm.room['room'])).to eq [17, 143, 16, 70]
+        expect(rect_of(wm.stream['conversation'])).to eq [33, 143, 6, 70]
+        expect(rect_of(wm.stream['familiar'])).to eq [39, 143, 17, 70]
+        expect(rect_of(wm.stream['percWindow'])).to eq [0, 179, 17, 34 - PercWindow.right_margin]
         expect(rect_of(wm.command_window)).to eq [61, 1, 1, 104]
+      end
+
+      # Where the thirds and sixths already end at or before the edge,
+      # min(a, b) leaves them as they were: 202 columns is a width where
+      # both end exactly at it, 203 one where both leave a column spare.
+      it "#{name}.xml keeps the right column's thirds and sixths where they already fit (60x202, 60x203)" do
+        load_template(name, 60, 202)
+        expect(problems).to eq []
+        expect(rect_of(wm.stream['percWindow'])).to eq [0, 169, 17, 33 - PercWindow.right_margin]
+        expect(rect_of(wm.room['room'])).to eq [17, 135, 16, 67]
+
+        terminal(60, 203)
+        wm.resize(CommandBuffer.new)
+        expect(problems).to eq []
+        expect(rect_of(wm.stream['percWindow'])).to eq [0, 169, 17, 33 - PercWindow.right_margin]
+        expect(rect_of(wm.room['room'])).to eq [17, 135, 16, 67]
+      end
+
+      # Every width from 158 to 300 columns, widening one column at a time
+      # as a dragged terminal edge does: each width rounds the thirds and
+      # sixths one of six ways (cols mod 6).
+      it "#{name}.xml ends its right column at or before the right edge at every width from 158 to 300" do
+        load_template(name, 60, 158)
+        overshoots = (158..300).filter_map do |cols|
+          terminal(60, cols)
+          wm.resize(CommandBuffer.new)
+          found = problems
+          "#{cols}: #{found.join('; ')}" unless found.empty?
+        end
+        expect(overshoots).to eq []
       end
     end
 

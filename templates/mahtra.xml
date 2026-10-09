@@ -480,19 +480,22 @@
        above the status bar, the lowest ones not built when no row is
        left for them, and the command line and the bottom row's
        indicators end at the right edge, those starting past it not
-       built. A window not built appears once the terminal grows.
+       built. The right column, sized in thirds and sixths of the
+       width, ends at the right edge where rounding would take it one
+       to four columns past. A window not built appears once the
+       terminal grows.
   -->
   <layout id='default'>
     <!-- Right column: death notices, active spells -->
     <window class='text'       top='0'  left='((cols/3)*2)+1' height='min(17, lines-2)' width='cols/6' value='death'/>
-    <window class='percWindow' top='0'  left='((cols/6)*5)+4' height='min(17, lines-2)' width='cols/6' value='percWindow'/>
+    <window class='percWindow' top='0'  left='((cols/6)*5)+4' height='min(17, lines-2)' width='min(cols/6, cols-((cols/6)*5)-4)' value='percWindow'/>
 
     <!-- Right column: room display -->
-    <window class='room' top='17' left='((cols/3)*2)+1' height='min(16, lines-19)' width='cols/3' title-preset='roomName' creatures-preset='monsterbold'/>
+    <window class='room' top='17' left='((cols/3)*2)+1' height='min(16, lines-19)' width='min(cols/3, cols-((cols/3)*2)-1)' title-preset='roomName' creatures-preset='monsterbold'/>
 
     <!-- Right column: chat and misc streams -->
-    <window class='text' top='33' left='((cols/3)*2)+1' height='min(6, lines-35)'  width='cols/3' value='conversation,talk,whispers,lnet,thoughts' buffer-size='3000' timestamp='true'/>
-    <window class='text' top='39' left='((cols/3)*2)+1' height='min(17, lines-41)' width='cols/3' value='familiar,ooc' buffer-size='1000' timestamp='true'/>
+    <window class='text' top='33' left='((cols/3)*2)+1' height='min(6, lines-35)'  width='min(cols/3, cols-((cols/3)*2)-1)' value='conversation,talk,whispers,lnet,thoughts' buffer-size='3000' timestamp='true'/>
+    <window class='text' top='39' left='((cols/3)*2)+1' height='min(17, lines-41)' width='min(cols/3, cols-((cols/3)*2)-1)' value='familiar,ooc' buffer-size='1000' timestamp='true'/>
 
     <!-- Sink: capture and discard atmospherics (weather/ambient text) -->
     <window class='sink' value='atmospherics'/>
