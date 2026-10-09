@@ -201,7 +201,8 @@ class WindowManager
   # Take the command window a layout asks for. The first layout creates
   # it with the block; later layouts keep that window, which the command
   # buffer draws into, and only replace its layout. The window is kept on
-  # top of any window that overlaps it (see {OnTopWindow}).
+  # top of any window that overlaps it (see {OnTopWindow}), and so is the
+  # current layout's prompt indicator, the rest of the command line.
   #
   # @param layout [WindowLayout] where the layout puts the command line
   # @yield once, only when there is no command window yet
@@ -210,7 +211,7 @@ class WindowManager
   # @return [Curses::Window] the command window
   # @api private
   def install_command_window(layout)
-    @command_window ||= yield.extend(OnTopWindow)
+    @command_window ||= yield.extend(OnTopWindow).keep_on_top_with { [@indicator['prompt']] }
     @command_window_layout = layout
     @command_window
   end
@@ -339,12 +340,30 @@ end
 # the window's cells per refresh; doupdate sends the terminal only the
 # cells that differ from what it already shows, so nothing more is sent
 # where no window overlaps.
+#
+# Windows that belong with it (the prompt indicator, see
+# {#keep_on_top_with}) are copied whole just before it at each refresh,
+# so they stay on top too and the cursor still ends in this window.
 module OnTopWindow
+  # Keep other windows on top along with this one.
+  #
+  # @param windows [Proc] returns the windows (see the block)
+  # @yieldreturn [Array<Curses::Window, nil>] the windows, asked for at
+  #   each refresh (so a window replaced by a new layout is followed); nil
+  #   entries are skipped
+  # @return [self]
+  def keep_on_top_with(&windows)
+    @kept_with = windows
+    self
+  end
+
   # Copy the whole window to the next screen update, not just its changed
-  # lines (see the module docs), and leave the cursor there.
+  # lines (see the module docs), after the windows kept on top with it,
+  # and leave the cursor in it.
   #
   # @return [void]
   def noutrefresh
+    copy_kept_with
     touch
     super
   end
@@ -354,8 +373,24 @@ module OnTopWindow
   #
   # @return [void]
   def refresh
+    copy_kept_with
     touch
     super
+  end
+
+  private
+
+  # Copy each window kept on top with this one (see {#keep_on_top_with})
+  # whole to the next screen update.
+  #
+  # @return [void]
+  def copy_kept_with
+    @kept_with&.call&.each do |window|
+      next unless window
+
+      window.touch
+      window.noutrefresh
+    end
   end
 end
 

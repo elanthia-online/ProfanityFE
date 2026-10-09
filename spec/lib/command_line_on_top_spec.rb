@@ -17,6 +17,8 @@
 # columns 53-78) over the command line on row 22. Before the fix, each new
 # game line scrolled main over the command line and only a resize drew it
 # again; the room window's render did the same to the columns it covers.
+# The prompt indicator just left of the command window is the rest of the
+# command line, and stays on top with it.
 
 require 'rexml/document'
 require_relative '../../lib/shared_state'
@@ -117,7 +119,8 @@ RSpec.describe 'The command line on top of overlapping windows' do
 
       after_typing = frames_since_typed('abc', row: 23, column: 21)
       expect(after_typing.size).to be > game_lines.size / 2
-      expect(after_typing.map { |frame| frame[:rows][23][21..] }).to all(eq('abc'))
+      # the prompt indicator (column 20) and the command window (21 on)
+      expect(after_typing.map { |frame| frame[:rows][23][20..] }).to all(eq('>abc'))
       expect(after_typing.map { |frame| frame[:cursor] }).to all(eq([23, 24]))
       # main's text did reach the row above the command line
       expect(frames.last[:rows][22]).to match(/ Line \d+ of a long room description\.\z/)
@@ -127,7 +130,7 @@ RSpec.describe 'The command line on top of overlapping windows' do
       run_client(keyboard(-> { game_server.say(*game_lines) }, wait_until { drawn?(last_line) }))
 
       expect(frames.last[:rows][22]).to match(/ Line \d+ of a long room description\.\z/)
-      expect(frames.last[:rows][23][21..].to_s).to eq ''
+      expect(frames.last[:rows][23][20..]).to eq '>'
       expect(frames.last[:cursor]).to eq [23, 21]
     end
 
@@ -144,7 +147,7 @@ RSpec.describe 'The command line on top of overlapping windows' do
 
       expect(status).to eq 0
       expect(shown_at_exit.size).to eq 1
-      expect(shown_at_exit.first[:rows][23][21..]).to eq 'look'
+      expect(shown_at_exit.first[:rows][23][20..]).to eq '>look'
       expect(shown_at_exit.first[:cursor]).to eq [23, 25]
       expect(main.rows.reject(&:empty?).last(3)).to eq ['* Connection closed', '* Press any key to exit...', '*']
     end
@@ -162,8 +165,18 @@ RSpec.describe 'The command line on top of overlapping windows' do
       expect(resizes).to eq 2
 
       expect(frames.last[:newest]).to eq more.last
-      expect(frames.last[:rows][23][21..]).to eq 'abc'
+      expect(frames.last[:rows][23][20..]).to eq '>abc'
       expect(frames.last[:cursor]).to eq [23, 24]
+    end
+
+    it 'keeps the prompt the game sent last on top, refitted to its length' do
+      prompts = game_lines + ['<prompt time="1790826945">R&gt;</prompt>'] + (41..45).map { |n| "Line #{n} after the new prompt." }
+      run_client(keyboard('abc', -> { game_server.say(*prompts) }, wait_until { drawn?('Line 45 after the new prompt.') }))
+
+      expect(app.window_mgr.indicator['prompt'].maxx).to eq 2
+      expect([command.begy, command.begx]).to eq [23, 22]
+      expect(frames.last[:rows][23][20..]).to eq 'R>abc'
+      expect(frames.last[:cursor]).to eq [23, 25]
     end
   end
 
