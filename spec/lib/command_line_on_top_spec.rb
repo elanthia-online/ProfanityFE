@@ -39,8 +39,9 @@ RSpec.describe 'The command line on top of overlapping windows' do
   include ClientRun
 
   let(:settings_path) { File.join(@dir, 'settings.xml') }
+  let(:links) { false }
   let(:app) do
-    Application.new({ char: nil, no_status: true, links: false, room_window_only: false },
+    Application.new({ char: nil, no_status: true, links: links, room_window_only: false },
                     settings_file: settings_path, host: '127.0.0.1', port: 8000)
   end
   let(:main) { app.window_mgr.stream['main'] }
@@ -177,6 +178,42 @@ RSpec.describe 'The command line on top of overlapping windows' do
       expect([command.begy, command.begx]).to eq [23, 22]
       expect(frames.last[:rows][23][20..]).to eq 'R>abc'
       expect(frames.last[:cursor]).to eq [23, 25]
+    end
+
+    # Main's rows 8 and 9 show on screen rows 22 and 23; row 23 is under
+    # the command line. A click goes by what the screen shows.
+    context 'with links on, a link in main under the command line' do
+      let(:links) { true }
+      let(:door_lines) do
+        (1..8).map { |n| "Line #{n} of a long room description." } +
+          ["Exit here: <d cmd='go visible door'>door</d> is on the row above the command line.",
+           "Exit here: <d cmd='go hidden door'>door</d> is under the command line."] +
+          (1..27).map { |n| "Tail #{n} of a long room description." }
+      end
+
+      def click_at(y, x)
+        event = ->(bstate) { allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x)) }
+        [press_after(Curses::KEY_MOUSE) { event.call(Curses::BUTTON1_PRESSED) },
+         press_after(Curses::KEY_MOUSE) { event.call(Curses::BUTTON1_RELEASED) }]
+      end
+
+      it 'follows no link for a click on the command line, only the one the screen shows' do
+        now = 100.0
+        allow(SelectionManager).to receive(:monotonic_now) { now += 1 }
+        shown = under = nil
+        run_client(keyboard('abc', -> { game_server.say(*door_lines) }, wait_until { drawn?('Tail 27 of a long room description.') },
+                            lambda {
+                              shown = frames.last[:rows][22..23]
+                              under = main.rows[8..9]
+                            },
+                            *click_at(23, 31), *click_at(23, 20), *click_at(22, 31),
+                            wait_until { game_server.commands.any? }))
+
+        expect(under).to eq ['Exit here: door is on the row above the command line.',
+                             'Exit here: door is under the command line.']
+        expect(shown).to eq [(' ' * 20) + 'Exit here: door is on the row above the command line.', (' ' * 20) + '>abc']
+        expect(game_server.commands).to eq ['go visible door']
+      end
     end
   end
 

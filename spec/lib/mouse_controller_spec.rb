@@ -601,6 +601,119 @@ RSpec.describe MouseController do
       end
     end
 
+    # The command line stays on top of a window the layout puts under it
+    # (OnTopWindow), so the mouse must not reach the hidden window there.
+    # Main's bottom row (screen row 5) runs under the prompt indicator
+    # (column 0) and the command window (columns 1-30); columns 31 on
+    # show main. A link hides under each part, one more shows past it.
+    context 'on a command line laid over a text window' do
+      let(:layout) do
+        <<~XML
+          <layout>
+            <window class='text' top='0' left='0' height='6' width='42' value='main'/>
+            <window class='indicator' top='5' left='0' height='1' width='1' label='&gt;' value='prompt'/>
+            <window class='command' top='5' left='1' height='1' width='30'/>
+          </layout>
+        XML
+      end
+      let(:window_mgr) { WindowManager.new(shared_state: shared_state) }
+      let(:bottom_row) { 'n'.ljust(5) + 'north'.ljust(26) + 'south.' }
+      let(:links) do
+        [{ start: 0, end: 1, cmd: 'look n' }, { start: 5, end: 10, cmd: 'north' }, { start: 31, end: 36, cmd: 'south' }]
+      end
+
+      before do
+        %w[alpha bravo charlie delta echo].each { |line| main.add_string(line) }
+        main.add_string(bottom_row, links)
+        # A second apart: no click counts as a double click
+        now = 100.0
+        allow(SelectionManager).to receive(:monotonic_now) { now += 1 }
+      end
+
+      it 'lays main out under the command line' do
+        expect(main.rows.last).to eq bottom_row
+        expect([window_mgr.indicator['prompt'].begx, window_mgr.command_window.begx,
+                window_mgr.command_window.maxx]).to eq [0, 1, 30]
+      end
+
+      # A sent link is echoed in main, which scrolls; the row goes back
+      # at the bottom before each click.
+      it 'sends, for a click on each cell of the bottom row, only the link the screen shows there' do
+        cells = (0...42).map do |x|
+          sent.clear
+          main.add_string(bottom_row, links)
+          click(5, x)
+          sent.dup
+        end
+
+        expect(cells).to eq [[]] * 31 + [['south']] * 5 + [[]] * 6
+        expect(cmd_buffer.history.to_a).to eq ['south']
+      end
+
+      it 'sends nothing for a click ncurses resolved into BUTTON1_CLICKED on the command line' do
+        mouse(Curses::BUTTON1_CLICKED, 5, 0)
+        mouse(Curses::BUTTON1_CLICKED, 5, 6)
+        mouse(Curses::BUTTON1_CLICKED, 5, 32)
+
+        expect(sent).to eq ['south']
+      end
+
+      it 'starts no selection at a press on the command line, and drops the one there was' do
+        mouse(Curses::BUTTON1_PRESSED, 1, 0)
+        mouse(Curses::BUTTON1_PRESSED, 5, 12)
+        mouse(Curses::REPORT_MOUSE_POSITION, 4, 2)
+        mouse(Curses::BUTTON1_RELEASED, 4, 2)
+
+        expect(SelectionManager.selecting).to be_falsey
+        expect(copied).to be_empty
+        expect(reversed_columns(main, 4)).to be_empty
+      end
+
+      it 'ends a drag over the command line at the last place the pointer showed main' do
+        mouse(Curses::BUTTON1_PRESSED, 2, 0)
+        mouse(Curses::REPORT_MOUSE_POSITION, 4, 2)
+        mouse(Curses::REPORT_MOUSE_POSITION, 5, 10)
+        expect(reversed_columns(main, 5)).to be_empty
+        mouse(Curses::BUTTON1_RELEASED, 5, 10)
+
+        expect(copied).to eq ["charlie\ndelta\nec"]
+        expect(reversed_columns(main, 5)).to be_empty
+      end
+
+      it 'copies nothing for a drag released on the command line with no motion before it' do
+        mouse(Curses::BUTTON1_PRESSED, 2, 0)
+        mouse(Curses::BUTTON1_RELEASED, 5, 10)
+
+        expect(copied).to be_empty
+        expect(SelectionManager.selecting).to be_falsey
+      end
+
+      it 'still copies a drag that ends on main right of the command line' do
+        drag([4, 0], [5, 33])
+
+        expect(copied).to eq ["echo\n#{bottom_row[0, 33]}"]
+      end
+
+      context 'with no prompt indicator' do
+        let(:layout) do
+          <<~XML
+            <layout>
+              <window class='text' top='0' left='0' height='6' width='42' value='main'/>
+              <window class='command' top='5' left='1' height='1' width='30'/>
+            </layout>
+          XML
+        end
+
+        it 'sends the link main shows left of the command window' do
+          click(5, 0)
+          click(5, 1)
+
+          expect(window_mgr.indicator['prompt']).to be_nil
+          expect(sent).to eq ['look n']
+        end
+      end
+    end
+
     describe 'pressing outside every window' do
       before { %w[alpha bravo charlie delta].each { |line| main.add_string(line) } }
 

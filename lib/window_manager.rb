@@ -378,6 +378,22 @@ module OnTopWindow
     super
   end
 
+  # Whether a screen cell shows this window or a window kept on top with
+  # it, whatever window the layout puts under it. A mouse press there
+  # belongs to the command line, not to the hidden window (see
+  # {MouseController}).
+  #
+  # @param screen_y [Integer] the cell's row on the screen
+  # @param screen_x [Integer] the cell's column on the screen
+  # @return [Boolean]
+  def covers?(screen_y, screen_x)
+    [self, *@kept_with&.call].any? do |window|
+      window &&
+        screen_y >= window.begy && screen_y < window.begy + window.maxy &&
+        screen_x >= window.begx && screen_x < window.begx + window.maxx
+    end
+  end
+
   private
 
   # Copy each window kept on top with this one (see {#keep_on_top_with})

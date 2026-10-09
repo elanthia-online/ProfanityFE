@@ -808,6 +808,8 @@ The command line stays on top: where another window of the layout overlaps
 the command window (or the `prompt` indicator beside it), as a fixed layout
 can on a small terminal, that window's text never shows in the command
 line's cells. The other window keeps its size and shows everywhere else.
+A click or drag on the command line doesn't reach the window under it, so
+it can't follow a link or select text you can't see.
 
 ---
 
