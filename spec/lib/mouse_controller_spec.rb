@@ -680,6 +680,21 @@ RSpec.describe MouseController do
         expect(reversed_columns(main, 5)).to be_empty
       end
 
+      # Motion reports closer together than DRAG_REDRAW_INTERVAL redraw
+      # only the first; the release still ends at the last one off the
+      # command line.
+      it 'ends it there too when that last motion report was not redrawn yet' do
+        allow(SelectionManager).to receive(:monotonic_now).and_return(500.0)
+        mouse(Curses::BUTTON1_PRESSED, 2, 0)
+        mouse(Curses::REPORT_MOUSE_POSITION, 3, 1)
+        mouse(Curses::REPORT_MOUSE_POSITION, 4, 2)
+        expect(reversed_columns(main, 4)).to be_empty
+        mouse(Curses::REPORT_MOUSE_POSITION, 5, 10)
+        mouse(Curses::BUTTON1_RELEASED, 5, 10)
+
+        expect(copied).to eq ["charlie\ndelta\nec"]
+      end
+
       it 'copies nothing for a drag released on the command line with no motion before it' do
         mouse(Curses::BUTTON1_PRESSED, 2, 0)
         mouse(Curses::BUTTON1_RELEASED, 5, 10)
