@@ -234,6 +234,40 @@ RSpec.describe Curses::Window do
 
   # Screen positions read back from a real terminal (the output replayed
   # through a terminal emulator) after the same calls.
+  # mvwin: ncurses refuses a move that would put any of the window off the
+  # screen, and the window stays where it was (the curses gem returns nil
+  # either way). Captured with a 5x10 window on a 12x40 terminal.
+  describe 'moving a window' do
+    before { allow(Curses).to receive_messages(lines: 12, cols: 40) }
+
+    def moved(top, left)
+      win = window(5, 10)
+      expect(win.move(top, left)).to be_nil
+      [win.begy, win.begx]
+    end
+
+    it 'moves a window that ends on the bottom row and the last column' do
+      expect(moved(7, 30)).to eq [7, 30]
+    end
+
+    it 'moves a window that stays inside the screen' do
+      expect(moved(2, 3)).to eq [2, 3]
+    end
+
+    it 'leaves a window that would end one row past the bottom where it was' do
+      expect(moved(8, 30)).to eq [0, 0]
+    end
+
+    it 'leaves a window that would end one column past the right edge where it was' do
+      expect(moved(7, 31)).to eq [0, 0]
+    end
+
+    it 'leaves a window that would start above or left of the screen where it was' do
+      expect(moved(-1, 0)).to eq [0, 0]
+      expect(moved(0, -1)).to eq [0, 0]
+    end
+  end
+
   describe 'the terminal cursor' do
     let(:top) { described_class.new(3, 10, 0, 0) }
     let(:bottom) { described_class.new(1, 10, 5, 2) }

@@ -286,4 +286,25 @@ RSpec.describe 'Shipped templates on small terminals' do
     expect(rect_of(wm.stream['main'])).to eq [14, 20, 37, 140]
     expect(rect_of(wm.stream['logons'])).to eq [22, 0, 8, 19]
   end
+
+  # ncurses refuses to move a window that would reach past the screen, and
+  # the virtual screen does the same, so a right column that ran past the
+  # edge stayed where the small terminal put it.
+  %w[default mahtra].each do |name|
+    it "moves #{name}.xml's right column to its place when the terminal grows from 24x80 to 63x213 and back" do
+      load_template(name, 24, 80)
+      expect(rect_of(wm.room['room'])).to eq [17, 53, 5, 26]
+
+      terminal(63, 213)
+      wm.resize(CommandBuffer.new)
+      expect(problems).to eq []
+      expect(rect_of(wm.room['room'])).to eq [17, 143, 16, 70]
+      expect(rect_of(wm.stream['percWindow'])).to eq [0, 179, 17, 34 - PercWindow.right_margin]
+
+      terminal(24, 80)
+      wm.resize(CommandBuffer.new)
+      expect(rect_of(wm.room['room'])).to eq [17, 53, 5, 26]
+      expect(rect_of(wm.command_window)).to eq [22, 1, 1, 79]
+    end
+  end
 end

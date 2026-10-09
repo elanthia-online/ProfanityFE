@@ -271,8 +271,14 @@ module Curses
       nil
     end
 
+    # Like mvwin, refuses a move that would put any of the window off the
+    # screen (Curses.lines by Curses.cols) and leaves the window where it
+    # was; the curses gem returns nil either way.
     def move(top, left)
       log(:move, top, left)
+      return nil if top.negative? || left.negative?
+      return nil if top + @maxy > Curses.lines || left + @maxx > Curses.cols
+
       @begy = top
       @begx = left
       nil
