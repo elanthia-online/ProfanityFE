@@ -804,6 +804,11 @@ The command buffer supports horizontal scrolling when your input exceeds the
 window width. It also supports command history (up/down arrows), word-level
 cursor movement, and a kill ring (cut/paste).
 
+The command line stays on top: where another window of the layout overlaps
+the command window (or the `prompt` indicator beside it), as a fixed layout
+can on a small terminal, that window's text never shows in the command
+line's cells. The other window keeps its size and shows everywhere else.
+
 ---
 
 #### 3.10 Sink Window (`class='sink'`)
