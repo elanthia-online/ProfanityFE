@@ -273,9 +273,11 @@ with the operators:
 | `2*min(cols/3, 40)` | Calls work like numbers inside larger expressions |
 
 A malformed call (`min(1)`, `min(1, 2, 3)`, `min(, 2)`, a missing `)`, a
-name not followed by `(`) or a comma outside a call's arguments makes the
-expression 0 and prints a warning on standard error; so does any other name
-(`MIN`, `abs`).
+name not followed by `(`, a name with no operator before it as in
+`2min(30, 40)`) or a comma outside a call's arguments makes the expression 0
+and prints a warning on standard error; so does any other name (`MIN`,
+`abs`). Other text after a complete expression is ignored: `10)` is 10 and
+`2(3)` is 2.
 
 A window whose top or left falls off the screen, or that gets no rows or
 columns, isn't built when the layout loads. It is built as soon as the

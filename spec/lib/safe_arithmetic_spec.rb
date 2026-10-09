@@ -195,6 +195,25 @@ RSpec.describe SafeArithmetic do
       expect(evaluate('min(1, 2)3')).to eq 1
       expect(evaluate('min(1, 2))')).to eq 1
     end
+
+    # Text after a complete expression is otherwise ignored, but before
+    # min/max there were no names, so a name there was always an error
+    # ("2min(30, 40)" meant as 2*min would silently be 2).
+    it 'returns 0 and warns for a name after a complete expression, where an operator is missing' do
+      {
+        '2min(30, 40)' => 'min', '3min' => 'min', '16max' => 'max', 'min(1, 2)max' => 'max',
+        'min(1, 2)max(3, 4)' => 'max', '(2)min(1, 2)' => 'min', '(2 min(1, 2))' => 'min',
+        '10)min(1, 2)' => 'min', '4 max(1, 2)' => 'max'
+      }.each do |expr, name|
+        expect { expect(evaluate(expr)).to eq 0 }
+          .to output(/#{name} after the end of the expression \(missing an operator\?\) in '#{Regexp.escape(expr)}'/).to_stderr
+      end
+    end
+
+    it 'still ignores a number or parenthesis after a complete expression' do
+      expect { expect(evaluate('2(3)')).to eq 2 }.not_to output.to_stderr
+      expect { expect(evaluate('min(1, 2)(3)')).to eq 1 }.not_to output.to_stderr
+    end
   end
 
   describe '.evaluate with unsafe characters' do

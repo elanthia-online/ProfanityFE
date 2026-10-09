@@ -35,13 +35,16 @@ module SafeArithmetic
   # "2*min(3, 4)" is 6. A malformed call is an error: a name not followed
   # by "(", other than two arguments, an empty argument, or a missing ")"
   # ("min(1)", "min(1, 2, 3)", "min(, 2)", "min(1, 2"). So is a comma
-  # outside a call's argument list ("1, 2", "(1, 2)"), and a name other
-  # than +min+ and +max+ counts as an unsafe character.
+  # outside a call's argument list ("1, 2", "(1, 2)"), and so is a name
+  # after the first complete expression, where an operator is missing
+  # ("2min(30, 40)", "3max"). A name other than +min+ and +max+ counts as
+  # an unsafe character.
   #
   # Otherwise the parser is lenient: a missing closing parenthesis is
   # ignored ("(10" is 10), whitespace between digits is dropped ("3 3" is
-  # 33), a missing operand counts as 0 ("1+" is 1), and anything after the
-  # first complete expression is ignored ("10)" is 10).
+  # 33), a missing operand counts as 0 ("1+" is 1), and any other text
+  # after the first complete expression is ignored ("10)" and "2(3)" are
+  # 10 and 2).
   #
   # Parentheses, unary minus signs and calls may nest {MAX_DEPTH} levels
   # deep ("-(1)" and "-min(1, 2)" are two levels); deeper nesting is an
@@ -158,6 +161,11 @@ module SafeArithmetic
 
     result = parse_expr.call
     no_comma.call
+    # Text after the expression is ignored, but not a name: names came
+    # with min/max, so "2min(30, 40)" is a missing operator, not a 2
+    leftover = tokens[pos[0]..].find { |t| FUNCTIONS.key?(t) }
+    raise ArgumentError, "#{leftover} after the end of the expression (missing an operator?)" if leftover
+
     result.to_i
   rescue StandardError => e
     warn "Layout expression error: #{e.message} in '#{expr}'"
