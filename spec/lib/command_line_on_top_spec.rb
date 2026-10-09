@@ -217,6 +217,43 @@ RSpec.describe 'The command line on top of overlapping windows' do
     end
   end
 
+  # Every screen update refreshes the command window with #noutrefresh
+  # and one doupdate; nothing in the client calls its #refresh. A refresh
+  # must still keep the command line on top, so a new path that uses it
+  # can't bring the bug back.
+  describe 'refreshing the command window with #refresh, outside the client' do
+    let(:window_mgr) { WindowManager.new }
+    let(:main) { window_mgr.stream['main'] }
+    let(:command) { window_mgr.command_window }
+
+    before do
+      LAYOUT['on top refresh'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='14' left='20' height='37' width='140' value='main'/>
+          <window class='indicator' top='lines-1' left='20' height='1' width='1' label='&gt;' value='prompt'/>
+          <window class='command' top='lines-1' left='21' width='cols-21' height='1'/>
+        </layout>
+      XML
+      window_mgr.load_layout('on top refresh')
+    end
+
+    after { LAYOUT.delete('on top refresh') }
+
+    it 'copies the prompt and the command window whole, over main drawn after their last refresh' do
+      command.addstr('abc')
+      command.refresh
+      (1..37).each { |n| main.add_string("Line #{n} of a long room description.") }
+      main.noutrefresh
+      expect(main.rows[9]).to eq 'Line 10 of a long room description.'
+
+      command.refresh
+
+      expect(Curses::TerminalScreen.row(22)).to eq "#{' ' * 20}Line 9 of a long room description."
+      expect(Curses::TerminalScreen.row(23)).to eq "#{' ' * 20}>abc"
+      expect(Curses::TerminalCursor.position).to eq [23, 24]
+    end
+  end
+
   describe "mahtra.xml's windows at 80x24 (the room window runs over columns 53-78 of the command line)" do
     # The template's command window is 104 columns wide, past the right
     # edge of an 80-column screen, where ncurses won't move it; cols-1
