@@ -319,6 +319,11 @@
        ================================================================
        Requires a wide terminal (190+ columns, 50+ rows).
        Uses fixed column positions, not dynamic expressions.
+       The center and right panels' widths are written
+       min(width, cols-left): the width above wherever the terminal
+       has room for it (190+ columns); on a narrower terminal they end
+       at the right edge, and a panel that starts past it isn't built
+       until the terminal grows.
 
        Columns 0-44 are the left panel; 45-158 are center; 160-189
        are the right-side effectmon panel.
@@ -383,9 +388,9 @@
     <!-- Speech border -->
     <window class='indicator' top='0'        left='0'   height='1'        width='44' label='─Speech────────────────────────────────────' />
     <!-- Room border -->
-    <window class='indicator' top='0'        left='45'   height='1'       width='114' label='─Room────────────────────────────────────────────────────────────────────────────────────────────────────────────' />
+    <window class='indicator' top='0'        left='45'   height='1'       width='min(114, cols-45)' label='─Room────────────────────────────────────────────────────────────────────────────────────────────────────────────' />
     <!-- Main border -->
-    <window class='indicator' top='11'       left='45'  height='1'        width='114' label='─Main────────────────────────────────────────────────────────────────────────────────────────────────────────────' />
+    <window class='indicator' top='11'       left='45'  height='1'        width='min(114, cols-45)' label='─Main────────────────────────────────────────────────────────────────────────────────────────────────────────────' />
     <!-- Combat border -->
     <window class='indicator' top='lines-14' left='0'   height='1'        width='44' label='─Targets───────────────────────────────────' />
     <!-- Status -->
@@ -393,10 +398,10 @@
     <!-- Hands -->
     <window class='indicator' top='lines-2'  left='0'   height='1'        width='44' label='─Hands─────────────────────────────────────' />
     <!-- Command border -->
-    <window class='indicator' top='lines-2'  left='45'  height='1'        width='113' label='─Command─────────────────────────────────────────────────────────────────────────────────────────────────────────' />
+    <window class='indicator' top='lines-2'  left='45'  height='1'        width='min(113, cols-45)' label='─Command─────────────────────────────────────────────────────────────────────────────────────────────────────────' />
 
     <!-- Bottom row: command input and hand contents -->
-    <window class='command'   top='lines-1'  left='46'  height='1'        width='112' />
+    <window class='command'   top='lines-1'  left='46'  height='1'        width='min(112, cols-46)' />
     <!-- Nerd font hand icons (left and right separators) -->
     <window class='indicator' top='lines-1'  left='0'   height='1'        width='1'   label=''                             fg='9BA2B2'/>
     <window class='indicator' top='lines-1'  left='23'  height='1'        width='1'   label=''                             fg='9BA2B2'/>
@@ -408,8 +413,8 @@
     <window class='indicator' top='lines-1'  left='26'  height='1'        width='17'  label='Empty'    value='right'        fg='899ca1,53a684' />
 
     <!-- Main scrollable text windows -->
-    <window class='text'      top='12'       left='45'  height='lines-14' width='114'                  value='main,familiar' buffer-size='4000'/>
-    <window class='room'      top='1'        left='45'  height='10'       width='114'                  title-preset='roomName' creatures-preset='monsterbold'/>
+    <window class='text'      top='12'       left='45'  height='lines-14' width='min(114, cols-45)'                  value='main,familiar' buffer-size='4000'/>
+    <window class='room'      top='1'        left='45'  height='10'       width='min(114, cols-45)'                  title-preset='roomName' creatures-preset='monsterbold'/>
     <window class='text'      top='1'        left='0'   height='lines-15' width='44'                   value='speech,announcements,lnet,thoughts,voln' buffer-size='2000' />
     <window class='text'      top='lines-13' left='0'   height='3'        width='44'                   value='combat'       buffer-size='500'/>
 
@@ -481,59 +486,59 @@
 
     <!-- Right panel: effectmon.lic progress bars (cols 160-189) -->
     <!-- Buffs section (10 slots) -->
-    <window class='indicator' top='0'       left='160' height='1'        width='30' label='─Buffs────────────────────────' />
-    <window class='progress'  top='1'       left='160' height='1'        width='30'                   value='buff0'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='2'       left='160' height='1'        width='30'                   value='buff1'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='3'       left='160' height='1'        width='30'                   value='buff2'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='4'       left='160' height='1'        width='30'                   value='buff3'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='5'       left='160' height='1'        width='30'                   value='buff4'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='6'       left='160' height='1'        width='30'                   value='buff5'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='7'       left='160' height='1'        width='30'                   value='buff6'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='8'       left='160' height='1'        width='30'                   value='buff7'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='9'       left='160' height='1'        width='30'                   value='buff8'        fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='10'       left='160' height='1'        width='30'                   value='buff9'        fg='9BA2B2'            bg='395573'/>
+    <window class='indicator' top='0'       left='160' height='1'        width='min(30, cols-160)' label='─Buffs────────────────────────' />
+    <window class='progress'  top='1'       left='160' height='1'        width='min(30, cols-160)'                   value='buff0'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='2'       left='160' height='1'        width='min(30, cols-160)'                   value='buff1'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='3'       left='160' height='1'        width='min(30, cols-160)'                   value='buff2'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='4'       left='160' height='1'        width='min(30, cols-160)'                   value='buff3'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='5'       left='160' height='1'        width='min(30, cols-160)'                   value='buff4'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='6'       left='160' height='1'        width='min(30, cols-160)'                   value='buff5'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='7'       left='160' height='1'        width='min(30, cols-160)'                   value='buff6'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='8'       left='160' height='1'        width='min(30, cols-160)'                   value='buff7'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='9'       left='160' height='1'        width='min(30, cols-160)'                   value='buff8'        fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='10'       left='160' height='1'        width='min(30, cols-160)'                   value='buff9'        fg='9BA2B2'            bg='395573'/>
 
     <!-- Debuffs section (2 slots) -->
-    <window class='indicator' top='11'       left='160' height='1'        width='30' label='─Debuffs──────────────────────' />
-    <window class='progress'  top='12'       left='160' height='1'        width='30'                   value='debuff0'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='13'       left='160' height='1'        width='30'                   value='debuff1'      fg='9BA2B2'            bg='395573'/>
+    <window class='indicator' top='11'       left='160' height='1'        width='min(30, cols-160)' label='─Debuffs──────────────────────' />
+    <window class='progress'  top='12'       left='160' height='1'        width='min(30, cols-160)'                   value='debuff0'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='13'       left='160' height='1'        width='min(30, cols-160)'                   value='debuff1'      fg='9BA2B2'            bg='395573'/>
 
     <!-- Cooldowns section (2 slots) -->
-    <window class='indicator' top='14'       left='160' height='1'        width='30' label='─Cooldowns────────────────────' />
-    <window class='progress'  top='15'       left='160' height='1'        width='30'                   value='cooldown0'    fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='16'       left='160' height='1'        width='30'                   value='cooldown1'    fg='9BA2B2'            bg='395573'/>
+    <window class='indicator' top='14'       left='160' height='1'        width='min(30, cols-160)' label='─Cooldowns────────────────────' />
+    <window class='progress'  top='15'       left='160' height='1'        width='min(30, cols-160)'                   value='cooldown0'    fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='16'       left='160' height='1'        width='min(30, cols-160)'                   value='cooldown1'    fg='9BA2B2'            bg='395573'/>
 
     <!-- Spells section (30 slots for active spell timers) -->
-    <window class='indicator' top='17'        left='160' height='1'        width='30' label='─Spells───────────────────────' />
-    <window class='progress'  top='18'        left='160' height='1'        width='30'                   value='spell0'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='19'        left='160' height='1'        width='30'                   value='spell1'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='20'        left='160' height='1'        width='30'                   value='spell2'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='21'        left='160' height='1'        width='30'                   value='spell3'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='22'        left='160' height='1'        width='30'                   value='spell4'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='23'        left='160' height='1'        width='30'                   value='spell5'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='24'        left='160' height='1'        width='30'                   value='spell6'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='25'        left='160' height='1'        width='30'                   value='spell7'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='26'        left='160' height='1'        width='30'                   value='spell8'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='27'       left='160' height='1'        width='30'                   value='spell9'       fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='28'       left='160' height='1'        width='30'                   value='spell10'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='29'       left='160' height='1'        width='30'                   value='spell11'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='30'       left='160' height='1'        width='30'                   value='spell12'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='31'       left='160' height='1'        width='30'                   value='spell13'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='32'       left='160' height='1'        width='30'                   value='spell14'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='33'       left='160' height='1'        width='30'                   value='spell15'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='34'       left='160' height='1'        width='30'                   value='spell16'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='35'       left='160' height='1'        width='30'                   value='spell17'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='36'       left='160' height='1'        width='30'                   value='spell18'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='37'       left='160' height='1'        width='30'                   value='spell19'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='38'       left='160' height='1'        width='30'                   value='spell20'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='39'       left='160' height='1'        width='30'                   value='spell21'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='40'       left='160' height='1'        width='30'                   value='spell22'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='41'       left='160' height='1'        width='30'                   value='spell23'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='42'       left='160' height='1'        width='30'                   value='spell24'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='43'       left='160' height='1'        width='30'                   value='spell25'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='44'       left='160' height='1'        width='30'                   value='spell26'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='45'       left='160' height='1'        width='30'                   value='spell27'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='46'       left='160' height='1'        width='30'                   value='spell28'      fg='9BA2B2'            bg='395573'/>
-    <window class='progress'  top='47'       left='160' height='1'        width='30'                   value='spell29'      fg='9BA2B2'            bg='395573'/>
+    <window class='indicator' top='17'        left='160' height='1'        width='min(30, cols-160)' label='─Spells───────────────────────' />
+    <window class='progress'  top='18'        left='160' height='1'        width='min(30, cols-160)'                   value='spell0'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='19'        left='160' height='1'        width='min(30, cols-160)'                   value='spell1'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='20'        left='160' height='1'        width='min(30, cols-160)'                   value='spell2'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='21'        left='160' height='1'        width='min(30, cols-160)'                   value='spell3'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='22'        left='160' height='1'        width='min(30, cols-160)'                   value='spell4'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='23'        left='160' height='1'        width='min(30, cols-160)'                   value='spell5'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='24'        left='160' height='1'        width='min(30, cols-160)'                   value='spell6'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='25'        left='160' height='1'        width='min(30, cols-160)'                   value='spell7'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='26'        left='160' height='1'        width='min(30, cols-160)'                   value='spell8'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='27'       left='160' height='1'        width='min(30, cols-160)'                   value='spell9'       fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='28'       left='160' height='1'        width='min(30, cols-160)'                   value='spell10'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='29'       left='160' height='1'        width='min(30, cols-160)'                   value='spell11'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='30'       left='160' height='1'        width='min(30, cols-160)'                   value='spell12'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='31'       left='160' height='1'        width='min(30, cols-160)'                   value='spell13'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='32'       left='160' height='1'        width='min(30, cols-160)'                   value='spell14'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='33'       left='160' height='1'        width='min(30, cols-160)'                   value='spell15'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='34'       left='160' height='1'        width='min(30, cols-160)'                   value='spell16'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='35'       left='160' height='1'        width='min(30, cols-160)'                   value='spell17'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='36'       left='160' height='1'        width='min(30, cols-160)'                   value='spell18'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='37'       left='160' height='1'        width='min(30, cols-160)'                   value='spell19'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='38'       left='160' height='1'        width='min(30, cols-160)'                   value='spell20'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='39'       left='160' height='1'        width='min(30, cols-160)'                   value='spell21'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='40'       left='160' height='1'        width='min(30, cols-160)'                   value='spell22'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='41'       left='160' height='1'        width='min(30, cols-160)'                   value='spell23'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='42'       left='160' height='1'        width='min(30, cols-160)'                   value='spell24'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='43'       left='160' height='1'        width='min(30, cols-160)'                   value='spell25'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='44'       left='160' height='1'        width='min(30, cols-160)'                   value='spell26'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='45'       left='160' height='1'        width='min(30, cols-160)'                   value='spell27'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='46'       left='160' height='1'        width='min(30, cols-160)'                   value='spell28'      fg='9BA2B2'            bg='395573'/>
+    <window class='progress'  top='47'       left='160' height='1'        width='min(30, cols-160)'                   value='spell29'      fg='9BA2B2'            bg='395573'/>
   </layout>
 </settings>

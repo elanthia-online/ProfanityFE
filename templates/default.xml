@@ -474,18 +474,29 @@
        +..#[command input ].......+.........+.........+
        | RT  | L: left  | R: right | S: spell|ST|BL|HP
        +.....+..........+..........+.........+..+..+..+
+
+       Every fixed size is written min(size, room left): it is the size
+       above wherever the terminal has room for it (58+ rows, 158+
+       columns). On a smaller terminal the right column's windows end
+       above the status bar, the lowest ones not built when no row is
+       left for them, and the command line and the bottom row's
+       indicators end at the right edge, those starting past it not
+       built. The right column, sized in thirds and sixths of the
+       width, ends at the right edge where rounding would take it one
+       to four columns past. A window not built appears once the
+       terminal grows.
   -->
   <layout id='default'>
     <!-- Right column: death notices, active spells -->
-    <window class='text'       top='0'  left='((cols/3)*2)+1' height='17' width='cols/6' value='death'/>
-    <window class='percWindow' top='0'  left='((cols/6)*5)+4' height='17' width='cols/6' value='percWindow'/>
+    <window class='text'       top='0'  left='((cols/3)*2)+1' height='min(17, lines-2)' width='cols/6' value='death'/>
+    <window class='percWindow' top='0'  left='((cols/6)*5)+4' height='min(17, lines-2)' width='min(cols/6, cols-((cols/6)*5)-4)' value='percWindow'/>
 
     <!-- Right column: room display -->
-    <window class='room' top='17' left='((cols/3)*2)+1' height='16' width='cols/3' title-preset='roomName' creatures-preset='monsterbold'/>
+    <window class='room' top='17' left='((cols/3)*2)+1' height='min(16, lines-19)' width='min(cols/3, cols-((cols/3)*2)-1)' title-preset='roomName' creatures-preset='monsterbold'/>
 
     <!-- Right column: chat and misc streams -->
-    <window class='text' top='33' left='((cols/3)*2)+1' height='6'  width='cols/3' value='conversation,talk,whispers,lnet,thoughts' buffer-size='3000' timestamp='true'/>
-    <window class='text' top='39' left='((cols/3)*2)+1' height='17' width='cols/3' value='familiar,ooc' buffer-size='1000' timestamp='true'/>
+    <window class='text' top='33' left='((cols/3)*2)+1' height='min(6, lines-35)'  width='min(cols/3, cols-((cols/3)*2)-1)' value='conversation,talk,whispers,lnet,thoughts' buffer-size='3000' timestamp='true'/>
+    <window class='text' top='39' left='((cols/3)*2)+1' height='min(17, lines-41)' width='min(cols/3, cols-((cols/3)*2)-1)' value='familiar,ooc' buffer-size='1000' timestamp='true'/>
 
     <!-- Sink: capture and discard atmospherics (weather/ambient text) -->
     <window class='sink' value='atmospherics'/>
@@ -496,30 +507,30 @@
     <!-- Status bar (second-to-last row): command input + room players -->
     <window class='indicator' top='lines-2' left='105' height='1' width='(cols - 105)' value='room players' fg='&grey;,&cyan;'/>
     <window class='indicator' top='lines-2' left='0'   width='1'   height='1' label='#' fg='&white;'/>
-    <window class='command'   top='lines-2' left='1'   width='104' height='1'/>
+    <window class='command'   top='lines-2' left='1'   width='min(104, cols-1)' height='1'/>
 
     <!-- Bottom row: timers, hand contents, spell prep, vitals -->
     <window class='countdown' top='lines-1' left='0'   width='10' height='1' label='' value='roundtime' fg='&white;,&white;,&white;,&white;' bg='nil,&red;,&yellow;'/>
 
-    <window class='indicator' top='lines-1' left='17'  height='1' width='3'  label='L:' fg='&blue;'/>
-    <window class='indicator' top='lines-1' left='20'  height='1' width='20' label=' '  value='left'  fg='&white;,&purple;'/>
+    <window class='indicator' top='lines-1' left='17'  height='1' width='min(3, cols-17)'  label='L:' fg='&blue;'/>
+    <window class='indicator' top='lines-1' left='20'  height='1' width='min(20, cols-20)' label=' '  value='left'  fg='&white;,&purple;'/>
 
-    <window class='indicator' top='lines-1' left='42'  height='1' width='3'  label='R:' fg='&blue;'/>
-    <window class='indicator' top='lines-1' left='45'  height='1' width='20' label=' '  value='right' fg='&white;,&purple;'/>
+    <window class='indicator' top='lines-1' left='42'  height='1' width='min(3, cols-42)'  label='R:' fg='&blue;'/>
+    <window class='indicator' top='lines-1' left='45'  height='1' width='min(20, cols-45)' label=' '  value='right' fg='&white;,&purple;'/>
 
-    <window class='indicator' top='lines-1' left='67'  height='1' width='3'  label='S:' fg='&blue;'/>
-    <window class='indicator' top='lines-1' left='70'  height='1' width='25' label=' '  value='spell' fg='&white;,&purple;'/>
+    <window class='indicator' top='lines-1' left='67'  height='1' width='min(3, cols-67)'  label='S:' fg='&blue;'/>
+    <window class='indicator' top='lines-1' left='70'  height='1' width='min(25, cols-70)' label=' '  value='spell' fg='&white;,&purple;'/>
 
-    <window class='indicator' top='lines-1' left='96'  height='1' width='4'  label='STUN' value='stunned'  fg='&black;,&yellow;'/>
-    <window class='indicator' top='lines-1' left='101' height='1' width='3'  label='BLD'  value='bleeding' fg='&black;,&red;'/>
+    <window class='indicator' top='lines-1' left='96'  height='1' width='min(4, cols-96)'  label='STUN' value='stunned'  fg='&black;,&yellow;'/>
+    <window class='indicator' top='lines-1' left='101' height='1' width='min(3, cols-101)'  label='BLD'  value='bleeding' fg='&black;,&red;'/>
 
-    <window class='progress'  top='lines-1' left='105' width='3'  height='1' label='' value='health'        fg='&red;,&red;,&red;'       bg='&black;'/>
-    <window class='progress'  top='lines-1' left='109' width='3'  height='1' label='' value='mana'          fg='&blue;,&blue;,&blue;'    bg='&black;'/>
-    <window class='progress'  top='lines-1' left='113' width='3'  height='1' label='' value='stamina'       fg='&white;,&white;,&white;' bg='&black;'/>
-    <window class='progress'  top='lines-1' left='117' width='3'  height='1' label='' value='concentration' fg='&green;,&green;,&green;' bg='&black;'/>
-    <window class='progress'  top='lines-1' left='121' width='3'  height='1' label='' value='spirit'        fg='&cyan;,&cyan;,&cyan;'    bg='&black;'/>
+    <window class='progress'  top='lines-1' left='105' width='min(3, cols-105)'  height='1' label='' value='health'        fg='&red;,&red;,&red;'       bg='&black;'/>
+    <window class='progress'  top='lines-1' left='109' width='min(3, cols-109)'  height='1' label='' value='mana'          fg='&blue;,&blue;,&blue;'    bg='&black;'/>
+    <window class='progress'  top='lines-1' left='113' width='min(3, cols-113)'  height='1' label='' value='stamina'       fg='&white;,&white;,&white;' bg='&black;'/>
+    <window class='progress'  top='lines-1' left='117' width='min(3, cols-117)'  height='1' label='' value='concentration' fg='&green;,&green;,&green;' bg='&black;'/>
+    <window class='progress'  top='lines-1' left='121' width='min(3, cols-121)'  height='1' label='' value='spirit'        fg='&cyan;,&cyan;,&cyan;'    bg='&black;'/>
 
-    <window class='text'      top='lines-1' left='125' width='33' height='1' value='moonWindow'/>
+    <window class='text'      top='lines-1' left='125' width='min(33, cols-125)' height='1' value='moonWindow'/>
   </layout>
 
 </settings>

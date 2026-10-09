@@ -243,9 +243,12 @@ RSpec.describe WindowManager, '#resize geometry' do
     it 'clamps every window to at least one row and column at the smallest size it resizes for' do
       resize_to(3, 10)
 
+      # exp and the spell window keep their fixed 5 rows, too many to move
+      # to row 1 of a 3-row terminal: ncurses refuses the move (mvwin), so
+      # they stay at row 12, one column wide.
       expect(geometries).to eq(
         main: [0, 0, 1, 4], thoughts: [0, 5, 1, 1], combat: [0, 7, 1, 1], atmo: [0, 5, 1, 1],
-        exp: [1, 0, 5, 1], spells: [1, 2, 5, 1], room: [1, 5, 1, 5],
+        exp: [12, 0, 5, 1], spells: [12, 20, 5, 1], room: [1, 5, 1, 5],
         health: [0, 0, 1, 2], roundtime: [0, 0, 1, 1], kneeling: [18, 70, 1, 10],
         prompt: [2, 0, 1, 2], command: [2, 2, 1, 8]
       )

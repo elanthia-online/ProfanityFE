@@ -380,26 +380,36 @@
          Row lines-3: Encumbrance bar
          Row lines-2: Stun countdown
          Row lines-1: Roundtime countdown + command prompt
+       Smaller terminals: every fixed size is written min(size, room
+       left), so the layout is the one above wherever the terminal has
+       room for it (53+ rows, 234+ columns). With less room, windows end
+       at the right edge, the main, speech and room windows end above the
+       command line, and the death and logon streams end above the left
+       sidebar (as in original.xml; while they aren't built, their lines
+       show in main). A sidebar item is built only while its row is below the
+       familiar window (row 13 or lower): height min(1, lines-N) is 1
+       there and 0 (not built) above it. A window not built appears once
+       the terminal grows.
   -->
   <layout id='default'>
     <!-- Top row: hand contents (left and right hand item indicators) -->
-    <window class="indicator" top='0'  left='12' height='1' width='50'  value='left' label='Empty' />
-    <window class="indicator" top='0' left='62' height='1' width='50' value='right' label="Empty" />
+    <window class="indicator" top='0'  left='12' height='1' width='min(50, cols-12)'  value='left' label='Empty' />
+    <window class="indicator" top='0' left='62' height='1' width='min(50, cols-62)' value='right' label="Empty" />
 
     <!-- Main game text (center area, largest window) -->
-    <window class='text' top='14' left='20'  height='37' width='140' value='main' buffer-size='4000'/>
+    <window class='text' top='14' left='20'  height='min(37, lines-15)' width='min(140, cols-20)' value='main' buffer-size='4000'/>
     <!-- Speech/say window (right sidebar, shows spoken text) -->
-    <window class='text' top='21' left='161' height='30' width='73'  value='speech' buffer-size='2000' />
+    <window class='text' top='21' left='161' height='min(30, lines-22)' width='min(73, cols-161)'  value='speech' buffer-size='2000' />
     <!-- Familiar and announcements (top left) -->
-    <window class='text' top='1'  left='0'   height='12' width='80' value='familiar,announcements' buffer-size='2000' />
+    <window class='text' top='1'  left='0'   height='min(12, lines-2)' width='min(80, cols)' value='familiar,announcements' buffer-size='2000' />
     <!-- Chat streams: LNet, thoughts, voln (top right) -->
-    <window class='text' top='1'  left='81' height='12' width='80' value='lnet,thoughts,voln' buffer-size='2000' />
+    <window class='text' top='1'  left='81' height='min(12, lines-2)' width='min(80, cols-81)' value='lnet,thoughts,voln' buffer-size='2000' />
     <!-- Death stream (left sidebar, shows nearby deaths) -->
-    <window class='text' top='14' left='0'   height='7' width='19'  value='death' buffer-size='500' />
+    <window class='text' top='14' left='0'   height='min(7, lines-37)' width='19'  value='death' buffer-size='500' />
     <!-- Logon stream (left sidebar, shows character arrivals) -->
-    <window class='text' top='22' left='0'   height='8' width='19'  value='logons' buffer-size='500' />
+    <window class='text' top='22' left='0'   height='min(8, lines-45)' width='19'  value='logons' buffer-size='500' />
     <!-- Room window stream -->
-    <window class='room' top='0'  left='161' height='20' width='72'  title-preset='roomName' creatures-preset='monsterbold'/>
+    <window class='room' top='0'  left='161' height='min(20, lines-1)' width='min(72, cols-161)'  title-preset='roomName' creatures-preset='monsterbold'/>
     <!-- Command input: prompt character and text entry -->
     <window class='indicator' top='lines-1' left='20' height='1' width='1' label='&gt;' value='prompt' fg='f1f1f1,44444'/>
     <window class='command'   top='lines-1' left='21' width='cols-21' height='1' />
@@ -408,26 +418,26 @@
     <!-- Left sidebar vital bars (cols 0-10) -->
 
     <!-- Stance bar (purple: combat stance indicator) -->
-    <window class='progress' top='lines-11' left='0' width='11' height='1' label='stance:' value='stance' bg='290055'/>
+    <window class='progress' top='lines-11' left='0' width='11' height='min(1, lines-23)' label='stance:' value='stance' bg='290055'/>
     <!-- Mind bar (orange: experience absorption rate) -->
-    <window class='progress' top='lines-10' left='0' width='11' height='1' label='mind:' value='mind' bg='663000,442000'/>
+    <window class='progress' top='lines-10' left='0' width='11' height='min(1, lines-22)' label='mind:' value='mind' bg='663000,442000'/>
     <!-- Health bar (green: hit points) -->
-    <window class='progress' top='lines-8' left='0' width='11' height='1' label='health:' value='health' bg='004800,003300'/>
+    <window class='progress' top='lines-8' left='0' width='11' height='min(1, lines-20)' label='health:' value='health' bg='004800,003300'/>
     <!-- Spirit bar (olive: spiritual energy for resurrection/favor) -->
-    <window class='progress' top='lines-7' left='0' width='11' height='1' label='spirit:' value='spirit' bg='333300,222200'/>
+    <window class='progress' top='lines-7' left='0' width='11' height='min(1, lines-19)' label='spirit:' value='spirit' bg='333300,222200'/>
     <!-- Mana bar (blue: spell casting resource) -->
-    <window class='progress' top='lines-6' left='0' width='11' height='1' label='mana:' value='mana' bg='0000a0,000055'/>
+    <window class='progress' top='lines-6' left='0' width='11' height='min(1, lines-18)' label='mana:' value='mana' bg='0000a0,000055'/>
     <!-- Stamina bar (teal: physical action resource) -->
-    <window class='progress' top='lines-5' left='0' width='11' height='1' label='stam:' value='stamina' bg='003333,002222'/>
+    <window class='progress' top='lines-5' left='0' width='11' height='min(1, lines-17)' label='stam:' value='stamina' bg='003333,002222'/>
     <!-- Encumbrance bar (red/pink: carrying capacity) -->
-    <window class='progress' top='lines-3' left='0' width='11' height='1' label='load:' value='encumbrance' bg='990033,4c0019' fg='nil,nil,nil,f7f7f7'/>
+    <window class='progress' top='lines-3' left='0' width='11' height='min(1, lines-15)' label='load:' value='encumbrance' bg='990033,4c0019' fg='nil,nil,nil,f7f7f7'/>
 
     <!-- ==================== COUNTDOWN BARS =========================== -->
 
     <!-- Stun countdown (shows remaining stun duration, red when active) -->
-    <window class='countdown' top='lines-2' left='0' width='11' height='1' label='stun:' value='stunned' fg='f7f7f7,dddddd' bg='nil,aa0000'/>
+    <window class='countdown' top='lines-2' left='0' width='11' height='min(1, lines-14)' label='stun:' value='stunned' fg='f7f7f7,dddddd' bg='nil,aa0000'/>
     <!-- Roundtime countdown (red=waiting, blue=hardRT) -->
-    <window class='countdown' top='lines-1' left='0' width='11' height='1' label='rndtime:' value='roundtime' fg='f7f7f7,dddddd,dddddd,dddddd' bg='nil,aa0000,0000aa'/>
+    <window class='countdown' top='lines-1' left='0' width='11' height='min(1, lines-13)' label='rndtime:' value='roundtime' fg='f7f7f7,dddddd,dddddd,dddddd' bg='nil,aa0000,0000aa'/>
 
     <!-- ==================== COMPASS ROSE ============================= -->
     <!-- ASCII compass rose showing available exits.
@@ -437,17 +447,17 @@
                    v  *  v  *
          Center column: up/out/down; sides: NW/W/SW, N/S, NE/E/SE -->
 
-    <window class='indicator' top='lines-15' left='1' height='1' width='1' label='^' value='compass:up' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-14' left='1' height='1' width='1' label='o' value='compass:out' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-13' left='1' height='1' width='1' label='v' value='compass:down' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-15' left='5' height='1' width='1' label='*' value='compass:nw' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-14' left='5' height='1' width='1' label='&lt;' value='compass:w' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-13' left='5' height='1' width='1' label='*' value='compass:sw' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-15' left='7' height='1' width='1' label='^' value='compass:n' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-13' left='7' height='1' width='1' label='v' value='compass:s' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-15' left='9' height='1' width='1' label='*' value='compass:ne' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-14' left='9' height='1' width='1' label='&gt;' value='compass:e' fg='303030,ffff00'/>
-    <window class='indicator' top='lines-13' left='9' height='1' width='1' label='*' value='compass:se' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-15' left='1' height='min(1, lines-27)' width='1' label='^' value='compass:up' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-14' left='1' height='min(1, lines-26)' width='1' label='o' value='compass:out' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-13' left='1' height='min(1, lines-25)' width='1' label='v' value='compass:down' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-15' left='5' height='min(1, lines-27)' width='1' label='*' value='compass:nw' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-14' left='5' height='min(1, lines-26)' width='1' label='&lt;' value='compass:w' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-13' left='5' height='min(1, lines-25)' width='1' label='*' value='compass:sw' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-15' left='7' height='min(1, lines-27)' width='1' label='^' value='compass:n' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-13' left='7' height='min(1, lines-25)' width='1' label='v' value='compass:s' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-15' left='9' height='min(1, lines-27)' width='1' label='*' value='compass:ne' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-14' left='9' height='min(1, lines-26)' width='1' label='&gt;' value='compass:e' fg='303030,ffff00'/>
+    <window class='indicator' top='lines-13' left='9' height='min(1, lines-25)' width='1' label='*' value='compass:se' fg='303030,ffff00'/>
 
     <!-- ==================== INJURY BODY DIAGRAM ====================== -->
     <!-- ASCII stick figure showing wound severity on each body part.
@@ -472,29 +482,29 @@
            bk           (back)
     -->
 
-    <window class='indicator' top='lines-23' left='1' height='1' width='1' label='e' value='leftEye' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-23' left='5' height='1' width='1' label='e' value='rightEye' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-22' left='3' height='1' width='1' label='O' value='head' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-21' left='2' height='1' width='1' label='/' value='leftArm' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-21' left='3' height='1' width='1' label='|' value='chest' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-21' left='4' height='1' width='1' label='\' value='rightArm' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-20' left='1' height='1' width='1' label='o' value='leftHand' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-20' left='3' height='1' width='1' label='|' value='abdomen' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-20' left='5' height='1' width='1' label='o' value='rightHand' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-19' left='1' height='2' width='2' label=' /o' value='leftLeg' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-19' left='4' height='2' width='2' label='\  o' value='rightLeg' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-23' left='8' height='1' width='2' label='ns' value='nsys' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-21' left='8' height='1' width='2' label='nk' value='neck' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-19' left='8' height='1' width='2' label='bk' value='back' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-23' left='1' height='min(1, lines-35)' width='1' label='e' value='leftEye' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-23' left='5' height='min(1, lines-35)' width='1' label='e' value='rightEye' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-22' left='3' height='min(1, lines-34)' width='1' label='O' value='head' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-21' left='2' height='min(1, lines-33)' width='1' label='/' value='leftArm' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-21' left='3' height='min(1, lines-33)' width='1' label='|' value='chest' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-21' left='4' height='min(1, lines-33)' width='1' label='\' value='rightArm' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-20' left='1' height='min(1, lines-32)' width='1' label='o' value='leftHand' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-20' left='3' height='min(1, lines-32)' width='1' label='|' value='abdomen' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-20' left='5' height='min(1, lines-32)' width='1' label='o' value='rightHand' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-19' left='1' height='min(2, 2*(lines-31))' width='2' label=' /o' value='leftLeg' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-19' left='4' height='min(2, 2*(lines-31))' width='2' label='\  o' value='rightLeg' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-23' left='8' height='min(1, lines-35)' width='2' label='ns' value='nsys' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-21' left='8' height='min(1, lines-33)' width='2' label='nk' value='neck' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-19' left='8' height='min(1, lines-31)' width='2' label='bk' value='back' fg='f7f7f7,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
 
     <!-- ==================== STATUS INDICATORS ======================== -->
     <!-- Condition flags (shown red when active, white when clear) -->
 
     <!-- Poisoned indicator -->
-    <window class='indicator' top='lines-17' left='0' height='1' width='3' label='psn' value='poisoned' fg='f7f7f7,ff0000'/>
+    <window class='indicator' top='lines-17' left='0' height='min(1, lines-29)' width='3' label='psn' value='poisoned' fg='f7f7f7,ff0000'/>
     <!-- Diseased indicator -->
-    <window class='indicator' top='lines-17' left='4' height='1' width='3' label='dis' value='diseased' fg='f7f7f7,ff0000'/>
+    <window class='indicator' top='lines-17' left='4' height='min(1, lines-29)' width='3' label='dis' value='diseased' fg='f7f7f7,ff0000'/>
     <!-- Bleeding indicator -->
-    <window class='indicator' top='lines-17' left='8' height='1' width='3' label='bld' value='bleeding' fg='f7f7f7,ff0000'/>
+    <window class='indicator' top='lines-17' left='8' height='min(1, lines-29)' width='3' label='bld' value='bleeding' fg='f7f7f7,ff0000'/>
   </layout>
 </settings>

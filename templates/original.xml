@@ -155,6 +155,11 @@
        +===========================================+
        | Progress bars, compass, injury indicators |
        +===========================================+
+       The left sidebar's items are anchored to the bottom. On a short
+       terminal (under 29 rows) an item is built only while its row is
+       below the chat strip (row 6 or lower): height min(1, lines-N) is 1
+       there and 0 (not built) above it. It appears once the terminal
+       grows.
   -->
   <layout id='default'>
     <!-- Chat strip across the top -->
@@ -171,50 +176,50 @@
     <window class='command'   top='lines-1' left='13' width='cols-13' height='1'/>
 
     <!-- Vital bars (left column) -->
-    <window class='progress' top='lines-11' left='0' width='11' height='1' label='stance:'  value='stance'      bg='290055'/>
-    <window class='progress' top='lines-10' left='0' width='11' height='1' label='mind:'    value='mind'        bg='663000,442000'/>
-    <window class='progress' top='lines-8'  left='0' width='11' height='1' label='health:'  value='health'      bg='004800,003300'/>
-    <window class='progress' top='lines-7'  left='0' width='11' height='1' label='spirit:'  value='spirit'      bg='333300,222200'/>
-    <window class='progress' top='lines-6'  left='0' width='11' height='1' label='mana:'    value='mana'        bg='0000a0,000055'/>
-    <window class='progress' top='lines-5'  left='0' width='11' height='1' label='stam:'    value='stamina'     bg='003333,002222'/>
-    <window class='progress' top='lines-3'  left='0' width='11' height='1' label='load:'    value='encumbrance' bg='990033,4c0019' fg='nil,nil,nil,444444'/>
+    <window class='progress' top='lines-11' left='0' width='11' height='min(1, lines-16)' label='stance:'  value='stance'      bg='290055'/>
+    <window class='progress' top='lines-10' left='0' width='11' height='min(1, lines-15)' label='mind:'    value='mind'        bg='663000,442000'/>
+    <window class='progress' top='lines-8'  left='0' width='11' height='min(1, lines-13)' label='health:'  value='health'      bg='004800,003300'/>
+    <window class='progress' top='lines-7'  left='0' width='11' height='min(1, lines-12)' label='spirit:'  value='spirit'      bg='333300,222200'/>
+    <window class='progress' top='lines-6'  left='0' width='11' height='min(1, lines-11)' label='mana:'    value='mana'        bg='0000a0,000055'/>
+    <window class='progress' top='lines-5'  left='0' width='11' height='min(1, lines-10)' label='stam:'    value='stamina'     bg='003333,002222'/>
+    <window class='progress' top='lines-3'  left='0' width='11' height='min(1, lines-8)' label='load:'    value='encumbrance' bg='990033,4c0019' fg='nil,nil,nil,444444'/>
 
     <!-- Countdown timers -->
-    <window class='countdown' top='lines-2' left='0' width='11' height='1' label='stun:'    value='stunned'   fg='444444,dddddd'                bg='nil,aa0000'/>
-    <window class='countdown' top='lines-1' left='0' width='11' height='1' label='rndtime:' value='roundtime' fg='444444,dddddd,dddddd,dddddd'  bg='nil,aa0000,0000aa'/>
+    <window class='countdown' top='lines-2' left='0' width='11' height='min(1, lines-7)' label='stun:'    value='stunned'   fg='444444,dddddd'                bg='nil,aa0000'/>
+    <window class='countdown' top='lines-1' left='0' width='11' height='min(1, lines-6)' label='rndtime:' value='roundtime' fg='444444,dddddd,dddddd,dddddd'  bg='nil,aa0000,0000aa'/>
 
     <!-- Compass indicators -->
-    <window class='indicator' top='lines-15' left='1' height='1' width='1' label='^' value='compass:up'  fg='444444,ffff00'/>
-    <window class='indicator' top='lines-14' left='1' height='1' width='1' label='o' value='compass:out' fg='444444,ffff00'/>
-    <window class='indicator' top='lines-13' left='1' height='1' width='1' label='v' value='compass:down' fg='444444,ffff00'/>
-    <window class='indicator' top='lines-15' left='5' height='1' width='1' label='*' value='compass:nw'  fg='444444,ffff00'/>
-    <window class='indicator' top='lines-14' left='5' height='1' width='1' label='&lt;' value='compass:w' fg='444444,ffff00'/>
-    <window class='indicator' top='lines-13' left='5' height='1' width='1' label='*' value='compass:sw'  fg='444444,ffff00'/>
-    <window class='indicator' top='lines-15' left='7' height='1' width='1' label='^' value='compass:n'   fg='444444,ffff00'/>
-    <window class='indicator' top='lines-13' left='7' height='1' width='1' label='v' value='compass:s'   fg='444444,ffff00'/>
-    <window class='indicator' top='lines-15' left='9' height='1' width='1' label='*' value='compass:ne'  fg='444444,ffff00'/>
-    <window class='indicator' top='lines-14' left='9' height='1' width='1' label='&gt;' value='compass:e' fg='444444,ffff00'/>
-    <window class='indicator' top='lines-13' left='9' height='1' width='1' label='*' value='compass:se'  fg='444444,ffff00'/>
+    <window class='indicator' top='lines-15' left='1' height='min(1, lines-20)' width='1' label='^' value='compass:up'  fg='444444,ffff00'/>
+    <window class='indicator' top='lines-14' left='1' height='min(1, lines-19)' width='1' label='o' value='compass:out' fg='444444,ffff00'/>
+    <window class='indicator' top='lines-13' left='1' height='min(1, lines-18)' width='1' label='v' value='compass:down' fg='444444,ffff00'/>
+    <window class='indicator' top='lines-15' left='5' height='min(1, lines-20)' width='1' label='*' value='compass:nw'  fg='444444,ffff00'/>
+    <window class='indicator' top='lines-14' left='5' height='min(1, lines-19)' width='1' label='&lt;' value='compass:w' fg='444444,ffff00'/>
+    <window class='indicator' top='lines-13' left='5' height='min(1, lines-18)' width='1' label='*' value='compass:sw'  fg='444444,ffff00'/>
+    <window class='indicator' top='lines-15' left='7' height='min(1, lines-20)' width='1' label='^' value='compass:n'   fg='444444,ffff00'/>
+    <window class='indicator' top='lines-13' left='7' height='min(1, lines-18)' width='1' label='v' value='compass:s'   fg='444444,ffff00'/>
+    <window class='indicator' top='lines-15' left='9' height='min(1, lines-20)' width='1' label='*' value='compass:ne'  fg='444444,ffff00'/>
+    <window class='indicator' top='lines-14' left='9' height='min(1, lines-19)' width='1' label='&gt;' value='compass:e' fg='444444,ffff00'/>
+    <window class='indicator' top='lines-13' left='9' height='min(1, lines-18)' width='1' label='*' value='compass:se'  fg='444444,ffff00'/>
 
     <!-- Body part injury indicators (ASCII figure) -->
-    <window class='indicator' top='lines-23' left='1' height='1' width='1' label='e' value='leftEye'   fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-23' left='5' height='1' width='1' label='e' value='rightEye'  fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-22' left='3' height='1' width='1' label='O' value='head'      fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-21' left='2' height='1' width='1' label='/' value='leftArm'   fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-21' left='3' height='1' width='1' label='|' value='chest'     fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-21' left='4' height='1' width='1' label='\' value='rightArm'  fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-20' left='1' height='1' width='1' label='o' value='leftHand'  fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-20' left='3' height='1' width='1' label='|' value='abdomen'   fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-20' left='5' height='1' width='1' label='o' value='rightHand' fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-19' left='1' height='2' width='2' label=' /o' value='leftLeg' fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-19' left='4' height='2' width='2' label='\  o' value='rightLeg' fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-23' left='8' height='1' width='2' label='ns' value='nsys'     fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-21' left='8' height='1' width='2' label='nk' value='neck'     fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
-    <window class='indicator' top='lines-19' left='8' height='1' width='2' label='bk' value='back'     fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-23' left='1' height='min(1, lines-28)' width='1' label='e' value='leftEye'   fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-23' left='5' height='min(1, lines-28)' width='1' label='e' value='rightEye'  fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-22' left='3' height='min(1, lines-27)' width='1' label='O' value='head'      fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-21' left='2' height='min(1, lines-26)' width='1' label='/' value='leftArm'   fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-21' left='3' height='min(1, lines-26)' width='1' label='|' value='chest'     fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-21' left='4' height='min(1, lines-26)' width='1' label='\' value='rightArm'  fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-20' left='1' height='min(1, lines-25)' width='1' label='o' value='leftHand'  fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-20' left='3' height='min(1, lines-25)' width='1' label='|' value='abdomen'   fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-20' left='5' height='min(1, lines-25)' width='1' label='o' value='rightHand' fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-19' left='1' height='min(2, 2*(lines-24))' width='2' label=' /o' value='leftLeg' fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-19' left='4' height='min(2, 2*(lines-24))' width='2' label='\  o' value='rightLeg' fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-23' left='8' height='min(1, lines-28)' width='2' label='ns' value='nsys'     fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-21' left='8' height='min(1, lines-26)' width='2' label='nk' value='neck'     fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
+    <window class='indicator' top='lines-19' left='8' height='min(1, lines-24)' width='2' label='bk' value='back'     fg='444444,ffff00,ff6600,ff0000,00ffff,0066ff,0000ff'/>
 
     <!-- Status condition indicators -->
-    <window class='indicator' top='lines-17' left='0' height='1' width='3' label='psn' value='poisoned' fg='444444,ff0000'/>
-    <window class='indicator' top='lines-17' left='4' height='1' width='3' label='dis' value='diseased' fg='444444,ff0000'/>
-    <window class='indicator' top='lines-17' left='8' height='1' width='3' label='bld' value='bleeding' fg='444444,ff0000'/>
+    <window class='indicator' top='lines-17' left='0' height='min(1, lines-22)' width='3' label='psn' value='poisoned' fg='444444,ff0000'/>
+    <window class='indicator' top='lines-17' left='4' height='min(1, lines-22)' width='3' label='dis' value='diseased' fg='444444,ff0000'/>
+    <window class='indicator' top='lines-17' left='8' height='min(1, lines-22)' width='3' label='bld' value='bleeding' fg='444444,ff0000'/>
   </layout>
 </settings>

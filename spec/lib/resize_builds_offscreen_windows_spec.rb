@@ -213,6 +213,14 @@ RSpec.describe 'Windows off the screen when the layout loads' do
 
   def text_of(window) = window.rows.reject(&:empty?)
 
+  # A {#layout_state} without the rows tysong's main window shows (its
+  # place and scrollbar kept), for comparing clients whose main window
+  # was built at different heights.
+  def without_main_rows(state)
+    main = place_of(wm.stream['main'])
+    state.merge(windows: state[:windows].map { |shown| shown.first(5) == main ? shown.first(5) + shown.drop(6) : shown })
+  end
+
   def built?(window) = BaseWindow.all_windows.any? { |built| built.equal?(window) }
 
   around do |example|
@@ -282,21 +290,31 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       expect(text_of(wm.stream['thoughts'])).to eq [gs_thought_text]
     end
 
+    # Main is built at 24x80 too, 9 rows tall (min(37, lines-15)), and
+    # grows to 37 rows. A text window that grows keeps its lines on the
+    # rows they were on, with blank rows below them until more lines come
+    # (as on any terminal that grows); a client started at 55x234 starts
+    # main with 37 blank rows, so its lines are at the bottom. Main shows
+    # the same lines either way.
     it 'ends up as the same layout as a client started at 55x234, with the same lines after it' do
       terminal_resize(55, 234)
       receive_from_server(gs_room, gs_speech, gs_thought)
       grown = layout_state
+      grown_main = text_of(wm.stream['main'])
 
       restart_client
       start(template('tysong'), 55, 234)
       receive_from_server(gs_room, gs_speech, gs_thought)
 
-      expect(grown).to eq layout_state
+      expect(grown_main).to eq text_of(wm.stream['main'])
+      expect(without_main_rows(grown)).to eq without_main_rows(layout_state)
     end
 
     it 'puts the new text windows in the Tab cycle where the layout lists them, keeping the current window' do
       main = wm.stream['main']
-      expect(tab_cycle.map(&:first)).to eq %w[TextWindow] * 4
+      # familiar and main; death and logons have no rows left above the
+      # left sidebar at 24 lines
+      expect(tab_cycle.map(&:first)).to eq %w[TextWindow] * 2
 
       terminal_resize(55, 234)
 
@@ -334,8 +352,12 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       expect(wm.stream['speech']).to be_nil
       expect(wm.stream['lnet']).to be_a TextWindow
 
+      # Column 161 on: min(72, cols-161) and min(73, cols-161) columns. The
+      # room window takes 1 column; a text window needs 2.
       terminal_resize(24, 162)
       expect(wm.room['room']).to be_a RoomWindow
+      expect(wm.stream['speech']).to be_nil
+      terminal_resize(24, 163)
       expect(wm.stream['speech']).to be_a TextWindow
     end
 
@@ -406,15 +428,21 @@ RSpec.describe 'Windows off the screen when the layout loads' do
   describe 'tysong.xml started at 20x80' do
     before { start(template('tysong'), 20, 80) }
 
-    # The injury figure's top rows sit at lines-23..lines-21, above the
-    # top row on a 20-line terminal.
+    # The injury figure sits at lines-23..lines-18, and a left sidebar item
+    # is built only on row 13 or lower, below the familiar window: the legs
+    # (lines-19) from 32 lines, the eyes (lines-23) from 36.
     it 'builds the injury indicators when the terminal gets taller, with their labels' do
-      expect(wm.indicator.keys).not_to include('leftEye', 'head', 'chest')
+      expect(wm.indicator.keys).not_to include('leftEye', 'head', 'chest', 'leftLeg')
+
+      terminal_resize(32, 80)
+
+      expect(geometry(wm.indicator['leftLeg'])).to eq [13, 1, 2, 2]
       expect(wm.indicator['leftLeg'].rows).to eq [' /', 'o']
+      expect(wm.indicator.keys).not_to include('leftEye', 'head', 'chest')
 
-      terminal_resize(24, 80)
+      terminal_resize(36, 80)
 
-      expect(geometry(wm.indicator['leftEye'])).to eq [1, 1, 1, 1]
+      expect(geometry(wm.indicator['leftEye'])).to eq [13, 1, 1, 1]
       expect(wm.indicator['head'].rows).to eq ['O']
       expect(wm.indicator['chest'].rows).to eq ['|']
     end
@@ -447,7 +475,11 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       expect(wm.stream['lnet']).to be_a TextWindow
       expect(SCROLL_WINDOW[0]).to be familiar
 
+      # Main (row 14, min(37, lines-15) rows) gets its first row at 16 lines.
       terminal_resize(15, 161)
+      expect(wm.stream['main']).to be_nil
+      expect(SCROLL_WINDOW[0]).to be familiar
+      terminal_resize(16, 161)
       expect(SCROLL_WINDOW[0]).to be wm.stream['main']
       expect(familiar.active?).to be false
     end
