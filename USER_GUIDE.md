@@ -259,6 +259,24 @@ You can combine them with `+`, `-`, `*`, `/`, and parentheses:
 
 All expressions are evaluated as integers.
 
+Two functions keep a fixed size from running past the screen: `min(a, b)` is
+the smaller of `a` and `b`, `max(a, b)` the larger. Each takes exactly two
+arguments, and each argument is a whole expression, so calls nest and combine
+with the operators:
+
+| Expression | Meaning |
+|------------|---------|
+| `min(16, lines-19)` | 16 rows, or fewer on a terminal too short for 16 (ends 2 rows from the bottom when it starts at row 17) |
+| `min(104, cols-1)` | 104 columns, but never past the right edge when it starts at column 1 |
+| `max(1, cols/3-60)` | A third of the width minus 60, but at least 1 |
+| `max(1, min(16, lines-19))` | Between 1 and 16 rows |
+| `2*min(cols/3, 40)` | Calls work like numbers inside larger expressions |
+
+A malformed call (`min(1)`, `min(1, 2, 3)`, `min(, 2)`, a missing `)`, a
+name not followed by `(`) or a comma outside a call's arguments makes the
+expression 0 and prints a warning on standard error; so does any other name
+(`MIN`, `abs`).
+
 A window whose top or left falls off the screen, or that gets no rows or
 columns, isn't built when the layout loads. It is built as soon as the
 terminal is large enough (on the next resize or `.resize`), where the layout
