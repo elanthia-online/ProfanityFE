@@ -385,7 +385,8 @@
        room for it (53+ rows, 234+ columns). With less room, windows end
        at the right edge, the main, speech and room windows end above the
        command line, and the death and logon streams end above the left
-       sidebar. A sidebar item is built only while its row is below the
+       sidebar (as in original.xml; while they aren't built, their lines
+       show in main). A sidebar item is built only while its row is below the
        familiar window (row 13 or lower): height min(1, lines-N) is 1
        there and 0 (not built) above it. A window not built appears once
        the terminal grows.
