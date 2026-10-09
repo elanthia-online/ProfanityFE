@@ -144,7 +144,7 @@ module Curses
   def self.init_pair(*) = nil
   def self.init_color(*) = nil
   def self.color_content(*) = [0, 0, 0]
-  def self.doupdate = TerminalCursor.flush
+  def self.doupdate = TerminalScreen.doupdate
   def self.use_default_colors = nil
   def self.mousemask(*) = nil
 
@@ -176,8 +176,8 @@ require_relative 'support/virtual_screen'
 
 module CursesRenderer
   def self.synchronize = yield
-  def self.render = (yield; Curses::TerminalCursor.flush)
-  def self.doupdate = Curses::TerminalCursor.flush
+  def self.render = (yield; Curses::TerminalScreen.doupdate)
+  def self.doupdate = Curses::TerminalScreen.doupdate
   def self.outside_lock = yield
 end
 
@@ -273,6 +273,7 @@ RSpec.configure do |config|
     # Windows register themselves in per-class instance lists; start empty.
     BaseWindow.window_classes.each { |klass| klass.list.clear }
     Curses::TerminalCursor.reset
+    Curses::TerminalScreen.reset
     # The real terminal is off limits (see "Keep the suite off the desktop").
     allow(File).to receive(:open).and_call_original
     allow(File).to receive(:open).with('/dev/tty', 'w').and_yield(spec_terminal)

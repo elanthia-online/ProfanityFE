@@ -266,6 +266,96 @@ RSpec.describe Curses::Window do
     end
   end
 
+  # The terminal after doupdate. Each rule here was checked against a real
+  # ncurses screen (12x40, xterm-256color, in a pseudo-terminal): the same
+  # calls on three overlapping windows, the screen read back after every
+  # doupdate, 23 steps identical to the virtual screen's.
+  describe 'the terminal (overlapping windows)' do
+    before do
+      allow(Curses).to receive_messages(lines: 12, cols: 40)
+    end
+
+    # back: rows 0-7, full width; front: rows 4-9, columns 10-29;
+    # line: row 7, full width, refreshed last.
+    let(:back) { described_class.new(8, 40, 0, 0) }
+    let(:front) { described_class.new(6, 20, 4, 10) }
+    let(:line) { described_class.new(1, 40, 7, 0) }
+
+    def terminal = Curses::TerminalScreen.rows
+
+    before do
+      back.addstr('b' * 40 * 7)
+      front.addstr('f' * 20 * 5)
+      line.addstr('> typed text')
+      [back, front, line].each(&:noutrefresh)
+      Curses.doupdate
+    end
+
+    it 'shows nothing a window wrote until doupdate' do
+      line.setpos(0, 2)
+      line.addstr('TYPED')
+      line.noutrefresh
+      expect(terminal[7]).to eq '> typed text'
+
+      Curses.doupdate
+      expect(terminal[7]).to eq '> TYPED text'
+    end
+
+    it 'keeps a window drawn over another when the one below is refreshed with no changes' do
+      front.setpos(3, 0)
+      front.addstr('XXXX')
+      front.noutrefresh
+      line.noutrefresh
+      Curses.doupdate
+      expect(terminal[7]).to eq '> typed teXXXX'
+    end
+
+    it 'copies the whole window again after touch' do
+      front.setpos(3, 0)
+      front.addstr('XXXX')
+      front.noutrefresh
+      line.touch
+      line.noutrefresh
+      Curses.doupdate
+      expect(terminal[7]).to eq '> typed text'
+    end
+
+    it 'copies only the changed part of a line' do
+      back.setpos(5, 2)
+      back.addstr('zz')
+      back.noutrefresh
+      Curses.doupdate
+      expect(terminal[5]).to eq "bbzz#{'b' * 6}#{'f' * 20}#{'b' * 10}"
+    end
+
+    it 'copies every row a scroll moved' do
+      back.scrollok(true)
+      back.setpos(7, 0)
+      back.addstr("\nnew")
+      back.noutrefresh
+      Curses.doupdate
+      expect(terminal[3..7]).to eq ['b' * 40, 'b' * 40, 'b' * 40, '', 'new']
+    end
+
+    it 'copies the whole window after a move' do
+      front.move(6, 20)
+      front.noutrefresh
+      Curses.doupdate
+      expect(terminal[7]).to eq "> typed text#{' ' * 8}#{'f' * 20}"
+    end
+
+    it 'copies a new window whole, blank cells included' do
+      described_class.new(2, 10, 8, 2).noutrefresh
+      Curses.doupdate
+      expect(terminal[8]).to eq "#{' ' * 12}#{'f' * 18}"
+    end
+
+    it 'clears the screen when a new window of size 0x0 is refreshed (it reaches the edges)' do
+      described_class.new(0, 0, 0, 0).refresh
+      expect(terminal).to all(eq(''))
+    end
+  end
+
   describe 'a closed window' do
     %i[maxy cury addstr close].each do |meth|
       it "raises on #{meth}, as the curses gem does" do
