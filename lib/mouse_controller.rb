@@ -11,6 +11,12 @@
 # history and sends it with the +send_to_server+ callback, but only while
 # links are on (+SharedState#blue_links+).
 #
+# The command line stays on top of any window the layout puts under it
+# (see {OnTopWindow}), so a press or click on it reaches no window: it
+# neither follows a link nor starts a selection in text the user can't
+# see. A drag over the command line ends where the pointer last was off
+# it.
+#
 # @example
 #   mouse = MouseController.new(key_action: key_action, window_mgr: window_mgr,
 #                               shared_state: shared_state, cmd_buffer: cmd_buffer,
@@ -67,7 +73,7 @@ class MouseController
       handle_release(screen_y, screen_x)
     elsif defined?(Curses::BUTTON1_CLICKED) && (bstate & Curses::BUTTON1_CLICKED) != 0
       SelectionManager.clear_selection
-      window = BaseWindow.find_window_at(screen_y, screen_x)
+      window = window_at(screen_y, screen_x)
       if window
         rel_y = screen_y - window.begy
         rel_x = screen_x - window.begx
@@ -99,14 +105,15 @@ class MouseController
   private
 
   # Button 1 pressed: start a selection in the window under the pointer.
-  # A press outside every window clears the selection. A double or triple
-  # click selects a word or line at once, so the screen is flushed.
+  # A press outside every window, or on the command line, clears the
+  # selection. A double or triple click selects a word or line at once,
+  # so the screen is flushed.
   #
   # @param screen_y [Integer] the pointer's row on the screen
   # @param screen_x [Integer] the pointer's column on the screen
   # @return [void]
   def handle_press(screen_y, screen_x)
-    window = BaseWindow.find_window_at(screen_y, screen_x)
+    window = window_at(screen_y, screen_x)
     unless window
       SelectionManager.clear_selection
       return
@@ -119,7 +126,9 @@ class MouseController
   end
 
   # Live highlight update from a motion report while button 1 is held.
-  # SelectionManager throttles redraws so a motion flood coalesces.
+  # SelectionManager throttles redraws so a motion flood coalesces. A
+  # report from the command line is ignored: the window under it is
+  # hidden there.
   #
   # @param screen_y [Integer] the pointer's row on the screen
   # @param screen_x [Integer] the pointer's column on the screen
@@ -127,6 +136,7 @@ class MouseController
   def handle_drag(screen_y, screen_x)
     window = SelectionManager.active_window
     return unless window && SelectionManager.selecting
+    return if on_command_line?(screen_y, screen_x)
 
     rel_y = screen_y - window.begy
     rel_x = screen_x - window.begx
@@ -137,7 +147,8 @@ class MouseController
   # a drag copies the selection. A release on the press's row, at most 3
   # columns from it, ends a click; the link it follows is the one under
   # the press, the cell the user aimed at. A double or triple click whose
-  # first click followed a link does nothing more.
+  # first click followed a link does nothing more. A drag released on the
+  # command line ends at the last motion report off it (or at the press).
   #
   # @param screen_y [Integer] the pointer's row on the screen
   # @param screen_x [Integer] the pointer's column on the screen
@@ -169,9 +180,35 @@ class MouseController
       end
     else
       # Actual drag: finalize selection and copy to clipboard
-      SelectionManager.update_selection(rel_y, rel_x)
+      if on_command_line?(screen_y, screen_x)
+        SelectionManager.update_selection(*SelectionManager.last_drag_pos) if SelectionManager.last_drag_pos
+      else
+        SelectionManager.update_selection(rel_y, rel_x)
+      end
       finalize_selection
     end
+  end
+
+  # The window under a screen cell, as the user sees it: none on the
+  # command line, which stays on top of the windows under it.
+  #
+  # @param screen_y [Integer] the cell's row on the screen
+  # @param screen_x [Integer] the cell's column on the screen
+  # @return [BaseWindow, nil]
+  def window_at(screen_y, screen_x)
+    return if on_command_line?(screen_y, screen_x)
+
+    BaseWindow.find_window_at(screen_y, screen_x)
+  end
+
+  # Whether a screen cell is the command line's: the command window or a
+  # window kept on top with it (see {OnTopWindow#covers?}).
+  #
+  # @param screen_y [Integer] the cell's row on the screen
+  # @param screen_x [Integer] the cell's column on the screen
+  # @return [Boolean]
+  def on_command_line?(screen_y, screen_x)
+    @window_mgr.command_window&.covers?(screen_y, screen_x) || false
   end
 
   # Copy the finished selection and show brief feedback in the main window.

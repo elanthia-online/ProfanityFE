@@ -310,6 +310,9 @@ RSpec.describe WindowManager, '#resize geometry' do
 
     # Overlapping windows show whichever was copied to the screen last, so
     # the order the windows are flushed in is part of what the user sees.
+    # Each refresh of the command window copies the prompt indicator first
+    # (OnTopWindow), which is logged after the command window's own call:
+    # each "command prompt" pair is the prompt copied, then the command.
     it 'flushes the windows to the screen in the same order on every resize' do
       flushed = []
       windows.each do |name, window|
@@ -322,7 +325,7 @@ RSpec.describe WindowManager, '#resize geometry' do
       expect(flushed.chunk_while { |a, b| a == b }.map(&:first)).to eq %i[
         main main_scrollbar main thoughts thoughts_scrollbar thoughts
         combat_scrollbar combat atmo_scrollbar atmo
-        exp spells room kneeling prompt health roundtime command prompt command
+        exp spells room kneeling prompt health roundtime command prompt command prompt command prompt
       ]
     end
   end

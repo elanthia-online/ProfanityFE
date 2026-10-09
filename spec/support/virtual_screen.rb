@@ -5,8 +5,9 @@ module Curses
   # stages that window's cursor (as a screen position) and doupdate moves
   # the terminal cursor to the one staged last, so after a flush the cursor
   # is wherever the window refreshed last left it. Window#refresh does
-  # both. spec_helper's Curses.doupdate and its CursesRenderer stub call
-  # {.flush}, and every example starts with {.reset}.
+  # both. TerminalScreen.doupdate (spec_helper's Curses.doupdate and its
+  # CursesRenderer stub) calls {.flush}, and every example starts with
+  # {.reset}.
   module TerminalCursor
     class << self
       # @return [Array(Integer, Integer), nil] screen row and column of the
@@ -32,6 +33,94 @@ module Curses
     end
   end
 
+  # What the terminal shows, modelled on ncurses' two screens: each
+  # Window#noutrefresh copies the part of every line the window changed
+  # since its last refresh (and only that part, as wnoutrefresh does) into
+  # the next frame, and doupdate shows that frame. So where windows
+  # overlap, the cells on the terminal are those of the window that last
+  # copied them, which is not always the window refreshed last: a window
+  # refreshed with no changes copies nothing. spec_helper's Curses.doupdate
+  # and its CursesRenderer stub call {.doupdate}; every example starts with
+  # {.reset}.
+  #
+  # Checked against real ncurses in a pseudo-terminal: a window copies only
+  # the changed range of a line; Window.new, #move, #touch, #erase and
+  # #clear mark every line; scrolling marks the scrolled rows.
+  module TerminalScreen
+    class << self
+      # Copy one cell into the next frame (what wnoutrefresh does for each
+      # changed cell). Cells off the screen are dropped.
+      #
+      # @param y [Integer] screen row
+      # @param x [Integer] screen column
+      # @param cell [Array(String, Integer)] character and attributes
+      # @param lines [Integer] the screen's height (read once per window
+      #   by the caller: specs often stub Curses.lines, and a stubbed call
+      #   per cell made every refresh slow)
+      # @param cols [Integer] the screen's width
+      def stage(y, x, cell, lines = Curses.lines, cols = Curses.cols)
+        return if y.negative? || x.negative? || y >= lines || x >= cols
+
+        (staged[y] ||= {})[x] = cell
+        changed_rows[y] = true
+      end
+
+      # Show the next frame and move the terminal cursor (see
+      # TerminalCursor), as Curses.doupdate does.
+      def doupdate
+        # Only the rows staged since the last doupdate are copied, so a
+        # frame costs what changed in it, not the whole screen.
+        @shown ||= {}
+        changed_rows.each_key { |y| @shown[y] = staged[y].dup }
+        changed_rows.clear
+        TerminalCursor.flush
+      end
+
+      # @param y [Integer] screen row
+      # @return [String] the characters the terminal shows on a row after
+      #   the last doupdate, trailing blanks removed
+      def row(y)
+        (0...Curses.cols).map { |x| cell(y, x).first }.join.rstrip
+      end
+
+      # @return [Array<String>] every row of the terminal, trailing blanks
+      #   removed
+      def rows
+        (0...Curses.lines).map { |y| row(y) }
+      end
+
+      # @param y [Integer] screen row
+      # @param x [Integer] screen column
+      # @return [Integer] the attributes of the cell the terminal shows
+      def attrs_at(y, x)
+        cell(y, x).last
+      end
+
+      # Blank the terminal and the next frame.
+      def reset
+        @staged = {}
+        @shown = {}
+        @changed_rows = {}
+      end
+
+      private
+
+      # The next frame: row => { column => cell } for every cell staged.
+      def staged
+        @staged ||= {}
+      end
+
+      # The rows staged since the last doupdate.
+      def changed_rows
+        @changed_rows ||= {}
+      end
+
+      def cell(y, x)
+        (@shown || {}).dig(y, x) || Window::BLANK
+      end
+    end
+  end
+
   # Headless stand-in for Curses::Window that models what a real curses
   # window shows: a grid of cells (character + attributes), a cursor, a
   # scrolling region, and the attribute state. Specs can assert on the
@@ -45,6 +134,9 @@ module Curses
   #   scrollok is on, and otherwise leaves the cursor on the bottom line;
   # - scrl scrolls only the scrolling region (the whole window by default),
   #   and only while scrollok is on;
+  # - each window remembers which part of each line changed since its last
+  #   refresh, and #noutrefresh copies only that part to the terminal (see
+  #   TerminalScreen);
   # - after #close, every curses call, a second #close and the size,
   #   position and cursor readers included, raises RuntimeError "already
   #   closed window", as the curses gem does. The inspection helpers
@@ -75,11 +167,16 @@ module Curses
     # @return [Array<Array(Symbol, Array)>] every call made, in order
     attr_reader :call_log
 
+    # Like newwin, a height or width of 0 reaches the bottom or right edge
+    # of the screen.
+    #
     # @param height [Integer] number of rows
     # @param width [Integer] number of columns
     # @param top [Integer] screen row of the window's top edge
     # @param left [Integer] screen column of the window's left edge
     def initialize(height = 1, width = 80, top = 0, left = 0)
+      height = Curses.lines - top if height.zero?
+      width = Curses.cols - left if width.zero?
       @maxy = height
       @maxx = width
       @begy = top
@@ -91,6 +188,7 @@ module Curses
       @attrs = 0
       @scrollok = false
       @region = nil
+      touch_rows(0...height)
     end
 
     # --- Screen inspection (for specs) ---
@@ -147,6 +245,7 @@ module Curses
       line = @cells[@cury]
       line.insert(@curx, [ch.is_a?(Integer) ? ch.chr : ch.to_s, @attrs])
       line.pop
+      touch_to_eol(@cury, @curx)
       nil
     end
 
@@ -155,6 +254,7 @@ module Curses
       line = @cells[@cury]
       line.delete_at(@curx)
       line.push(BLANK)
+      touch_to_eol(@cury, @curx)
       nil
     end
 
@@ -162,12 +262,13 @@ module Curses
       log(:deleteln)
       @cells.delete_at(@cury)
       @cells.push(blank_row(@maxx))
+      touch_rows(@cury...@maxy)
       nil
     end
 
     def clrtoeol
       log(:clrtoeol)
-      (@curx...@maxx).each { |x| @cells[@cury][x] = BLANK }
+      clrtoeol_silently
       nil
     end
 
@@ -213,6 +314,7 @@ module Curses
           @cells.insert(top, blank_row(@maxx))
         end
       end
+      touch_rows(top..bottom)
       nil
     end
 
@@ -268,6 +370,8 @@ module Curses
       @maxx = width
       @cury = [@cury, height - 1].min
       @curx = [@curx, width - 1].min
+      @changed = []
+      touch_rows(0...height)
       nil
     end
 
@@ -281,22 +385,32 @@ module Curses
 
       @begy = top
       @begx = left
+      touch_rows(0...@maxy)
       nil
     end
 
-    # Like wnoutrefresh, stages the cursor for the next doupdate (see
-    # TerminalCursor).
+    # Like touchwin, marks every line as changed, so the next #noutrefresh
+    # copies the whole window to the terminal.
+    def touch
+      log(:touch)
+      touch_rows(0...@maxy)
+      nil
+    end
+
+    # Like wnoutrefresh, copies the changed part of each line to the next
+    # frame (see TerminalScreen), forgets the changes, and stages the
+    # cursor for the next doupdate (see TerminalCursor).
     def noutrefresh
       log(:noutrefresh)
-      TerminalCursor.stage(@begy + @cury, @begx + @curx)
+      stage_changes
       nil
     end
 
     # Like wrefresh: wnoutrefresh, then doupdate.
     def refresh
       log(:refresh)
-      TerminalCursor.stage(@begy + @cury, @begx + @curx)
-      TerminalCursor.flush
+      stage_changes
+      TerminalScreen.doupdate
     end
 
     # --- Calls with no effect on the modelled screen ---
@@ -341,6 +455,38 @@ module Curses
       raise 'already closed window' if @closed
     end
 
+    # Copy each line's changed range to the terminal's next frame, forget
+    # the changes, and stage the cursor.
+    def stage_changes
+      lines = Curses.lines
+      cols = Curses.cols
+      (@changed || []).each_with_index do |range, y|
+        next unless range
+
+        range.each { |x| TerminalScreen.stage(@begy + y, @begx + x, @cells[y][x], lines, cols) if x < @maxx }
+      end
+      @changed = []
+      TerminalCursor.stage(@begy + @cury, @begx + @curx)
+    end
+
+    # Mark columns +first+..+last+ of row +y+ as changed (ncurses keeps one
+    # range per line, from the first to the last changed column).
+    def touch_cells(y, first, last)
+      return if y.negative? || y >= @maxy || last < first
+
+      @changed ||= []
+      old = @changed[y]
+      @changed[y] = old ? ([old.first, first].min..[old.last, last].max) : (first..last)
+    end
+
+    def touch_to_eol(y, x)
+      touch_cells(y, x, @maxx - 1)
+    end
+
+    def touch_rows(rows)
+      rows.each { |y| touch_cells(y, 0, @maxx - 1) }
+    end
+
     def blank_row(width)
       Array.new([width, 0].max) { BLANK }
     end
@@ -349,6 +495,7 @@ module Curses
       @cells = Array.new(@maxy) { blank_row(@maxx) }
       @cury = 0
       @curx = 0
+      touch_rows(0...@maxy)
       nil
     end
 
@@ -365,7 +512,10 @@ module Curses
         return next_line(wrapping: false)
       end
 
-      @cells[@cury][@curx] = [ch, @attrs] if @cury < @maxy && @curx < @maxx
+      if @cury < @maxy && @curx < @maxx
+        @cells[@cury][@curx] = [ch, @attrs]
+        touch_cells(@cury, @curx, @curx)
+      end
       @curx += 1
       return true if @curx < @maxx
 
@@ -373,7 +523,10 @@ module Curses
     end
 
     def clrtoeol_silently
-      (@curx...@maxx).each { |x| @cells[@cury][x] = BLANK } if @cury < @maxy
+      return unless @cury < @maxy
+
+      (@curx...@maxx).each { |x| @cells[@cury][x] = BLANK }
+      touch_to_eol(@cury, @curx)
     end
 
     # Move to the start of the next line, scrolling the region at its
@@ -401,6 +554,7 @@ module Curses
       top, bottom = region
       @cells.delete_at(top)
       @cells.insert(bottom, blank_row(@maxx))
+      touch_rows(top..bottom)
     end
   end
 end

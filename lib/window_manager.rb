@@ -200,7 +200,9 @@ class WindowManager
 
   # Take the command window a layout asks for. The first layout creates
   # it with the block; later layouts keep that window, which the command
-  # buffer draws into, and only replace its layout.
+  # buffer draws into, and only replace its layout. The window is kept on
+  # top of any window that overlaps it (see {OnTopWindow}), and so is the
+  # current layout's prompt indicator, the rest of the command line.
   #
   # @param layout [WindowLayout] where the layout puts the command line
   # @yield once, only when there is no command window yet
@@ -209,7 +211,7 @@ class WindowManager
   # @return [Curses::Window] the command window
   # @api private
   def install_command_window(layout)
-    @command_window ||= yield
+    @command_window ||= yield.extend(OnTopWindow).keep_on_top_with { [@indicator['prompt']] }
     @command_window_layout = layout
     @command_window
   end
@@ -319,6 +321,92 @@ class WindowManager
     end
     prompt_window.label = @prompt_text
     true
+  end
+end
+
+# Keeps a window on top of the windows that overlap it: whatever the
+# layout says, their text never shows in its cells. The command window is
+# extended with it (see {WindowManager#install_command_window}).
+#
+# ncurses' wnoutrefresh copies to the screen only the lines a window
+# changed since it was last refreshed. Every screen update refreshes the
+# command window last, so that the cursor ends on the command line (see
+# {CommandBuffer#flush_screen}), but an unchanged command window copied
+# nothing: a window that wrote over the command line's cells earlier in
+# the same update (main scrolling under it at 80x24, say) kept them on the
+# screen until a resize redrew the command line. A window extended with
+# this module marks all of its lines changed before each refresh, so it
+# is copied whole and wins every cell it covers. The cost is one copy of
+# the window's cells per refresh; doupdate sends the terminal only the
+# cells that differ from what it already shows, so nothing more is sent
+# where no window overlaps.
+#
+# Windows that belong with it (the prompt indicator, see
+# {#keep_on_top_with}) are copied whole just before it at each refresh,
+# so they stay on top too and the cursor still ends in this window.
+module OnTopWindow
+  # Keep other windows on top along with this one.
+  #
+  # @param windows [Proc] returns the windows (see the block)
+  # @yieldreturn [Array<Curses::Window, nil>] the windows, asked for at
+  #   each refresh (so a window replaced by a new layout is followed); nil
+  #   entries are skipped
+  # @return [self]
+  def keep_on_top_with(&windows)
+    @kept_with = windows
+    self
+  end
+
+  # Copy the whole window to the next screen update, not just its changed
+  # lines (see the module docs), after the windows kept on top with it,
+  # and leave the cursor in it.
+  #
+  # @return [void]
+  def noutrefresh
+    copy_kept_with
+    touch
+    super
+  end
+
+  # Copy the whole window to the screen at once, as {#noutrefresh} does,
+  # then update the terminal.
+  #
+  # @return [void]
+  def refresh
+    copy_kept_with
+    touch
+    super
+  end
+
+  # Whether a screen cell shows this window or a window kept on top with
+  # it, whatever window the layout puts under it. A mouse press there
+  # belongs to the command line, not to the hidden window (see
+  # {MouseController}).
+  #
+  # @param screen_y [Integer] the cell's row on the screen
+  # @param screen_x [Integer] the cell's column on the screen
+  # @return [Boolean]
+  def covers?(screen_y, screen_x)
+    [self, *@kept_with&.call].any? do |window|
+      window &&
+        screen_y >= window.begy && screen_y < window.begy + window.maxy &&
+        screen_x >= window.begx && screen_x < window.begx + window.maxx
+    end
+  end
+
+  private
+
+  # Copy each window kept on top with this one (see {#keep_on_top_with})
+  # whole to the next screen update.
+  #
+  # @return [void]
+  def copy_kept_with
+    @kept_with&.call&.each do |window|
+      next unless window
+
+      window.touch
+      window.noutrefresh
+    end
   end
 end
 

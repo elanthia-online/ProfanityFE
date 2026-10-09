@@ -17,7 +17,7 @@
 #   the cursor on it and stops (ncurses cannot wrap a one-line window).
 # - +clrtoeol+ blanks from the cursor to the end; +deleteln+ blanks the row.
 # - +resize+ changes the width, truncating or padding the row; +move+
-#   only records the call.
+#   and +touch+ only record the call.
 #
 # Every call is also appended to +call_log+ like the spec_helper stub.
 class ScreenLineWindow
@@ -102,6 +102,8 @@ class ScreenLineWindow
   end
 
   def move(y, x) = log(:move, y, x)
+
+  def touch = log(:touch)
 
   def noutrefresh = log(:noutrefresh)
 
