@@ -35,6 +35,7 @@ RSpec.describe 'Dot-commands typed on the command line' do
     'reload' => :none, 'layout' => :required, 'resize' => :none, 'tab' => :optional,
     'arrow' => :none, 'links' => :none, 'select' => :none, 'draghl' => :none,
     'scrollcfg' => :none, 'unhighlight' => :required, 'highlight' => :optional,
+    'effects' => :optional,
     'help' => :none
   }.freeze
 
@@ -505,6 +506,8 @@ RSpec.describe 'Dot-commands typed on the command line' do
         '.unhighlight <text> Remove an inline highlight',
         '.highlight <text>   Add cyan highlight for text (session only)',
         '.highlight          List active inline highlights',
+        '.effects            Show which effect timer categories are visible',
+        '.effects <cat...>   Toggle categories: spells, buffs, debuffs, cooldowns, custom',
         '.help              Show this help'
       ]
     end
@@ -514,7 +517,8 @@ RSpec.describe 'Dot-commands typed on the command line' do
       rows = main.rows.map(&:rstrip).reject(&:empty?)
       expect(rows.first).to eq '*'
       expect(rows.last).to eq '*'
-      expect(rows.length).to eq 20
+      # 18 original help lines, 2 more for .effects and the two banner rows
+      expect(rows.length).to eq 22
     end
   end
 end

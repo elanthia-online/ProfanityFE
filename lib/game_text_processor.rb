@@ -17,6 +17,7 @@ require_relative 'line_filter'
 require_relative 'prompt_tracker'
 require_relative 'stream_router'
 require_relative 'coord_commands'
+require_relative 'effect_tracker'
 
 # Processes game server output in a dedicated thread: parses each line's
 # markup and hands its text to the collaborators that route and assemble it.
@@ -109,6 +110,13 @@ class GameTextProcessor
     @marks = SpanTracker.new(SpanTracker::ROOM_MARKS)
     # The game's commands for coord links, from the server's <cmdlist>
     @coord_commands = CoordCommands.new
+    # The effects of the <dialogData> blocks (spells, buffs, debuffs,
+    # cooldowns). The tracker adds each effect's time left to the server
+    # time now, read from the same clock as the countdown windows.
+    @effects = EffectTracker.new(event_bus: event_bus, pending_render: @pending_render, clock: clock,
+                                 unescape: method(:unescape_entities))
+    # Whether a <dialogData> is open (see TagHandlers#handle_dialog_open)
+    @dialog_open = false
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false

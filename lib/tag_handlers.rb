@@ -6,6 +6,7 @@ require_relative 'link_extractor'
 require_relative 'streams'
 require_relative 'presets'
 require_relative 'room_title'
+require_relative 'effect_tracker'
 
 # Tag dispatch and handler methods for game server XML processing.
 #
@@ -25,6 +26,8 @@ require_relative 'room_title'
 # - @room (a RoomAssembler)
 # - @prompts (a PromptTracker)
 # - @coord_commands (a CoordCommands: the game's commands for coord links)
+# - @effects (an EffectTracker: the effects of the open <dialogData> block)
+# - @dialog_open (false until a <dialogData> opens: whether a block is open)
 # - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
 #   leaving only its kept tags; see LineFilter#gagged?)
@@ -66,7 +69,7 @@ module TagHandlers
     'a'            => :handle_open_link,
     'd'            => :handle_open_link,
     'streamWindow' => :handle_stream_window,
-    'dialogdata'   => :handle_ignored_tag,
+    'dialogData'   => :handle_dialog_open,
     'label'        => :handle_ignored_tag,
     'skin'         => :handle_ignored_tag,
     'output'       => :handle_ignored_tag,
@@ -76,14 +79,15 @@ module TagHandlers
 
   # Dispatch table for closing tags (</tagname>).
   CLOSING_TAG_DISPATCH = {
-    'preset'    => :handle_close_preset,
-    'color'     => :handle_close_color,
-    'b'         => :handle_pop_bold,
-    'a'         => :handle_close_link,
-    'd'         => :handle_close_link,
-    'component' => :handle_stream_close,
-    'compDef'   => :handle_stream_close,
-    'cmdlist'   => :handle_ignored_tag,
+    'preset'     => :handle_close_preset,
+    'color'      => :handle_close_color,
+    'b'          => :handle_pop_bold,
+    'a'          => :handle_close_link,
+    'd'          => :handle_close_link,
+    'component'  => :handle_stream_close,
+    'compDef'    => :handle_stream_close,
+    'cmdlist'    => :handle_ignored_tag,
+    'dialogData' => :handle_dialog_close,
   }.freeze
 
   # Dispatch an XML tag to its handler method.
@@ -110,6 +114,7 @@ module TagHandlers
       @spans.prompt
       @marks.prompt
       @room.prompt_seen
+      finalize_dialog_at_prompt
     end
 
     # <nav rm='NNN'/> names the player's room (see RoomAssembler#nav).
@@ -121,8 +126,10 @@ module TagHandlers
 
     if handler
       send(handler, xml, text_buffer)
-    elsif @router.combat_routing?
-      # Unrecognized tag while combat-next-line is active:
+    elsif @router.combat_routing? && !@dialog_open
+      # Unrecognized tag while combat-next-line is active (the controls of a
+      # <dialogData>, such as its dropDownBox, are not text-bearing and
+      # don't count):
       # flush accumulated text and switch to combat stream.
       flush_text_buffer(text_buffer)
       @router.switch_to_combat
@@ -280,7 +287,12 @@ module TagHandlers
   # @param _text_buffer [String] the text collected so far on the line (unused)
   # @return [void]
   def handle_progress_bar_tag(xml, _text_buffer)
-    id, value, text = XmlTokenizer.attrs(xml).values_at('id', 'value', 'text')
+    attrs = XmlTokenizer.attrs(xml)
+    # A bar inside an effects <dialogData> (or a custom timer's) is an
+    # effect, not a vital.
+    return @effects.add_effect(attrs) if @effects.open?
+
+    id, value, text = attrs.values_at('id', 'value', 'text')
     return unless id && value
 
     number = value.match?(/\A[0-9]+\z/)
@@ -304,6 +316,52 @@ module TagHandlers
       @event_bus.emit(:progress_update, id: id, value: value.to_i, max: 100)
       @pending_render.request_update
     end
+  end
+
+  # Handle <dialogData id='...'> opening tag. The four effect dialogs
+  # (see EffectTracker::CATEGORIES) and the custom timers of Lich scripts
+  # (+ProfanityCustom+, see EffectTracker) start collecting the effects of
+  # their <progressBar> tags; any other dialog (combat's dropDownBox, the
+  # vitals of minivitals) collects nothing, and its tags are handled as
+  # usual, except that an unrecognized one doesn't switch to combat.
+  #
+  # A dialog closed in the same tag (<dialogData id='x'/>) is not left open.
+  # Only the custom one does anything then: <dialogData id='ProfanityCustom'
+  # clear='t'/> clears the custom timers, as the block with an end tag does.
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
+  def handle_dialog_open(xml, _text_buffer)
+    @effects.end_dialog # one still open never got its </dialogData>
+    attrs = XmlTokenizer.attrs(xml)
+    self_closing = xml.end_with?('/>')
+    @dialog_open = !self_closing
+    category = EffectTracker.category_for(attrs['id'])
+    return unless category && (!self_closing || category == EffectTracker::CUSTOM)
+
+    @effects.start_dialog(category, clear: attrs['clear'] == 't')
+    @effects.end_dialog if self_closing
+  end
+
+  # Handle </dialogData>: commit the effects the dialog collected.
+  #
+  # @param _xml [String] the tag (unused)
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
+  def handle_dialog_close(_xml, _text_buffer)
+    @dialog_open = false
+    @effects.end_dialog
+  end
+
+  # Settle a <dialogData> left open at a <prompt>, so a missing
+  # </dialogData> can't leak into the next block (as a stream left open
+  # doesn't, see #resync_streams_at_prompt).
+  #
+  # @return [void]
+  def finalize_dialog_at_prompt
+    @dialog_open = false
+    @effects.finalize
   end
 
   # Handle <arbProgress id='...' max='...' current='...'/> user-defined progress bars.
