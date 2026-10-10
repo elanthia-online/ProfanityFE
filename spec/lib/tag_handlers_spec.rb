@@ -165,8 +165,8 @@ RSpec.describe TagHandlers do
       expect(screen).to eq('combat' => ['The goblin lunges.'])
     end
 
-    it 'keeps the text in its stream at a tag it ignores on purpose, such as dialogdata' do
-      receive_from_server(%(#{combat_then_thoughts}<dialogdata id="foo"/>You recall a song.))
+    it 'keeps the text in its stream at a tag it ignores on purpose, such as dialogData' do
+      receive_from_server(%(#{combat_then_thoughts}<dialogData id="foo"/>You recall a song.))
 
       expect(screen).to eq('thoughts' => ['You recall a song.'])
     end

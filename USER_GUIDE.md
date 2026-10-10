@@ -149,6 +149,7 @@ Available templates:
 | `original.xml` | GS | Minimal GemStone IV baseline — simple 3-window layout with basic highlights. Good clean starting point for GS players. |
 | `tysong.xml` | GS | GemStone IV 1080p template with character class highlighting (Empath, Wizard, Cleric, Ranger, Sorcerer name lists). |
 | `eleazzar.xml` | GS | Advanced GemStone IV template requiring nerd fonts and effectmon.lic/targetlist.lic scripts. Three-column layout with buff/debuff panels. |
+| `eleazzar_effect_window.xml` | GS | Advanced GemStone IV template requiring nerd fonts and the targetlist.lic script (effect timers are native; no effectmon.lic needed). Three-column layout with buff/debuff panels. |
 
 After copying, edit the file to suit your needs. At minimum you'll want to:
 - Adjust the layout dimensions for your terminal size
@@ -797,7 +798,169 @@ Spells are sorted by a duration weight:
 
 ---
 
-#### 3.9 Command Window (`class='command'`)
+#### 3.9 Effects Window (`class='effects'`)
+
+Shows your character's active effects as live countdown bars. Each effect gets
+one row: its name on the left, the remaining time as `HH:MM:SS` on the right,
+and a fill bar behind the row showing the fraction of its duration that is
+left. The window is populated natively from the game's own `<dialogData>`
+effect blocks (Active Spells, Buffs, Debuffs, Cooldowns) -- no external script
+is required. It replaces the old `effectmon.lic` approach.
+
+Rows switch to warning colors during the final minute (60 seconds or less) and
+to "ending" colors once time is up. An effect with no expiry shows `Indef`.
+
+**Categories and order:**
+
+Effects are grouped into categories, drawn top to bottom in this fixed order:
+**Debuffs, Cooldowns, Buffs, Custom, Spells**.
+
+- Each *enabled* category always shows a header row (for example
+  `── Debuffs ──── 0`), even when it has no effects.
+- Within a category, effects stay in the order the game sends them, so related
+  effects (such as a spell circle) stay grouped and rows do not jump around as
+  timers tick.
+
+**Attributes:**
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `class` | yes | Must be `'effects'` |
+| `top` | yes | Top row position |
+| `left` | yes | Left column position |
+| `height` | yes | Height in rows |
+| `width` | yes | Width in columns |
+| `value` | no | Registry key (default `'effects'`). A window with the same key in the previous layout is reused, keeping its effects and chosen categories |
+| `categories` | no | Comma-separated list of categories to show initially, from: `spells`, `buffs`, `debuffs`, `cooldowns`, `custom`. Default: all of them |
+| `fg` / `bg` | no | Colors of ordinary rows as `'filled,empty'` (filled part of the bar, empty part). A value left out keeps the default |
+| `warn_fg` / `warn_bg` | no | Colors for an effect with 60 seconds or less left |
+| `end_fg` / `end_bg` | no | Colors for an effect whose time is up |
+
+**Example:**
+
+```xml
+<!-- Effects sidebar: all categories, default colors -->
+<window class='effects' top='0' left='160' height='lines-1' width='30'
+        value='effects' categories='spells,buffs,debuffs,cooldowns,custom'/>
+```
+
+##### Choosing categories at runtime: `.effects`
+
+The `.effects` command controls which categories are visible while you play:
+
+- `.effects` with no argument prints which categories are currently shown.
+- `.effects <category...>` toggles one or more categories on or off (space or
+  comma separated, case-insensitive). Valid names: `spells`, `buffs`,
+  `debuffs`, `cooldowns`, `custom`.
+
+```
+.effects
+.effects debuffs cooldowns
+.effects custom
+```
+
+Your choices are saved between sessions (in `~/.profanity/settings.json`).
+
+> **Upgrading?** If you used the Effects Window before the Custom category
+> existed, Custom starts hidden. Run `.effects custom` once to show it.
+
+##### Custom per-effect colors: `<effectColor>`
+
+Place `<effectColor>` child elements inside an effects `<window>` to color the
+bars of specific effects differently from the window's default palette.
+
+**Matchers** (a rule may combine several; **all** of them must match -- a
+logical AND):
+
+| Attribute | Description |
+|-----------|-------------|
+| `id` | Exact effect id, e.g. `id='401'` |
+| `id_min` / `id_max` | Inclusive numeric id range; either bound may be left out. Non-numeric ids never match a range |
+| `name` | The whole effect name, case-insensitive, e.g. `name='Strength'` |
+| `name_pattern` | A regular expression searched anywhere in the name, case-insensitive, e.g. `name_pattern='Sign of .*'`. Use `^`...`$` to anchor |
+
+**Colors:**
+
+| Attribute | Description |
+|-----------|-------------|
+| `fg` | Filled-part color, same `'filled,empty'` convention as the window's palette attributes |
+| `bg` | Background color(s), same `'filled,empty'` convention |
+
+A single value (for example `fg='ffd700'`) colors only the **filled** part of
+the bar. Give two values (`fg='ffd700,ffd700'`) to color the whole row.
+
+**Behavior:**
+
+- If several `<effectColor>` rules match one effect, the **first** one in
+  document order wins.
+- Warning (60 seconds or less) and ending (time is up) colors take precedence
+  over a custom color, so an expiring effect still visibly warns.
+- Indefinite effects can take a custom color.
+- A malformed rule (bad regular expression, non-numeric bound, or no matcher)
+  is ignored and logged; it is not fatal.
+
+**Example:**
+
+```xml
+<window class='effects' top='0' left='160' height='lines-1' width='30'>
+  <effectColor id='401' fg='ff0000' bg='550000,220000'/>
+  <effectColor id_min='400' id_max='499' bg='00aaff,003344'/>
+  <effectColor name='Strength' fg='ffd700'/>
+  <effectColor name_pattern='Sign of .*' bg='884400,221100'/>
+</window>
+```
+
+##### Custom timers from Lich scripts: `ProfanityCustom`
+
+Lich scripts can push their own timers into the Effects Window's **Custom**
+section (visible when the `custom` category is enabled; toggle it with
+`.effects custom`). A script emits a `<dialogData id='ProfanityCustom'>` block
+containing `<progressBar>` elements. The wire id is `ProfanityCustom` so it
+does not clash with real game data, but the section is displayed as "Custom".
+
+**`<progressBar>` attributes:**
+
+| Attribute | Required | Description |
+|-----------|----------|-------------|
+| `id` | yes | Unique key for the timer. A bar without an id is dropped |
+| `text` | no | Display name (entity-decoded). Falls back to the id if missing or blank |
+| `time` | no | Remaining time as `HH:MM:SS`; the bar counts down from there. Omit it for an indefinite timer (shown as `Indef`). Missing, `Indefinite`, or malformed values are treated as indefinite |
+| `end_time` | no | A server epoch-seconds end time. Used instead of `time` when it is a plain number |
+| `value` | no | Initial bar fill as a percent, 0-100 (default 100) |
+| `clear` | no | `clear='t'` on a single `<progressBar id='X' clear='t'/>` removes that one timer |
+
+`clear='t'` on the `<dialogData id='ProfanityCustom' clear='t'>` block itself
+removes **all** custom timers.
+
+**Behavior:**
+
+- Custom timers are *sticky*: they persist until they expire (the time runs
+  out) or are cleared. A script only needs to emit a timer once; it does not
+  need to keep re-sending it.
+- Re-sending the same id updates the timer in place and keeps its position.
+- A timer disappears from the display automatically when it reaches 0.
+- Escape XML special characters in names (`&amp;`, `&apos;`, `&lt;`).
+
+**Examples (Ruby / Lich).** Scripts emit raw XML to the client; the usual call
+is `_respond`:
+
+```ruby
+# Add/update a timer (sticks until it expires or is cleared):
+_respond "<dialogData id='ProfanityCustom'><progressBar id='mytimer' text='My Timer' time='00:05:00'/></dialogData>"
+
+# Several at once:
+_respond "<dialogData id='ProfanityCustom'><progressBar id='a' text='A' time='00:10:00'/><progressBar id='b' text='B' time='00:02:00'/></dialogData>"
+
+# Remove one timer:
+_respond "<dialogData id='ProfanityCustom'><progressBar id='mytimer' clear='t'/></dialogData>"
+
+# Remove all custom timers:
+_respond "<dialogData id='ProfanityCustom' clear='t'></dialogData>"
+```
+
+---
+
+#### 3.10 Command Window (`class='command'`)
 
 The single-line input area where you type commands. There must be exactly one
 command window in each layout.
@@ -833,7 +996,7 @@ it can't follow a link or select text you can't see.
 
 ---
 
-#### 3.10 Sink Window (`class='sink'`)
+#### 3.11 Sink Window (`class='sink'`)
 
 A null window that silently discards all content routed to it. Use this to hide
 game streams you do not want to see without creating a visible window.
@@ -860,7 +1023,7 @@ they are invisible.
 
 ---
 
-#### 3.11 Complete Layout Example
+#### 3.12 Complete Layout Example
 
 Here is a full working layout that demonstrates all window types:
 
@@ -1617,6 +1780,20 @@ Remove a previously added inline highlight.
 ```
 .unhighlight "some string"
 .unhighlight goblin
+```
+
+### .effects
+
+Show or toggle which categories are visible in the
+[Effects Window](#39-effects-window-classeffects). With no argument, prints the
+categories currently shown. With one or more category names (space or comma
+separated, case-insensitive), toggles each on or off. Valid names: `spells`,
+`buffs`, `debuffs`, `cooldowns`, `custom`.
+
+```
+.effects
+.effects debuffs cooldowns
+.effects custom
 ```
 
 ### .help

@@ -30,7 +30,7 @@ require_relative 'window_layout'
 class LayoutLoader
   # The handler hashes of {WindowManager} a builder can {#claim} a window
   # from.
-  REGISTRIES = %i[stream indicator progress countdown room].freeze
+  REGISTRIES = %i[stream indicator progress countdown effects room].freeze
 
   # @param window_manager [WindowManager] owns the handler hashes, and is
   #   handed to every builder

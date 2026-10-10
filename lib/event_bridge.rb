@@ -75,6 +75,16 @@ class EventBridge
       window.apply_changes(data.slice(:label, :fg, :bg, :value, :max))
     end
 
+    # ---- Effect events ----
+
+    # @wm.effects (a Hash of effects windows, by name) is provided by the
+    # window-manager lane; until it lands this does nothing.
+    event_bus.on(:effects_update) do |data|
+      next unless @wm.respond_to?(:effects)
+
+      @wm.effects&.each_value { |window| window.apply_effects(data[:category], data[:effects]) }
+    end
+
     # ---- Countdown events ----
 
     event_bus.on(:countdown_update) do |data|
