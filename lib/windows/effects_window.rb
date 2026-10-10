@@ -92,6 +92,15 @@ class EffectsWindow < BaseWindow
 
   # The colors of one kind of row: foreground and background of the filled
   # part of the bar, and of the empty part.
+  #
+  # @!attribute fg_fill
+  #   @return [String, nil] foreground of the filled part of the bar
+  # @!attribute fg_empty
+  #   @return [String, nil] foreground of the empty part of the bar
+  # @!attribute bg_fill
+  #   @return [String, nil] background of the filled part of the bar
+  # @!attribute bg_empty
+  #   @return [String, nil] background of the empty part of the bar
   Palette = Struct.new(:fg_fill, :fg_empty, :bg_fill, :bg_empty)
 
   # The colors used unless a layout chooses others. The fill colors are
@@ -114,8 +123,18 @@ class EffectsWindow < BaseWindow
   #
   # @!attribute kind
   #   @return [Symbol] +:header+, +:effect+ or +:more+
+  # @!attribute category
+  #   @return [Symbol, nil] the effect category this row belongs to
+  # @!attribute id
+  #   @return [String, nil] the effect's id (nil for header and more rows)
+  # @!attribute name
+  #   @return [String, nil] the effect's name (nil for header and more rows)
   # @!attribute remaining
   #   @return [Integer, nil] whole seconds left; nil when Indefinite
+  # @!attribute percent
+  #   @return [Integer, nil] the bar fill, 0..100 (nil for non-effect rows)
+  # @!attribute total
+  #   @return [Integer, nil] a header's effect count, or a more row's hidden count
   Line = Struct.new(:kind, :category, :id, :name, :remaining, :percent, :total, keyword_init: true)
 
   # A request to color certain effects differently (see
@@ -172,11 +191,21 @@ class EffectsWindow < BaseWindow
 
     private
 
+    # The value as a stripped string, or nil when it is blank.
+    #
+    # @param value [Object, nil] an attribute value
+    # @return [String, nil] the trimmed text, or nil if empty
     def presence(value)
       text = value.to_s.strip
       text.empty? ? nil : text
     end
 
+    # Parse a decimal id bound.
+    #
+    # @param value [Object, nil] the attribute value (nil when absent)
+    # @param label [String] the attribute name, used in the error message
+    # @return [Integer, nil] the number, or nil when the value is blank
+    # @raise [ArgumentError] when the value is present but not a whole number
     def integer(value, label)
       text = presence(value)
       text && Integer(text, 10)
@@ -184,6 +213,12 @@ class EffectsWindow < BaseWindow
       raise ArgumentError, "#{label} #{text.inspect} is not a whole number"
     end
 
+    # Compile a case-insensitive name pattern.
+    #
+    # @param source [Regexp, String, nil] a regexp, or its source text (nil
+    #   when absent)
+    # @return [Regexp, nil] the pattern, or nil when the source is blank
+    # @raise [ArgumentError] when the source is present but not a valid regexp
     def pattern(source)
       return source if source.is_a?(Regexp)
 
@@ -193,7 +228,11 @@ class EffectsWindow < BaseWindow
       raise ArgumentError, "name_pattern #{text.inspect} is not a valid regexp: #{e.message}"
     end
 
-    # A range rule matches only numeric ids.
+    # Whether an id falls in this rule's id range. A range rule matches
+    # only numeric ids; a rule with no range matches any id.
+    #
+    # @param id [String] the effect's id
+    # @return [Boolean]
     def id_in_range?(id)
       return true unless @id_min || @id_max
       return false unless id.match?(/\A\d+\z/)
@@ -202,6 +241,12 @@ class EffectsWindow < BaseWindow
       (@id_min.nil? || number >= @id_min) && (@id_max.nil? || number <= @id_max)
     end
 
+    # Read one color from a +filled,empty+ list, falling back to a default.
+    #
+    # @param colors [Array<String, nil>, nil] the parsed color list
+    # @param index [Integer] the position to read (0 filled, 1 empty)
+    # @param default [String, nil] used when the list has nothing there
+    # @return [String, nil] the hex color, or the default
     def pick(colors, index, default)
       colors && index < colors.length ? colors[index] : default
     end

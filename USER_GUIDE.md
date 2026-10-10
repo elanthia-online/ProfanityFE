@@ -148,7 +148,8 @@ Available templates:
 | `mahtra.xml` | DR | A real DR player's configuration — same as default.xml but serves as a named-character example. |
 | `original.xml` | GS | Minimal GemStone IV baseline — simple 3-window layout with basic highlights. Good clean starting point for GS players. |
 | `tysong.xml` | GS | GemStone IV 1080p template with character class highlighting (Empath, Wizard, Cleric, Ranger, Sorcerer name lists). |
-| `eleazzar.xml` | GS | Advanced GemStone IV template requiring nerd fonts and the targetlist.lic script (effect timers are native; no effectmon.lic needed). Three-column layout with buff/debuff panels. |
+| `eleazzar.xml` | GS | Advanced GemStone IV template requiring nerd fonts and effectmon.lic/targetlist.lic scripts. Three-column layout with buff/debuff panels. |
+| `eleazzar_effect_window.xml` | GS | Advanced GemStone IV template requiring nerd fonts and the targetlist.lic script (effect timers are native; no effectmon.lic needed). Three-column layout with buff/debuff panels. |
 
 After copying, edit the file to suit your needs. At minimum you'll want to:
 - Adjust the layout dimensions for your terminal size
