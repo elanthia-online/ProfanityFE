@@ -534,8 +534,8 @@ RSpec.describe 'The effects window in the running client' do
     end
   end
 
-  describe 'the eleazzar.xml template' do
-    let(:template) { File.expand_path('../../templates/eleazzar.xml', __dir__) }
+  describe 'the eleazzar_effect_window.xml template' do
+    let(:template) { File.expand_path('../../templates/eleazzar_effect_window.xml', __dir__) }
     let(:element) do
       REXML::Document.new(File.read(template)).root.elements["layout[@id='default']"]
     end
@@ -546,7 +546,8 @@ RSpec.describe 'The effects window in the running client' do
       old_rows = windows.select { |w| w.attributes['value'].to_s.match?(/\A(?:buff|debuff|cooldown|spell)\d+\z/) }
 
       expect(effects_windows.size).to eq 1
-      expect(%w[left width top].map { |name| effects_windows.first.attributes[name] }).to eq %w[160 30 0]
+      expect(%w[left top].map { |name| effects_windows.first.attributes[name] }).to eq %w[160 0]
+      expect(effects_windows.first.attributes['width']).to eq 'min(30, cols-160)'
       expect(old_rows).to be_empty
       expect(windows.select { |w| w.attributes['class'] == 'progress' && w.attributes['left'] == '160' }).to be_empty
     end

@@ -7,11 +7,11 @@
   ================================================================
 
   A GemStone IV template designed for use with nerd fonts and
-  the targetlist.lic Lich script. Features a
+  the effectmon.lic / targetlist.lic Lich scripts. Features a
   three-column layout with dedicated panes for speech, room
   description, main game text, targets, status vitals (with an
-  ASCII body diagram), compass rose, a native buff/debuff/spell/
-  cooldown timer window, and hand inventory indicators.
+  ASCII body diagram), compass rose, buff/debuff/spell timers
+  (via effectmon.lic), and hand inventory indicators.
 
   Highlights identify players by profession class (Empath, Cleric),
   NPC merchants, combat results, channel chat, and danger alerts.
@@ -19,10 +19,11 @@
   Requirements:
     - A Nerd Font installed (https://nerdfonts.com) for glyph icons
     - A large terminal window (190+ columns recommended) so the
-              right-side effects panel is visible — if you launch
-       ProfanityFE in a window too small to fit everything, you
-       will not see the spell effects on the right side. Make sure
-       your window is large enough BEFORE you launch ProfanityFE.
+      right-side effectmon panel is visible — if you launch
+      ProfanityFE in a window too small to fit everything, you
+      will not see the spell effects on the right side. Make sure
+      your window is large enough BEFORE you launch ProfanityFE.
+    - effectmon.lic  (populates buff/debuff/spell progress bars)
     - targetlist.lic (populates the combat/target pane)
 
   Color palette reference:
@@ -318,23 +319,28 @@
        ================================================================
        Requires a wide terminal (190+ columns, 50+ rows).
        Uses fixed column positions, not dynamic expressions.
+       The center and right panels' widths are written
+       min(width, cols-left): the width above wherever the terminal
+       has room for it (190+ columns); on a narrower terminal they end
+       at the right edge, and a panel that starts past it isn't built
+       until the terminal grows.
 
        Columns 0-44 are the left panel; 45-158 are center; 160-189
-        are the right-side effects panel.
+       are the right-side effectmon panel.
 
        ASCII diagram (approximate):
 
        col:  0              44  45                         158  160          189
        row:
-        0    +==Speech=======+  +==Room==========================+  +==Effects===+
-        1    |               |  |                                |  | spells,    |
+        0    +==Speech=======+  +==Room==========================+  +==Buffs=====+
+        1    |               |  |                                |  | buff0..9   |
         :    | speech,       |  | room description               |  |            |
-        :    | announcements,|  | (10 rows)                      |  | buffs,     |
-       10    | lnet, thoughts|  |                                |  | debuffs,   |
-       11    | voln          |  +==Main===========================+  | cooldowns  |
-       12    |               |  |                                |  | (live      |
-        :    | (scrollable)  |  | main text + familiar           |  | timers)    |
-        :    |               |  | (scrollable, 4000 line buffer) |  |            |
+        :    | announcements,|  | (10 rows)                      |  +==Debuffs===+
+       10    | lnet, thoughts|  |                                |  | debuff0..1 |
+       11    | voln          |  +==Main===========================+  +==Cooldowns=+
+       12    |               |  |                                |  | cooldown0..|
+        :    | (scrollable)  |  | main text + familiar           |  +==Spells====+
+        :    |               |  | (scrollable, 4000 line buffer) |  | spell0..29 |
         :    |               |  |                                |  |            |
        L-14  +==Targets======+  |                                |  |            |
        L-13  | combat/target |  |                                |  |            |
@@ -363,13 +369,11 @@
          - Main window: primary game text + familiar (4000 line buffer)
          - Command line at bottom row
 
-        Right panel (cols 160-189, native effects window):
-         - One live list of the active spells, buffs, debuffs and
-           cooldowns with a countdown bar each (no helper script), plus
-           a Custom section for timers Lich scripts add (ProfanityCustom
-           dialogData). Toggle a category with .effects <name> (.effects
-           alone shows what is visible); the choice is saved between
-           sessions.
+       Right panel (cols 160-189, requires effectmon.lic):
+         - Buffs: 10 progress bars (buff0-buff9)
+         - Debuffs: 2 progress bars (debuff0-debuff1)
+         - Cooldowns: 2 progress bars (cooldown0-cooldown1)
+         - Spells: 30 progress bars (spell0-spell29)
 
        Body diagram detail (nerd font icons):
          Row L-9: [left eye] [right eye]  ns(nervous system)
@@ -384,9 +388,9 @@
     <!-- Speech border -->
     <window class='indicator' top='0'        left='0'   height='1'        width='44' label='─Speech────────────────────────────────────' />
     <!-- Room border -->
-    <window class='indicator' top='0'        left='45'   height='1'       width='114' label='─Room────────────────────────────────────────────────────────────────────────────────────────────────────────────' />
+    <window class='indicator' top='0'        left='45'   height='1'       width='min(114, cols-45)' label='─Room────────────────────────────────────────────────────────────────────────────────────────────────────────────' />
     <!-- Main border -->
-    <window class='indicator' top='11'       left='45'  height='1'        width='114' label='─Main────────────────────────────────────────────────────────────────────────────────────────────────────────────' />
+    <window class='indicator' top='11'       left='45'  height='1'        width='min(114, cols-45)' label='─Main────────────────────────────────────────────────────────────────────────────────────────────────────────────' />
     <!-- Combat border -->
     <window class='indicator' top='lines-14' left='0'   height='1'        width='44' label='─Targets───────────────────────────────────' />
     <!-- Status -->
@@ -394,10 +398,10 @@
     <!-- Hands -->
     <window class='indicator' top='lines-2'  left='0'   height='1'        width='44' label='─Hands─────────────────────────────────────' />
     <!-- Command border -->
-    <window class='indicator' top='lines-2'  left='45'  height='1'        width='113' label='─Command─────────────────────────────────────────────────────────────────────────────────────────────────────────' />
+    <window class='indicator' top='lines-2'  left='45'  height='1'        width='min(113, cols-45)' label='─Command─────────────────────────────────────────────────────────────────────────────────────────────────────────' />
 
     <!-- Bottom row: command input and hand contents -->
-    <window class='command'   top='lines-1'  left='46'  height='1'        width='112' />
+    <window class='command'   top='lines-1'  left='46'  height='1'        width='min(112, cols-46)' />
     <!-- Nerd font hand icons (left and right separators) -->
     <window class='indicator' top='lines-1'  left='0'   height='1'        width='1'   label=''                             fg='9BA2B2'/>
     <window class='indicator' top='lines-1'  left='23'  height='1'        width='1'   label=''                             fg='9BA2B2'/>
@@ -409,8 +413,8 @@
     <window class='indicator' top='lines-1'  left='26'  height='1'        width='17'  label='Empty'    value='right'        fg='899ca1,53a684' />
 
     <!-- Main scrollable text windows -->
-    <window class='text'      top='12'       left='45'  height='lines-14' width='114'                  value='main,familiar' buffer-size='4000'/>
-    <window class='room'      top='1'        left='45'  height='10'       width='114'                  title-preset='roomName' creatures-preset='monsterbold'/>
+    <window class='text'      top='12'       left='45'  height='lines-14' width='min(114, cols-45)'                  value='main,familiar' buffer-size='4000'/>
+    <window class='room'      top='1'        left='45'  height='10'       width='min(114, cols-45)'                  title-preset='roomName' creatures-preset='monsterbold'/>
     <window class='text'      top='1'        left='0'   height='lines-15' width='44'                   value='speech,announcements,lnet,thoughts,voln' buffer-size='2000' />
     <window class='text'      top='lines-13' left='0'   height='3'        width='44'                   value='combat'       buffer-size='500'/>
 
@@ -481,18 +485,13 @@
     <window class='indicator' top='lines-3'  left='25'  height='1'        width='1'   label=''        value='bleeding'     fg='555555,bf4d80'/>
 
     <!-- Right panel: native active-effects window (cols 160-189). Replaces the
-         effectmon.lic progress-bar slots. It lists the character's effects
-         with live countdowns and draws only what the game reports, so it needs
-         no helper script. Show or hide a category while playing with
+         effectmon.lic progress-bar slots. It lists the character's effects with
+         live countdowns and draws only what the game reports, so it needs no
+         helper script. Show or hide a category while playing with
          .effects <category> (spells, buffs, debuffs, cooldowns, custom; a bare
          .effects shows what is visible); the choice is remembered between
          sessions. The Custom section lists timers that Lich scripts send as
          <dialogData id='ProfanityCustom'>. -->
-		 <window class='effects'   top='0'        left='160' height='lines-1'  width='30'                   value='effects'      categories='spells,buffs,debuffs,cooldowns,custom'>
-      <effectColor id='401' fg='ff0000' bg='550000,220000'/>
-  <effectColor id_min='400' id_max='499' bg='00aaff,003344'/>
-  <effectColor name='Strength' fg='ffd700'/>
-  <effectColor name_pattern='Sign of .*' bg='884400,221100'/>
-  </window>
+    <window class='effects'   top='0'        left='160' height='lines-1'  width='min(30, cols-160)'                   value='effects'      categories='spells,buffs,debuffs,cooldowns,custom'/>
   </layout>
 </settings>
