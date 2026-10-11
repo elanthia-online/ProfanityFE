@@ -81,9 +81,13 @@ class GameTextProcessor
   # @param game_rules [Games::Rules] the game's death, logon, stun,
   #   spell-name and cut-short room list rules (--game, see
   #   Games.rules_for); both games' when the game isn't known
+  # @param blank_lines [Boolean] show the game's interior blank lines (see
+  #   {PromptTracker#blank_lines_enabled}); from the saved +.blanklines+
+  #   setting. Defaults to off: the game's interior blank lines are shown
+  #   only when +.blanklines+ turns them on
   def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:,
                  boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false, clock: Clock.new,
-                 game_rules: Games::BOTH_GAMES)
+                 game_rules: Games::BOTH_GAMES, blank_lines: false)
     @wm = window_mgr
     @state = shared_state
     @xml_escapes = xml_escapes
@@ -97,6 +101,7 @@ class GameTextProcessor
     @line_filter = LineFilter.new(shared_state: shared_state)
     @prompts = PromptTracker.new(shared_state: shared_state, event_bus: event_bus, pending_render: @pending_render,
                                  window_mgr: window_mgr, clock: clock, boot_profiler: boot_profiler)
+    @prompts.blank_lines_enabled = blank_lines
     @room = RoomAssembler.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
                               shared_state: shared_state, game_rules: game_rules)
     @router = StreamRouter.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
@@ -135,6 +140,16 @@ class GameTextProcessor
     @reader.run(server)
   end
 
+  # Show or hide the game's interior blank lines from now on (see
+  # {PromptTracker#blank_lines_enabled}). Called from the input thread by
+  # +.blanklines+; the change is a flag the server thread reads per line.
+  #
+  # @param value [Boolean]
+  # @return [void]
+  def blank_lines_enabled=(value)
+    @prompts.blank_lines_enabled = value
+  end
+
   # Show the "Connection closed / Press any key to exit" notice in the
   # main window and flush it to the screen.
   #
@@ -154,7 +169,9 @@ class GameTextProcessor
   end
 
   # Second step for one server line, inside the render lock: a blank line
-  # shows a pending prompt; any other line is parsed and routed.
+  # shows a pending prompt, or is held until main text follows it (see
+  # {PromptTracker#blank_line}); any other line is parsed and routed. A
+  # blank line inside an open stream is dropped.
   #
   # @param line [String] a line returned by {#prepare_line}
   # @return [void]
