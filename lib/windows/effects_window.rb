@@ -394,8 +394,11 @@ class EffectsWindow < BaseWindow
   # @param category [Symbol] one of {CATEGORIES}; anything else is ignored
   # @param effects [Array<Hash>] effects with +:id+, +:name+, +:percent+
   #   (0..100) and +:end_time+ (server epoch seconds; nil for Indefinite)
+  # @param redraw_now [Boolean] false to keep the list without drawing, when
+  #   the caller redraws right after (the +effects+ builder seeding a new
+  #   window)
   # @return [void]
-  def apply_effects(category, effects)
+  def apply_effects(category, effects, redraw_now: true)
     category = category.to_s.strip.downcase.to_sym
     return unless CATEGORIES.include?(category)
 
@@ -403,7 +406,7 @@ class EffectsWindow < BaseWindow
     # a complete list.
     list = Array(effects).grep(Hash).map { |effect| effect.dup.freeze }.freeze
     @buckets = @buckets.merge(category => list).freeze
-    redraw if @enabled.include?(category)
+    redraw if redraw_now && @enabled.include?(category)
   end
 
   # The colors of a kind of row.
@@ -750,12 +753,9 @@ end
 # new layout; without any +<effectColor>+ the window colors as before.
 BaseWindow.register_type('effects') do |height, width, top, left, element, wm|
   key = element.attributes['value'] || EffectsWindow::DEFAULT_KEY
-  # A window built from scratch starts with the lists the game last sent
-  # (see WindowManager#last_effects); a kept one already has its own.
-  window = wm.claim_window(:effects, key, EffectsWindow) ||
-           EffectsWindow.new(height, width, top, left).tap do |fresh|
-             wm.last_effects.each { |category, effects| fresh.apply_effects(category, effects) }
-           end
+  window = wm.claim_window(:effects, key, EffectsWindow)
+  fresh = window.nil?
+  window ||= EffectsWindow.new(height, width, top, left)
   window.scrollok(false)
   window.clock = wm.clock
   window.enabled_categories = element.attributes['categories'] if element.attributes['categories']
@@ -778,6 +778,11 @@ BaseWindow.register_type('effects') do |height, width, top, left, element, wm|
                           name_pattern: child.attributes['name_pattern'],
                           fg: BaseWindow.parse_color_attrs(child, 'fg'), bg: BaseWindow.parse_color_attrs(child, 'bg'))
   end
+  # A window built from scratch starts with the lists the game last sent
+  # (see WindowManager#last_effects); a kept one already has its own. They
+  # are put in without drawing: the redraw below draws them once, with the
+  # clock set above.
+  wm.last_effects.each { |category, effects| window.apply_effects(category, effects, redraw_now: false) } if fresh
   wm.effects[key] = window
   window.redraw
   window

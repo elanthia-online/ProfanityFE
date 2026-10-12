@@ -118,6 +118,15 @@ RSpec.describe EffectsWindow do
       expect(window.rows.drop(3)).to all(be_empty)
     end
 
+    it 'keeps the list without drawing when told not to, and shows it at the next redraw' do
+      expect { window.apply_effects(:spells, [effect('Strength', 600)], redraw_now: false) }
+        .not_to(change { erase_count(window) })
+      expect(window.effects_for(:spells).map { |entry| entry[:name] }).to eq ['Strength']
+
+      window.redraw
+      expect(window.rows[1]).to eq effect_row('Strength', '00:10:00')
+    end
+
     it 'replaces the category with the new list' do
       window.apply_effects(:spells, [effect('Strength', 600), effect('Blink', 300)])
       window.apply_effects(:spells, [effect('Iron Skin', 900)])
@@ -1409,6 +1418,22 @@ RSpec.describe 'effects window in a layout' do
 
       expect([window.effects_for(:buffs), window.effects_for(:custom)]).to eq [buffs, timers]
       expect(window.rows.grep(/\A(Blink|Haste)/).map { |row| row[0, 5] }).to eq %w[Blink Haste]
+    end
+
+    it 'is seeded without extra draws: the seed adds none to those of a window with nothing to seed' do
+      element = "<window class='effects' top='0' left='30' height='8' width='30' categories='buffs'/>"
+      load_layout(text_element)
+      load_layout(text_element, element, id: 'with_effects')
+      seeded = window_manager.effects['effects']
+      bare_manager = WindowManager.new(clock: clock)
+      bare_manager.load_layout('with_effects')
+      bare = bare_manager.effects['effects']
+
+      expect(bare.effects_for(:buffs)).to be_empty
+      expect(seeded.effects_for(:buffs)).to eq buffs
+      erases = ->(target) { target.call_log.count { |(meth, _args)| meth == :erase } }
+      expect(erases.call(seeded)).to eq erases.call(bare)
+      expect(seeded.rows.grep(/\ABlink/).first).to end_with('00:10:00')
     end
 
     it 'is seeded with them when the layout gives it a new value key' do

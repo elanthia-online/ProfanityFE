@@ -4,7 +4,7 @@
 # real Application on the virtual screen: the input loop ticking the
 # countdowns, the .effects <category> dot-command, the categories being
 # remembered in settings.json between sessions (also for a window the resize
-# builds later), and the eleazzar.xml template carrying the window.
+# builds later), and the eleazzar_effect_window.xml template carrying the window.
 # spec_helper points HOME at a throwaway directory, so settings.json is the
 # real file there.
 

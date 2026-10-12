@@ -23,6 +23,12 @@ RSpec.describe EffectTracker do
     { 'id' => id, 'text' => text, 'value' => value, 'time' => time }.compact
   end
 
+  # The ids of the effects in the last :effects_update emitted for a category
+  # (the tracker keeps no state to read them from).
+  def latest_ids(category)
+    events.reverse.find { |event| event[:category] == category }[:effects].map { |e| e[:id] }
+  end
+
   def commit(category, *bars)
     tracker.start_dialog(category)
     bars.each { |attrs| tracker.add_effect(attrs) }
@@ -148,7 +154,7 @@ RSpec.describe EffectTracker do
       commit(:debuffs, bar('3', 'Bleeding'))
       commit(:buffs, bar('2', 'Haste'))
 
-      expect([tracker.effects(:buffs).map { |e| e[:id] }, tracker.effects(:debuffs).map { |e| e[:id] }]).to eq [%w[2], %w[3]]
+      expect([latest_ids(:buffs), latest_ids(:debuffs)]).to eq [%w[2], %w[3]]
     end
 
     it 'emits an empty bucket for a block without effects' do
@@ -220,16 +226,6 @@ RSpec.describe EffectTracker do
     end
 
     it 'does nothing when nothing is open' do
-      tracker.finalize
-
-      expect(events).to be_empty
-    end
-  end
-
-  describe '#reset' do
-    it 'drops the open block without emitting' do
-      tracker.start_dialog(:buffs)
-      tracker.reset
       tracker.finalize
 
       expect(events).to be_empty
@@ -363,13 +359,14 @@ RSpec.describe EffectTracker do
         commit(:buffs, bar('1', 'Blink'))
         commit(:buffs)
 
-        expect([tracker.effects(:custom).map { |e| e[:id] }, tracker.effects(:buffs)]).to eq [%w[a], []]
+        expect([latest_ids(:custom), latest_ids(:buffs)]).to eq [%w[a], []]
+        expect(events.count { |event| event[:category] == :custom }).to eq 1
       end
 
-      it 'returns the sticky list from #effects' do
+      it 'emits the sticky list, in the order the timers were added' do
         custom(timer('a', time: '00:10:00'), timer('b'))
 
-        expect(tracker.effects(:custom).map { |e| e[:id] }).to eq %w[a b]
+        expect(latest_ids(:custom)).to eq %w[a b]
       end
 
       it 'commits an empty block as the unchanged list' do
@@ -437,7 +434,10 @@ RSpec.describe EffectTracker do
         custom(timer('a', time: '00:10:00'), timer('b'))
         custom(clear: true)
 
-        expect([events.last, tracker.effects(:custom)]).to eq [{ category: :custom, effects: [] }, []]
+        expect(events.last).to eq({ category: :custom, effects: [] })
+
+        custom
+        expect(events.last).to eq({ category: :custom, effects: [] })
       end
 
       it 'emits the empty list for a clear block even when nothing was set, and for it alone' do
@@ -493,16 +493,6 @@ RSpec.describe EffectTracker do
         tracker.start_dialog(:buffs)
 
         expect(events.map { |e| e[:category] }).to eq [:custom]
-      end
-
-      it 'drops an open custom block on #reset but keeps the timers it already has' do
-        custom(timer('a', time: '00:10:00'))
-        tracker.start_dialog(:custom)
-        tracker.add_effect(timer('b', time: '00:10:00'))
-        tracker.reset
-        tracker.finalize
-
-        expect([events.size, tracker.effects(:custom).map { |e| e[:id] }]).to eq [1, %w[a]]
       end
     end
   end

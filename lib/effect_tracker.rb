@@ -3,12 +3,14 @@
 require_relative 'clock'
 
 # The active effects (spells, buffs, debuffs, cooldowns) the game server
-# sends as +<dialogData>+ blocks, collected into one bucket per category.
+# sends as +<dialogData>+ blocks, one list per category. The tracker keeps no
+# game-category state of its own: it emits each list, and whoever needs the
+# latest one keeps it (see WindowManager#last_effects).
 #
 # A block is read as the tag parser meets it (see TagHandlers): it is
 # started with {#start_dialog}, each of its +<progressBar>+ effects is
 # added with {#add_effect}, and {#end_dialog} commits it. A commit replaces
-# the whole bucket of the category and emits one
+# the whole list of the category and emits one
 #
 #   event_bus.emit(:effects_update, category: :spells, effects: [...])
 #
@@ -121,7 +123,6 @@ class EffectTracker
     @render_wanted = render_wanted
     @clock = clock
     @unescape = unescape || :itself.to_proc
-    @buckets = [*CATEGORIES.values, CUSTOM].to_h { |category| [category, []] }
     # The sticky custom timers by id, in the order first added
     @custom = {}
     @open = nil
@@ -133,14 +134,6 @@ class EffectTracker
   # @return [Boolean]
   def open?
     !@open.nil?
-  end
-
-  # The effects last committed for a category.
-  #
-  # @param category [Symbol] one of {CATEGORIES}'s values, or +:custom+
-  # @return [Array<Hash>] the effects, as {#commit} emitted them
-  def effects(category)
-    @buckets.fetch(category).dup
   end
 
   # Begin collecting a block's effects. A block still open is committed
@@ -194,7 +187,7 @@ class EffectTracker
     end
   end
 
-  # Replace a category's bucket and emit it. (Custom timers merge: they are
+  # Emit a category's whole list, which replaces the previous one. (Custom timers merge: they are
   # committed by {#end_dialog}.)
   #
   # @param category [Symbol] one of {CATEGORIES}'s values
@@ -206,7 +199,6 @@ class EffectTracker
       seconds = effect[:seconds]
       { id: effect[:id], name: effect[:name], percent: effect[:percent], end_time: seconds && (now + seconds) }
     end
-    @buckets[category] = effects
     @event_bus.emit(:effects_update, category: category, effects: effects.map(&:dup))
     request_render
   end
@@ -221,15 +213,6 @@ class EffectTracker
     cleared = @cleared
     @cleared = []
     cleared.each { |category| commit(category) }
-  end
-
-  # Forget the open block and what was cleared, emitting nothing. The sticky
-  # custom timers are kept.
-  #
-  # @return [void]
-  def reset
-    @open = nil
-    @cleared = []
   end
 
   private
@@ -264,8 +247,7 @@ class EffectTracker
       end
     end
     @custom.delete_if { |_id, timer| timer[:end_time] && timer[:end_time] <= now }
-    @buckets[CUSTOM] = @custom.values
-    @event_bus.emit(:effects_update, category: CUSTOM, effects: @buckets[CUSTOM].map(&:dup))
+    @event_bus.emit(:effects_update, category: CUSTOM, effects: @custom.values.map(&:dup))
     request_render
   end
 
