@@ -28,9 +28,9 @@ require_relative 'clock'
 #
 # The server sends each category as an empty +clear='t'+ block followed by
 # the block with the effects. A clear block alone is not committed: the
-# block that follows replaces the bucket at once (so no empty bucket is
+# block that follows replaces the list at once (so no empty list is
 # emitted between the two). Should that block never come, {#finalize}
-# commits the empty bucket.
+# commits the empty list.
 #
 # == Custom timers
 #
@@ -187,7 +187,8 @@ class EffectTracker
     end
   end
 
-  # Emit a category's whole list, which replaces the previous one. (Custom timers merge: they are
+  # Emit a category's whole list, which replaces the previous one.
+  # (Custom timers merge: they are
   # committed by {#end_dialog}.)
   #
   # @param category [Symbol] one of {CATEGORIES}'s values

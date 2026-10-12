@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 # Tests EffectTracker, the model behind the native effect timers: the
-# effects of each <dialogData> block collected into a bucket per category,
+# effects of each <dialogData> block collected into a list per category,
 # and the :effects_update event each commit emits. No curses involved.
 
 require_relative '../../lib/event_bus'
@@ -149,7 +149,7 @@ RSpec.describe EffectTracker do
       expect([pending_render.update_requested?, events.size]).to eq [false, 1]
     end
 
-    it 'replaces the whole bucket of the category and leaves the others' do
+    it 'replaces the whole list of the category and leaves the others' do
       commit(:buffs, bar('1', 'Blink'), bar('2', 'Haste'))
       commit(:debuffs, bar('3', 'Bleeding'))
       commit(:buffs, bar('2', 'Haste'))
@@ -157,7 +157,7 @@ RSpec.describe EffectTracker do
       expect([latest_ids(:buffs), latest_ids(:debuffs)]).to eq [%w[2], %w[3]]
     end
 
-    it 'emits an empty bucket for a block without effects' do
+    it 'emits an empty list for a block without effects' do
       commit(:debuffs)
 
       expect(events).to eq [{ category: :debuffs, effects: [] }]
