@@ -75,6 +75,15 @@ class EventBridge
       window.apply_changes(data.slice(:label, :fg, :bg, :value, :max))
     end
 
+    # ---- Effect events ----
+
+    # The latest list of each category is also kept, so that an effects
+    # window built later (see {WindowManager#last_effects}) can be seeded.
+    event_bus.on(:effects_update) do |data|
+      @wm.last_effects[data[:category]] = data[:effects]
+      @wm.effects.each_value { |window| window.apply_effects(data[:category], data[:effects]) }
+    end
+
     # ---- Countdown events ----
 
     event_bus.on(:countdown_update) do |data|

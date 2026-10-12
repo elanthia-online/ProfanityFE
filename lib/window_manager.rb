@@ -11,8 +11,8 @@ require_relative 'shared_state'
 
 # Manages window creation, layout loading, and handler hash access.
 #
-# Owns the five handler hashes (stream, indicator, progress, countdown,
-# room) that map string keys to their corresponding window objects, plus
+# Owns the six handler hashes (stream, indicator, progress, countdown,
+# effects, room) that map string keys to their corresponding window objects, plus
 # the command input window. Provides mutex-protected layout reloading so
 # the server read thread can safely read handler hashes while a layout
 # reload replaces them. {LayoutLoader} builds the windows of a layout,
@@ -58,6 +58,8 @@ class WindowManager
     @indicator = {}
     @progress = {}
     @countdown = {}
+    @effects = {}
+    @last_effects = {}
     @room = {}
     @command_window = nil
     @command_window_layout = nil
@@ -90,6 +92,27 @@ class WindowManager
   # @return [Hash<String, CountdownWindow>] the countdown handler hash (not a copy)
   # @note Returns the live hash, not a copy. Mutations affect countdown display.
   attr_reader :countdown
+
+  # Returns the live effects handler hash. {EventBridge} hands every
+  # +:effects_update+ event to each window in it, and the application
+  # ticks each one ({EffectsWindow#tick}) to run its countdowns.
+  #
+  # @return [Hash<String, EffectsWindow>] the effects handler hash (not a
+  #   copy), keyed by the +value+ of the layout element (default "effects")
+  # @note Returns the live hash, not a copy. Mutations affect effects display.
+  attr_reader :effects
+
+  # The effects list last sent for each category, kept so that an effects
+  # window built after the game sent it (by +.layout+ with a new +value+, or
+  # by a {#resize} that makes room for it) starts with what the others
+  # show instead of empty lists until the game sends them again.
+  # {EventBridge} records every +:effects_update+ here, and the +effects+
+  # builder seeds a window it builds from scratch ({EffectsWindow#apply_effects}).
+  # It belongs to the session, not to a layout, so {#reset_registries}
+  # leaves it alone.
+  #
+  # @return [Hash{Symbol => Array<Hash>}] the live hash (not a copy), by category
+  attr_reader :last_effects
 
   # Returns the live room handler hash.
   #
@@ -170,9 +193,11 @@ class WindowManager
     @layout_loader.current_window_switched
   end
 
-  # Point each handler hash (stream, indicator, progress, countdown, room)
+  # Point each handler hash (stream, indicator, progress, countdown, effects, room)
   # at a new, empty hash. The old hashes are left as they were, so the
   # layout loader can still read the previous layout's windows from them.
+  # {#last_effects} is not reset: it is what a window of the new layout
+  # is seeded from.
   #
   # @return [void]
   # @api private
@@ -181,6 +206,7 @@ class WindowManager
     @indicator = {}
     @progress = {}
     @countdown = {}
+    @effects = {}
     @room = {}
   end
 
@@ -188,7 +214,7 @@ class WindowManager
   # during {#load_layout} (see {LayoutLoader#claim}).
   #
   # @param registry [Symbol] the handler hash the window was in
-  #   (+:stream+, +:indicator+, +:progress+, +:countdown+ or +:room+)
+  #   (+:stream+, +:indicator+, +:progress+, +:countdown+, +:effects+ or +:room+)
   # @param keys [String, Array<String>, nil] the keys the new window
   #   serves, in the order to try them
   # @param window_class [Class] the class the window must be

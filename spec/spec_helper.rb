@@ -225,7 +225,7 @@ require_relative '../lib/highlight_processor'
 
 # The real window classes, drawing onto the virtual screen above.
 %w[base_window text_window tabbed_text_window indicator_window progress_window
-   countdown_window skill exp_window perc_window room_window sink_window].each do |window|
+   countdown_window effects_window skill exp_window perc_window room_window sink_window].each do |window|
   require_relative "../lib/windows/#{window}"
 end
 

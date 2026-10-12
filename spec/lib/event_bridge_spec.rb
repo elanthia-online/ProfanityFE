@@ -96,6 +96,73 @@ RSpec.describe EventBridge do
     end
   end
 
+  describe ':effects_update' do
+    let(:effects) { [{ id: '1', name: 'Blink', percent: 74, end_time: 1_000_100.0 }] }
+
+    it 'does nothing while the window manager has no effects windows' do
+      expect { event_bus.emit(:effects_update, category: :buffs, effects: effects) }.not_to raise_error
+    end
+
+    it 'does nothing when no effects window is registered' do
+      wm.define_singleton_method(:effects) { {} }
+
+      expect { event_bus.emit(:effects_update, category: :buffs, effects: effects) }.not_to raise_error
+    end
+
+    it 'hands the category and the effects to each registered effects window' do
+      window = double('effects window', apply_effects: nil)
+      wm.define_singleton_method(:effects) { { 'effects' => window } }
+
+      event_bus.emit(:effects_update, category: :buffs, effects: effects)
+
+      expect(window).to have_received(:apply_effects).with(:buffs, effects)
+    end
+
+    it 'records the list in WindowManager#last_effects whether or not there is a window' do
+      event_bus.emit(:effects_update, category: :buffs, effects: effects)
+      event_bus.emit(:effects_update, category: :cooldowns, effects: [])
+
+      expect(wm.last_effects).to eq(buffs: effects, cooldowns: [])
+    end
+
+    it 'replaces the recorded list of a category with the next one' do
+      event_bus.emit(:effects_update, category: :buffs, effects: effects)
+      event_bus.emit(:effects_update, category: :buffs, effects: [])
+
+      expect(wm.last_effects).to eq(buffs: [])
+    end
+
+    it 'keeps the recorded lists when a layout is loaded' do
+      event_bus.emit(:effects_update, category: :buffs, effects: effects)
+
+      load("<window class='text' top='0' left='0' height='4' width='42' value='main'/>", id: 'other_bridge')
+
+      expect(wm.last_effects).to eq(buffs: effects)
+    end
+  end
+
+  describe ':effects_update for custom timers' do
+    it 'hands the :custom category and its timers to apply_effects like any other' do
+      window = double('effects window', apply_effects: nil)
+      wm.define_singleton_method(:effects) { { 'effects' => window } }
+      timers = [{ id: 'mytimer', name: 'My Timer', percent: 100, end_time: nil }]
+
+      event_bus.emit(:effects_update, category: :custom, effects: timers)
+
+      expect(window).to have_received(:apply_effects).with(:custom, timers)
+    end
+
+    it 'shows the timers in a real effects window under the Custom header' do
+      load("<window class='effects' top='12' left='0' height='8' width='30' categories='custom'/>")
+      event_bus.emit(:effects_update, category: :custom,
+                                      effects: [{ id: 't', name: 'My Timer', percent: 100, end_time: nil }])
+
+      rows = wm.effects['effects'].rows
+      expect([rows[0], rows[1].rstrip]).to match([a_string_starting_with("\u2500\u2500 Custom ").and(end_with(' 1')),
+                                                  "My Timer#{' ' * 17}Indef"])
+    end
+  end
+
   describe ':add_prompt' do
     it 'shows the prompt, with the command after it, in main unless a stream is named' do
       event_bus.emit(:add_prompt, text: 'H>')

@@ -1,0 +1,2 @@
+<dialogData id='combat'><dropDownBox id='dDBTarget' value="none" cmd="target %dDBTarget%" tooltip='Select Target' content_text="none" content_value="target help" anchor_left='cmdTarget' anchor_right='cmdAttack' height='20' width='80'  top='93' left='0' align='n'/></dialogData>
+<dialogData id='minivitals'><skin id='healthSkin' name='healthBar' controls='health' left='0%' top='0%' width='20%' height='100%'/><progressBar id='health' value='100' text='health 456/456' left='0%' customText='t' top='0%' width='20%' height='100%'/></dialogData>

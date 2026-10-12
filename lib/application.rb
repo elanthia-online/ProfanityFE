@@ -105,6 +105,11 @@ class Application
                    help: ['.highlight <text>   Add cyan highlight for text (session only)',
                           '.highlight          List active inline highlights'],
                    handler: proc { |pattern| handle_dot_highlight(pattern) }),
+    DotCommand.new(name: 'effects',
+                   args: :optional,
+                   help: ['.effects            Show which effect timer categories are visible',
+                          '.effects <cat...>   Toggle categories: spells, buffs, debuffs, cooldowns, custom'],
+                   handler: proc { |arg| handle_dot_effects(arg) }),
     DotCommand.new(name: 'help',
                    help: ['.help              Show this help'],
                    handler: proc { handle_dot_help })
@@ -538,6 +543,72 @@ class Application
     write_to_client("* Highlight removed: #{pattern}")
   end
 
+  # +.effects+: with no argument, show which categories of effects the
+  # effects windows draw and which names can be toggled; changes nothing.
+  # With category names (spells, buffs, debuffs, cooldowns, custom; separated by
+  # spaces or commas, in any case), toggle each one in every effects window
+  # of the layout: one that was drawn is hidden, one that was hidden is
+  # drawn. A name given twice is toggled once. The choice is remembered for
+  # the next session (see {#save_effects_categories}), the windows are
+  # repainted at once and the categories drawn now are shown.
+  #
+  # The names are checked first: if any is not a category, nothing is
+  # toggled and the message names the unknown ones and the valid ones.
+  # Says so when the layout has no effects window.
+  #
+  # @param arg [String, nil] the category names, or nil for the state
+  # @return [void]
+  def handle_dot_effects(arg)
+    windows = @window_mgr.effects.values
+    if windows.empty?
+      write_to_client('* No effects window in this layout')
+      return
+    end
+
+    names = arg.to_s.downcase.split(/[\s,]+/).reject(&:empty?).uniq
+    valid_names = EffectsWindow::CATEGORIES.join(', ')
+    if names.empty?
+      write_to_client(effects_state_line(windows), "* Categories: #{valid_names} (toggle with .effects <category>)")
+      return
+    end
+
+    unknown = names.reject { |name| EffectsWindow.category?(name) }
+    unless unknown.empty?
+      write_to_client("* Unknown effects category: #{unknown.join(', ')} (valid: #{valid_names})")
+      return
+    end
+
+    names.each { |name| windows.each { |window| window.toggle_category(name) } }
+    save_effects_categories
+    # The windows only staged their redraw; flush it whether or not the
+    # message could be written to a main window
+    write_to_client(effects_state_line(windows)) || @cmd_buffer.flush_screen
+  end
+
+  # @param windows [Array<EffectsWindow>] the layout's effects windows
+  # @return [String] the categories any of them draws, in drawing order
+  def effects_state_line(windows)
+    shown = EffectsWindow::DRAW_ORDER & windows.flat_map(&:enabled_categories)
+    shown.empty? ? '* Effects: none shown' : "* Effects showing: #{shown.join(', ')}"
+  end
+
+  # Remember which categories each effects window shows, in settings.json
+  # under {EffectsWindow::SETTING_KEY} as +{ window key => [category names] }+
+  # (the same file and helpers as the +.draghl+ setting). A failure to
+  # write is logged and does not interrupt the game.
+  #
+  # @return [void]
+  def save_effects_categories
+    saved = ProfanitySettings.load_setting(EffectsWindow::SETTING_KEY, nil)
+    saved = {} unless saved.is_a?(Hash)
+    @window_mgr.effects.each do |key, window|
+      saved[key] = window.enabled_categories.map(&:to_s)
+    end
+    ProfanitySettings.save_setting(EffectsWindow::SETTING_KEY, saved)
+  rescue StandardError => e
+    ProfanityLog.write('settings', "Could not save the effects categories: #{e.message}")
+  end
+
   # +.help+: show every dot-command's help lines, in {DOT_COMMANDS} order,
   # between banner rows in the main window.
   #
@@ -615,8 +686,10 @@ class Application
   # {WindowManager#load_layout}), moves the command line to the layout's
   # command window, fills each text window the layout added with blank
   # lines, so that its text starts on its bottom row, and fits every
-  # window to the terminal. It flushes with {CommandBuffer#flush_screen},
-  # so the cursor ends on the command line.
+  # window to the terminal. (The saved effects categories are applied by
+  # the +effects+ window builder, see {EffectsWindow.saved_categories}, so
+  # a window built by the resize gets them too.) It flushes with
+  # {CommandBuffer#flush_screen}, so the cursor ends on the command line.
   #
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
@@ -752,10 +825,23 @@ class Application
     any_updated
   end
 
+  # Poll all effects windows so their countdowns run; the input loop
+  # flushes if any changed. Called on every input loop iteration (~100ms),
+  # like {#tick_countdowns}.
+  #
+  # @return [Boolean] true if any effects window display changed
+  def tick_effects
+    any_updated = false
+    @window_mgr.effects.each_value do |window|
+      any_updated = true if window.tick
+    end
+    any_updated
+  end
+
   # Read and dispatch keys until the session ends. Each pass waits up to
   # {INPUT_POLL_SECONDS} for input, ends the session (see {#end_session})
   # once the server thread reports the connection over, and then, holding
-  # the render lock, ticks the countdown windows and the drag auto-scroll
+  # the render lock, ticks the countdown and effects windows and the drag auto-scroll
   # and hands one key to {#handle_key}, then any keys curses already holds
   # (see {#handle_queued_keys}). Ctrl+C (Interrupt) returns quietly;
   # any other error is logged and ends the session through {#fatal_error}.
@@ -784,12 +870,13 @@ class Application
       CursesRenderer.synchronize do
         # Tick countdowns on every iteration (~100ms), regardless of input
         countdown_updated = tick_countdowns
+        effects_updated = tick_effects
         # Drag held at a window edge keeps scrolling once per tick
         drag_scrolled = @mouse_controller.tick_drag_auto_scroll
 
         ch, key_combo = handle_next_key(key_combo)
         if ch.nil?
-          @cmd_buffer.flush_screen if countdown_updated || drag_scrolled
+          @cmd_buffer.flush_screen if countdown_updated || effects_updated || drag_scrolled
           next
         end
 
