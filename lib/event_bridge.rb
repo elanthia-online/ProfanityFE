@@ -77,12 +77,11 @@ class EventBridge
 
     # ---- Effect events ----
 
-    # @wm.effects (a Hash of effects windows, by name) is provided by the
-    # window-manager lane; until it lands this does nothing.
+    # The latest list of each category is also kept, so that an effects
+    # window built later (see {WindowManager#last_effects}) can be seeded.
     event_bus.on(:effects_update) do |data|
-      next unless @wm.respond_to?(:effects)
-
-      @wm.effects&.each_value { |window| window.apply_effects(data[:category], data[:effects]) }
+      @wm.last_effects[data[:category]] = data[:effects]
+      @wm.effects.each_value { |window| window.apply_effects(data[:category], data[:effects]) }
     end
 
     # ---- Countdown events ----

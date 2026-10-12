@@ -106,13 +106,19 @@ class EffectTracker
 
   # @param event_bus [EventBus] receives the +:effects_update+ events
   # @param pending_render [PendingRender] asked for a screen update after each
+  #   commit, when +render_wanted+ says there is a window to show it in
   # @param clock [Clock] read for the server time (see Clock#server_now) that
   #   the time left is added to
   # @param unescape [#call] decodes the XML entities of an effect name
   #   (given the name as sent, returns it decoded); defaults to no decoding
-  def initialize(event_bus:, pending_render:, clock: Clock.new, unescape: nil)
+  # @param render_wanted [#call] tells whether a commit changes anything on
+  #   screen, i.e. whether the layout has an effects window; a commit asks
+  #   for no update when it returns false. Defaults to always true. The
+  #   +:effects_update+ event is emitted either way.
+  def initialize(event_bus:, pending_render:, clock: Clock.new, unescape: nil, render_wanted: -> { true })
     @event_bus = event_bus
     @pending_render = pending_render
+    @render_wanted = render_wanted
     @clock = clock
     @unescape = unescape || :itself.to_proc
     @buckets = [*CATEGORIES.values, CUSTOM].to_h { |category| [category, []] }
@@ -202,7 +208,7 @@ class EffectTracker
     end
     @buckets[category] = effects
     @event_bus.emit(:effects_update, category: category, effects: effects.map(&:dup))
-    @pending_render.request_update
+    request_render
   end
 
   # Settle everything left open: the open block is committed and each
@@ -260,7 +266,15 @@ class EffectTracker
     @custom.delete_if { |_id, timer| timer[:end_time] && timer[:end_time] <= now }
     @buckets[CUSTOM] = @custom.values
     @event_bus.emit(:effects_update, category: CUSTOM, effects: @buckets[CUSTOM].map(&:dup))
-    @pending_render.request_update
+    request_render
+  end
+
+  # Ask for a screen update, unless there is no effects window to change.
+  # The only thing a commit changes on screen is an effects window.
+  #
+  # @return [void]
+  def request_render
+    @pending_render.request_update if @render_wanted.call
   end
 
   # @param value [String, nil] an +end_time+ attribute

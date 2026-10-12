@@ -117,6 +117,28 @@ RSpec.describe EventBridge do
 
       expect(window).to have_received(:apply_effects).with(:buffs, effects)
     end
+
+    it 'records the list in WindowManager#last_effects whether or not there is a window' do
+      event_bus.emit(:effects_update, category: :buffs, effects: effects)
+      event_bus.emit(:effects_update, category: :cooldowns, effects: [])
+
+      expect(wm.last_effects).to eq(buffs: effects, cooldowns: [])
+    end
+
+    it 'replaces the recorded list of a category with the next one' do
+      event_bus.emit(:effects_update, category: :buffs, effects: effects)
+      event_bus.emit(:effects_update, category: :buffs, effects: [])
+
+      expect(wm.last_effects).to eq(buffs: [])
+    end
+
+    it 'keeps the recorded lists when a layout is loaded' do
+      event_bus.emit(:effects_update, category: :buffs, effects: effects)
+
+      load("<window class='text' top='0' left='0' height='4' width='42' value='main'/>", id: 'other_bridge')
+
+      expect(wm.last_effects).to eq(buffs: effects)
+    end
   end
 
   describe ':effects_update for custom timers' do

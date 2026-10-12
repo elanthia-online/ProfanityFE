@@ -2,10 +2,11 @@
 
 # Tests how the effects window is wired into the running client, through the
 # real Application on the virtual screen: the input loop ticking the
-# countdowns, the .effects <category> dot-command, the one-time
-# `spell active` request, the categories being remembered in settings.json
-# between sessions, and the eleazzar.xml template carrying the window. spec_helper points HOME at a throwaway
-# directory, so settings.json is the real file there.
+# countdowns, the .effects <category> dot-command, the categories being
+# remembered in settings.json between sessions (also for a window the resize
+# builds later), and the eleazzar.xml template carrying the window.
+# spec_helper points HOME at a throwaway directory, so settings.json is the
+# real file there.
 
 require 'json'
 require 'rexml/document'
@@ -320,68 +321,14 @@ RSpec.describe 'The effects window in the running client' do
       expect(Application.const_defined?(:EFFECTS_DOT_COMMANDS)).to be false
     end
 
-    describe 'the one-time `spell active` request' do
-      it 'is sent the first time a toggle turns a category on' do
-        effects.hide_category(:buffs)
+    it 'sends nothing to the game for any toggle, turning a category on included' do
+      effects.hide_category(:buffs)
 
-        app.execute_command('.effects buffs')
+      app.execute_command('.effects buffs')
+      app.execute_command('.effects')
+      app.execute_command('.effects spells cooldowns')
 
-        expect(server.string).to eq "spell active\n"
-      end
-
-      it 'is not sent again by later toggles that turn a category on' do
-        effects.enabled_categories = []
-
-        app.execute_command('.effects buffs')
-        app.execute_command('.effects buffs')
-        app.execute_command('.effects buffs cooldowns')
-
-        expect(server.string).to eq "spell active\n"
-      end
-
-      it 'is not sent without an argument' do
-        app.execute_command('.effects')
-        app.execute_command('.effects   ')
-
-        expect(server.string).to be_empty
-      end
-
-      it 'is not sent by toggles that only turn categories off, and waits for the first one that turns one on' do
-        app.execute_command('.effects spells')
-        app.execute_command('.effects buffs debuffs')
-        expect(server.string).to be_empty
-
-        app.execute_command('.effects spells')
-        app.execute_command('.effects spells')
-
-        expect(server.string).to eq "spell active\n"
-      end
-
-      it 'is sent when a command turns one category on and another off' do
-        effects.hide_category(:buffs)
-
-        app.execute_command('.effects spells buffs')
-
-        expect(server.string).to eq "spell active\n"
-      end
-
-      it 'is not sent for an unknown category' do
-        app.execute_command('.effects potions')
-
-        expect(server.string).to be_empty
-        app.execute_command('.effects buffs')
-        app.execute_command('.effects buffs')
-        expect(server.string).to eq "spell active\n"
-      end
-
-      it 'uses the connection send_line' do
-        allow(app.connection).to receive(:send_line)
-        effects.hide_category(:debuffs)
-
-        app.execute_command('.effects debuffs')
-
-        expect(app.connection).to have_received(:send_line).with('spell active').once
-      end
+      expect(server.string).to be_empty
     end
   end
 
@@ -530,7 +477,7 @@ RSpec.describe 'The effects window in the running client' do
 
       app.send(:apply_layout, 'no_effects')
 
-      expect(ProfanitySettings).not_to have_received(:load_setting).with(Application::EFFECTS_SETTING_KEY, anything)
+      expect(ProfanitySettings).not_to have_received(:load_setting).with(EffectsWindow::SETTING_KEY, anything)
     end
   end
 

@@ -115,10 +115,6 @@ class Application
                    handler: proc { handle_dot_help })
   ].freeze
 
-  # The settings.json key under which the categories each effects window
-  # shows are saved, as +{ window key => [category names] }+.
-  EFFECTS_SETTING_KEY = 'EFFECTS_CATEGORIES'
-
   # How long .key waits for a key press before giving up, in milliseconds.
   DOT_KEY_TIMEOUT_MS = 5000
 
@@ -560,10 +556,6 @@ class Application
   # toggled and the message names the unknown ones and the valid ones.
   # Says so when the layout has no effects window.
   #
-  # A toggle that draws a category also asks the game for the current
-  # effects, once per session (see {#request_effects_refresh_once}); the
-  # no-argument form and a toggle that only hides never do.
-  #
   # @param arg [String, nil] the category names, or nil for the state
   # @return [void]
   def handle_dot_effects(arg)
@@ -586,9 +578,8 @@ class Application
       return
     end
 
-    turned_on = names.map { |name| windows.map { |window| window.toggle_category(name) }.include?(true) }.any?
+    names.each { |name| windows.each { |window| window.toggle_category(name) } }
     save_effects_categories
-    request_effects_refresh_once if turned_on
     # The windows only staged their redraw; flush it whether or not the
     # message could be written to a main window
     write_to_client(effects_state_line(windows)) || @cmd_buffer.flush_screen
@@ -601,63 +592,21 @@ class Application
     shown.empty? ? '* Effects: none shown' : "* Effects showing: #{shown.join(', ')}"
   end
 
-  # Ask the game for the character's current effects, the first time it is
-  # called in a session and never again. The game pushes an effect list
-  # whenever it changes, but an effect that was already active when
-  # Profanity connected (or while the category was hidden) has not been
-  # pushed since, so the window would stay empty until it next changed. One
-  # +spell active+ makes the game send the lists again; there is no polling.
-  #
-  # @return [void]
-  def request_effects_refresh_once
-    return if @effects_refreshed
-
-    @effects_refreshed = true
-    @connection.send_line('spell active')
-  end
-
   # Remember which categories each effects window shows, in settings.json
-  # under {EFFECTS_SETTING_KEY} as +{ window key => [category names] }+
+  # under {EffectsWindow::SETTING_KEY} as +{ window key => [category names] }+
   # (the same file and helpers as the +.draghl+ setting). A failure to
   # write is logged and does not interrupt the game.
   #
   # @return [void]
   def save_effects_categories
-    saved = ProfanitySettings.load_setting(EFFECTS_SETTING_KEY, nil)
+    saved = ProfanitySettings.load_setting(EffectsWindow::SETTING_KEY, nil)
     saved = {} unless saved.is_a?(Hash)
     @window_mgr.effects.each do |key, window|
       saved[key] = window.enabled_categories.map(&:to_s)
     end
-    ProfanitySettings.save_setting(EFFECTS_SETTING_KEY, saved)
+    ProfanitySettings.save_setting(EffectsWindow::SETTING_KEY, saved)
   rescue StandardError => e
     ProfanityLog.write('settings', "Could not save the effects categories: #{e.message}")
-  end
-
-  # Apply the categories saved by {#save_effects_categories} to the layout's
-  # effects windows, over the +categories+ of the layout file. A window with
-  # no saved entry keeps the layout's; so does one whose entry is not a list
-  # of category names. A list that is empty was saved by hiding every
-  # category and is kept as that. Anything unreadable leaves the layout's
-  # categories as they are.
-  #
-  # @return [void]
-  def restore_effects_categories
-    return if @window_mgr.effects.empty?
-
-    saved = ProfanitySettings.load_setting(EFFECTS_SETTING_KEY, nil)
-    return unless saved.is_a?(Hash)
-
-    @window_mgr.effects.each do |key, window|
-      names = saved[key]
-      next unless names.is_a?(Array)
-
-      valid = names.grep(String).select { |name| EffectsWindow.category?(name) }
-      next if valid.empty? && !names.empty?
-
-      window.enabled_categories = valid
-    end
-  rescue StandardError => e
-    ProfanityLog.write('settings', "Could not restore the effects categories: #{e.message}")
   end
 
   # +.help+: show every dot-command's help lines, in {DOT_COMMANDS} order,
@@ -735,11 +684,12 @@ class Application
   # layout at startup and for +.layout+. Builds the layout's windows
   # (reusing the previous layout's where it can, see
   # {WindowManager#load_layout}), moves the command line to the layout's
-  # command window, applies the saved effects categories (see
-  # {#restore_effects_categories}), fills each text window the layout added with blank
+  # command window, fills each text window the layout added with blank
   # lines, so that its text starts on its bottom row, and fits every
-  # window to the terminal. It flushes with {CommandBuffer#flush_screen},
-  # so the cursor ends on the command line.
+  # window to the terminal. (The saved effects categories are applied by
+  # the +effects+ window builder, see {EffectsWindow.saved_categories}, so
+  # a window built by the resize gets them too.) It flushes with
+  # {CommandBuffer#flush_screen}, so the cursor ends on the command line.
   #
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
@@ -747,7 +697,6 @@ class Application
     kept = TextWindow.list.dup
     @window_mgr.load_layout(layout_id)
     @cmd_buffer.window = @window_mgr.command_window
-    restore_effects_categories
     TextWindow.list.each do |window|
       window.fill_with_blank_lines unless kept.any? { |old| old.equal?(window) }
     end

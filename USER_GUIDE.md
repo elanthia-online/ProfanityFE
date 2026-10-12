@@ -861,8 +861,14 @@ The `.effects` command controls which categories are visible while you play:
 
 Your choices are saved between sessions (in `~/.profanity/settings.json`).
 
-> **Upgrading?** If you used the Effects Window before the Custom category
-> existed, Custom starts hidden. Run `.effects custom` once to show it.
+> **Saved choices override the layout.** `categories=` in the layout sets only
+> the *initial* categories. Once you change them with `.effects`, your choice
+> is saved under the key `EFFECTS_CATEGORIES` (per window `value`, default
+> `effects`, in the single global `settings.json`) and **overrides** the
+> layout's `categories=` on every later load -- so editing `categories=` in the
+> XML appears to do nothing once a save exists. To go back to the layout's
+> `categories=`, delete the `EFFECTS_CATEGORIES` entry (or just that window's
+> key inside it) from `~/.profanity/settings.json`.
 
 ##### Custom per-effect colors: `<effectColor>`
 
@@ -926,7 +932,7 @@ does not clash with real game data, but the section is displayed as "Custom".
 | `text` | no | Display name (entity-decoded). Falls back to the id if missing or blank |
 | `time` | no | Remaining time as `HH:MM:SS`; the bar counts down from there. Omit it for an indefinite timer (shown as `Indef`). Missing, `Indefinite`, or malformed values are treated as indefinite |
 | `end_time` | no | A server epoch-seconds end time. Used instead of `time` when it is a plain number |
-| `value` | no | Initial bar fill as a percent, 0-100 (default 100) |
+| `value` | no | Bar fill as a percent, 0-100 (default 100). It does not change as the countdown runs; at the default 100 the bar is always full |
 | `clear` | no | `clear='t'` on a single `<progressBar id='X' clear='t'/>` removes that one timer |
 
 `clear='t'` on the `<dialogData id='ProfanityCustom' clear='t'>` block itself
@@ -937,7 +943,10 @@ removes **all** custom timers.
 - Custom timers are *sticky*: they persist until they expire (the time runs
   out) or are cleared. A script only needs to emit a timer once; it does not
   need to keep re-sending it.
-- Re-sending the same id updates the timer in place and keeps its position.
+- Re-sending the same id updates that timer and keeps its position. Each
+  update **replaces** the timer's name, time and fill -- it does not merge --
+  so resend all of them: sending only `value` drops `time`, making the timer
+  Indefinite.
 - A timer disappears from the display automatically when it reaches 0.
 - Escape XML special characters in names (`&amp;`, `&apos;`, `&lt;`).
 

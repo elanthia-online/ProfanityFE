@@ -59,6 +59,7 @@ class WindowManager
     @progress = {}
     @countdown = {}
     @effects = {}
+    @last_effects = {}
     @room = {}
     @command_window = nil
     @command_window_layout = nil
@@ -100,6 +101,18 @@ class WindowManager
   #   copy), keyed by the +value+ of the layout element (default "effects")
   # @note Returns the live hash, not a copy. Mutations affect effects display.
   attr_reader :effects
+
+  # The effects list last sent for each category, kept so that an effects
+  # window built after the game sent it (by +.layout+ with a new +value+, or
+  # by a {#resize} that makes room for it) starts with what the others
+  # show instead of empty lists until the game sends them again.
+  # {EventBridge} records every +:effects_update+ here, and the +effects+
+  # builder seeds a window it builds from scratch ({EffectsWindow#apply_effects}).
+  # It belongs to the session, not to a layout, so {#reset_registries}
+  # leaves it alone.
+  #
+  # @return [Hash{Symbol => Array<Hash>}] the live hash (not a copy), by category
+  attr_reader :last_effects
 
   # Returns the live room handler hash.
   #
@@ -183,6 +196,8 @@ class WindowManager
   # Point each handler hash (stream, indicator, progress, countdown, effects, room)
   # at a new, empty hash. The old hashes are left as they were, so the
   # layout loader can still read the previous layout's windows from them.
+  # {#last_effects} is not reset: it is what a window of the new layout
+  # is seeded from.
   #
   # @return [void]
   # @api private

@@ -7,6 +7,7 @@
 # with WindowManager and feed it +:effects_update+ events as the parser
 # does.
 
+require 'json'
 require 'rexml/document'
 require_relative '../../../lib/clock'
 require_relative '../../../lib/event_bus'
@@ -1373,6 +1374,214 @@ RSpec.describe 'effects window in a layout' do
       now[0] += 2
 
       expect(window_manager.effects.each_value.map(&:tick)).to eq [true]
+    end
+  end
+
+  describe 'a window built after the game sent its effects' do
+    let(:event_bus) { EventBus.new.tap { |bus| window_manager.subscribe_to_events(bus) } }
+    let(:text_element) { "<window class='text' top='0' left='0' height='4' width='30' value='main'/>" }
+    let(:buffs) { [effect('Blink', 600), effect('Haste', 300)] }
+    let(:timers) { [effect('My Timer', 900), effect('Keep', nil)] }
+
+    before do
+      event_bus
+      event_bus.emit(:effects_update, category: :buffs, effects: buffs)
+      event_bus.emit(:effects_update, category: :custom, effects: timers)
+    end
+
+    it 'remembers the last list of each category in the window manager' do
+      event_bus.emit(:effects_update, category: :buffs, effects: [effect('Newer', 60)])
+
+      expect(window_manager.last_effects.keys).to eq %i[buffs custom]
+      expect(window_manager.last_effects[:buffs].map { |e| e[:name] }).to eq %w[Newer]
+    end
+
+    it 'remembers the lists although no layout has an effects window' do
+      load_layout(text_element)
+
+      expect(window_manager.last_effects[:buffs]).to eq buffs
+    end
+
+    it 'is seeded with them when a new layout adds it' do
+      load_layout(text_element)
+      load_layout(text_element, all_categories_element, id: 'with_effects')
+      window = window_manager.effects['effects']
+
+      expect([window.effects_for(:buffs), window.effects_for(:custom)]).to eq [buffs, timers]
+      expect(window.rows.grep(/\A(Blink|Haste)/).map { |row| row[0, 5] }).to eq %w[Blink Haste]
+    end
+
+    it 'is seeded with them when the layout gives it a new value key' do
+      load_layout(all_categories_element)
+      old = window_manager.effects['effects']
+
+      load_layout("<window class='effects' top='0' left='0' height='6' width='30' value='other'/>")
+      window = window_manager.effects['other']
+
+      expect(window).not_to equal(old)
+      expect(window.effects_for(:buffs)).to eq buffs
+      expect(window.effects_for(:custom)).to eq timers
+    end
+
+    it 'leaves the categories nothing was sent for empty' do
+      load_layout(all_categories_element)
+
+      expect(window_manager.effects['effects'].effects_for(:spells)).to eq []
+    end
+
+    it 'is not seeded again when the next layout keeps it' do
+      load_layout(all_categories_element)
+      window = window_manager.effects['effects']
+      window.apply_effects(:buffs, [effect('Only', 10)])
+
+      load_layout(all_categories_element)
+
+      expect(window_manager.effects['effects']).to equal(window)
+      expect(window.effects_for(:buffs).map { |e| e[:name] }).to eq %w[Only]
+    end
+
+    it 'keeps what was sent while the previous layout had no effects window, across several layouts' do
+      load_layout(text_element)
+      load_layout(text_element, id: 'another_text')
+      load_layout(all_categories_element)
+
+      expect(window_manager.effects['effects'].effects_for(:buffs)).to eq buffs
+    end
+
+    it 'is seeded with the lists, up to date, when a resize builds it' do
+      allow(Curses).to receive(:cols).and_return(80)
+      load_layout(text_element, "<window class='effects' top='0' left='100' height='6' width='30'/>")
+      expect(window_manager.effects).to be_empty
+      event_bus.emit(:effects_update, category: :buffs, effects: [effect('Later', 120)])
+
+      allow(Curses).to receive(:cols).and_return(140)
+      window_manager.resize(nil)
+      window = window_manager.effects['effects']
+
+      expect(window).to be_a(EffectsWindow)
+      expect(window.effects_for(:buffs).map { |e| e[:name] }).to eq %w[Later]
+      expect(window.effects_for(:custom)).to eq timers
+    end
+  end
+
+  describe 'the categories saved by .effects' do
+    let(:settings_file) { ProfanitySettings.file('settings.json') }
+    let(:resized_layout) do
+      ["<window class='text' top='0' left='0' height='4' width='30' value='main'/>",
+       "<window class='effects' top='0' left='100' height='6' width='30'/>"]
+    end
+
+    def save(categories)
+      ProfanitySettings.ensure_app_dir
+      File.write(settings_file, JSON.generate(EffectsWindow::SETTING_KEY => categories))
+    end
+
+    after { Dir.glob(File.join(ProfanitySettings::APP_DIR, 'settings.json*')).each { |f| File.delete(f) } }
+
+    it 'are applied over the layout\'s when the layout builds the window' do
+      save('effects' => %w[buffs cooldowns])
+      load_layout("<window class='effects' top='0' left='0' height='6' width='30' categories='spells'/>")
+
+      expect(window_manager.effects['effects'].enabled_categories).to eq %i[cooldowns buffs]
+    end
+
+    it 'are applied to a window a resize builds later, not the layout\'s categories' do
+      save('effects' => %w[debuffs])
+      allow(Curses).to receive(:cols).and_return(80)
+      load_layout(*resized_layout)
+      expect(window_manager.effects).to be_empty
+
+      allow(Curses).to receive(:cols).and_return(140)
+      window_manager.resize(nil)
+
+      expect(window_manager.effects['effects'].enabled_categories).to eq %i[debuffs]
+    end
+
+    it 'leave a window a resize builds on the layout\'s categories when none are saved for its key' do
+      save('other' => %w[debuffs])
+      allow(Curses).to receive(:cols).and_return(80)
+      load_layout(*resized_layout)
+
+      allow(Curses).to receive(:cols).and_return(140)
+      window_manager.resize(nil)
+
+      expect(window_manager.effects['effects'].enabled_categories).to eq EffectsWindow::DRAW_ORDER
+    end
+
+    it 'are read for the key of the window, one entry for each' do
+      save('first' => %w[buffs], 'second' => %w[spells])
+      load_layout("<window class='effects' top='0' left='0' height='6' width='30' value='first'/>",
+                  "<window class='effects' top='0' left='31' height='6' width='30' value='second'/>")
+
+      expect(window_manager.effects.transform_values(&:enabled_categories)).to eq('first' => %i[buffs], 'second' => %i[spells])
+    end
+
+    describe '.saved_categories' do
+      before { allow(ProfanityLog).to receive(:write) }
+
+      def saved_for(key = 'effects')
+        EffectsWindow.saved_categories(key)
+      end
+
+      it 'is the saved list for the key' do
+        save('effects' => %w[buffs spells])
+
+        expect(saved_for).to eq %w[buffs spells]
+      end
+
+      it 'is an empty list when every category was hidden' do
+        save('effects' => [])
+
+        expect(saved_for).to eq []
+      end
+
+      it 'drops names that are not categories from a list that has some' do
+        save('effects' => ['buffs', 'bogus', 7, nil])
+
+        expect(saved_for).to eq %w[buffs]
+      end
+
+      it 'is nil without a settings file' do
+        expect(saved_for).to be_nil
+      end
+
+      it 'is nil without an entry for the key' do
+        save('other' => %w[buffs])
+
+        expect(saved_for).to be_nil
+      end
+
+      it 'is nil for an entry that is not a list' do
+        save('effects' => 'buffs')
+
+        expect(saved_for).to be_nil
+      end
+
+      it 'is nil for a list with no known category' do
+        save('effects' => ['nonsense', 5])
+
+        expect(saved_for).to be_nil
+      end
+
+      it 'is nil when the whole setting is not an object' do
+        save(%w[buffs])
+
+        expect(saved_for).to be_nil
+      end
+
+      it 'is nil for a file that is not JSON' do
+        ProfanitySettings.ensure_app_dir
+        File.write(settings_file, '{not json')
+
+        expect(saved_for).to be_nil
+      end
+
+      it 'logs and is nil when the settings cannot be read' do
+        allow(ProfanitySettings).to receive(:load_setting).and_raise(Errno::EACCES)
+
+        expect(saved_for).to be_nil
+        expect(ProfanityLog).to have_received(:write).with('settings', /Could not restore the effects categories/)
+      end
     end
   end
 end

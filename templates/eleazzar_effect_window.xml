@@ -1,17 +1,20 @@
 <!--
   ================================================================
-  ProfanityFE Template: eleazzar.xml
+  ProfanityFE Template: eleazzar_effect_window.xml
   Game:    GemStone IV
   Source:  elanthia-online/ProfanityFE (community templates)
   Author:  Eleazzar (original)
   ================================================================
 
-  A GemStone IV template designed for use with nerd fonts and
-  the effectmon.lic / targetlist.lic Lich scripts. Features a
-  three-column layout with dedicated panes for speech, room
-  description, main game text, targets, status vitals (with an
-  ASCII body diagram), compass rose, buff/debuff/spell timers
-  (via effectmon.lic), and hand inventory indicators.
+  A variant of eleazzar.xml for use with nerd fonts and the
+  targetlist.lic Lich script. Features a three-column layout with
+  dedicated panes for speech, room description, main game text,
+  targets, status vitals (with an ASCII body diagram), compass
+  rose, and hand inventory indicators. The right-side panel is
+  ProfanityFE's native effects window (class='effects'): it shows
+  your spells, buffs, debuffs and cooldowns, plus a Custom section
+  for Lich script timers, with live countdowns and no helper
+  script. Toggle its categories with .effects.
 
   Highlights identify players by profession class (Empath, Cleric),
   NPC merchants, combat results, channel chat, and danger alerts.
@@ -19,11 +22,10 @@
   Requirements:
     - A Nerd Font installed (https://nerdfonts.com) for glyph icons
     - A large terminal window (190+ columns recommended) so the
-      right-side effectmon panel is visible — if you launch
+      right-side effects panel is visible — if you launch
       ProfanityFE in a window too small to fit everything, you
       will not see the spell effects on the right side. Make sure
       your window is large enough BEFORE you launch ProfanityFE.
-    - effectmon.lic  (populates buff/debuff/spell progress bars)
     - targetlist.lic (populates the combat/target pane)
 
   Color palette reference:
@@ -41,7 +43,7 @@
     Base foreground: #9BA2B2
 
   Usage:
-    profanity ..template=eleazzar.xml
+    profanity ..template=eleazzar_effect_window.xml
 
   NOTE: This template is built for GemStone IV. The highlight
   patterns, preset stream names, and layout windows are
@@ -326,21 +328,21 @@
        until the terminal grows.
 
        Columns 0-44 are the left panel; 45-158 are center; 160-189
-       are the right-side effectmon panel.
+       are the right-side native effects panel.
 
        ASCII diagram (approximate):
 
        col:  0              44  45                         158  160          189
        row:
-        0    +==Speech=======+  +==Room==========================+  +==Buffs=====+
-        1    |               |  |                                |  | buff0..9   |
-        :    | speech,       |  | room description               |  |            |
-        :    | announcements,|  | (10 rows)                      |  +==Debuffs===+
-       10    | lnet, thoughts|  |                                |  | debuff0..1 |
-       11    | voln          |  +==Main===========================+  +==Cooldowns=+
-       12    |               |  |                                |  | cooldown0..|
-        :    | (scrollable)  |  | main text + familiar           |  +==Spells====+
-        :    |               |  | (scrollable, 4000 line buffer) |  | spell0..29 |
+        0    +==Speech=======+  +==Room==========================+  +==Effects===+
+        1    |               |  |                                |  | Debuffs    |
+        :    | speech,       |  | room description               |  | Cooldowns  |
+        :    | announcements,|  | (10 rows)                      |  | Buffs      |
+       10    | lnet, thoughts|  |                                |  | Custom     |
+       11    | voln          |  +==Main===========================+  | Spells     |
+       12    |               |  |                                |  |            |
+        :    | (scrollable)  |  | main text + familiar           |  |            |
+        :    |               |  | (scrollable, 4000 line buffer) |  |            |
         :    |               |  |                                |  |            |
        L-14  +==Targets======+  |                                |  |            |
        L-13  | combat/target |  |                                |  |            |
@@ -369,11 +371,11 @@
          - Main window: primary game text + familiar (4000 line buffer)
          - Command line at bottom row
 
-       Right panel (cols 160-189, requires effectmon.lic):
-         - Buffs: 10 progress bars (buff0-buff9)
-         - Debuffs: 2 progress bars (debuff0-debuff1)
-         - Cooldowns: 2 progress bars (cooldown0-cooldown1)
-         - Spells: 30 progress bars (spell0-spell29)
+       Right panel (cols 160-189, native effects window, no helper script):
+         - One class='effects' window, full height, with live countdowns
+         - Categories, top to bottom: Debuffs, Cooldowns, Buffs, Custom,
+           Spells (Custom lists timers sent by Lich scripts)
+         - Toggle categories while playing with .effects
 
        Body diagram detail (nerd font icons):
          Row L-9: [left eye] [right eye]  ns(nervous system)

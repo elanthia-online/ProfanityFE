@@ -113,8 +113,11 @@ class GameTextProcessor
     # The effects of the <dialogData> blocks (spells, buffs, debuffs,
     # cooldowns). The tracker adds each effect's time left to the server
     # time now, read from the same clock as the countdown windows.
+    # A commit only needs a screen flush when the layout has an effects
+    # window to show it in.
     @effects = EffectTracker.new(event_bus: event_bus, pending_render: @pending_render, clock: clock,
-                                 unescape: method(:unescape_entities))
+                                 unescape: method(:unescape_entities),
+                                 render_wanted: -> { !window_mgr.effects.empty? })
     # Whether a <dialogData> is open (see TagHandlers#handle_dialog_open)
     @dialog_open = false
 

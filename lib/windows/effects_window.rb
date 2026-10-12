@@ -75,6 +75,13 @@ class EffectsWindow < BaseWindow
   # its layout element has no +value+ attribute.
   DEFAULT_KEY = 'effects'
 
+  # The settings.json key under which the categories each effects window
+  # shows are saved (by +.effects+, see Application#save_effects_categories),
+  # as +{ window key => [category names] }+. The one definition of the key:
+  # the +effects+ builder reads it through {.saved_categories} and the
+  # application writes it.
+  SETTING_KEY = 'EFFECTS_CATEGORIES'
+
   # What the time column shows for an effect that never runs out.
   INDEFINITE_LABEL = 'Indef'
 
@@ -258,6 +265,29 @@ class EffectsWindow < BaseWindow
   # @return [Boolean] whether it is one of {CATEGORIES}
   def self.category?(name)
     CATEGORIES.include?(name.to_s.strip.downcase.to_sym)
+  end
+
+  # The categories saved in settings.json (under {SETTING_KEY}) for the
+  # effects window with this key. nil, meaning "keep the layout's", when
+  # there is no saved entry for the key, when the entry is not a list, or
+  # when it is a non-empty list with no known category; names that are not
+  # categories are dropped from a list that has some. An empty list is
+  # returned as such: it was saved by hiding every category. Anything
+  # unreadable is logged and also gives nil.
+  #
+  # @param key [String] the window's key in +WindowManager#effects+
+  # @return [Array<String>, nil] category names, to give to
+  #   {#enabled_categories=}
+  def self.saved_categories(key)
+    saved = ProfanitySettings.load_setting(SETTING_KEY, nil)
+    names = saved[key] if saved.is_a?(Hash)
+    return unless names.is_a?(Array)
+
+    valid = names.grep(String).select { |name| category?(name) }
+    valid unless valid.empty? && !names.empty?
+  rescue StandardError => e
+    ProfanityLog.write('settings', "Could not restore the effects categories: #{e.message}")
+    nil
   end
 
   # Format a number of seconds as +HH:MM:SS+ (more hours widen the field).
@@ -692,7 +722,11 @@ end
 # - +categories+: comma-separated categories to show: spells, buffs,
 #   debuffs, cooldowns, custom (default all five, or, on a kept window, the
 #   categories it shows). They are always drawn in the order debuffs,
-#   cooldowns, buffs, custom, spells, each under its own header.
+#   cooldowns, buffs, custom, spells, each under its own header. The
+#   categories the user saved with +.effects+ ({EffectsWindow::SETTING_KEY} in
+#   settings.json, see {EffectsWindow.saved_categories}) are applied over
+#   these, to every window the builder returns, so the choice holds for a
+#   window built by +.layout+ or by a resize as well as at startup.
 # - +fg+ / +bg+: colors of ordinary rows, as "filled,empty" (the filled and
 #   the empty part of the bar); a color left out keeps its default.
 # - +warn_fg+ / +warn_bg+: the same for an effect with a minute or less
@@ -716,10 +750,19 @@ end
 # new layout; without any +<effectColor>+ the window colors as before.
 BaseWindow.register_type('effects') do |height, width, top, left, element, wm|
   key = element.attributes['value'] || EffectsWindow::DEFAULT_KEY
-  window = wm.claim_window(:effects, key, EffectsWindow) || EffectsWindow.new(height, width, top, left)
+  # A window built from scratch starts with the lists the game last sent
+  # (see WindowManager#last_effects); a kept one already has its own.
+  window = wm.claim_window(:effects, key, EffectsWindow) ||
+           EffectsWindow.new(height, width, top, left).tap do |fresh|
+             wm.last_effects.each { |category, effects| fresh.apply_effects(category, effects) }
+           end
   window.scrollok(false)
   window.clock = wm.clock
   window.enabled_categories = element.attributes['categories'] if element.attributes['categories']
+  # The user's saved choice wins over the layout's, whether the window is
+  # built at load, by +.layout+ or later by a resize.
+  saved = EffectsWindow.saved_categories(key)
+  window.enabled_categories = saved if saved
   { normal: %w[fg bg], warning: %w[warn_fg warn_bg], ending: %w[end_fg end_bg] }.each do |kind, (fg_attr, bg_attr)|
     next unless element.attributes[fg_attr] || element.attributes[bg_attr]
 

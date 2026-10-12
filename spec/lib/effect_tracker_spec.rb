@@ -118,6 +118,31 @@ RSpec.describe EffectTracker do
       expect { commit(:buffs, bar('1', 'Blink')) }.to change { pending_render.update_requested? }.from(false).to(true)
     end
 
+    it 'asks for no screen update when render_wanted says there is no effects window, but still emits' do
+      wanted = [false]
+      quiet = described_class.new(event_bus: event_bus, pending_render: pending_render, clock: clock,
+                                  render_wanted: -> { wanted[0] })
+      quiet.start_dialog(:buffs)
+      quiet.add_effect(bar('1', 'Blink'))
+      quiet.end_dialog
+      expect([pending_render.update_requested?, events.size]).to eq [false, 1]
+
+      wanted[0] = true
+      quiet.start_dialog(:buffs)
+      quiet.add_effect(bar('1', 'Blink'))
+      quiet.end_dialog
+      expect([pending_render.update_requested?, events.size]).to eq [true, 2]
+    end
+
+    it 'asks for no screen update for a cleared category committed empty at the prompt either' do
+      quiet = described_class.new(event_bus: event_bus, pending_render: pending_render, clock: clock, render_wanted: -> { false })
+      quiet.start_dialog(:buffs, clear: true)
+      quiet.end_dialog
+      quiet.finalize
+
+      expect([pending_render.update_requested?, events.size]).to eq [false, 1]
+    end
+
     it 'replaces the whole bucket of the category and leaves the others' do
       commit(:buffs, bar('1', 'Blink'), bar('2', 'Haste'))
       commit(:debuffs, bar('3', 'Bleeding'))
@@ -282,6 +307,15 @@ RSpec.describe EffectTracker do
 
     it 'asks for a screen update' do
       expect { custom(timer('a', time: '00:01:00')) }.to change { pending_render.update_requested? }.from(false).to(true)
+    end
+
+    it 'asks for no screen update when render_wanted says there is no effects window, but still emits' do
+      quiet = described_class.new(event_bus: event_bus, pending_render: pending_render, clock: clock, render_wanted: -> { false })
+      quiet.start_dialog(:custom)
+      quiet.add_effect(timer('a', time: '00:01:00'))
+      quiet.end_dialog
+
+      expect([pending_render.update_requested?, events.size]).to eq [false, 1]
     end
 
     describe 'sticking' do

@@ -344,6 +344,70 @@ RSpec.describe 'Effect dialogs (<dialogData>)' do
     end
   end
 
+  describe 'the screen update a block asks for' do
+    let(:buffs_line) { %(<dialogData id='Buffs'><progressBar id='9' value='50' text="Blink" time='00:00:10'/></dialogData>) }
+    let(:custom_line) do
+      %(<dialogData id='ProfanityCustom'><progressBar id='a' text='A' time='00:10:00'/></dialogData>)
+    end
+    let(:pending_render) { processor.instance_variable_get(:@pending_render) }
+
+    # How many screen updates running +line+ through the server loop asks for.
+    def updates_asked_by(line)
+      count = 0
+      allow(pending_render).to receive(:request_update).and_wrap_original do |original|
+        count += 1
+        original.call
+      end
+      receive_from_server(line)
+      count
+    end
+
+    before do
+      LAYOUT['with_effects'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='0' height='8' width='60' value='main'/>
+          <window class='effects' top='0' left='60' height='8' width='20'/>
+        </layout>
+      XML
+    end
+
+    it 'asks for none when the layout has no effects window, and still emits the event' do
+      expect([updates_asked_by(buffs_line), effects_events.size]).to eq [0, 1]
+    end
+
+    it 'asks for none for a custom block either' do
+      expect([updates_asked_by(custom_line), effects_events.size]).to eq [0, 1]
+    end
+
+    it 'asks for exactly one when the layout has an effects window' do
+      window_manager.load_layout('with_effects')
+
+      expect([updates_asked_by(buffs_line), effects_events.size]).to eq [1, 1]
+    end
+
+    it 'asks for exactly one for a custom block when the layout has an effects window' do
+      window_manager.load_layout('with_effects')
+
+      expect([updates_asked_by(custom_line), effects_events.size]).to eq [1, 1]
+    end
+
+    it 'follows a layout change: none before the window is added, one after' do
+      before_layout = updates_asked_by(buffs_line)
+      window_manager.load_layout('with_effects')
+
+      expect([before_layout, updates_asked_by(buffs_line)]).to eq [0, 1]
+    end
+
+    it 'shows an effect the game sent before the layout added the window' do
+      receive_from_server(buffs_line, custom_line)
+      window_manager.load_layout('with_effects')
+      window = window_manager.effects['effects']
+
+      expect([window.effects_for(:buffs).map { |e| e[:name] }, window.effects_for(:custom).map { |e| e[:name] }])
+        .to eq [%w[Blink], %w[A]]
+    end
+  end
+
   it 'leaves the arbProgress path of the scripts alone' do
     receive_from_server(%(<arbProgress id='spell0' max='1200' current='600' label='x' colors='395573,9BA2B2'></arbProgress>))
 
