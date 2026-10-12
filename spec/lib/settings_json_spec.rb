@@ -126,4 +126,79 @@ RSpec.describe ProfanitySettings do
       FileUtils.remove_entry(File.dirname(target))
     end
   end
+
+  describe 'saving from two clients at once' do
+    # BUG FOUND (fixed here): a save read settings.json, changed one key and
+    # wrote it all back with nothing held across processes, so two clients
+    # saving at the same moment each wrote the file without the other's key.
+    let(:lock_path) { described_class.file(described_class::SETTINGS_LOCK_FILE) }
+
+    after { FileUtils.rm_f(lock_path) }
+
+    # Hold the save lock, as another client in the middle of a save does.
+    def holding_the_lock
+      File.open(lock_path, File::RDWR | File::CREAT) do |lock|
+        lock.flock(File::LOCK_EX)
+        yield
+      end
+    end
+
+    it 'waits while another client holds the lock, then keeps both keys' do
+      File.write(path, '{"DRAG_HIGHLIGHT": true}')
+      saver = nil
+
+      holding_the_lock do
+        saver = Thread.new { described_class.save_setting('BUTTON4_PRESSED_MASK', 524_288) }
+        sleep 0.2
+
+        expect(saver).to be_alive
+        expect(File.read(path)).to eq '{"DRAG_HIGHLIGHT": true}'
+      end
+      saver.join(5)
+
+      expect(JSON.parse(File.read(path))).to eq('DRAG_HIGHLIGHT' => true, 'BUTTON4_PRESSED_MASK' => 524_288)
+    end
+
+    it 'makes save_mouse_settings wait for the lock too' do
+      saver = nil
+
+      holding_the_lock do
+        saver = Thread.new { described_class.save_mouse_settings(1, 2) }
+        sleep 0.2
+
+        expect(saver).to be_alive
+      end
+      saver.join(5)
+
+      expect(JSON.parse(File.read(path))).to eq('BUTTON4_PRESSED_MASK' => 1, 'BUTTON5_PRESSED_MASK' => 2)
+    end
+
+    it 'releases the lock when the save fails' do
+      allow(File).to receive(:rename).and_raise(Errno::EACCES)
+      expect { described_class.save_setting('DRAG_HIGHLIGHT', false) }.to raise_error(Errno::EACCES)
+
+      File.open(lock_path, File::RDWR) do |lock|
+        expect(lock.flock(File::LOCK_EX | File::LOCK_NB)).to eq 0
+      end
+    end
+
+    it 'keeps every key when two processes save different keys at the same time' do
+      skip 'needs fork' unless Process.respond_to?(:fork)
+
+      start_at = Time.now.to_f + 0.3
+      pids = %w[A B].map do |key|
+        fork do
+          sleep([start_at - Time.now.to_f, 0].max)
+          100.times { |i| described_class.save_setting(key, i) }
+          exit!(0)
+        rescue StandardError
+          exit!(1)
+        end
+      end
+      statuses = pids.map { |pid| Process.wait2(pid).last }
+
+      expect(statuses).to all(be_success)
+      expect(JSON.parse(File.read(path))).to eq('A' => 99, 'B' => 99)
+    end
+  end
 end
