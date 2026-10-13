@@ -31,6 +31,10 @@ module ProfanitySettings
   # @return [String] the application data directory
   APP_DIR = File.join(Dir.home, '.profanity')
 
+  # The file every save of settings.json locks while it reads, changes and
+  # writes it (see {update_settings}).
+  SETTINGS_LOCK_FILE = 'settings.lock'
+
   # Create {APP_DIR} if it doesn't exist. profanity.rb calls this at
   # startup, before anything is written there (log, settings cache,
   # settings.json, selection.txt); requiring this file doesn't create it.
@@ -200,10 +204,10 @@ module ProfanitySettings
   # @param button5_mask [Integer] scroll-down button mask
   # @return [void]
   def self.save_mouse_settings(button4_mask, button5_mask)
-    settings = load_mouse_settings || {}
-    settings['BUTTON4_PRESSED_MASK'] = button4_mask
-    settings['BUTTON5_PRESSED_MASK'] = button5_mask
-    write(file('settings.json'), JSON.pretty_generate(settings))
+    update_settings do |settings|
+      settings['BUTTON4_PRESSED_MASK'] = button4_mask
+      settings['BUTTON5_PRESSED_MASK'] = button5_mask
+    end
   end
 
   # Read a single value from settings.json.
@@ -224,8 +228,29 @@ module ProfanitySettings
   # @param value [Object] JSON-serializable value
   # @return [void]
   def self.save_setting(key, value)
-    settings = load_mouse_settings || {}
-    settings[key] = value
-    write(file('settings.json'), JSON.pretty_generate(settings))
+    update_settings { |settings| settings[key] = value }
+  end
+
+  # Read settings.json, let the block change it and write it back, holding
+  # an exclusive lock on {SETTINGS_LOCK_FILE} the whole time. Every
+  # Profanity process shares the one settings.json, so without the lock two
+  # saves that overlap (two characters' clients, say) could each read the
+  # file before the other wrote it, and the later write would drop the key
+  # the earlier one saved. The lock is on a file of its own because
+  # {write} replaces settings.json by renaming, so a lock on settings.json
+  # itself would be on a file that is no longer there.
+  #
+  # @yieldparam settings [Hash] the current settings (empty when the file is
+  #   absent or unreadable), to change in place
+  # @return [void]
+  # @raise [SystemCallError] if the lock file can't be opened or
+  #   settings.json can't be written; settings.json is then unchanged
+  def self.update_settings
+    File.open(file(SETTINGS_LOCK_FILE), File::RDWR | File::CREAT, 0o600) do |lock|
+      lock.flock(File::LOCK_EX)
+      settings = load_mouse_settings || {}
+      yield settings
+      write(file('settings.json'), JSON.pretty_generate(settings))
+    end
   end
 end
