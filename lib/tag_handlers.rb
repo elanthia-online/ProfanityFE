@@ -30,7 +30,7 @@ require_relative 'effect_tracker'
 # - @dialog_open (false until a <dialogData> opens: whether a block is open)
 # - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
-#   leaving only its kept tags; see LineFilter#gagged?)
+#   leaving only its tags; see LineFilter#gagged?)
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'

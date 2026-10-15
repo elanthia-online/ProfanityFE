@@ -3,8 +3,9 @@
 # What gags hide in each of the two streams DragonRealms sends, from real
 # lines (spec/fixtures/, player names replaced). General gags are matched
 # against the raw server line, tags included, then against the line's text
-# (see LineFilter#line_text), and a gagged line keeps only its stream and
-# style tags.
+# (see LineFilter#line_text). A line matched as sent keeps only its stream and
+# style tags; one matched by its text only keeps every tag but those of its
+# text.
 #
 # The rich stream (the stream the game sends when Lich identifies as the
 # Saga client) puts an <a exist> link around every object, creature and
@@ -40,8 +41,9 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
   end
 
   describe 'the old stream' do
-    # A gagged line drops a <component> with its text: a gag on the room's
-    # lines in main must leave the room components on their own lines.
+    # A line gagged as sent drops a <component> with its text: a gag on the
+    # room's lines in main must not match the room components on their own
+    # lines.
     # Matched against the raw lines, this anchored gag misses every line of
     # the fixture (each players line starts with a tag; see the example
     # below), so it guards gags read against a line's text.

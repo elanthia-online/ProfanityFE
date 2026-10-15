@@ -5,29 +5,34 @@ require_relative 'xml_tokenizer'
 # Decides which server lines reach the parser: gags (general and
 # multi-line), gag logging (--log-gags), and collapsing runs of blank lines.
 #
-# A gag drops a line's text but keeps its stream and style tags, so a
-# gagged <popStream/> still closes its stream and a gagged <style id=""/>
-# still closes its style.
-#
 # A gag pattern is tested against the raw line (tags included), then
 # against the line's text (see #line_text): a gag written against what
 # the game shows still matches a line whose text the game interleaves
 # with tags (the <a exist> links of the stream DragonRealms sends when
 # Lich identifies as the Saga client, or a creature's <crtrStatus/> tags
 # in front of a line).
+#
+# A gag that matches the raw line drops the line but keeps its stream and
+# style tags, so a gagged <popStream/> still closes its stream and a
+# gagged <style id=""/> still closes its style. A gag that matches only
+# the line's text drops only that text and the tags that color or link
+# it: every other tag of the line is kept, and a component whole, since
+# none of them was part of the match (a GemStone search line carries the
+# experience bars in front of its text; a DragonRealms creature line can
+# carry the room's objects after it).
 class LineFilter
   # Safety cap: a multi-line gag whose end pattern (or prompt) never arrives
   # is released after this many suppressed lines so it cannot swallow the
   # stream. Real blocks (e.g. sanowret crystal knowledge) are 2-3 lines.
   MULTILINE_GAG_MAX_LINES = 100
 
-  # Stream tags kept when a gag drops a line's text. Losing a <popStream/>
-  # with the text would leave routing stuck on that stream (e.g. game text
+  # Stream tags kept when a gag drops a line. Losing a <popStream/> with
+  # the text would leave routing stuck on that stream (e.g. game text
   # landing in the spell window), so gagged lines keep these tags and gag
   # logging flags them. Element names; see #tags_named.
   STREAM_TAGS = %w[pushStream popStream clearStream].freeze
 
-  # Tags kept when a gag drops a line's text: the stream tags, and style
+  # Tags kept when a gag on the raw line drops it: the stream tags, and style
   # tags, whose <style id=""/> closes a style (losing it would leave the
   # style coloring every later line up to a prompt). Element names; see
   # #tags_named.
@@ -36,9 +41,15 @@ class LineFilter
   # Elements whose text is not the line's but a window's (a room
   # component's text goes to the room window), left out of a line's text
   # (see #line_text). A gag on main's room lines must not match the
-  # component beside them: a gagged line keeps only {KEPT_TAGS}, so the
-  # component would be lost with its text.
+  # component beside them: a line gagged as sent keeps only {KEPT_TAGS},
+  # so the component would be lost with its text.
   COMPONENT_ELEMENTS = %w[component compDef].freeze
+
+  # Tags that only color or link the text they wrap (bold, presets, colors,
+  # links). A gag that matched a line's text drops them with it (see
+  # #without_text): nothing of them is left to show, and a roomDesc
+  # preset would start capturing the room's description.
+  MARKUP_TAGS = %w[pushBold popBold b preset color a d].freeze
 
   # Longest gag pattern source quoted in a gag log line. Some gags are long
   # alternations; the prefix is enough to find the gag in the settings XML.
@@ -67,7 +78,7 @@ class LineFilter
   end
 
   # Whether a gag dropped the text of the last line filtered, passing on
-  # only its kept tags ({KEPT_TAGS}).
+  # only its tags (see #filter).
   #
   # @return [Boolean]
   def gagged?
@@ -76,26 +87,26 @@ class LineFilter
 
   # Filter one server line.
   #
-  # A gagged line keeps only its stream and style tags ({KEPT_TAGS}), and
-  # is dropped when it has none. A blank line is passed on only when the
-  # previous line wasn't blank (a gagged line with kept tags doesn't count
-  # either way).
+  # A line gagged as sent keeps only its stream and style tags
+  # ({KEPT_TAGS}); a line gagged by its text only keeps all its tags but
+  # those of the text ({MARKUP_TAGS}; see #without_text). Either is dropped when nothing is left. A blank line
+  # is passed on only when the previous line wasn't blank (a gagged line
+  # with kept tags doesn't count either way).
   #
   # @param line [String] raw server line, line ending removed
   # @return [String, nil] the line to process, or nil to drop it
   def filter(line)
     @text_of = nil
-    gagged = multiline_gag?(line)
-    if !gagged && (gag, kind = general_gag(line))
+    matched = multiline_gag(line)
+    if !matched && (gag, kind, matched = general_gag(line))
       log_gagged_line(kind, gag, line)
-      gagged = true
     end
 
-    @gagged = gagged
-    if gagged
+    @gagged = !matched.nil?
+    if matched
       # A gag hides the line's text, never its stream or style tags:
       # dropping a <popStream/> would leave routing stuck on that stream.
-      line = tags_named(line, KEPT_TAGS).join
+      line = matched == :text ? without_text(line) : tags_named(line, KEPT_TAGS).join
       return if line.empty?
     elsif line.empty?
       @emptycount += 1
@@ -109,7 +120,8 @@ class LineFilter
   private
 
   # Decide whether a raw server line should be suppressed as part of a
-  # multi-line gag block, advancing the gag state machine as a side effect.
+  # multi-line gag block, and on what it matched, advancing the gag state
+  # machine as a side effect.
   #
   # When no block is active, the line is tested against the configured
   # multi-line gag start patterns; a match begins a block and suppresses
@@ -120,10 +132,11 @@ class LineFilter
   #   - the safety cap is exceeded (the block is released, line passes through).
   #
   # @param line [String] raw server line (post-chomp, XML tags intact)
-  # @return [Boolean] true if the line's text should be suppressed (its
-  #   stream tags are still processed)
+  # @return [Symbol, nil] nil if the line isn't suppressed; +:text+ for a
+  #   start or end line matched by its text only, +:line+ for any other
+  #   suppressed line (see #filter for the tags each keeps)
   # @api private
-  def multiline_gag?(line)
+  def multiline_gag(line)
     if @active_multiline_gag
       gag = @active_multiline_gag
       @multiline_gag_lines += 1
@@ -131,43 +144,70 @@ class LineFilter
       if @multiline_gag_lines > MULTILINE_GAG_MAX_LINES
         ProfanityLog.write('gag', "multiline gag exceeded #{MULTILINE_GAG_MAX_LINES} lines; releasing")
         @active_multiline_gag = nil
-        false
+        nil
       elsif gag[:end]
         # Explicit end pattern: the end line is part of the block (suppressed).
-        @active_multiline_gag = nil if line.match?(gag[:end]) || gag_text(line)&.match?(gag[:end])
+        matched = match_on(line, gag[:end])
+        @active_multiline_gag = nil if matched
         log_gagged_line('multiline', gag[:start], line)
-        true
+        matched || :line
       elsif prompt_line?(line)
         # Prompt-terminated: stop gagging and let the prompt line through.
         @active_multiline_gag = nil
-        false
+        nil
       else
         log_gagged_line('multiline', gag[:start], line)
-        true
+        :line
       end
-    elsif (gag = GagPatterns.match_multiline_start(line) || ((text = gag_text(line)) && GagPatterns.match_multiline_start(text)))
-      @active_multiline_gag = gag
-      @multiline_gag_lines = 0
-      log_gagged_line('multiline', gag[:start], line)
-      true
-    else
-      false
+    elsif (gag = GagPatterns.match_multiline_start(line))
+      start_multiline_gag(gag, line, :line)
+    elsif (text = gag_text(line)) && (gag = GagPatterns.match_multiline_start(text))
+      start_multiline_gag(gag, line, :text)
+    end
+  end
+
+  # Begin suppressing a multi-line gag's block at its start line.
+  #
+  # @param gag [Hash] the multi-line gag, { start:, end: }
+  # @param line [String] raw server line it starts on
+  # @param matched [Symbol] what the start pattern matched (+:line+ or +:text+)
+  # @return [Symbol] +matched+
+  # @api private
+  def start_multiline_gag(gag, line, matched)
+    @active_multiline_gag = gag
+    @multiline_gag_lines = 0
+    log_gagged_line('multiline', gag[:start], line)
+    matched
+  end
+
+  # What a pattern matches of a line: the raw line, or else its text.
+  #
+  # @param line [String] raw server line
+  # @param pattern [Regexp] the pattern
+  # @return [Symbol, nil] +:line+, +:text+ (see #gag_text), or nil
+  # @api private
+  def match_on(line, pattern)
+    if line.match?(pattern)
+      :line
+    elsif gag_text(line)&.match?(pattern)
+      :text
     end
   end
 
   # The general gag that matches a line, tested against the raw line and
-  # then against its text (see #line_text), and the kind of match for the
-  # gag log.
+  # then against its text (see #line_text), the kind of match for the gag
+  # log, and what it matched.
   #
   # @param line [String] raw server line
-  # @return [Array(Regexp, String), nil] the gag and +'general'+ or
-  #   +'general (text)'+; nil when no general gag matches
+  # @return [Array(Regexp, String, Symbol), nil] the gag, then +'general'+
+  #   and +:line+, or +'general (text)'+ and +:text+; nil when no general
+  #   gag matches
   # @api private
   def general_gag(line)
     if (gag = GagPatterns.match_general(line))
-      [gag, 'general']
+      [gag, 'general', :line]
     elsif (text = gag_text(line)) && (gag = GagPatterns.match_general(text))
-      [gag, 'general (text)']
+      [gag, 'general (text)', :text]
     end
   end
 
@@ -212,17 +252,55 @@ class LineFilter
   # @return [String]
   # @api private
   def read_text(line)
-    depth = 0
-    text = XmlTokenizer.tokenize(line).each_with_object(+'') do |(type, segment), out|
-      if type == :text
-        out << segment if depth.zero?
-      elsif COMPONENT_ELEMENTS.include?(XmlTokenizer.tag_name(segment))
-        depth += 1 if XmlTokenizer.start_tag_name(segment) && !segment.end_with?('/>')
-        depth -= 1 if segment.start_with?('</') && depth.positive?
-      end
-    end
+    text = +''
+    each_segment(line) { |segment, own_text| text << segment if own_text }
     @xml_escapes.each { |entity, char| text.gsub!(entity, char) }
     text
+  end
+
+  # A line with its text (see #line_text) taken out, and the tags that
+  # color or link it ({MARKUP_TAGS}): every other tag, and a
+  # {COMPONENT_ELEMENTS} element whole, as sent and in order. What a gag
+  # that matched the text only leaves of the line.
+  #
+  # @param line [String] raw server line
+  # @return [String]
+  # @api private
+  def without_text(line)
+    kept = +''
+    each_segment(line) do |segment, own_text, in_component|
+      next if own_text
+      next if !in_component && MARKUP_TAGS.include?(XmlTokenizer.tag_name(segment))
+
+      kept << segment
+    end
+    kept
+  end
+
+  # Each segment of a line, as the tag dispatcher reads it (see
+  # XmlTokenizer.tokenize), and whether it is the line's own text: a text
+  # segment outside any {COMPONENT_ELEMENTS} element.
+  #
+  # @param line [String] raw server line
+  # @yieldparam segment [String] a tag (a paired tag with its content) or a text segment
+  # @yieldparam own_text [Boolean] whether the segment is the line's text
+  # @yieldparam in_component [Boolean] whether the segment is part of a
+  #   {COMPONENT_ELEMENTS} element, its own tags included
+  # @return [void]
+  # @api private
+  def each_segment(line)
+    depth = 0
+    XmlTokenizer.tokenize(line).each do |type, segment|
+      if type == :text
+        yield segment, depth.zero?, depth.positive?
+      elsif COMPONENT_ELEMENTS.include?(XmlTokenizer.tag_name(segment))
+        depth += 1 if XmlTokenizer.start_tag_name(segment) && !segment.end_with?('/>')
+        yield segment, false, true
+        depth -= 1 if segment.start_with?('</') && depth.positive?
+      else
+        yield segment, false, depth.positive?
+      end
+    end
   end
 
   # Whether a raw line has a <prompt> start tag, as the tag dispatcher

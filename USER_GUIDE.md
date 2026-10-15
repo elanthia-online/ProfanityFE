@@ -1508,6 +1508,12 @@ room window's copy with it. A line with no text of its own (only tags, such
 as a prompt or a component) is tried as sent only, so a gag on blank lines,
 such as `^\s*$`, hides blank lines and nothing else.
 
+A gag that matches only the text hides only the text. The line's other tags
+still do their work: the experience bars GemStone sends in front of a search
+line still update, as does the room window from the objects DragonRealms can
+send after a creature's line. A gag that matches the line as sent hides the
+whole line but its stream tags (see Diagnosing Gags below).
+
 ### Combat Gag Patterns
 
 Applied only to text in the **combat** stream. Use these to filter repetitive
@@ -1572,7 +1578,9 @@ a mistyped `end` pattern can never swallow the stream indefinitely.
 General and multi-line gags match the raw server line, XML tags included, or
 its text (see General Gag Patterns above). A gagged line's text is hidden, but
 its stream tags (`<pushStream>`, `<popStream/>`, `<clearStream>`) are still
-processed, so a gag can never leave text routed to the wrong window.
+processed, so a gag can never leave text routed to the wrong window. A line
+matched by its text only keeps all its other tags too, but those that color or
+link its text.
 
 Start Profanity with `--log-gags` to write every gagged line to the log file:
 
