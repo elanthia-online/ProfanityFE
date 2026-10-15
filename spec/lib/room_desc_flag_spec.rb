@@ -78,6 +78,24 @@ RSpec.describe 'The room description setting on the rich stream' do
       expect(main_rows.grep(shacks_desc)).to be_empty
       expect(main_rows).to include('Obvious paths: north, south.')
     end
+
+    it 'keeps the text before a dropped description (synthetic)' do
+      load_layout(room_window: false)
+
+      receive_from_server(off, prompt, "Before. <preset id='roomDesc'>The trees here are uniform.</preset>  After.")
+
+      expect(main_rows).to include('Before.')
+      expect(main_rows.grep(/The trees here/)).to be_empty
+    end
+
+    it 'shows the next line after a description cut off at the end of its line (synthetic)' do
+      load_layout
+
+      receive_from_server(off, prompt, '<room><name>[Cut, Short] (5)</name><description>Half of a',
+                          'A goblin arrives.', "<preset id='roomDesc'>Half of a", 'A kobold arrives.')
+
+      expect(main_rows.last(3)).to eq ['[Cut, Short] (5)', 'A goblin arrives.', 'A kobold arrives.']
+    end
   end
 
   describe 'with room descriptions turned on again' do
