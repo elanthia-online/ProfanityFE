@@ -4,7 +4,8 @@
 # the line's text (LineFilter#line_text): what the game shows of it, with
 # entities decoded, leaving out the content of paired tags and the text of
 # a component (a component's text is a window's, such as the room
-# window's, and a gagged line keeps only its stream and style tags).
+# window's). A line matched as sent keeps only its stream and style tags;
+# a line matched by its text only keeps every tag but those of its text.
 # Synthetic lines in the forms the game sends.
 
 require_relative '../spec_helper'
@@ -54,12 +55,40 @@ RSpec.describe LineFilter do
       expect(line_filter.filter(line)).to eq line
     end
 
-    it 'drops the main text of a line that also holds a component' do
+    it 'drops only the main text of a line that also holds a component' do
       GagPatterns.add_general_pattern('^Also here:')
 
-      line = "<crtrStatus exist=\"1\" hostile=\"1\"/>Also here: Bob.<component id='room extra'></component>"
+      line = "<crtrStatus exist=\"1\" hostile=\"1\"/>Also here: Bob.<component id='room objs'>You also see a rock.</component>"
 
-      expect(line_filter.filter(line)).to be_nil
+      expect(line_filter.filter(line)).to eq "<crtrStatus exist=\"1\" hostile=\"1\"/><component id='room objs'>You also see a rock.</component>"
+    end
+
+    it 'keeps the tags of a line it matches by its text only, but those of the text' do
+      GagPatterns.add_general_pattern('^You search the')
+
+      line = "<dialogData id='expr'><progressBar id='mindState' value='100' text='must rest'/></dialogData>" \
+             'You search the <pushBold/><a exist="1" noun="lurk">shambling lurk</a><popBold/>.' \
+             "<preset id='roomDesc'>A cave.</preset><d cmd='look'>LOOK</d><color fg='ff0000'>!</color>"
+
+      expect(line_filter.filter(line)).to eq "<dialogData id='expr'><progressBar id='mindState' value='100' text='must rest'/></dialogData>"
+    end
+
+    it 'keeps the links and bold inside a component beside the text it matches' do
+      GagPatterns.add_general_pattern('^A bone wyvern walks')
+
+      component = "<component id='room objs'>You also see <pushBold/>a <a exist=\"2\" noun=\"rock\">rock</a><popBold/>.</component>"
+      line = "<pushBold/>A <a exist=\"1\" noun=\"wyvern\">bone wyvern</a><popBold/> walks southeast.#{component}"
+
+      expect(line_filter.filter(line)).to eq component
+    end
+
+    it 'keeps only the stream and style tags of a line it matches as sent' do
+      GagPatterns.add_general_pattern('You search the')
+
+      line = "<dialogData id='expr'><progressBar id='mindState' value='100' text='must rest'/></dialogData>" \
+             '<pushStream id="combat" />You search the shambling lurk.'
+
+      expect(line_filter.filter(line)).to eq '<pushStream id="combat" />'
     end
 
     it "doesn't take a paired tag's content for text" do
@@ -120,6 +149,28 @@ RSpec.describe LineFilter do
                'A goblin arrives.']
 
       expect(lines.map { |line| line_filter.filter(line) }).to eq [nil, nil, nil, 'A goblin arrives.']
+    end
+
+    it 'keeps the tags of a start and an end line it matches by their text only' do
+      GagPatterns.add_multiline_gag('^Knowledge from your', '^The knowledge fades')
+
+      bar = "<dialogData id='expr'><progressBar id='mindState' value='100' text='must rest'/></dialogData>"
+      lines = ["#{bar}Knowledge from your <a exist=\"1\" noun=\"crystal\">crystal</a> rings clear:",
+               'Some lore.',
+               "<indicator id='IconHIDDEN' visible='n'/>The knowledge fades."]
+
+      expect(lines.map { |line| line_filter.filter(line) }).to eq [bar, nil, "<indicator id='IconHIDDEN' visible='n'/>"]
+    end
+
+    it 'keeps only the stream and style tags of a line inside the block' do
+      GagPatterns.add_multiline_gag('^Knowledge from your', '^The knowledge fades')
+
+      lines = ['Knowledge from your crystal rings clear:',
+               "<dialogData id='expr'><progressBar id='mindState' value='100' text='must rest'/></dialogData>" \
+               '<pushStream id="combat" />Some lore.',
+               'The knowledge fades.']
+
+      expect(lines.map { |line| line_filter.filter(line) }).to eq [nil, '<pushStream id="combat" />', nil]
     end
 
     it "doesn't start on a line with no text under a start that matches an empty line" do

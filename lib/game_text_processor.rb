@@ -27,7 +27,8 @@ require_relative 'effect_tracker'
 #
 # - {ServerReader} reads the socket, guards each line and flushes the
 #   screen when no more data is waiting; this class is its line handler.
-# - {LineFilter} drops gagged lines (keeping their stream and style tags)
+# - {LineFilter} drops gagged lines (keeping their stream and style tags,
+#   or every tag but those of the text for a gag on the text only)
 #   and runs of blank lines.
 # - The markup parse stays here: bold carry-over across lines, the
 #   tokenize-and-dispatch tag parser ({TagHandlers}: colors, bold, presets,
