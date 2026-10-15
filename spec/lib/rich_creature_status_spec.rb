@@ -98,6 +98,85 @@ RSpec.describe 'Creature states in the room window' do
     expect(@processor.instance_variable_get(:@room).instance_variable_get(:@creature_states)).to be_empty
   end
 
+  # The fixture's room objs line: the objects again, with no status tags
+  def objects_line = fixture('room_pipeline', 'dr_rich_creatures').find { |line| line.include?("<component id='room objs'>") }
+
+  # A room objs line listing the fixture's two moradus and one more, id 195650001
+  def objects_with_third_line
+    objects_line.sub(' and some junk.', ', <pushBold/>a <a exist="195650001" noun="moradu">jeol moradu</a><popBold/> and some junk.')
+  end
+
+  it 'keeps a dead creature in the dead preset through an objects update that sends no state' do
+    load_layout
+    receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+
+    receive_from_server(objects_line, '<prompt time="1">&gt;</prompt>')
+
+    expect(objects_row).to start_with 'You also see {a jeol moradu:red} (immobile)'
+    expect(room_screen.join).to include('{a jeol moradu:grey} (dead)')
+  end
+
+  it 'draws a creature whose state came before the objects that show it' do
+    load_layout
+    receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+
+    receive_from_server(*status('195650001', 'prone'))
+    receive_from_server(objects_with_third_line, '<prompt time="1">&gt;</prompt>')
+
+    expect(room_screen.join).to include('{a jeol moradu:cyan} and some junk.')
+  end
+
+  it 'keeps only the states of the creatures the objects shown link to after an objects update' do
+    load_layout
+    receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+    receive_from_server(*(1..50).flat_map { |id| status(id.to_s, 'dead') })
+
+    receive_from_server(objects_line, '<prompt time="1">&gt;</prompt>')
+
+    kept = @processor.instance_variable_get(:@room).instance_variable_get(:@creature_states)
+    expect(kept.keys).to contain_exactly('195652828', '195652888')
+  end
+
+  it 'draws the room window again only when the state of a creature it shows changes' do
+    load_layout
+    receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+    room = @window_manager.room['room']
+    allow(room).to receive(:render).and_call_original
+
+    receive_from_server(*status('999', 'dead'))
+    receive_from_server(*status('195652888', 'dead'))
+    expect(room).not_to have_received(:render)
+
+    receive_from_server(*status('195652828', 'prone'))
+    expect(room).to have_received(:render).once
+  end
+
+  it 'draws a creature that is both sleeping and prone in the sleeping preset' do
+    PRESET['creatureSleeping'] = ['ff00ff', nil]
+    load_layout
+    receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+
+    receive_from_server(*status('195652828', 'sleeping', 'prone'))
+
+    expect(objects_row).to start_with 'You also see {a jeol moradu:magenta} (immobile)'
+  end
+
+  it "takes the state presets from the room window's dead-preset and prone-preset" do
+    saved = %w[ownDead ownProne].to_h { |id| [id, PRESET[id]] }
+    PRESET['ownDead'] = ['00ff00', nil]
+    PRESET['ownProne'] = ['ffff00', nil]
+    load_layout(room_window: false, extra: "<window class='room' top='1' left='0' height='30' width='100' " \
+                                           "value='room' dead-preset='ownDead' prone-preset='ownProne'/>")
+    receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+
+    receive_from_server(*status('195652828', 'prone'))
+
+    expect(objects_row).to start_with 'You also see {a jeol moradu:yellow} (immobile)'
+    expect(room_screen.join).to include('{a jeol moradu:green} (dead)')
+  ensure
+    saved.each { |id, colors| colors ? PRESET[id] = colors : PRESET.delete(id) }
+  end
+
   it 'ignores the state of a creature the objects shown do not link to' do
     load_layout
     receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
