@@ -64,6 +64,11 @@ module Games
       @games.any? { |game| game.spell_line?(text) }
     end
 
+    # (see Games::Rules#compass_dirs)
+    def compass_dirs(exits)
+      first_answer { |game| game.compass_dirs(exits) }
+    end
+
     private
 
     # The first game's non-nil answer.

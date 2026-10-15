@@ -79,5 +79,15 @@ module Games
     # @return [Boolean, nil] true for a spell line; nil when the game has
     #   no such refresh
     def spell_line?(text); end
+
+    # The compass directions of a room's exits, for a game that sends no
+    # compass directions of its own with them.
+    #
+    # @param exits [Array<String>] the exits' names, as their links show
+    #   them (e.g. "north", "up")
+    # @return [Array<String>, nil] the compass indicators to light (e.g.
+    #   +["n", "up"]+), the exits that are no compass direction left out;
+    #   nil when the game sends its own compass directions
+    def compass_dirs(exits); end
   end
 end

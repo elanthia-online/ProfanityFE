@@ -91,6 +91,15 @@ module Games
     # this.)").
     SPELL_LINE_PATTERN = /\A[A-Z][^<>\[.]*  \([^()]+\)\z/.freeze
 
+    # The compass indicator of each exit name. When Lich identifies as the
+    # Saga client, DR sends no <compass> directions, only the exits'
+    # links; in the old stream its <compass> named the same directions as
+    # the exits line in every room.
+    COMPASS_DIRS = {
+      'north' => 'n', 'northeast' => 'ne', 'east' => 'e', 'southeast' => 'se', 'south' => 's',
+      'southwest' => 'sw', 'west' => 'w', 'northwest' => 'nw', 'up' => 'up', 'down' => 'down', 'out' => 'out'
+    }.freeze
+
     # Seconds of stun for a Raise Dead chant.
     RAISE_DEAD_STUN_SECONDS = 30.6
 
@@ -168,6 +177,14 @@ module Games
     # @return [Boolean] e.g. true for "Bless  (OM)"
     def self.spell_line?(text)
       text.match?(SPELL_LINE_PATTERN)
+    end
+
+    # The compass indicators of a room's exits ({COMPASS_DIRS}).
+    #
+    # @param exits [Array<String>] the exits' names, as their links show them
+    # @return [Array<String>] e.g. +["s", "nw"]+ for south and northwest
+    def self.compass_dirs(exits)
+      exits.filter_map { |name| COMPASS_DIRS[name.strip.downcase] }
     end
   end
 end
