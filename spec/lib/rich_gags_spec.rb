@@ -166,6 +166,25 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
       expect(room_screen.last).to eq 'Obvious exits: north, west, northwest.'
     end
 
+    # A room line is gagged a part at a time; any other line a gag matches
+    # by its text only keeps its other tags (the creature line is
+    # synthetic, in the shape DR sends: the room's objects after its text).
+    it 'hides a room part, and keeps the room objects on a creature line a gag hides by its text' do
+      GagPatterns.add_general_pattern('^You also see a deed register')
+      GagPatterns.add_general_pattern('^(?:<.*>)?(?:The|A|An) (?:bone wyvern)')
+      load_layout
+
+      receive_from_server(
+        *fixture('room_pipeline', 'dr_rich_move'),
+        '<pushBold/>A <a exist="2" noun="wyvern">bone wyvern</a><popBold/> walks southeast.' \
+        "<component id='room objs'>You also see a rock.</component>"
+      )
+
+      expect(main_rows.grep(/You also see|wyvern/)).to be_empty
+      expect(main_rows).to include('[Bosque Deriel, Greengrove] (230006)', 'Obvious paths: south, northwest.')
+      expect(room_screen).to include('You also see a rock.')
+    end
+
     it 'logs the room part a gag drops with --log-gags' do
       state.log_gags = true
       gag_log = []
