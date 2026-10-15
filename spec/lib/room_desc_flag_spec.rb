@@ -124,4 +124,17 @@ RSpec.describe 'The room description setting on the rich stream' do
 
     expect(room_screen[1]).to eq 'The trees here are uniform.'
   end
+
+  # GemStone follows its own setting, and sends its descriptions in a
+  # roomDesc style (real lines, spec/fixtures/room_pipeline/gs_move), not
+  # in a roomDesc preset or a <room> block. So even a line in DR's answer
+  # text, without --game, can't drop one.
+  it "keeps GemStone's description after a line in DR's answer text, without --game" do
+    load_layout
+
+    receive_from_server(off, prompt, *fixture('room_pipeline', 'gs_move'))
+
+    expect(main_rows.grep(/Long beds of dark loam/).size).to eq 1
+    expect(room_screen.grep(/Long beds of dark loam/)).not_to be_empty
+  end
 end
