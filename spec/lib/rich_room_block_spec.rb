@@ -177,6 +177,31 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
         expect(main_rows.last).to eq 'A goblin arrives.'
       end
 
+      it 'leaves no capture for the next line after a block cut off right after a part opens' do
+        load_layout
+
+        receive_from_server('<room><name>[Cut, Short] (5)</name><description>', 'A goblin arrives.',
+                            'Obvious paths: north.')
+
+        expect(room_screen).to eq ['{[Cut, Short] (5):green}', 'Obvious paths: north.']
+      end
+
+      it 'does not take the next line as the room name after a block cut off right after its name opens' do
+        load_layout
+
+        receive_from_server('<room><name>', 'A goblin arrives.')
+
+        expect(state.room_title).to eq ''
+      end
+
+      it 'leaves no roomName color for the next line after a block cut off in its name' do
+        load_layout(room_window: false)
+
+        receive_from_server('<room><name>[Cut, Short] (5)', 'A goblin arrives.')
+
+        expect(main_screen).to eq ['{[Cut, Short] (5):green}', 'A goblin arrives.']
+      end
+
       it 'reads a name tag outside a block as text' do
         load_layout
 
