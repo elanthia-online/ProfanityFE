@@ -54,7 +54,6 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
     # With creatures in the room, the players line starts with their
     # <crtrStatus/> tags, so an anchored gag misses its raw line.
     it 'hides the players line in main when creature tags come before its text' do
-      pending 'gags are matched against the raw line only'
       GagPatterns.add_general_pattern('^Also here:')
       load_layout
 
@@ -74,7 +73,6 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
     end
 
     it 'hides a line whose text a gag matches after a leading stream tag' do
-      pending 'gags are matched against the raw line only'
       GagPatterns.add_general_pattern('^You search the')
       load_layout(room_window: false)
 
@@ -86,7 +84,6 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
 
   describe 'the rich stream' do
     it 'hides a line whose text a gag matches, links and all' do
-      pending 'gags are matched against the raw line only'
       GagPatterns.add_general_pattern('^(?:<.*>)?(?:The|A|An) jeol moradu begins to advance')
       load_layout(room_window: false)
 

@@ -8,6 +8,13 @@ require_relative 'xml_tokenizer'
 # A gag drops a line's text but keeps its stream and style tags, so a
 # gagged <popStream/> still closes its stream and a gagged <style id=""/>
 # still closes its style.
+#
+# A gag pattern is tested against the raw line (tags included), then
+# against the line's text (see #line_text): a gag written against what
+# the game shows still matches a line whose text the game interleaves
+# with tags (the <a exist> links of the stream DragonRealms sends when
+# Lich identifies as the Saga client, or a creature's <crtrStatus/> tags
+# in front of a line).
 class LineFilter
   # Safety cap: a multi-line gag whose end pattern (or prompt) never arrives
   # is released after this many suppressed lines so it cannot swallow the
@@ -26,13 +33,23 @@ class LineFilter
   # #tags_named.
   KEPT_TAGS = [*STREAM_TAGS, 'style'].freeze
 
+  # Elements whose text is not the line's but a window's (a room
+  # component's text goes to the room window), left out of a line's text
+  # (see #line_text). A gag on main's room lines must not match the
+  # component beside them: a gagged line keeps only {KEPT_TAGS}, so the
+  # component would be lost with its text.
+  COMPONENT_ELEMENTS = %w[component compDef].freeze
+
   # Longest gag pattern source quoted in a gag log line. Some gags are long
   # alternations; the prefix is enough to find the gag in the settings XML.
   GAG_LOG_PATTERN_LIMIT = 80
 
   # @param shared_state [SharedState] read for +log_gags+ (--log-gags)
-  def initialize(shared_state:)
+  # @param xml_escapes [Hash<String, String>] XML entity to character
+  #   mappings, decoded in a line's text (see #line_text)
+  def initialize(shared_state:, xml_escapes: {})
     @state = shared_state
+    @xml_escapes = xml_escapes
 
     # Multi-line gag state: the active { start:, end: } gag being suppressed
     # (nil when not inside a block) and how many lines it has swallowed so far.
@@ -44,6 +61,9 @@ class LineFilter
 
     # Whether the last line filtered was gagged
     @gagged = false
+
+    # The line being filtered and its text, once worked out (see #line_text)
+    @text_of = nil
   end
 
   # Whether a gag dropped the text of the last line filtered, passing on
@@ -64,9 +84,10 @@ class LineFilter
   # @param line [String] raw server line, line ending removed
   # @return [String, nil] the line to process, or nil to drop it
   def filter(line)
+    @text_of = nil
     gagged = multiline_gag?(line)
-    if !gagged && (gag = GagPatterns.match_general(line))
-      log_gagged_line('general', gag, line)
+    if !gagged && (gag, kind = general_gag(line))
+      log_gagged_line(kind, gag, line)
       gagged = true
     end
 
@@ -113,7 +134,7 @@ class LineFilter
         false
       elsif gag[:end]
         # Explicit end pattern: the end line is part of the block (suppressed).
-        @active_multiline_gag = nil if line.match?(gag[:end])
+        @active_multiline_gag = nil if line.match?(gag[:end]) || line_text(line).match?(gag[:end])
         log_gagged_line('multiline', gag[:start], line)
         true
       elsif prompt_line?(line)
@@ -124,7 +145,7 @@ class LineFilter
         log_gagged_line('multiline', gag[:start], line)
         true
       end
-    elsif (gag = GagPatterns.match_multiline_start(line))
+    elsif (gag = GagPatterns.match_multiline_start(line) || GagPatterns.match_multiline_start(line_text(line)))
       @active_multiline_gag = gag
       @multiline_gag_lines = 0
       log_gagged_line('multiline', gag[:start], line)
@@ -132,6 +153,61 @@ class LineFilter
     else
       false
     end
+  end
+
+  # The general gag that matches a line, tested against the raw line and
+  # then against its text (see #line_text), and the kind of match for the
+  # gag log.
+  #
+  # @param line [String] raw server line
+  # @return [Array(Regexp, String), nil] the gag and +'general'+ or
+  #   +'general (text)'+; nil when no general gag matches
+  # @api private
+  def general_gag(line)
+    if (gag = GagPatterns.match_general(line))
+      [gag, 'general']
+    elsif (text = line_text(line)) != line && (gag = GagPatterns.match_general(text))
+      [gag, 'general (text)']
+    end
+  end
+
+  # A line's text as the game shows it: its text segments, as the tag
+  # dispatcher reads the line, with XML entities decoded. The content of
+  # a paired tag (prompt, spell, left, right, inv, compass; see
+  # XmlTokenizer::PAIRED_TAGS) isn't text, and neither is the text of a
+  # {COMPONENT_ELEMENTS} element.
+  #
+  # Worked out once per line filtered. A line with no tag and no entity is
+  # its own text.
+  #
+  # @param line [String] raw server line
+  # @return [String]
+  # @api private
+  def line_text(line)
+    return line unless line.include?('<') || line.include?('&')
+    return @text_of[1] if @text_of&.first.equal?(line)
+
+    @text_of = [line, read_text(line)]
+    @text_of[1]
+  end
+
+  # A line's text (see #line_text), read from its segments.
+  #
+  # @param line [String] raw server line
+  # @return [String]
+  # @api private
+  def read_text(line)
+    depth = 0
+    text = XmlTokenizer.tokenize(line).each_with_object(+'') do |(type, segment), out|
+      if type == :text
+        out << segment if depth.zero?
+      elsif COMPONENT_ELEMENTS.include?(XmlTokenizer.tag_name(segment))
+        depth += 1 if XmlTokenizer.start_tag_name(segment) && !segment.end_with?('/>')
+        depth -= 1 if segment.start_with?('</') && depth.positive?
+      end
+    end
+    @xml_escapes.each { |entity, char| text.gsub!(entity, char) }
+    text
   end
 
   # Whether a raw line has a <prompt> start tag, as the tag dispatcher
@@ -161,7 +237,8 @@ class LineFilter
   # characters are visible. Lines carrying a stream tag are marked
   # +STREAM-TAG+; the tag itself is still processed after the text is dropped.
   #
-  # @param kind [String] which gag type matched ('general' or 'multiline')
+  # @param kind [String] which gag type matched ('general', 'general (text)'
+  #   for a match on the line's text only, or 'multiline')
   # @param pattern [Regexp] the gag pattern responsible (start pattern for multiline)
   # @param line [String] raw server line being dropped
   # @return [void]
