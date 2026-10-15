@@ -1503,7 +1503,9 @@ each object, creature and player (when Lich identifies as the Saga client), or
 a creature's status tag at the start of a line. A gag written against the tags,
 such as one that matches `<preset id="whisper">`, still works too. The text of a room
 component is left out, so a gag on the room lines in the story window doesn't
-take the room window's copy with it.
+take the room window's copy with it. A line with no text of its own (only
+tags, such as a prompt or a room component) is tried as sent only, so a gag
+on blank lines, such as `^\s*$`, hides blank lines and nothing else.
 
 ### Combat Gag Patterns
 
