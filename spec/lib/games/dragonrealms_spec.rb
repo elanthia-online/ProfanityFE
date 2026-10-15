@@ -158,4 +158,30 @@ RSpec.describe Games::DragonRealms do
       expect(described_class.room_list_cut_short?('You also see a rock and a bland some other stuff.')).to be false
     end
   end
+
+  describe '.spell_line?' do
+    it 'is true for each kind of spell line a refresh sends' do
+      # A cleric's (the rich-stream session) and the roisaen and Indefinite
+      # forms other characters' spell lists use
+      ['Bless  (OM)', 'Osrel Meraud  (91%)', "Glythtide's Gift  (OM)", 'Ease Burden  (12 roisaen)',
+       'Hydra Hex  (Indefinite)'].each do |line|
+        expect(described_class.spell_line?(line)).to be(true), line
+      end
+    end
+
+    it 'is false for the game lines that come between a refresh and its spell lines' do
+      ['Roundtime: 1 sec.', 'You feel fully prepared to cast your spell.',
+       "[You're bruised (92%), winded (100%), mighty (100%), incredibly balanced and overwhelming your opponent.]",
+       'Shadow Priest Corvel just arrived.',
+       'You are currently set to display shortened cast messaging.  (Use SPELL BRIEFMSG OFF to change this.)'].each do |line|
+        expect(described_class.spell_line?(line)).to be(false), line
+      end
+    end
+
+    it 'is false without the two spaces, or with text after the parentheses (synthetic)' do
+      expect(described_class.spell_line?('Bless (OM)')).to be false
+      expect(described_class.spell_line?('Bless  (OM) and more')).to be false
+      expect(described_class.spell_line?('bless  (OM)')).to be false
+    end
+  end
 end

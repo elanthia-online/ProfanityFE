@@ -781,6 +781,13 @@ to fit narrow windows.
 
 The window is automatically wired to the `percWindow` stream.
 
+When Lich identifies as the Saga client, DragonRealms sends the spell list in
+the `percWindow` stream only once, at login. After that it clears the window and
+sends the spell lines as plain text. Up to the next prompt, Profanity puts each
+line shaped like a spell line (a name, two spaces, then something in
+parentheses: `Bless  (OM)`, `Ease Burden  (12 roisaen)`) in this window. Other
+lines that arrive between them stay in the story window.
+
 **Example:**
 
 ```xml

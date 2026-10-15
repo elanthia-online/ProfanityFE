@@ -73,7 +73,6 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
     end
 
     it 'shows a refresh with no pushStream in the spell window, and nothing of it in main' do
-      pending 'a spell refresh with no pushStream is not read yet'
       load_layout(room_window: false, extra: windows)
 
       receive_from_server(*fixture('rich_stream', 'dr_rich_perc_bare'))
@@ -86,7 +85,6 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
     end
 
     it 'takes the spell lines of a refresh that come after other lines, and leaves those lines in main' do
-      pending 'a spell refresh with no pushStream is not read yet'
       load_layout(room_window: false, extra: windows)
 
       receive_from_server(*fixture('rich_stream', 'dr_rich_perc_split'))
@@ -96,6 +94,24 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
       expect(main_rows).to include('Roundtime: 1 sec.',
                                    'You tap into the mana from fifty of the surrounding streams and attempt to ' \
                                    'keep it channeling in')
+    end
+
+    it 'leaves a spell-shaped line after the refresh\'s prompt in main (synthetic)' do
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server(*fixture('rich_stream', 'dr_rich_perc_bare'), 'Sanctuary  (OM)')
+
+      expect(window_text('percWindow')).to eq spell_rows
+      expect(main_rows.last).to eq 'Sanctuary  (OM)'
+    end
+
+    it 'leaves a refresh in main when the game is GemStone (--game)' do
+      load_layout(room_window: false, extra: windows, game_rules: Games::GemStone)
+
+      receive_from_server(*fixture('rich_stream', 'dr_rich_perc_bare'))
+
+      expect(window_text('percWindow')).to be_empty
+      expect(main_rows.first).to eq 'Bless  (OM)'
     end
 
     it 'shows combat lines in main, as it sends them' do
