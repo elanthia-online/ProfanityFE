@@ -80,6 +80,26 @@ RSpec.describe LineFilter do
       expect(line_filter.filter('<preset id="whisper">Bob whispers,</preset> "hi"')).to be_nil
     end
 
+    # A line with no text (a prompt, a room component, a status tag) shows
+    # nothing a gag written against the text could hide; its tags still
+    # matter. A gag on blank lines must keep matching blank lines only.
+    it 'leaves a line with no text alone under a gag that matches an empty line' do
+      GagPatterns.add_general_pattern('^\s*$')
+
+      lines = ['<prompt time="1792031037">&gt;</prompt>',
+               "<component id='room objs'>You also see a rock.</component>",
+               "<nav rm='4217405'/>",
+               '<roundTime value="1792031040"/>']
+
+      expect(lines.map { |line| line_filter.filter(line) }).to eq lines
+    end
+
+    it 'still drops a blank line under a gag that matches an empty line' do
+      GagPatterns.add_general_pattern('^$')
+
+      expect(line_filter.filter('')).to be_nil
+    end
+
     it 'logs a match on the text only as such with --log-gags' do
       state.log_gags = true
       GagPatterns.add_general_pattern('^You search the')
@@ -100,6 +120,26 @@ RSpec.describe LineFilter do
                'A goblin arrives.']
 
       expect(lines.map { |line| line_filter.filter(line) }).to eq [nil, nil, nil, 'A goblin arrives.']
+    end
+
+    it "doesn't start on a line with no text under a start that matches an empty line" do
+      GagPatterns.add_multiline_gag('^\s*$', '^The knowledge fades')
+
+      line = "<component id='room objs'>You also see a rock.</component>"
+
+      expect(line_filter.filter(line)).to eq line
+    end
+
+    it "doesn't end on a line with no text under an end that matches an empty line" do
+      GagPatterns.add_multiline_gag('^Knowledge from your', '^\s*$')
+
+      lines = ['Knowledge from your crystal rings clear:',
+               '<pushBold/>',
+               'Some lore.',
+               '',
+               'A goblin arrives.']
+
+      expect(lines.map { |line| line_filter.filter(line) }).to eq [nil, nil, nil, nil, 'A goblin arrives.']
     end
   end
 end

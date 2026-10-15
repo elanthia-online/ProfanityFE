@@ -144,7 +144,7 @@ class LineFilter
         false
       elsif gag[:end]
         # Explicit end pattern: the end line is part of the block (suppressed).
-        @active_multiline_gag = nil if line.match?(gag[:end]) || line_text(line).match?(gag[:end])
+        @active_multiline_gag = nil if line.match?(gag[:end]) || gag_text(line)&.match?(gag[:end])
         log_gagged_line('multiline', gag[:start], line)
         true
       elsif prompt_line?(line)
@@ -155,7 +155,7 @@ class LineFilter
         log_gagged_line('multiline', gag[:start], line)
         true
       end
-    elsif (gag = GagPatterns.match_multiline_start(line) || GagPatterns.match_multiline_start(line_text(line)))
+    elsif (gag = GagPatterns.match_multiline_start(line) || ((text = gag_text(line)) && GagPatterns.match_multiline_start(text)))
       @active_multiline_gag = gag
       @multiline_gag_lines = 0
       log_gagged_line('multiline', gag[:start], line)
@@ -212,9 +212,24 @@ class LineFilter
   def general_gag(line)
     if (gag = GagPatterns.match_general(line))
       [gag, 'general']
-    elsif (text = line_text(line)) != line && (gag = GagPatterns.match_general(text))
+    elsif (text = gag_text(line)) && (gag = GagPatterns.match_general(text))
       [gag, 'general (text)']
     end
+  end
+
+  # The text a gag is tried against after the raw line (see #line_text),
+  # or nil when there is nothing more to try: the text is the raw line
+  # itself, or it is empty. A line with no text (a prompt, a room
+  # component, a status tag) shows nothing a gag could hide, so a gag that
+  # matches an empty line (+^$+, +^\s*$+) still matches blank lines only,
+  # not every line of tags.
+  #
+  # @param line [String] raw server line
+  # @return [String, nil]
+  # @api private
+  def gag_text(line)
+    text = line_text(line)
+    text unless text.empty? || text == line
   end
 
   # A line's text as the game shows it: its text segments, as the tag
