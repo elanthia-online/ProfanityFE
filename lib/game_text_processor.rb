@@ -248,6 +248,8 @@ class GameTextProcessor
   def process_line_tags(line)
     segments = XmlTokenizer.tokenize(line)
     text_buffer = String.new
+    # The second line of a block split across two lines opens inside it
+    reopen_room_block(segments) if line.include?('</room>')
 
     segments.each do |type, content|
       case type
@@ -260,8 +262,9 @@ class GameTextProcessor
       end
     end
 
-    # A <room> block is one line: one cut short is closed here, so it
-    # doesn't capture, color or read the next line
+    # A <room> block ends with its line: one cut short is closed here, so
+    # it doesn't capture, color or read the next line (the second line of
+    # a split block reopens it; see TagHandlers#reopen_room_block)
     close_room_block(text_buffer)
     handle_game_text(text_buffer, *split_spans(:line_end, text_buffer.length))
   ensure
