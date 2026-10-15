@@ -1,0 +1,20 @@
+<prompt time="1792032121">&gt;</prompt>
+<roundTime value='1792032122'/><roundTime value='1792032123'/><clearStream id="percWindow"/>
+<dialogData id='minivitals'><skin id='manaSkin' name='manaBar' controls='mana' left='20%' top='0%' width='20%' height='100%'/><progressBar id='mana' value='97' text='mana 97%' left='20%' customText='t' top='0%' width='20%' height='100%'/></dialogData>
+<dialogData id='minivitals'><skin id='staminaSkin' name='staminaBar' controls='stamina' left='40%' top='0%' width='20%' height='100%'/><progressBar id='stamina' value='99' text='fatigue 99%' left='40%' customText='t' top='0%' width='20%' height='100%'/></dialogData>
+<dialogData id='minivitals'><progressBar id='concentration' value='98' text='concentration 98%' left='80%' customText='t' top='0%' width='20%' height='100%'/></dialogData>
+You tap into the mana from fifty of the surrounding streams and attempt to keep it channeling in a stream around you.
+Roundtime: 1 sec.
+You concentrate intently, attempting to infuse a vast amount of your harnessed mana into your active Osrel Meraud spell pattern.
+Roundtime: 1 sec.
+You sense that you were able to channel most of your infusion's power into a <a exist="195648611" noun="orb">brilliant orb of rippling cerulean light</a>.  A faint tugging sensation emanates from the <a exist="195648611" noun="orb">orb</a>, as if it hungers for more.
+Bless  (OM)
+Auspice  (OM)
+Divine Radiance  (OM)
+Shield of Light  (OM)
+Glythtide's Gift  (OM)
+Benediction  (OM)
+Centering  (OM)
+Starry Waters  (OM)
+Visage  (OM)
+Persistence of Mana  (OM)
