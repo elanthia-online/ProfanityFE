@@ -30,6 +30,10 @@ require_relative 'effect_tracker'
 # - @dialog_open (false until a <dialogData> opens: whether a block is open)
 # - @room_block (false until a <room> opens: whether the line's <room>
 #   block is open; reset at the end of every line)
+# - @room_descriptions_off (whether the game last said room descriptions
+#   are off; see GameTextProcessor#track_room_descriptions)
+# - @hiding_room_desc (whether the room description being read is dropped,
+#   because room descriptions are off; reset at the end of every line)
 # - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
 #   leaving only its kept tags; see LineFilter#gagged?)
@@ -440,7 +444,7 @@ module TagHandlers
     return unless (preset_id = XmlTokenizer.attrs(xml)['id'])
 
     # Unlike a roomDesc style, the preset flushes the text before it.
-    @room.start_capture(:desc) { flush_text_buffer(text_buffer) } if preset_id == Presets::ROOM_DESC
+    open_room_desc(text_buffer) { @room.start_capture(:desc) { flush_text_buffer(text_buffer) } } if preset_id == Presets::ROOM_DESC
     @spans.open(:preset, text_buffer.length, **Presets.colors(preset_id).to_h)
   end
 
@@ -450,8 +454,38 @@ module TagHandlers
   # @param text_buffer [String] the text collected so far on the line (tags removed); its length is where the tag sits
   # @return [void]
   def handle_close_preset(_xml, text_buffer)
+    close_hidden_room_desc(text_buffer)
     @room.end_capture(:desc) { flush_text_buffer(text_buffer) }
     @spans.close(:preset, text_buffer.length)
+  end
+
+  # Start reading a room description (a roomDesc preset or a <room>
+  # block's description). While the game's room descriptions are off, the
+  # description is dropped, in main and in the room window, as the old
+  # stream leaves it out: the stream DR sends when Lich identifies as the
+  # Saga client sends it whatever the setting. Otherwise yields, to start
+  # the capture.
+  #
+  # @param text_buffer [String] the text collected so far on the line
+  # @yield to start the description's capture, when it is shown
+  # @return [void]
+  def open_room_desc(text_buffer)
+    return yield unless @room_descriptions_off
+
+    flush_text_buffer(text_buffer)
+    @hiding_room_desc = true
+  end
+
+  # End a description {#open_room_desc} dropped: its text is handed off,
+  # and shown nowhere (see GameTextProcessor#handle_game_text).
+  #
+  # @param text_buffer [String] the text collected so far on the line
+  # @return [void]
+  def close_hidden_room_desc(text_buffer)
+    return unless @hiding_room_desc
+
+    flush_text_buffer(text_buffer)
+    @hiding_room_desc = false
   end
 
   # Handle <color fg='...' bg='...' ul='...'> opening tag.
@@ -550,7 +584,11 @@ module TagHandlers
     return unless kind
 
     @spans.open(:style, text_buffer.length, **Presets.colors(preset_id).to_h)
-    @room.start_capture(kind)
+    if kind == :desc
+      open_room_desc(text_buffer) { @room.start_capture(kind) }
+    else
+      @room.start_capture(kind)
+    end
   end
 
   # Handle a part's closing tag in an open <room> block: the part's text
@@ -564,6 +602,7 @@ module TagHandlers
     return unless @room_block
 
     _preset_id, kind = ROOM_BLOCK_CAPTURES[XmlTokenizer.tag_name(xml)]
+    close_hidden_room_desc(text_buffer) if kind == :desc
     @room.end_capture(kind) { flush_text_buffer(text_buffer) } if kind
     @spans.close(:style, text_buffer.length) if kind
     flush_text_buffer(text_buffer)

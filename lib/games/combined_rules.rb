@@ -56,6 +56,11 @@ module Games
       @games.any? { |game| game.room_list_cut_short?(text) }
     end
 
+    # (see Games::Rules#room_descriptions_shown)
+    def room_descriptions_shown(text)
+      first_answer { |game| game.room_descriptions_shown(text) }
+    end
+
     private
 
     # The first game's non-nil answer.

@@ -81,6 +81,12 @@ module Games
     # all.
     ROOM_LIST_CUT_SHORT_PATTERN = /\band some other stuff\.\z/.freeze
 
+    # DR's answer to FLAG DESCRIPTION ON.
+    ROOM_DESCRIPTIONS_ON = 'You will now see room descriptions.'
+
+    # DR's answer to FLAG DESCRIPTION OFF.
+    ROOM_DESCRIPTIONS_OFF = 'You will no longer see room descriptions.'
+
     # Seconds of stun for a Raise Dead chant.
     RAISE_DEAD_STUN_SECONDS = 30.6
 
@@ -150,6 +156,18 @@ module Games
     #   other stuff."
     def self.room_list_cut_short?(text)
       text.match?(ROOM_LIST_CUT_SHORT_PATTERN)
+    end
+
+    # Whether a line is DR's answer to FLAG DESCRIPTION ON or OFF
+    # ({ROOM_DESCRIPTIONS_ON}, {ROOM_DESCRIPTIONS_OFF}).
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean, nil] true for ON, false for OFF, nil for any other line
+    def self.room_descriptions_shown(text)
+      case text.strip
+      when ROOM_DESCRIPTIONS_ON then true
+      when ROOM_DESCRIPTIONS_OFF then false
+      end
     end
   end
 end

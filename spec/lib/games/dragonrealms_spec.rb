@@ -137,6 +137,18 @@ RSpec.describe Games::DragonRealms do
     end
   end
 
+  describe '.room_descriptions_shown' do
+    it "reads DR's answers to FLAG DESCRIPTION ON and OFF" do
+      expect(described_class.room_descriptions_shown('You will now see room descriptions.')).to be true
+      expect(described_class.room_descriptions_shown('You will no longer see room descriptions.')).to be false
+    end
+
+    it 'says nothing for any other line (synthetic)' do
+      expect(described_class.room_descriptions_shown('Lisa says, "You will now see room descriptions."')).to be_nil
+      expect(described_class.room_descriptions_shown('Obvious paths: north.')).to be_nil
+    end
+  end
+
   describe '.room_list_cut_short?' do
     it 'is true for a room objs component that ends with the cut-short mark' do
       expect(described_class.room_list_cut_short?('You also see a rock, a stick and some other stuff.')).to be true

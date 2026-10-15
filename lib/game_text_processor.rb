@@ -122,6 +122,11 @@ class GameTextProcessor
     @dialog_open = false
     # Whether the line's <room> block is open (see TagHandlers#handle_room_open)
     @room_block = false
+    # Whether the game last said room descriptions are off (see
+    # #track_room_descriptions), and whether the description being read is
+    # dropped for it (see TagHandlers#open_room_desc)
+    @room_descriptions_off = false
+    @hiding_room_desc = false
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
@@ -260,6 +265,7 @@ class GameTextProcessor
     @room.end_line
     # A <room> block is one line: one cut short doesn't read the next line
     @room_block = false
+    @hiding_room_desc = false
   end
 
   # Process a chunk of game text after XML tags have been stripped.
@@ -279,6 +285,10 @@ class GameTextProcessor
   # @return [void]
   # @api private
   def handle_game_text(text, runs, marks)
+    # A room description dropped while the game's room descriptions are off
+    return if @hiding_room_desc
+
+    track_room_descriptions(text)
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
@@ -329,5 +339,18 @@ class GameTextProcessor
     end
 
     @router.route(text, runs, room_captured: room_captured, marks: marks)
+  end
+
+  # Follow the game's room description setting from its answers to a
+  # change of it (see Games::Rules#room_descriptions_shown): while it is
+  # off, room descriptions are dropped (see TagHandlers#open_room_desc).
+  # Until the game answers a change, descriptions are shown.
+  #
+  # @param text [String] game text
+  # @return [void]
+  # @api private
+  def track_room_descriptions(text)
+    shown = @game_rules.room_descriptions_shown(text)
+    @room_descriptions_off = !shown unless shown.nil?
   end
 end

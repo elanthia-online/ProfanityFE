@@ -70,5 +70,13 @@ module Games
     # @return [Boolean, nil] true when the game marked the list as cut
     #   short; nil when the game has no such mark
     def room_list_cut_short?(text); end
+
+    # Whether a game line says room descriptions are now shown or not, as
+    # the game answers a change to its room description setting.
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean, nil] true when they are now shown, false when not;
+    #   nil when the line says neither
+    def room_descriptions_shown(text); end
   end
 end
