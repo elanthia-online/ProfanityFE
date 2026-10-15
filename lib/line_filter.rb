@@ -40,6 +40,12 @@ class LineFilter
   # component would be lost with its text.
   COMPONENT_ELEMENTS = %w[component compDef].freeze
 
+  # A part of DragonRealms' one-line room (the <room> block it sends when
+  # Lich identifies as the Saga client; see TagHandlers#handle_room_open),
+  # captured with its element name. Each part is gagged on its own, as
+  # each of the old stream's room lines is (see #gag_room_parts).
+  ROOM_PART = %r{<(name|description|exists|players|exits|extra)>.*?</\1>}
+
   # Longest gag pattern source quoted in a gag log line. Some gags are long
   # alternations; the prefix is enough to find the gag in the settings XML.
   GAG_LOG_PATTERN_LIMIT = 80
@@ -86,7 +92,11 @@ class LineFilter
   def filter(line)
     @text_of = nil
     gagged = multiline_gag?(line)
-    if !gagged && (gag, kind = general_gag(line))
+    if gagged
+      # The multi-line gag dropped the line
+    elsif room_line?(line)
+      line = gag_room_parts(line)
+    elsif (gag, kind = general_gag(line))
       log_gagged_line(kind, gag, line)
       gagged = true
     end
@@ -152,6 +162,36 @@ class LineFilter
       true
     else
       false
+    end
+  end
+
+  # Whether a line holds a whole <room> block (see {ROOM_PART}).
+  #
+  # @param line [String] raw server line
+  # @return [Boolean]
+  # @api private
+  def room_line?(line)
+    line.include?('<room>') && line.include?('</room>')
+  end
+
+  # Gag each part of a <room> block on its own (see {ROOM_PART}), so a gag
+  # on one part ("Also here:", "You also see ...") drops that part only,
+  # as it dropped the old stream's line for it, and not the whole room. A
+  # gagged part keeps its tags, empty: the room is read as if the game had
+  # sent the part with nothing in it. A gag on the line as a whole doesn't
+  # apply.
+  #
+  # @param line [String] raw server line holding a <room> block
+  # @return [String] the line, each gagged part emptied
+  # @api private
+  def gag_room_parts(line)
+    line.gsub(ROOM_PART) do |part|
+      element = Regexp.last_match(1)
+      gag, kind = general_gag(part)
+      next part unless gag
+
+      log_gagged_line("#{kind} room #{element}", gag, part)
+      "<#{element}></#{element}>"
     end
   end
 

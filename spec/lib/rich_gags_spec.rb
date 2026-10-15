@@ -94,7 +94,6 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
     end
 
     it 'hides only the part of a room an anchored gag matches' do
-      pending 'gags are matched against the whole room line'
       GagPatterns.add_general_pattern('^You also see a deed register')
       load_layout
 
@@ -105,7 +104,6 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
     end
 
     it 'hides only the part of a room an unanchored gag matches' do
-      pending 'gags are matched against the whole room line'
       GagPatterns.add_general_pattern('You also see .* register')
       load_layout
 
@@ -113,6 +111,53 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
 
       expect(main_rows.grep(/You also see/)).to be_empty
       expect(main_rows).to include('[Bosque Deriel, Greengrove] (230006)', 'Obvious paths: south, northwest.')
+    end
+
+    it 'hides a gagged room name, and takes the description that follows for no title' do
+      GagPatterns.add_general_pattern('^\\[Bosque Deriel, Greengrove\\]')
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+
+      expect(main_rows.grep(/Bosque Deriel/)).to be_empty
+      expect(main_rows[1]).to start_with 'The trees here are uniform'
+      # The move's subtitle names the room in the title row and the terminal title
+      expect(room_screen.first).to eq '{[Bosque Deriel, Greengrove] (230006):green}'
+      expect(state.room_title).to eq 'Bosque Deriel, Greengrove (230006)'
+    end
+
+    it 'leaves a LOOK with its players gagged without players, as the old stream does' do
+      GagPatterns.add_general_pattern('^Also here:')
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_rich_look'))
+
+      expect(main_rows.grep(/Also here:/)).to be_empty
+      expect(room_screen.grep(/Also here:/)).to be_empty
+      expect(room_screen.last).to eq 'Obvious exits: north, west, northwest.'
+    end
+
+    it 'logs the room part a gag drops with --log-gags' do
+      state.log_gags = true
+      gag_log = []
+      allow(ProfanityLog).to receive(:write) { |context, message, **| gag_log << message if context == 'gag' }
+      GagPatterns.add_general_pattern('^You also see a deed register')
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+
+      expect(gag_log.map { |message| message[/\A[^\/]*/].strip }).to eq ['general (text) room exists']
+    end
+
+    # A multi-line gag still applies to the physical line: one that starts
+    # on a room's text hides the whole room (a documented limitation).
+    it 'hides the whole room when a multi-line gag starts on its text' do
+      GagPatterns.add_multiline_gag('^\\[Bosque Deriel, Greengrove\\]')
+      load_layout(room_window: false)
+
+      receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+
+      expect(main_rows).to eq ['You stroll southeast.']
     end
 
     # Combat gags apply to the combat stream, which the rich stream never
