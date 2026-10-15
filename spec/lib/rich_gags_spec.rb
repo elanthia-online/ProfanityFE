@@ -42,12 +42,28 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
   describe 'the old stream' do
     # A gagged line drops a <component> with its text: a gag on the room's
     # lines in main must leave the room components on their own lines.
+    # Matched against the raw lines, this anchored gag misses every line of
+    # the fixture (each starts with a tag; see the pending example below),
+    # so it guards gags read against a line's text.
     it 'keeps the players in the room window and the indicator under a gag on the players line' do
       GagPatterns.add_general_pattern('^Also here:')
       load_layout
 
       receive_from_server(*fixture('room_pipeline', 'dr_old_creatures'))
 
+      expect(room_screen).to include('Also here: True to Life Faelan and Universalist Hessa.')
+      expect(indicator).to eq 'Faelan, Hessa'
+    end
+
+    # The same guard with a gag written against the raw players line, which
+    # hides it in main today.
+    it 'keeps the players in the room window and the indicator when a gag hides the players line in main' do
+      GagPatterns.add_general_pattern('^(?:<crtrStatus[^>]*>)*Also here:')
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_old_creatures'))
+
+      expect(main_rows.grep(/Also here:/)).to be_empty
       expect(room_screen).to include('Also here: True to Life Faelan and Universalist Hessa.')
       expect(indicator).to eq 'Faelan, Hessa'
     end
