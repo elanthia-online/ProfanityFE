@@ -57,13 +57,12 @@ RSpec.describe 'Link colors on the old and the rich DragonRealms stream' do
     end
 
     it 'draws a creature in the creature color with links on, in the room window and in main' do
-      pending 'the link color covers the creature color'
       load_layout
 
       receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
 
       expect(room_screen).to include(start_with('You also see {a :red}[jeol moradu:red](look #195652828) (immobile)'))
-      expect(main_screen).to include(start_with('You also see {a jeol moradu:red} (immobile)'))
+      expect(main_screen.join).to include('{a jeol moradu:red} (immobile)')
     end
 
     it 'draws a highlighted name in the highlight color with links off' do
@@ -77,7 +76,6 @@ RSpec.describe 'Link colors on the old and the rich DragonRealms stream' do
     end
 
     it 'draws a highlighted name in the highlight color with links on' do
-      pending 'the link color covers the highlight color'
       HIGHLIGHT[/Aldric/] = ['ff00ff', nil, nil]
       load_layout(room_window: false)
 

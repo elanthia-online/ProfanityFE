@@ -2133,6 +2133,12 @@ supported. When enabled, link text is rendered using the `links` preset color
 (falls back to blue `5555ff` if no preset is defined). All built-in templates
 include a `links` preset by default.
 
+The link color only shows on text that has no other color. A creature's name
+(`monsterbold`), a highlight or a preset under a link keeps its own color, and
+the text stays clickable. This matters in GemStone, and in DragonRealms when
+Lich identifies as the Saga client, which puts a link around every object,
+creature and player.
+
 **Clickable links:** When `.links` is enabled, clicking on highlighted link
 text sends the associated command to the game server. In DragonRealms, this
 executes the `cmd` attribute (e.g., `get #40872332`). The command is echoed
