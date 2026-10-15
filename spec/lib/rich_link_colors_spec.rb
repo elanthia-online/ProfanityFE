@@ -75,6 +75,18 @@ RSpec.describe 'Link colors on the old and the rich DragonRealms stream' do
       expect(main_screen.first).to start_with "{Aldric:magenta}'s greatsword"
     end
 
+    # An underlined highlight adds A_UNDERLINE to the cells' attributes;
+    # their color is still the highlight's.
+    it 'draws an underlined highlighted name in the highlight color with links off' do
+      state.blue_links = false
+      HIGHLIGHT[/Aldric/] = ['ff00ff', nil, 'true']
+      load_layout(room_window: false)
+
+      receive_from_server(*fixture('rich_stream', 'dr_rich_combat'))
+
+      expect(main_screen.first).to start_with "{Aldric:magenta}'s greatsword"
+    end
+
     it 'draws a highlighted name in the highlight color with links on' do
       HIGHLIGHT[/Aldric/] = ['ff00ff', nil, nil]
       load_layout(room_window: false)
