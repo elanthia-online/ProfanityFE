@@ -234,10 +234,27 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
         expect(compass_lit).to eq %w[n]
       end
 
+      it 'follows an exits component sent on its own without a room window (synthetic)' do
+        load_layout(room_window: false)
+
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_move'),
+                            "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>")
+
+        expect(compass_lit).to eq %w[n]
+      end
+
       it "keeps GemStone's own compass directions (--game GS)" do
         load_layout(game_rules: Games::GemStone)
 
         receive_from_server(*fixture('room_pipeline', 'gs_move'))
+
+        expect(compass_lit).to eq %w[n s]
+      end
+
+      it "doesn't light GemStone's compass from its exits, in a room sent with no <compass> (--game GS)" do
+        load_layout(game_rules: Games::GemStone)
+
+        receive_from_server(*fixture('room_pipeline', 'gs_move'), *fixture('room_pipeline', 'gs_death_room'))
 
         expect(compass_lit).to eq %w[n s]
       end
