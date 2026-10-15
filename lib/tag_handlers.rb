@@ -30,6 +30,8 @@ require_relative 'effect_tracker'
 # - @dialog_open (false until a <dialogData> opens: whether a block is open)
 # - @room_block (false until a <room> opens: whether the line's <room>
 #   block is open; reset at the end of every line)
+# - @room_part (nil until a part of a <room> block opens: the element name
+#   of the part open in it, or nil; see #close_room_block)
 # - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
 #   leaving only its kept tags; see LineFilter#gagged?)
@@ -508,7 +510,7 @@ module TagHandlers
   #
   # The text before it goes on its own line. Its parts are read only while
   # it is open (see #handle_room_part_open), until </room> or the end of
-  # the line.
+  # the line (see #close_room_block).
   #
   # @param _xml [String] the tag (unused)
   # @param text_buffer [String] the text collected so far on the line (tags removed)
@@ -525,8 +527,21 @@ module TagHandlers
   # @param text_buffer [String] the text collected so far on the line (tags removed)
   # @return [void]
   def handle_room_close(_xml, text_buffer)
+    close_room_block(text_buffer)
+  end
+
+  # Close the open <room> block, at </room> or at the end of its line (a
+  # block cut short): a part still open is closed as its closing tag
+  # would close it, so its capture and its roomName/roomDesc style don't
+  # take or color the next line, and the text left goes on its own line.
+  # Does nothing when no block is open.
+  #
+  # @param text_buffer [String] the text collected so far on the line (tags removed)
+  # @return [void]
+  def close_room_block(text_buffer)
     return unless @room_block
 
+    close_room_part(@room_part, text_buffer) if @room_part
     flush_text_buffer(text_buffer)
     @room_block = false
   end
@@ -546,7 +561,8 @@ module TagHandlers
     return unless @room_block
 
     flush_text_buffer(text_buffer)
-    preset_id, kind = ROOM_BLOCK_CAPTURES[XmlTokenizer.tag_name(xml)]
+    @room_part = XmlTokenizer.tag_name(xml)
+    preset_id, kind = ROOM_BLOCK_CAPTURES[@room_part]
     return unless kind
 
     @spans.open(:style, text_buffer.length, **Presets.colors(preset_id).to_h)
@@ -563,7 +579,17 @@ module TagHandlers
   def handle_room_part_close(xml, text_buffer)
     return unless @room_block
 
-    _preset_id, kind = ROOM_BLOCK_CAPTURES[XmlTokenizer.tag_name(xml)]
+    close_room_part(XmlTokenizer.tag_name(xml), text_buffer)
+  end
+
+  # Close a part of the open <room> block (see #handle_room_part_close).
+  #
+  # @param part [String] the part's element name
+  # @param text_buffer [String] the text collected so far on the line (tags removed)
+  # @return [void]
+  def close_room_part(part, text_buffer)
+    @room_part = nil
+    _preset_id, kind = ROOM_BLOCK_CAPTURES[part]
     @room.end_capture(kind) { flush_text_buffer(text_buffer) } if kind
     @spans.close(:style, text_buffer.length) if kind
     flush_text_buffer(text_buffer)
