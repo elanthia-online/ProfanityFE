@@ -177,13 +177,27 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
       expect(gag_log.map { |message| message[/\A[^\/]*/].strip }).to eq ['general (text) room exists']
     end
 
-    # A gag on blank lines matches the empty text of a room's empty parts
-    # (this move has no players and nothing extra); there is nothing to drop.
-    it 'logs no room part that was empty already' do
+    # A room's empty parts (this move has no players and nothing extra) have
+    # no text, so a gag on blank lines doesn't match them.
+    it 'logs no empty room part under a gag on blank lines' do
       state.log_gags = true
       gag_log = []
       allow(ProfanityLog).to receive(:write) { |context, message, **| gag_log << message if context == 'gag' }
       GagPatterns.add_general_pattern('^\\s*$')
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+
+      expect(gag_log.grep(/ room /)).to be_empty
+    end
+
+    # A gag written against a part's tags matches the part when it is empty
+    # too (this move has no players); there is nothing to drop.
+    it 'logs no room part that was empty already' do
+      state.log_gags = true
+      gag_log = []
+      allow(ProfanityLog).to receive(:write) { |context, message, **| gag_log << message if context == 'gag' }
+      GagPatterns.add_general_pattern('<players>')
       load_layout
 
       receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))

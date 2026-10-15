@@ -179,10 +179,11 @@ class LineFilter
   # as it dropped the old stream's line for it, and not the whole room. A
   # gagged part keeps its tags, empty: the room is read as if the game had
   # sent the part with nothing in it. A gag on the line as a whole doesn't
-  # apply. A part that is empty already is left alone: a gag matching its
-  # empty text (one on blank lines) has nothing to drop, and logs nothing.
-  # Unlike a gagged line, which keeps {KEPT_TAGS}, a gagged part keeps
-  # none of the tags inside it.
+  # apply. A part that is empty already is left alone: a gag written
+  # against its tags (+<players>+) has nothing to drop, and logs nothing.
+  # (A gag on blank lines doesn't match an empty part: it has no text; see
+  # #gag_text.) Unlike a gagged line, which keeps {KEPT_TAGS}, a gagged
+  # part keeps none of the tags inside it.
   #
   # @param line [String] raw server line holding a <room> block
   # @return [String] the line, each gagged part emptied
