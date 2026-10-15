@@ -167,7 +167,9 @@ module ScreenReplay
     window.rows.each_index.filter_map do |y|
       next if window.row(y).strip.empty?
 
-      cell = ->(x) { [COLOR_NAMES[PAIRS.key(window.attrs_at(y, x) >> 8)], (yield(window, y, x) if block_given?)] }
+      # Only the color pair field: an underlined cell keeps its color.
+      pair = ->(x) { (window.attrs_at(y, x) & Curses::A_COLOR) >> 8 }
+      cell = ->(x) { [COLOR_NAMES[PAIRS.key(pair.(x))], (yield(window, y, x) if block_given?)] }
       runs = window.row(y).rstrip.each_char.with_index.chunk_while { |(_, a), (_, b)| cell.(a) == cell.(b) }
       runs.map { |chars| markup(chars.map(&:first).join, *cell.(chars.first.last)) }.join
     end
