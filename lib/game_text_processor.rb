@@ -348,7 +348,8 @@ class GameTextProcessor
 
   # Follow the game's room description setting from its answers to a
   # change of it (see Games::Rules#room_descriptions_shown): while it is
-  # off, room descriptions are dropped (see TagHandlers#open_room_desc).
+  # off, room descriptions are dropped (see TagHandlers#open_room_desc, a
+  # workaround for a confirmed DragonRealms game bug on the rich stream).
   # Until the game answers a change, descriptions are shown.
   #
   # @param text [String] game text

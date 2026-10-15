@@ -690,11 +690,13 @@ as one line, with each part (name, description, objects, players, exits)
 marked. The story window shows each part on a line of its own, and the room
 window reads them as it reads the lines above. That stream sends the
 description whatever `FLAG DESCRIPTION` is set to, and so does Lich's rewrite of
-it into the old layout. Profanity follows the setting from the game's answers to
-it ("You will no longer see room descriptions." / "You will now see room
-descriptions."): while it is off, neither window shows a room description, as
-with the old stream. Until the game answers a change of the setting (after
-Profanity starts), descriptions are shown.
+it into the old layout. This is a confirmed DragonRealms game bug; GemStone
+follows its setting. Until the game is fixed, Profanity works around it by
+following the setting from the game's answers to it ("You will no longer see
+room descriptions." / "You will now see room descriptions."): while it is off,
+neither window shows a room description, as with the old stream. Until the game
+answers a change of the setting (after Profanity starts), descriptions are
+shown.
 
 A view of another room, such as the one a Moon Mage's Locate shows, goes to
 the `familiar` window (or to the story window when the layout has none). It

@@ -6,10 +6,12 @@
 # room_description_spec.rb). The stream the game sends when Lich identifies
 # as the Saga client sends the description whatever the setting, in its
 # <room> block, and so does Lich's rewrite of that block into the old
-# layout for front ends that don't read <room>. Profanity follows the
-# setting from the game's answers to it ("You will no longer see room
-# descriptions." / "You will now see room descriptions."): while it is off,
-# a room description is shown neither in main nor in the room window.
+# layout for front ends that don't read <room>. That is a confirmed
+# DragonRealms game bug (GemStone follows its setting). As a workaround,
+# Profanity follows the setting from the game's answers to it ("You will
+# no longer see room descriptions." / "You will now see room
+# descriptions."): while it is off, a room description is shown neither in
+# main nor in the room window.
 # Real lines (spec/fixtures/room_pipeline/dr_rich_*, player names
 # replaced) and synthetic lines in Lich's rewrite layout.
 

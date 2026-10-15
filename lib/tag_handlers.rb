@@ -464,9 +464,11 @@ module TagHandlers
   # Start reading a room description (a roomDesc preset or a <room>
   # block's description). While the game's room descriptions are off, the
   # description is dropped, in main and in the room window, as the old
-  # stream leaves it out: the stream DR sends when Lich identifies as the
-  # Saga client sends it whatever the setting. Otherwise yields, to start
-  # the capture.
+  # stream leaves it out. This works around a confirmed DragonRealms game
+  # bug: the stream DR sends when Lich identifies as the Saga client sends
+  # the description whatever FLAG DESCRIPTION is set to. GemStone follows
+  # its setting, and sends its descriptions in a roomDesc style, which
+  # never comes here. Otherwise yields, to start the capture.
   #
   # @param text_buffer [String] the text collected so far on the line
   # @yield to start the description's capture, when it is shown
