@@ -214,6 +214,45 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
         expect(main_screen).to eq ['{[Cut, Short] (5):green}', 'A goblin arrives.']
       end
 
+      context 'when a block is split across two lines' do
+        let(:whole) do
+          '<resource picture="0"/><room><name>[Hall of Tests] (12)</name><description>A plain hall.</description>' \
+            '<exists>You also see a rock.</exists><players>Also here: <a exist="9" noun="Jorvin">Jorvin</a>.' \
+            '</players><exits>Obvious paths: <d>north</d>.</exits><extra></extra></room>'
+        end
+        let(:hall) do
+          ['{[Hall of Tests] (12):green}', 'A plain hall.', 'You also see a rock.', 'Also here: Jorvin.',
+           'Obvious paths: north.']
+        end
+
+        def split_before(mark)
+          at = whole.index(mark)
+          [whole[0...at], whole[at..]]
+        end
+
+        %w[<exists> <players>].each do |mark|
+          it "reads the parts on the second line, split before #{mark}, as parts of the block" do
+            load_layout
+
+            receive_from_server('<nav rm="12"/>', *split_before(mark), '<prompt time="1">&gt;</prompt>')
+
+            expect(room_screen).to eq hall
+            expect(main_rows).to eq(hall.map { |row| row.sub(/\A\{(.*):green\}\z/, '\1') })
+            expect(indicator).to eq 'Jorvin'
+          end
+        end
+
+        it 'commits the room from the second line when the split falls inside the description' do
+          load_layout
+
+          receive_from_server('<nav rm="12"/>', *split_before('plain hall.'), '<prompt time="1">&gt;</prompt>')
+
+          expect(room_screen).to include('{[Hall of Tests] (12):green}', 'You also see a rock.',
+                                         'Also here: Jorvin.', 'Obvious paths: north.')
+          expect(indicator).to eq 'Jorvin'
+        end
+      end
+
       it 'reads a name tag outside a block as text' do
         load_layout
 
