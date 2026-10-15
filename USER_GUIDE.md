@@ -1508,9 +1508,9 @@ take the room window's copy with it.
 ### Combat Gag Patterns
 
 Applied only to text in the **combat** stream. Use these to filter repetitive
-combat messages. When Lich identifies as the Saga client, DragonRealms sends no
-combat stream, so combat gags don't apply there; combat lines go to the story
-window.
+combat messages. Combat lines that come with no combat stream (as in some
+sessions where Lich identifies as the Saga client, depending on the Lich build)
+go to the story window, and combat gags don't apply to them.
 
 ```xml
 <combat_gag>REGEX_PATTERN</combat_gag>
