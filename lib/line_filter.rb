@@ -181,6 +181,8 @@ class LineFilter
   # sent the part with nothing in it. A gag on the line as a whole doesn't
   # apply. A part that is empty already is left alone: a gag matching its
   # empty text (one on blank lines) has nothing to drop, and logs nothing.
+  # Unlike a gagged line, which keeps {KEPT_TAGS}, a gagged part keeps
+  # none of the tags inside it.
   #
   # @param line [String] raw server line holding a <room> block
   # @return [String] the line, each gagged part emptied
@@ -282,9 +284,11 @@ class LineFilter
   # +STREAM-TAG+; the tag itself is still processed after the text is dropped.
   #
   # @param kind [String] which gag type matched ('general', 'general (text)'
-  #   for a match on the line's text only, or 'multiline')
+  #   for a match on the line's text only, or 'multiline'); for a part of a
+  #   <room> block, the general kind followed by +room+ and the part's
+  #   element name ('general (text) room exists'; see #gag_room_parts)
   # @param pattern [Regexp] the gag pattern responsible (start pattern for multiline)
-  # @param line [String] raw server line being dropped
+  # @param line [String] raw server line being dropped, or the raw room part
   # @return [void]
   # @api private
   def log_gagged_line(kind, pattern, line)

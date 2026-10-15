@@ -1591,7 +1591,11 @@ Start Profanity with `--log-gags` to write every gagged line to the log file:
 ```
 
 Each entry shows the gag type, the start of the pattern that matched, and the
-full raw line. Lines that carried a stream tag are marked `STREAM-TAG`.
+full raw line. Lines that carried a stream tag are marked `STREAM-TAG`. A gag
+on a part of a room DragonRealms sends as one line (see
+[General Gag Patterns](#general-gag-patterns)) is logged with the part: the
+type names it, as in `general (text) room exists`, and the entry shows that
+part, not the whole line.
 
 ### Notes
 
