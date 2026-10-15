@@ -711,6 +711,9 @@ Pass `--room-window-only` to suppress room data from the story window.
 | `title-preset` | no | Preset color for the room title (default: `'roomName'`) |
 | `desc-preset` | no | Preset color for the room description |
 | `creatures-preset` | no | Preset color for creature names in objects (default: `'monsterbold'`) |
+| `dead-preset` | no | Preset color for a dead creature in objects (default: `'creatureDead'`) |
+| `sleeping-preset` | no | Preset color for a sleeping creature in objects (default: `'creatureSleeping'`) |
+| `prone-preset` | no | Preset color for a prone creature in objects (default: `'creatureProne'`) |
 
 To use a room window, you must also define the referenced presets. The room
 title is shown in brackets, creatures in the objects list are highlighted with
@@ -1876,6 +1879,7 @@ Common preset IDs used by the game:
 | `roomName` | Room title text (also used by room window) |
 | `roomDesc` | Room description text (also used by room window) |
 | `monsterbold` | Creature names in room objects (also used by room window) |
+| `creatureDead`, `creatureSleeping`, `creatureProne` | A dead, sleeping or prone creature in the room window's objects, in place of `monsterbold`. The built-in templates define only `creatureDead`; a state with no preset stays `monsterbold`. DragonRealms reports creatures' states, and Profanity can tell which creature a state belongs to when Lich identifies as the Saga client, which links each creature |
 | `speech` | Spoken text |
 | `whisper` | Whispered text |
 | `thoughts` | Thought network text |

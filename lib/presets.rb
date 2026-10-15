@@ -17,6 +17,18 @@ module Presets
   # Bold text: creature names (+<pushBold/>+) and familiar notifications.
   MONSTERBOLD = 'monsterbold'
 
+  # A dead creature in the room window's objects; the room window's
+  # default +dead-preset+ (see RoomWindow#creature_state_presets).
+  CREATURE_DEAD = 'creatureDead'
+
+  # A sleeping creature in the room window's objects; the room window's
+  # default +sleeping-preset+.
+  CREATURE_SLEEPING = 'creatureSleeping'
+
+  # A prone creature in the room window's objects; the room window's
+  # default +prone-preset+.
+  CREATURE_PRONE = 'creatureProne'
+
   # Link colors, when a link is colored (see LinkExtractor::DEFAULT_LINK_COLOR).
   LINKS = 'links'
 

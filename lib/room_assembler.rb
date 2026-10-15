@@ -122,6 +122,31 @@ class RoomAssembler
     # Whether the inline lines being read are a view of another room, from
     # its roomName to its exits line (see #remote_title?)
     @remote_view = false
+    # The state each creature's last <crtrStatus> set, by the game's id of
+    # the creature (see #creature_status); kept for the creatures the
+    # objects shown link to
+    @creature_states = {}
+    # The ids the objects shown link to (see #emit)
+    @shown_ids = []
+  end
+
+  # The game sent a creature's state (see TagHandlers#handle_creature_status):
+  # the room window shows it when the objects it shows link to the
+  # creature, and is drawn again when the state of such a creature
+  # changes.
+  #
+  # @param exist [String] the game's id of the creature
+  # @param state [Symbol, nil] +:dead+, +:sleeping+, +:prone+ or nil
+  # @return [void]
+  def creature_status(exist, state)
+    return if @creature_states.key?(exist) && @creature_states[exist] == state
+
+    @creature_states[exist] = state
+    return unless @shown_ids.include?(exist) && room_window?
+
+    @event_bus.emit(:room_creature_states, states: shown_states)
+    @pending_render.request_room_render
+    @pending_render.request_update
   end
 
   # The game named the room the player is in: <nav rm='NNN'/>. Both games
@@ -451,11 +476,29 @@ class RoomAssembler
     @title_row = part if field == :title
     data = case field
            when :title then { text: part }
-           when :objects then { text: part.text, links: part.links, creatures: part.creatures }
+           when :objects then objects_data(part)
            else { text: part.text, links: part.links }
            end
     @event_bus.emit(FIELD_EVENTS.fetch(field), **data)
     @pending_render.request_room_render if render
+  end
+
+  # The room objects event's data for +part+. The creatures it links to
+  # are the ones whose states are kept from then on.
+  #
+  # @param part [RoomPart] the objects
+  # @return [Hash]
+  def objects_data(part)
+    @shown_ids = part.links.filter_map { |link| link[:exist] }.uniq
+    @creature_states = @creature_states.slice(*@shown_ids)
+    { text: part.text, links: part.links, creatures: part.creatures, states: shown_states }
+  end
+
+  # The kept states of the creatures the objects shown link to.
+  #
+  # @return [Hash{String => Symbol}] state by the creature's id, unset ones left out
+  def shown_states
+    @creature_states.slice(*@shown_ids).compact
   end
 
   # Show a field a room component delivered, and record it as delivered in
