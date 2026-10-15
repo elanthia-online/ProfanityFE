@@ -132,7 +132,9 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
     end
 
     # The components carry a move in both streams, so the room window shows
-    # it alike already; the rich stream always sends the description.
+    # it alike already, except that the rich stream always sends the
+    # description, which shows under the name. (This is the only example
+    # not pending that pins the description in the room window.)
     it 'shows a move to the same room alike in the room window from either stream' do
       load_layout
       receive_from_server(*fixture('room_pipeline', 'dr_old_move_greengrove'))
@@ -141,7 +143,7 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
       load_layout
       receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
 
-      expect(room_screen - greengrove_desc).to eq old_room
+      expect(room_screen).to eq [old_room.first, *greengrove_desc, *old_room.drop(1)]
     end
 
     it 'lights the compass from the exits' do
