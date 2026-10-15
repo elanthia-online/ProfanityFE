@@ -62,6 +62,18 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
       expect(indicator).to eq 'Jorvin, Ilmar'
       expect(compass_lit).to eq %w[n w nw]
     end
+
+    # A room the game re-sends as components alone, with no lines on main,
+    # comes with no <compass> of directions: only the exits component's
+    # empty one. The exits light the compass.
+    it 'lights the compass for a room sent as components alone' do
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_old_move_greengrove'),
+                          *fixture('room_pipeline', 'dr_two_moves_one_cycle'))
+
+      expect(compass_lit).to eq %w[n s]
+    end
   end
 
   describe 'the rich stream' do
