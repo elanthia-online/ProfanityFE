@@ -1509,10 +1509,21 @@ before they reach any window.
 <gag>REGEX_PATTERN</gag>
 ```
 
+A gag is tried against the line as the game sends it, XML tags included, and
+then against its text, the way the window shows it. A gag written against the
+text therefore still matches when the game puts tags inside it: a link around
+each object, creature and player (when Lich identifies as the Saga client), or
+a creature's status tag at the start of a line. A gag written against the tags,
+such as one that matches `<preset id="whisper">`, still works too. The text of a room
+component is left out, so a gag on the room lines in the story window doesn't
+take the room window's copy with it.
+
 ### Combat Gag Patterns
 
 Applied only to text in the **combat** stream. Use these to filter repetitive
-combat messages.
+combat messages. When Lich identifies as the Saga client, DragonRealms sends no
+combat stream, so combat gags don't apply there; combat lines go to the story
+window.
 
 ```xml
 <combat_gag>REGEX_PATTERN</combat_gag>
