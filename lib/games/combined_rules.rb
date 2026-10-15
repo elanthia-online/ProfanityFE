@@ -69,6 +69,11 @@ module Games
       first_answer { |game| game.compass_dirs(exits) }
     end
 
+    # (see Games::Rules#room_descriptions_shown)
+    def room_descriptions_shown(text)
+      first_answer { |game| game.room_descriptions_shown(text) }
+    end
+
     private
 
     # The first game's non-nil answer.

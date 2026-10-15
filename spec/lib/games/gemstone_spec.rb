@@ -191,6 +191,12 @@ RSpec.describe Games::GemStone do
     end
   end
 
+  describe '.room_descriptions_shown' do
+    it "doesn't read DragonRealms' answer to FLAG DESCRIPTION" do
+      expect(described_class.room_descriptions_shown('You will no longer see room descriptions.')).to be_nil
+    end
+  end
+
   describe '.room_list_cut_short?' do
     it "has no cut-short mark (DragonRealms' mark is not GemStone's)" do
       expect(described_class.room_list_cut_short?('You also see a rock, a stick and some other stuff.')).to be_nil

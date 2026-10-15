@@ -100,6 +100,12 @@ module Games
       'southwest' => 'sw', 'west' => 'w', 'northwest' => 'nw', 'up' => 'up', 'down' => 'down', 'out' => 'out'
     }.freeze
 
+    # DR's answer to FLAG DESCRIPTION ON.
+    ROOM_DESCRIPTIONS_ON = 'You will now see room descriptions.'
+
+    # DR's answer to FLAG DESCRIPTION OFF.
+    ROOM_DESCRIPTIONS_OFF = 'You will no longer see room descriptions.'
+
     # Seconds of stun for a Raise Dead chant.
     RAISE_DEAD_STUN_SECONDS = 30.6
 
@@ -185,6 +191,18 @@ module Games
     # @return [Array<String>] e.g. +["s", "nw"]+ for south and northwest
     def self.compass_dirs(exits)
       exits.filter_map { |name| COMPASS_DIRS[name.strip.downcase] }
+    end
+
+    # Whether a line is DR's answer to FLAG DESCRIPTION ON or OFF
+    # ({ROOM_DESCRIPTIONS_ON}, {ROOM_DESCRIPTIONS_OFF}).
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean, nil] true for ON, false for OFF, nil for any other line
+    def self.room_descriptions_shown(text)
+      case text.strip
+      when ROOM_DESCRIPTIONS_ON then true
+      when ROOM_DESCRIPTIONS_OFF then false
+      end
     end
   end
 end

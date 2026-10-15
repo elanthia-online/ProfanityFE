@@ -89,5 +89,13 @@ module Games
     #   +["n", "up"]+), the exits that are no compass direction left out;
     #   nil when the game sends its own compass directions
     def compass_dirs(exits); end
+
+    # Whether a game line says room descriptions are now shown or not, as
+    # the game answers a change to its room description setting.
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean, nil] true when they are now shown, false when not;
+    #   nil when the line says neither
+    def room_descriptions_shown(text); end
   end
 end
