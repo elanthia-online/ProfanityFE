@@ -9,11 +9,10 @@
 # The rich stream (the stream the game sends when Lich identifies as the
 # Saga client) puts an <a exist> link around every object, creature and
 # player, so a gag written against the text misses the raw line and
-# matches its text; and it sends a whole room as one line, so a gag on one
-# part of a room matches the line of the whole room. The examples marked
-# pending describe what the user should see; they fail until gags read a
-# room's parts (spec policy: AUDIT §0.2). The patterns are trimmed from
-# the shipped templates' gags.
+# matches its text; and it sends a whole room as one line, so a gag is
+# tried on each part of the room (see LineFilter#gag_room_parts), as on
+# each of the old stream's room lines. The patterns are trimmed from the
+# shipped templates' gags.
 
 require_relative '../spec_helper'
 require_relative '../support/screen_replay'
