@@ -76,6 +76,27 @@ RSpec.describe 'Link colors on the old and the rich DragonRealms stream' do
       expect(main.link_cmd_at(y, x)).to eq 'look #195652828'
     end
 
+    # The unselected parts of a line with a selection on it are drawn from
+    # copies of the line's color regions; the copies keep the link's :cmd,
+    # so a creature keeps the creature color there too.
+    it 'draws a creature in the creature color in main while part of its line is selected' do
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+
+      main = @window_manager.stream['main']
+      y = main.rows.index { |row| row.include?('jeol moradu (immobile)') }
+      line_id, = main.selection_anchor_at(y, 0)
+      creature_row = -> { main_screen.find { |row| row.include?('(immobile), a') } }
+
+      after_it = main.row(y).index('(immobile)')
+      main.highlight_selection(line_id, after_it, line_id, after_it + 3)
+      expect(creature_row.call).to include('{a jeol moradu:red} (immobile)')
+
+      main.highlight_selection(line_id, 2, line_id, 6)
+      expect(creature_row.call).to include('{a jeol moradu:red} (immobile)')
+    end
+
     it 'draws a highlighted name in the highlight color with links off' do
       state.blue_links = false
       HIGHLIGHT[/Aldric/] = ['ff00ff', nil, nil]
