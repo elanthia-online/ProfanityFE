@@ -133,16 +133,18 @@ class RoomAssembler
   # The game sent a creature's state (see TagHandlers#handle_creature_status):
   # the room window shows it when the objects it shows link to the
   # creature, and is drawn again when the state of such a creature
-  # changes.
+  # changes. Without a RoomWindow no state is kept: only an objects update
+  # to the room window prunes the states kept.
   #
   # @param exist [String] the game's id of the creature
   # @param state [Symbol, nil] +:dead+, +:sleeping+, +:prone+ or nil
   # @return [void]
   def creature_status(exist, state)
+    return unless room_window?
     return if @creature_states.key?(exist) && @creature_states[exist] == state
 
     @creature_states[exist] = state
-    return unless @shown_ids.include?(exist) && room_window?
+    return unless @shown_ids.include?(exist)
 
     @event_bus.emit(:room_creature_states, states: shown_states)
     @pending_render.request_room_render

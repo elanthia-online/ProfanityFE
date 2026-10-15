@@ -90,6 +90,14 @@ RSpec.describe 'Creature states in the room window' do
     PRESET['monsterbold'] = saved if saved
   end
 
+  it 'keeps no creature states without a room window' do
+    load_layout(room_window: false)
+
+    receive_from_server(*(1..50).flat_map { |id| status(id.to_s, 'dead') })
+
+    expect(@processor.instance_variable_get(:@room).instance_variable_get(:@creature_states)).to be_empty
+  end
+
   it 'ignores the state of a creature the objects shown do not link to' do
     load_layout
     receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
