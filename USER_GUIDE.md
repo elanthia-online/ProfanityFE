@@ -1511,6 +1511,13 @@ such as one that matches `<preset id="whisper">`, still works too. The text of a
 component is left out, so a gag on the room lines in the story window doesn't
 take the room window's copy with it.
 
+When Lich identifies as the Saga client, DragonRealms sends a whole room as one
+line. A gag is then tried on each part of the room (name, description, objects,
+players, exits) on its own, and hides only the part it matches, as it hid that
+part's own line before. A gag that would only match across two parts doesn't
+apply. A multi-line gag still applies to the whole line, so one that starts on
+a room's text hides the whole room.
+
 ### Combat Gag Patterns
 
 Applied only to text in the **combat** stream. Use these to filter repetitive
