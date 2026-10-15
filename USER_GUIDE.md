@@ -1582,10 +1582,10 @@ a mistyped `end` pattern can never swallow the stream indefinitely.
 
 ### Diagnosing Gags
 
-General and multi-line gags match the raw server line, XML tags included. A
-gagged line's text is hidden, but its stream tags (`<pushStream>`,
-`<popStream/>`, `<clearStream>`) are still processed, so a gag can never leave
-text routed to the wrong window.
+General and multi-line gags match the raw server line, XML tags included, or
+its text (see General Gag Patterns above). A gagged line's text is hidden, but
+its stream tags (`<pushStream>`, `<popStream/>`, `<clearStream>`) are still
+processed, so a gag can never leave text routed to the wrong window.
 
 Start Profanity with `--log-gags` to write every gagged line to the log file:
 
@@ -1594,8 +1594,9 @@ Start Profanity with `--log-gags` to write every gagged line to the log file:
 ```
 
 Each entry shows the gag type, the start of the pattern that matched, and the
-full raw line. Lines that carried a stream tag are marked `STREAM-TAG`. A gag
-on a part of a room DragonRealms sends as one line (see
+full raw line. A general gag that matched the line's text but not the raw line
+shows as `general (text)`. Lines that carried a stream tag are marked
+`STREAM-TAG`. A gag on a part of a room DragonRealms sends as one line (see
 [General Gag Patterns](#general-gag-patterns)) is logged with the part: the
 type names it, as in `general (text) room exists`, and the entry shows that
 part, not the whole line.
@@ -1605,7 +1606,9 @@ part, not the whole line.
 - Gag patterns use Ruby regular expression syntax.
 - General gags are checked before any text processing or routing.
 - Combat gags are checked only for lines in the combat stream.
-- Multi-line gags are checked before general gags, at the raw-line level.
+- Multi-line gags are checked before general gags, against the raw line and
+  its text, as general gags are, but always on the whole line, never on one
+  part of a room.
 - On `.reload`, custom gag patterns from XML are reloaded (defaults are
   preserved).
 - Invalid regex patterns are logged as warnings and skipped.
