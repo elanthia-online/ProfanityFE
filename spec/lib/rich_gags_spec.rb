@@ -115,8 +115,9 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
       expect(main_rows).to include('[Bosque Deriel, Greengrove] (230006)', 'Obvious paths: south, northwest.')
     end
 
-    # Combat gags apply to the combat stream, which the rich stream never
-    # opens: its combat lines are main's, as it sends them.
+    # Combat gags apply to the combat stream. Combat lines that come with no
+    # combat pushStream (as in the session these fixtures come from) are
+    # main's, so combat gags don't apply to them.
     it 'shows combat lines a combat gag matches, since they are not on the combat stream' do
       GagPatterns.add_combat_pattern('lands a massive strike')
       load_layout(room_window: false)
