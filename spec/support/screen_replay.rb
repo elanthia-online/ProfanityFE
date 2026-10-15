@@ -65,8 +65,10 @@ module ScreenReplay
   #
   # @param room_window [Boolean] whether the layout has a room window
   # @param extra [String] extra <window> elements
+  # @param game_rules [Games::Rules] the game's rules (--game); both games'
+  #   by default, as without --game
   # @return [void]
-  def load_layout(room_window: true, extra: '')
+  def load_layout(room_window: true, extra: '', game_rules: Games::BOTH_GAMES)
     compass = COMPASS.map do |dir|
       "<window class='indicator' top='3' left='0' height='1' width='5' label='#{dir}' value='compass:#{dir}'/>"
     end
@@ -88,7 +90,7 @@ module ScreenReplay
     @processor = GameTextProcessor.new(
       window_mgr: @window_manager, shared_state: state, cmd_buffer: Struct.new(:window).new(nil),
       xml_escapes: { '&lt;' => '<', '&gt;' => '>', '&quot;' => '"', '&apos;' => "'", '&amp;' => '&' },
-      event_bus: event_bus
+      event_bus: event_bus, game_rules: game_rules
     )
   end
 

@@ -122,6 +122,9 @@ class GameTextProcessor
     @dialog_open = false
     # Whether the line's <room> block is open (see TagHandlers#handle_room_open)
     @room_block = false
+    # Whether a spell refresh with no pushStream may be under way (see
+    # TagHandlers#handle_clear_stream)
+    @spell_refresh = false
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
@@ -279,6 +282,14 @@ class GameTextProcessor
   # @return [void]
   # @api private
   def handle_game_text(text, runs, marks)
+    # A spell line of a refresh DR sent with no pushStream (when Lich
+    # identifies as the Saga client) is the spell window's, as a pushed
+    # one's lines are; the other lines of the refresh stay main's.
+    if @spell_refresh && @router.current_stream.nil? && @game_rules.spell_line?(text)
+      @router.route_to(Streams::PERC, text, runs, marks: marks)
+      return
+    end
+
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
