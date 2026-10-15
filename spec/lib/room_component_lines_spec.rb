@@ -171,14 +171,16 @@ RSpec.describe 'Room component lines' do
         expect(color_of(room, 'the Wayside Lodge and ')).to be_nil
       end
 
-      it 'with links on, draws the bolded article in the monsterbold color and the creature, a link, in the link color' do
+      it 'with links on, draws the whole bolded creature in the monsterbold color, its name still a link' do
         state.blue_links = true
 
         receive_from_server(objects_line)
 
-        # The game bolds "a dwarven blacksmith assistant"; only the name is a link
-        expect(color_of(room, 'dwarven blacksmith assistant')).to eq '5555ff'
-        expect(color_of(room, 'a dwarven blacksmith assistant')).to eq %w[ff0000 5555ff]
+        # The game bolds "a dwarven blacksmith assistant"; only the name is a
+        # link, and a link's color yields to the creature's
+        expect(color_of(room, 'a dwarven blacksmith assistant')).to eq 'ff0000'
+        y, x = locate(room, 'dwarven blacksmith assistant')
+        expect(room.link_cmd_at(y, x)).not_to be_nil
       end
 
       it 'keeps the links of objects shown with links off, so they work once links are turned on' do

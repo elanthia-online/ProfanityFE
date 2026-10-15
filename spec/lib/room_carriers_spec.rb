@@ -608,7 +608,8 @@ RSpec.describe 'Room carriers' do
       expect(room_screen).to eq [
         '[Wayside Inn, Lobby]',
         'A cozy [fire](look #-1) warms the lobby.',
-        'You also see a [bench](look #-2) and {a :red}[rat](look #-3).',
+        # A link's color yields to the creature's: the rat stays clickable
+        'You also see a [bench](look #-2) and {a :red}[rat:red](look #-3).',
         'Also here: [Bob](look #-4).',
         'Obvious paths: [out](look #-5)'
       ]

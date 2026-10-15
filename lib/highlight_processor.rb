@@ -53,7 +53,13 @@ module HighlightProcessor
 
   # Render text with color regions to a curses window.
   # Splits text at color region boundaries and applies the most specific
-  # (smallest range) color to each segment.
+  # (smallest range) color to each segment, except that a link's color
+  # (a region with a :cmd) yields to every other color: it shows only on
+  # text no other region colors. A creature's name, a highlight or a
+  # preset under a link keeps its own color, and the link stays clickable
+  # (clicks read the regions, not the color drawn). DragonRealms wraps
+  # every object, creature and player in a link when Lich identifies as
+  # the Saga client.
   #
   # @param window [Curses::Window] the window to render to
   # @param text [String] the text to render
@@ -85,8 +91,9 @@ module HighlightProcessor
       if color_list.empty?
         window.addstr(str)
       else
-        # Sort by specificity (smaller range = more specific = higher priority)
-        color_list = color_list.sort_by { |h| h[:end] - h[:start] }
+        # Links last, then by specificity (smaller range = more specific =
+        # higher priority)
+        color_list = color_list.sort_by { |h| [h[:cmd] ? 1 : 0, h[:end] - h[:start]] }
         fg = color_list.map { |h| h[:fg] }.find { |c| !c.nil? }
         bg = color_list.map { |h| h[:bg] }.find { |c| !c.nil? }
         ul = color_list.map { |h| h[:ul] == 'true' }.find { |u| u }
