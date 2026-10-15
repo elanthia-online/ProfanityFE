@@ -79,8 +79,8 @@ module TagHandlers
   }.freeze
 
   # The creature states a <crtrStatus> tag can set that the room window
-  # shows, the first one set winning: a dead creature is also sleeping and
-  # prone.
+  # shows, the first one set winning: a dead creature is usually also
+  # sleeping, prone or both.
   CREATURE_STATES = %w[dead sleeping prone].freeze
 
   # Dispatch table for closing tags (</tagname>).
