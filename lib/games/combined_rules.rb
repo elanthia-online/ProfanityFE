@@ -56,6 +56,11 @@ module Games
       @games.any? { |game| game.room_list_cut_short?(text) }
     end
 
+    # (see Games::Rules#compass_dirs)
+    def compass_dirs(exits)
+      first_answer { |game| game.compass_dirs(exits) }
+    end
+
     private
 
     # The first game's non-nil answer.

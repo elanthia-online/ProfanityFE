@@ -185,6 +185,12 @@ RSpec.describe Games::GemStone do
     end
   end
 
+  describe '.compass_dirs' do
+    it 'has none: GemStone sends its own compass directions' do
+      expect(described_class.compass_dirs(%w[north])).to be_nil
+    end
+  end
+
   describe '.room_list_cut_short?' do
     it "has no cut-short mark (DragonRealms' mark is not GemStone's)" do
       expect(described_class.room_list_cut_short?('You also see a rock, a stick and some other stuff.')).to be_nil

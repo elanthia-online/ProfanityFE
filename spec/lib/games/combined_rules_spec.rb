@@ -95,6 +95,10 @@ RSpec.describe Games::CombinedRules do
       expect(described_class.new(Games::DragonRealms, marks_everything).room_list_cut_short?('a rock and some junk.')).to be true
     end
 
+    it "takes the first game's compass directions" do
+      expect(both.compass_dirs(%w[north up])).to eq %w[n up]
+    end
+
     it 'answers nil when no game has an answer' do
       expect(both.death_summary(' * Mahtra fell off a cliff.')).to be_nil
       expect(both.logon(' * Mahtra tiptoes in.')).to be_nil
