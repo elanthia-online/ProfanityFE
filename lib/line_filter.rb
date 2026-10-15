@@ -179,7 +179,8 @@ class LineFilter
   # as it dropped the old stream's line for it, and not the whole room. A
   # gagged part keeps its tags, empty: the room is read as if the game had
   # sent the part with nothing in it. A gag on the line as a whole doesn't
-  # apply.
+  # apply. A part that is empty already is left alone: a gag matching its
+  # empty text (one on blank lines) has nothing to drop, and logs nothing.
   #
   # @param line [String] raw server line holding a <room> block
   # @return [String] the line, each gagged part emptied
@@ -187,11 +188,14 @@ class LineFilter
   def gag_room_parts(line)
     line.gsub(ROOM_PART) do |part|
       element = Regexp.last_match(1)
+      emptied = "<#{element}></#{element}>"
+      next part if part == emptied
+
       gag, kind = general_gag(part)
       next part unless gag
 
       log_gagged_line("#{kind} room #{element}", gag, part)
-      "<#{element}></#{element}>"
+      emptied
     end
   end
 

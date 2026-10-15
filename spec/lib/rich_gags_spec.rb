@@ -149,6 +149,20 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
       expect(gag_log.map { |message| message[/\A[^\/]*/].strip }).to eq ['general (text) room exists']
     end
 
+    # A gag on blank lines matches the empty text of a room's empty parts
+    # (this move has no players and nothing extra); there is nothing to drop.
+    it 'logs no room part that was empty already' do
+      state.log_gags = true
+      gag_log = []
+      allow(ProfanityLog).to receive(:write) { |context, message, **| gag_log << message if context == 'gag' }
+      GagPatterns.add_general_pattern('^\\s*$')
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+
+      expect(gag_log.grep(/ room /)).to be_empty
+    end
+
     # A multi-line gag still applies to the physical line: one that starts
     # on a room's text hides the whole room (a documented limitation).
     it 'hides the whole room when a multi-line gag starts on its text' do
