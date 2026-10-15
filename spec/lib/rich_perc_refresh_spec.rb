@@ -16,9 +16,9 @@
 #   In a session on another Lich build, every refresh and every combat line
 #   came pushed, as in the old stream.
 #
-# The rich examples marked pending describe what the user should see; they
-# fail until a bare refresh is read (spec policy: AUDIT §0.2). Combat lines
-# that come with no combat pushStream stay in main: nothing else marks them.
+# A bare refresh's spell lines go to the spell window, from the clear up to
+# the next prompt or percWindow pushStream. Combat lines that come with no
+# combat pushStream stay in main: nothing else marks them.
 
 require_relative '../spec_helper'
 require_relative '../support/screen_replay'
@@ -112,6 +112,35 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
       load_layout(room_window: false, extra: windows, game_rules: Games::GemStone)
 
       receive_from_server(*fixture('rich_stream', 'dr_rich_perc_bare'))
+
+      expect(window_text('percWindow')).to be_empty
+      expect(main_rows.first).to eq 'Bless  (OM)'
+    end
+
+    it 'leaves a spell-shaped line in main after a pushed refresh, before its prompt (synthetic)' do
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server('<clearStream id="percWindow"/>', '<pushStream id="percWindow"/>Bless  (OM)',
+                          '<popStream/>Sanctuary  (OM)', '<prompt time="1792032076">&gt;</prompt>')
+
+      expect(window_text('percWindow')).to eq ['Bless (OM)']
+      expect(main_rows).to include('Sanctuary  (OM)')
+    end
+
+    it 'leaves a spell-shaped line on another stream during a bare refresh on that stream (synthetic)' do
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server('<clearStream id="percWindow"/>', '<pushStream id="combat"/>Sanctuary  (OM)',
+                          '<popStream/>Bless  (OM)', '<prompt time="1792032076">&gt;</prompt>')
+
+      expect(window_text('combat')).to eq ['Sanctuary  (OM)']
+      expect(window_text('percWindow')).to eq ['Bless (OM)']
+    end
+
+    it 'leaves a spell-shaped line in main after a clearStream of another stream (synthetic)' do
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server('<clearStream id="combat"/>', 'Bless  (OM)', '<prompt time="1792032076">&gt;</prompt>')
 
       expect(window_text('percWindow')).to be_empty
       expect(main_rows.first).to eq 'Bless  (OM)'
