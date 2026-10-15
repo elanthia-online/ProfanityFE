@@ -422,7 +422,7 @@ injury levels), each index corresponds to the severity level.
 | `right` | Item in your right hand |
 | `spell` | Currently prepared spell |
 | `prompt` | The game prompt (e.g., `H>`) |
-| `compass:n` | North exit available (also: `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`, `up`, `down`, `out`). When Lich identifies as the Saga client, DragonRealms sends no compass directions, so the exits in the room's "Obvious paths" light it |
+| `compass:n` | North exit available (also: `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`, `up`, `down`, `out`). When Lich identifies as the Saga client, DragonRealms sends no compass directions, so the room's exits ("Obvious paths" or "Obvious exits") light it |
 | `nsys` | Nerve damage level (integer 0-3) |
 | `head`, `neck`, `chest`, `abdomen`, `back`, `leftArm`, `rightArm`, `leftLeg`, `rightLeg`, `leftEye`, `rightEye`, `leftHand` | Body part injury level (integer 0-6) |
 | `room players` | Names of other players in the room |
