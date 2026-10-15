@@ -83,9 +83,10 @@ module Games
 
     # A line of the spell list: the spell's name, two spaces and what is
     # left of it in parentheses ("Bless  (OM)", "Osrel Meraud  (91%)",
-    # "Ease Burden  (12 roisaen)", "Hydra Hex  (Indefinite)"). When Lich
-    # identifies as the Saga client, DR sends every refresh after the first
-    # as <clearStream id="percWindow"/> and these lines with no pushStream.
+    # "Ease Burden  (12 roisaen)", "Hydra Hex  (Indefinite)"). In some
+    # sessions where Lich identifies as the Saga client (it depends on the
+    # Lich build), every refresh after the first comes as
+    # <clearStream id="percWindow"/> and these lines with no pushStream.
     # A spell's name has no period, which keeps out sentences that end in
     # a parenthesis ("...in the area.  (Use SPELL RECOGNIZE OFF to change
     # this.)").

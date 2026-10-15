@@ -278,9 +278,10 @@ class GameTextProcessor
   # @return [void]
   # @api private
   def handle_game_text(text, runs, marks)
-    # A spell line of a refresh DR sent with no pushStream (when Lich
-    # identifies as the Saga client) is the spell window's, as a pushed
-    # one's lines are; the other lines of the refresh stay main's.
+    # A spell line of a refresh that came with no pushStream (as in some
+    # sessions where Lich identifies as the Saga client) is the spell
+    # window's, as a pushed one's lines are; the other lines of the refresh
+    # stay main's.
     if @spell_refresh && @router.current_stream.nil? && @game_rules.spell_line?(text)
       @router.route_to(Streams::PERC, text, runs, marks: marks)
       return
