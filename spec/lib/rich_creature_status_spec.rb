@@ -78,6 +78,18 @@ RSpec.describe 'Creature states in the room window' do
     expect(objects_row).to start_with 'You also see {a jeol moradu:red} (immobile)'
   end
 
+  it 'draws a dead creature in the dead preset when the creatures preset is not defined' do
+    saved = PRESET.delete('monsterbold')
+    load_layout
+
+    receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+
+    expect(objects_row).to start_with 'You also see a jeol moradu (immobile), a pouch'
+    expect(room_screen.join).to include('{a jeol moradu:grey} (dead)')
+  ensure
+    PRESET['monsterbold'] = saved if saved
+  end
+
   it 'ignores the state of a creature the objects shown do not link to' do
     load_layout
     receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))

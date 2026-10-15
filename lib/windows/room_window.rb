@@ -346,21 +346,21 @@ class RoomWindow < BaseWindow
     line_colors = build_link_colors(@objects_links)
 
     # Highlight creatures with monsterbold preset, or a creature in a state
-    # with that state's preset
-    preset_name = @creatures_preset || Presets::MONSTERBOLD
-    if (colors = Presets.colors(preset_name))
-      @extracted_creatures.each do |creature|
-        next if creature.empty? # it would match at pos without moving on
+    # with that state's preset (even when the creatures preset is not
+    # defined)
+    colors = Presets.colors(@creatures_preset || Presets::MONSTERBOLD)
+    @extracted_creatures.each do |creature|
+      next if creature.empty? # it would match at pos without moving on
 
-        # Whole words only ("rat" not inside "pirate"); apostrophes and
-        # hyphens count as part of a word, as in "Adan'f" or "void-black".
-        whole_word = /(?<![[:word:]'-])#{Regexp.escape(creature)}(?![[:word:]'-])/
-        pos = 0
-        while (idx = @objects.index(whole_word, pos))
-          line_colors.push({ start: idx, end: idx + creature.length,
-                             **(state_colors(idx, idx + creature.length) || colors) })
-          pos = idx + creature.length
-        end
+      # Whole words only ("rat" not inside "pirate"); apostrophes and
+      # hyphens count as part of a word, as in "Adan'f" or "void-black".
+      whole_word = /(?<![[:word:]'-])#{Regexp.escape(creature)}(?![[:word:]'-])/
+      pos = 0
+      while (idx = @objects.index(whole_word, pos))
+        finish = idx + creature.length
+        creature_colors = state_colors(idx, finish) || colors
+        line_colors.push({ start: idx, end: finish, **creature_colors }) if creature_colors
+        pos = finish
       end
     end
 
