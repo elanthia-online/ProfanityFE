@@ -3,9 +3,9 @@
 # A gag is tested against the raw line, tags included, and then against
 # the line's text (LineFilter#line_text): what the game shows of it, with
 # entities decoded, leaving out the content of paired tags and the text of
-# a room component (a component's text is the room window's, and a gagged
-# line keeps only its stream and style tags). Synthetic lines in the forms
-# the game sends.
+# a component (a component's text is a window's, such as the room
+# window's, and a gagged line keeps only its stream and style tags).
+# Synthetic lines in the forms the game sends.
 
 require_relative '../spec_helper'
 require_relative '../../lib/line_filter'
