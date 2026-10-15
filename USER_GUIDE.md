@@ -2106,7 +2106,9 @@ The link color only shows on text that has no other color. A creature's name
 (`monsterbold`), a highlight or a preset under a link keeps its own color, and
 the text stays clickable. This matters in GemStone, and in DragonRealms when
 Lich identifies as the Saga client, which puts a link around every object,
-creature and player.
+creature and player. The room players indicator is the exception: a linked
+player's name there is drawn in the link color even when a highlight covers
+it.
 
 **Clickable links:** When `.links` is enabled, clicking on highlighted link
 text sends the associated command to the game server. In DragonRealms, this
