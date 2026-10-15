@@ -177,6 +177,24 @@ RSpec.describe 'Creature states in the room window' do
     saved.each { |id, colors| colors ? PRESET[id] = colors : PRESET.delete(id) }
   end
 
+  it 'follows the state of a creature shown while a layout without a room window is loaded' do
+    load_layout
+    receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
+    receive_from_server(*status('195652828', 'prone'))
+    LAYOUT['no-room'] = REXML::Document.new(
+      "<layout><window class='text' top='0' left='0' height='60' width='100' value='main'/></layout>"
+    ).root
+
+    @window_manager.load_layout('no-room')
+    receive_from_server(*status('195652828'))
+    @window_manager.load_layout('replay')
+    receive_from_server(objects_line, '<prompt time="1">&gt;</prompt>')
+
+    expect(objects_row).to start_with 'You also see {a jeol moradu:red} (immobile)'
+  ensure
+    LAYOUT.delete('no-room')
+  end
+
   it 'ignores the state of a creature the objects shown do not link to' do
     load_layout
     receive_from_server(*fixture('room_pipeline', 'dr_rich_creatures'))
