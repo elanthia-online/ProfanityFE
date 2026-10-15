@@ -98,6 +98,21 @@ RSpec.describe 'The room description setting on the rich stream' do
 
       expect(main_rows.last(3)).to eq ['[Cut, Short] (5)', 'A goblin arrives.', 'A kobold arrives.']
     end
+
+    # The second line of a block split across two lines opens inside it
+    # (see TagHandlers#reopen_room_block): its parts still fill the room
+    # window, and the description on the first line is still dropped.
+    it 'drops the description of a block split across two lines and reads its second line (synthetic)' do
+      load_layout
+
+      receive_from_server(off, prompt, '<room><name>[Hall of Tests] (12)</name><description>A plain hall.</description>',
+                          '<exists>You also see a rock.</exists><exits>Obvious paths: <d>north</d>.</exits></room>',
+                          prompt)
+
+      expect(room_screen).to eq ['{[Hall of Tests] (12):green}', 'You also see a rock.', 'Obvious paths: north.']
+      expect(main_rows.grep(/A plain hall/)).to be_empty
+      expect(main_rows.last(3)).to eq ['[Hall of Tests] (12)', 'You also see a rock.', 'Obvious paths: north.']
+    end
   end
 
   describe 'with room descriptions turned on again' do
