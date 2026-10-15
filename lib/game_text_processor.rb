@@ -94,7 +94,7 @@ class GameTextProcessor
     @pending_render = PendingRender.new
     @reader = ServerReader.new(line_handler: self, pending_render: @pending_render, event_bus: event_bus,
                                cmd_buffer: cmd_buffer, shared_state: shared_state, boot_profiler: boot_profiler)
-    @line_filter = LineFilter.new(shared_state: shared_state)
+    @line_filter = LineFilter.new(shared_state: shared_state, xml_escapes: xml_escapes)
     @prompts = PromptTracker.new(shared_state: shared_state, event_bus: event_bus, pending_render: @pending_render,
                                  window_mgr: window_mgr, clock: clock, boot_profiler: boot_profiler)
     @room = RoomAssembler.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
