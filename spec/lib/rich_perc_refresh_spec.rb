@@ -9,13 +9,16 @@
 #   <pushStream id="percWindow"/>...<popStream/>; combat lines come inside
 #   <pushStream id="combat" />;
 # - the rich stream (the stream the game sends when Lich identifies as the
-#   Saga client) pushes the list once, at login. Every later refresh is the
-#   clear followed by the spell lines with no pushStream, sometimes after
-#   other lines; it sends no combat pushStream at all.
+#   Saga client): what reaches Profanity depends on the Lich build. In the
+#   session these fixtures come from, the list was pushed once, at login;
+#   every later refresh was the clear followed by the spell lines with no
+#   pushStream, sometimes after other lines, and no combat pushStream came.
+#   In a session on another Lich build, every refresh and every combat line
+#   came pushed, as in the old stream.
 #
 # The rich examples marked pending describe what the user should see; they
 # fail until a bare refresh is read (spec policy: AUDIT §0.2). Combat lines
-# stay where the rich stream puts them, in main: nothing in it marks them.
+# that come with no combat pushStream stay in main: nothing else marks them.
 
 require_relative '../spec_helper'
 require_relative '../support/screen_replay'
@@ -114,7 +117,7 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
       expect(main_rows.first).to eq 'Bless  (OM)'
     end
 
-    it 'shows combat lines in main, as it sends them' do
+    it 'shows combat lines that come with no combat pushStream in main' do
       load_layout(room_window: false, extra: windows)
 
       receive_from_server(*fixture('rich_stream', 'dr_rich_combat'))
