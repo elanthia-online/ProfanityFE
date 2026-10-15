@@ -1,0 +1,9 @@
+You will no longer see room descriptions.
+<prompt time="1792031039">&gt;</prompt>
+<pushStream id="combat" />The magenta sphere begins to move ominously toward a jeol moradu.
+<popStream id="combat" /><prompt time="1792031039">&gt;</prompt>
+<resource picture="0"/><style id="roomName" />[Jeol'gelvmoraen, Ice Grottos] (4217404)
+<style id=""/>  You also see <pushBold/>a jeol moradu<popBold/>, a glimmering magenta sphere, a large steel bar, a large brass bar, a medium pewter bar, an embroidery needle, a small pewter pin, an embroidery needle, <pushBold/>a jeol moradu<popBold/>, <pushBold/>a jeol moradu<popBold/>, <pushBold/>a jeol moradu<popBold/>, <pushBold/>a jeol moradu<popBold/> and some junk.
+<crtrStatus exist="195593724" hostile="1" disengaged="1"/><crtrStatus exist="195593732" hostile="1" disengaged="1"/><crtrStatus exist="195593760" hostile="1" disengaged="1"/><crtrStatus exist="195593764" hostile="1" disengaged="1"/><crtrStatus exist="195593788" hostile="1" disengaged="1"/>Also here: Traveler Jorvin and Chieftain Ilmar.
+Obvious exits: <d>north</d>, <d>west</d>, <d>northwest</d>.
+<compass><dir value="n"/><dir value="w"/><dir value="nw"/></compass><prompt time="1792031039">&gt;</prompt>
