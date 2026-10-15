@@ -122,6 +122,8 @@ class GameTextProcessor
     @dialog_open = false
     # Whether the line's <room> block is open (see TagHandlers#handle_room_open)
     @room_block = false
+    # The part open in that block (see TagHandlers#close_room_block)
+    @room_part = nil
     # Whether the game last said room descriptions are off (see
     # #track_room_descriptions), and whether the description being read is
     # dropped for it (see TagHandlers#open_room_desc)
@@ -258,13 +260,16 @@ class GameTextProcessor
       end
     end
 
+    # A <room> block is one line: one cut short is closed here, so it
+    # doesn't capture, color or read the next line
+    close_room_block(text_buffer)
     handle_game_text(text_buffer, *split_spans(:line_end, text_buffer.length))
   ensure
     @spans.end_line
     @marks.end_line
     @room.end_line
-    # A <room> block is one line: one cut short doesn't read the next line
     @room_block = false
+    @room_part = nil
     @hiding_room_desc = false
   end
 
