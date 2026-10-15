@@ -16,7 +16,12 @@ require_relative 'games'
 #   {#start_capture} and {#end_capture}, which the tag parser calls) and
 #   "You also see" / "Also here:" / "Obvious exits:" lines on main, with
 #   the links and creatures their room marks show, are staged, and
-#   committed as one batch when the exits arrive.
+#   committed as one batch when the exits arrive. DragonRealms' <room>
+#   block (the whole room on one line, when Lich identifies as the Saga
+#   client) takes this path too: the tag parser hands off each of its
+#   parts as a line of its own, and captures its name and description as
+#   it does the roomName style and the roomDesc preset (see
+#   TagHandlers#handle_room_part_open).
 #
 # Component data owns the room it described. A burst runs from a room
 # subtitle ({#subtitle}) or a prompt ({#prompt_seen}) to the next prompt,
