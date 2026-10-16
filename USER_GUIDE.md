@@ -1879,7 +1879,7 @@ Common preset IDs used by the game:
 | `roomName` | Room title text (also used by room window) |
 | `roomDesc` | Room description text (also used by room window) |
 | `monsterbold` | Creature names in room objects (also used by room window) |
-| `creatureDead`, `creatureSleeping`, `creatureProne` | A dead, sleeping or prone creature in the room window's objects, in place of `monsterbold`. The built-in templates define only `creatureDead`; a state with no preset stays `monsterbold`. DragonRealms reports creatures' states, and Profanity can tell which creature a state belongs to when Lich identifies as the Saga client, which links each creature |
+| `creatureDead`, `creatureSleeping`, `creatureProne` | A dead, sleeping or prone creature in the room window's objects, in place of `monsterbold`. The built-in templates define only `creatureDead`; a state with no preset stays `monsterbold`. Both games report creatures' states: GemStone inside the room objects, just before each creature, and DragonRealms after the room objects. Profanity tells which creature a state belongs to by the creature's link, which GemStone always sends and DragonRealms sends when Lich identifies as the Saga client |
 | `speech` | Spoken text |
 | `whisper` | Whispered text |
 | `thoughts` | Thought network text |

@@ -658,10 +658,13 @@ module TagHandlers
     span[:cmd] = text_buffer[span[:start]...span[:end]]
   end
 
-  # Handle <crtrStatus exist='N' hostile='1' disengaged='1' dead='1' .../>,
-  # DragonRealms' state of the creature with that id (its <a exist> link):
-  # each tag gives the creature's whole state, so a flag left out is no
-  # longer set (a "prone" goes when the creature clambers to its feet).
+  # Handle <crtrStatus exist='N' hostile='1' dead='1' .../>, the game's
+  # state of the creature with that id (its <a exist> link). Both games
+  # send it: GemStone inside the room objs compDef or component, just
+  # before each creature (and with health and maxhealth), DragonRealms on
+  # the line after the room objs component, or after </exists> in a <room>
+  # block. Each tag gives the creature's whole state, so a flag left out is
+  # no longer set (a "prone" goes when the creature clambers to its feet).
   # The room window shows the first of {CREATURE_STATES} set (see
   # RoomAssembler#creature_status).
   #

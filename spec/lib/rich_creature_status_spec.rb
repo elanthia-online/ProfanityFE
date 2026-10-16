@@ -1,14 +1,20 @@
 # frozen_string_literal: true
 
-# A creature's state in the room window. DragonRealms sends
-# <crtrStatus exist='N' .../> with a creature's whole state (hostile,
-# disengaged, dead, sleeping, prone, immobile); when Lich identifies as the
-# Saga client, each creature in the room's objects is an <a exist='N'>
-# link, so the room window can tell which creature a state is for, even
-# between two creatures of one name. A dead, sleeping or prone creature is
-# drawn in the room window's preset for that state, when it is defined.
+# A creature's state in the room window, in both games. Each sends
+# <crtrStatus exist='N' .../> with a creature's whole state (DragonRealms:
+# hostile, disengaged, dead, sleeping, prone, immobile...; GemStone: health,
+# maxhealth, hostile, dead, prone, sleeping...). GemStone sends it inside
+# the room objs compDef or component, just before each creature;
+# DragonRealms sends it on the line after the room objs component, or
+# after </exists> in a <room> block. Where each creature in the room's
+# objects is an <a exist='N'> link (always in GemStone; in DragonRealms
+# when Lich identifies as the Saga client) the room window can tell which
+# creature a state is for, even between two creatures of one name. A dead,
+# sleeping or prone creature is drawn in the room window's preset for that
+# state, when it is defined.
 # From real lines (spec/fixtures/room_pipeline/dr_rich_creatures: one jeol
-# moradu immobile, one dead) and synthetic status lines.
+# moradu immobile, one dead; gs_sanctum_tower_move), synthetic status
+# lines, and GemStone objects updates in a real shape (see 'in GemStone').
 
 require_relative '../spec_helper'
 require_relative '../support/screen_replay'
@@ -219,5 +225,58 @@ RSpec.describe 'Creature states in the room window' do
     receive_from_server(*fixture('room_pipeline', 'dr_old_creatures'))
 
     expect(room_screen.join).not_to include(':grey}')
+  end
+
+  # GemStone links every creature, and sends each one's <crtrStatus> inside
+  # the room objs compDef or component, just before the creature's <b>.
+  # The move is a real one (gs_sanctum_tower_move: one pale scaled shaper,
+  # id 559065931, alive); the objects updates after it are in the shape of
+  # real ones from a 2026-10-15 GemStone log, ids and the disk's owner
+  # changed. GemStone sends a dead creature as dead and prone, and a
+  # standalone <crtrStatus> before the component that shows the change.
+  describe 'in GemStone' do
+    let(:move) { fixture('room_pipeline', 'gs_sanctum_tower_move') }
+
+    # A GemStone room objs component: a disk, a dead fanatic, a live
+    # fanatic of the same name, and the shaper with +shaper_flags+
+    def gs_objects(shaper_flags = '')
+      "<component id='room objs'>  You also see the <a exist=\"700000001\" noun=\"disk\">blue Avrel disk</a>," \
+        '<crtrStatus exist="700000011" health="-128" maxhealth="240" hostile="1" dead="1" prone="1"/>' \
+        '<b> <pushBold/>a <a exist="700000011" noun="fanatic">deathsworn fanatic</a><popBold/></b> that appears dead,' \
+        '<crtrStatus exist="700000012" health="240" maxhealth="240" hostile="1"/>' \
+        '<b> <pushBold/>a <a exist="700000012" noun="fanatic">deathsworn fanatic</a><popBold/></b> and' \
+        "<crtrStatus exist=\"559065931\" health=\"85\" maxhealth=\"240\" hostile=\"1\"#{shaper_flags}/>" \
+        '<b> <pushBold/>a <a exist="559065931" noun="shaper">pale scaled shaper</a><popBold/></b>.</component>'
+    end
+
+    it 'draws a dead creature in the dead preset, and one of the same name alive in the creatures preset' do
+      load_layout
+      receive_from_server(*move)
+
+      receive_from_server(gs_objects, '<prompt time="1">&gt;</prompt>')
+
+      expect(room_screen).to include('You also see the blue Avrel disk, {a deathsworn fanatic:grey} that appears dead, ' \
+                                     '{a deathsworn fanatic:red} and', '{a pale scaled shaper:red}.')
+    end
+
+    it 'follows a standalone <crtrStatus> sent before the objects update' do
+      load_layout
+      receive_from_server(*move)
+      receive_from_server(gs_objects, '<prompt time="1">&gt;</prompt>')
+
+      receive_from_server('<crtrStatus exist="559065931" health="85" maxhealth="240" hostile="1" prone="1"/>' \
+                          '<prompt time="2">&gt;</prompt>')
+
+      expect(room_screen).to include('{a pale scaled shaper:cyan}.')
+    end
+
+    it 'draws a creature the objects update marks prone in the prone preset' do
+      load_layout
+      receive_from_server(*move)
+
+      receive_from_server(gs_objects(' prone="1"'), '<prompt time="1">&gt;</prompt>')
+
+      expect(room_screen).to include('{a pale scaled shaper:cyan}.')
+    end
   end
 end
