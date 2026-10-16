@@ -510,8 +510,7 @@ module TagHandlers
   #
   # The text before it goes on its own line. Its parts are read only while
   # it is open (see #handle_room_part_open), until </room> or the end of
-  # the line (see #close_room_block); the second line of a block split
-  # across two lines opens inside it (see #reopen_room_block).
+  # the line (see #close_room_block).
   #
   # @param _xml [String] the tag (unused)
   # @param text_buffer [String] the text collected so far on the line (tags removed)
@@ -545,22 +544,6 @@ module TagHandlers
     close_room_part(@room_part, text_buffer) if @room_part
     flush_text_buffer(text_buffer)
     @room_block = false
-  end
-
-  # Reopen the <room> block on the second line of a block split across
-  # two lines: a line whose first room tag is </room> starts inside a
-  # block, so its parts are read as the parts of that block (the end of
-  # the first line closed it; see #close_room_block). The part cut by the
-  # split is not reopened: its rest goes on a line of its own, uncolored
-  # and not captured. A whole block, a line with no room tag and a line
-  # cut short are left alone.
-  #
-  # @param segments [Array<Array(Symbol, String)>] the line's segments
-  #   (see XmlTokenizer.tokenize)
-  # @return [void]
-  def reopen_room_block(segments)
-    first = segments.find { |type, content| type == :tag && XmlTokenizer.tag_name(content) == 'room' }
-    @room_block = true if first&.last&.start_with?('</')
   end
 
   # Handle a part's opening tag in an open <room> block: the part's text
