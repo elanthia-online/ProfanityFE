@@ -62,6 +62,16 @@ class RoomAssembler
   # @return [Symbol, nil]
   attr_reader :capture_mode
 
+  # Whether the inline lines being read are a view of another room (DR's
+  # Locate), from its roomName to its exits line (see #remote_title?). The
+  # roomName comes first, so a description in the view comes after this
+  # turned true.
+  #
+  # @return [Boolean]
+  def remote_view?
+    @remote_view
+  end
+
   # @param window_mgr [WindowManager] asked whether the layout has a RoomWindow
   # @param event_bus [EventBus] receives the room and indicator events
   # @param pending_render [PendingRender] asked for flushes and room renders

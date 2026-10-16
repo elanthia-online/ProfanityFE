@@ -468,13 +468,16 @@ module TagHandlers
   # bug: the stream DR sends when Lich identifies as the Saga client sends
   # the description whatever FLAG DESCRIPTION is set to. GemStone follows
   # its setting, and sends its descriptions in a roomDesc style, which
-  # never comes here. Otherwise yields, to start the capture.
+  # never comes here. A view of another room (DR's Locate; see
+  # RoomAssembler#remote_view?) keeps its description: the game sends it
+  # there too with the setting off, and it goes to the familiar window, not
+  # the room window. Otherwise yields, to start the capture.
   #
   # @param text_buffer [String] the text collected so far on the line
   # @yield to start the description's capture, when it is shown
   # @return [void]
   def open_room_desc(text_buffer)
-    return yield unless @room_descriptions_off
+    return yield unless @room_descriptions_off && !@room.remote_view?
 
     flush_text_buffer(text_buffer)
     @hiding_room_desc = true

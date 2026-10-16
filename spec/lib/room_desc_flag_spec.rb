@@ -11,7 +11,8 @@
 # Profanity follows the setting from the game's answers to it ("You will
 # no longer see room descriptions." / "You will now see room
 # descriptions."): while it is off, a room description is shown neither in
-# main nor in the room window.
+# main nor in the room window. A view of another room (DR's Locate) keeps
+# its description, in the familiar window: the game sends it there too.
 # Real lines (spec/fixtures/room_pipeline/dr_rich_*, player names
 # replaced) and synthetic lines in Lich's rewrite layout.
 
@@ -97,6 +98,56 @@ RSpec.describe 'The room description setting on the rich stream' do
                           'A goblin arrives.', "<preset id='roomDesc'>Half of a", 'A kobold arrives.')
 
       expect(main_rows.last(3)).to eq ['[Cut, Short] (5)', 'A goblin arrives.', 'A kobold arrives.']
+    end
+
+    describe 'and a view of another room (DR Locate)' do
+      let(:familiar) { "<window class='text' top='5' left='0' height='10' width='100' value='familiar'/>" }
+      let(:burial_ground) do
+        '<resource picture="0"/><room><name>[Bosque Deriel, Burial Ground] (230007)</name><description>You come ' \
+          'upon an Elven burial ground in the shade of sacred groves.</description><exists></exists><players>' \
+          '</players><exits>Obvious paths: <d>north</d>, <d>southeast</d>.</exits><extra></extra></room>'
+      end
+
+      # The game re-sends the player's room after OFF, then a Locate shows
+      # another room in a <room> block of the same shape, with its
+      # description (real lines, a session of 2026-10-16; names replaced,
+      # descriptions shortened)
+      it "shows the located room's description in the familiar window, and not the player's room's" do
+        load_layout(extra: familiar)
+
+        receive_from_server(
+          off, prompt, burial_ground, prompt, '<spell>None</spell>You gesture.',
+          '<resource picture="0"/><room><name>[Bosque Deriel, Hermit\'s Shacks] (230008)</name><description>Here ' \
+          'on the route between the sacred sites of the Observatory and the Faery Ring is a semi-circular ' \
+          'clearing.</description><exists>You also see a <a exist="199715456" noun="vessel">floating vessel of ' \
+          'flaring crimson light</a>.</exists><players>Also here: Soul Annihilator <a exist="-1001" ' \
+          'noun="Corvel">Corvel</a>, Druid <a exist="-1002" noun="Ebrin">Ebrin</a> and <a exist="-1003" ' \
+          'noun="Dunmar">Dunmar</a>.</players><exits>Obvious paths: <d>north</d>, <d>south</d>.</exits><extra>' \
+          '</extra></room>', prompt
+        )
+
+        expect(window_text('familiar')).to eq [
+          "[Bosque Deriel, Hermit's Shacks] (230008)",
+          'Here on the route between the sacred sites of the Observatory and the Faery Ring is a',
+          '  semi-circular clearing.', 'You also see a floating vessel of flaring crimson light.',
+          'Also here: Soul Annihilator Corvel, Druid Ebrin and Dunmar.', 'Obvious paths: north, south.'
+        ]
+        expect(room_screen).to eq ['{[Bosque Deriel, Burial Ground] (230007):green}', 'Obvious paths: north, southeast.']
+        expect(main_rows.grep(/Elven burial ground/)).to be_empty
+      end
+
+      it "shows the located room's description in Lich's rewrite of the view (synthetic)" do
+        load_layout(extra: familiar)
+
+        receive_from_server(off, prompt, burial_ground, prompt, '<spell>None</spell>You gesture.',
+                            '<resource picture="0"/><style id="roomName" />[Somewhere Else, Far Hall] (999999)',
+                            "<style id=\"\"/><preset id='roomDesc'>A far hall.</preset>",
+                            'Obvious paths: <d>east</d>.', prompt)
+
+        expect(window_text('familiar')).to eq ['[Somewhere Else, Far Hall] (999999)', 'A far hall.',
+                                               'Obvious paths: east.']
+        expect(room_screen).to eq ['{[Bosque Deriel, Burial Ground] (230007):green}', 'Obvious paths: north, southeast.']
+      end
     end
 
     # The second line of a block split across two lines opens inside it

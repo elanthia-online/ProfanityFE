@@ -694,9 +694,10 @@ it into the old layout. This is a confirmed DragonRealms game bug; GemStone
 follows its setting. Until the game is fixed, Profanity works around it by
 following the setting from the game's answers to it ("You will no longer see
 room descriptions." / "You will now see room descriptions."): while it is off,
-neither window shows a room description, as with the old stream. Until the game
-answers a change of the setting (after Profanity starts), descriptions are
-shown.
+neither window shows a room description, as with the old stream. A view of
+another room (see below) keeps its description: the game sends it there too
+with the setting off. Until the game answers a change of the setting (after
+Profanity starts), descriptions are shown.
 
 A view of another room, such as the one a Moon Mage's Locate shows, goes to
 the `familiar` window (or to the story window when the layout has none). It
