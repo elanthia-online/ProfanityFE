@@ -802,14 +802,16 @@ class RoomAssembler
   # Map the color regions of the full players text to the indicator
   # label: one region per name, from the regions that cover the whole name.
   #
-  # The copies are all the name's size, so the label can't rank them by
-  # size as main does; they are resolved here instead, as
-  # HighlightProcessor.render_colored_text would: a link's region (one
-  # with a :cmd) after every other, the rest in their order. So a
-  # highlight or preset over a linked name shows its color, and the link
-  # color shows only where nothing else colors the name. The region
-  # drops the :cmd: the label is not clickable, and a :cmd would rank it
-  # after the indicator's own color.
+  # The label's copy of a region is the name's size, so the label can't
+  # rank the copies by size as main does; they are resolved here instead,
+  # from the regions' sizes in the full text, as
+  # HighlightProcessor.render_colored_text ranks them: a link's region
+  # (one with a :cmd) after every other, then the smallest first. So a
+  # highlight or preset over a linked name shows its color, a highlight
+  # of one name wins over one of the whole line, and the link color shows
+  # only where nothing else colors the name. The region drops the :cmd:
+  # the label is not clickable, and a :cmd would rank it after the
+  # indicator's own color.
   #
   # @param full_text [String] the full "Also here: ..." text
   # @param names [Array<String>] parsed player names
@@ -842,8 +844,9 @@ class RoomAssembler
   end
 
   # The one region a name in the indicator label is drawn with: the first
-  # foreground and background among +covering+, taken with the links
-  # (regions with a :cmd) last, and underlined when any of them is.
+  # foreground and background among +covering+, ranked with the links
+  # (regions with a :cmd) last and then the smallest first (equal ones in
+  # their order), and underlined when any of them is.
   #
   # @param covering [Array<Hash>] the regions covering the whole name, in
   #   their order (not empty)
@@ -851,7 +854,7 @@ class RoomAssembler
   # @param label_end [Integer] where the name ends in the label
   # @return [Hash] the region, with :start, :end, :fg, :bg and :ul
   def name_color(covering, label_start, label_end)
-    ranked = covering.reject { |c| c[:cmd] } + covering.select { |c| c[:cmd] }
+    ranked = covering.each_with_index.sort_by { |c, i| [c[:cmd] ? 1 : 0, c[:end] - c[:start], i] }.map(&:first)
     { start: label_start, end: label_end,
       fg: ranked.map { |c| c[:fg] }.compact.first,
       bg: ranked.map { |c| c[:bg] }.compact.first,
