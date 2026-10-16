@@ -785,9 +785,9 @@ In some sessions where Lich identifies as the Saga client (it depends on the
 Lich build), the spell list comes in the `percWindow` stream only once, at login.
 After that each refresh clears the window and the spell lines come as plain
 text. When that happens, up to the next prompt, Profanity puts each
-line shaped like a spell line (a name, two spaces, then something in
-parentheses: `Bless  (OM)`, `Ease Burden  (12 roisaen)`) in this window. Other
-lines that arrive between them stay in the story window.
+line shaped like a spell line (a name with no period or colon, two spaces,
+then something in parentheses: `Bless  (OM)`, `Ease Burden  (12 roisaen)`) in
+this window. Other lines that arrive between them stay in the story window.
 
 **Example:**
 

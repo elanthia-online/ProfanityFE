@@ -89,8 +89,9 @@ module Games
     # <clearStream id="percWindow"/> and these lines with no pushStream.
     # A spell's name has no period, which keeps out sentences that end in
     # a parenthesis ("...in the area.  (Use SPELL RECOGNIZE OFF to change
-    # this.)").
-    SPELL_LINE_PATTERN = /\A[A-Z][^<>\[.]*  \([^()]+\)\z/.freeze
+    # this.)"), and no colon, which keeps out the rows of the EXP skill
+    # table ("Shield Usage:   1750 00% clear          (0/34)").
+    SPELL_LINE_PATTERN = /\A[A-Z][^<>\[.:]*  \([^()]+\)\z/.freeze
 
     # Seconds of stun for a Raise Dead chant.
     RAISE_DEAD_STUN_SECONDS = 30.6

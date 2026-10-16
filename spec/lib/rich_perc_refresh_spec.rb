@@ -137,6 +137,22 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
       expect(window_text('percWindow')).to eq ['Bless (OM)']
     end
 
+    it 'leaves the EXP skill table in main during a bare refresh' do
+      # Rows in the real shape (leading spaces, two spaces before each
+      # mindstate fraction), and the same row with no leading spaces
+      # (synthetic): the colons keep both out of the spell window.
+      row = 'Shield Usage:   1750 00% clear          (0/34)     Light Armor:   1750 01% clear          (0/34)'
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server('<clearStream id="percWindow"/>', 'Bless  (OM)',
+                          '          SKILL: Rank/Percent towards next rank/Amount learning/Mindstate Fraction',
+                          "    #{row}", row, '<prompt time="1792032076">&gt;</prompt>')
+
+      expect(window_text('percWindow')).to eq ['Bless (OM)']
+      expect(main_rows.join("\n")).to include('Shield Usage:').and include('Light Armor:')
+      expect(main_rows.count { |r| r.include?('Shield Usage:') }).to eq 2
+    end
+
     it 'leaves a spell-shaped line in main after a clearStream of another stream (synthetic)' do
       load_layout(room_window: false, extra: windows)
 

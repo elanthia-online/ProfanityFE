@@ -178,6 +178,17 @@ RSpec.describe Games::DragonRealms do
       end
     end
 
+    it 'is false for a row of the EXP skill table, with or without its leading spaces' do
+      # A real row, which ends in two spaces and a mindstate fraction in
+      # parentheses. The game sends every row with leading spaces (1 to 13
+      # in the 2026-10-16 logs); without them the row is spell-shaped but
+      # for its colons.
+      row = 'Shield Usage:   1750 00% clear          (0/34)     Light Armor:   1750 01% clear          (0/34)'
+      expect(described_class.spell_line?("    #{row}")).to be false
+      expect(described_class.spell_line?(row)).to be false
+      expect(described_class.spell_line?('Light Armor:   1750 01% clear          (0/34)')).to be false
+    end
+
     it 'is false without the two spaces, or with text after the parentheses (synthetic)' do
       expect(described_class.spell_line?('Bless (OM)')).to be false
       expect(described_class.spell_line?('Bless  (OM) and more')).to be false
