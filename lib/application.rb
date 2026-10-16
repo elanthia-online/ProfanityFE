@@ -159,7 +159,7 @@ class Application
     @settings_file = settings_file
     @boot_profiler = boot_profiler
     @game_rules = game_rules
-    @connection = ServerConnection.new(host: host, port: port)
+    @connection = ServerConnection.new(host: host, port: port, declare_capabilities: cli_options.fetch(:rich_stream, false))
 
     @xml_escapes = {
       '&lt;'   => '<',

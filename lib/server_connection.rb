@@ -5,9 +5,11 @@ require_relative 'server_reader'
 
 # The TCP connection to the game server (Lich).
 #
-# Opens the socket and announces the front end's PID, writes commands to it
-# without holding the render lock, runs the thread that reads from it, and
-# reports how that thread ended so the main thread can end the session.
+# Opens the socket and announces the front end's PID (and, when asked to,
+# the parts of DragonRealms' rich stream it renders; see
+# {FRONTEND_CAPABILITIES}), writes commands to it without holding the
+# render lock, runs the thread that reads from it, and reports how that
+# thread ended so the main thread can end the session.
 #
 # @example
 #   connection = ServerConnection.new(host: '127.0.0.1', port: 8000)
@@ -23,6 +25,23 @@ class ServerConnection
   # Seconds {#stop} waits for the reader thread to end.
   STOP_TIMEOUT = 1
 
+  # The parts of DragonRealms' rich stream (the stream the game sends when
+  # Lich identifies as the Saga client) that Profanity renders itself, as
+  # Lich's +SET_FRONTEND_CAPS+ line names them. A Lich that knows the line
+  # (lich-5 #1726) then stops rewriting them to the old stream's shape for
+  # this connection:
+  #
+  # - +room_element+: the inline +<room>+ block, read by TagHandlers (its
+  #   parts go on lines of their own and into the room window);
+  # - +game_links+: +<a exist>+ links, which TagHandlers#handle_open_link
+  #   reads as it reads GemStone's;
+  # - +double_bold+: doubled +<pushBold/>+, which nests (bold spans stack in
+  #   SpanTracker), as GemStone's always has.
+  FRONTEND_CAPABILITIES = %w[room_element game_links double_bold].freeze
+
+  # The line that declares {FRONTEND_CAPABILITIES} to Lich.
+  CAPABILITY_DECLARATION = "SET_FRONTEND_CAPS #{FRONTEND_CAPABILITIES.join(' ')}".freeze
+
   # Raised by {#connect} when the connection cannot be opened. The message
   # names the host and port and says why; +cause+ is the original error.
   class ConnectError < StandardError; end
@@ -37,24 +56,34 @@ class ServerConnection
   # @param port [Integer] game server (Lich) port
   # @param connect_timeout [Numeric] seconds {#connect} waits for the
   #   connection before giving up
-  def initialize(host:, port:, connect_timeout: CONNECT_TIMEOUT)
+  # @param declare_capabilities [Boolean] whether {#connect} also sends
+  #   {CAPABILITY_DECLARATION} (+--rich-stream+). Off by default: a Lich
+  #   without lich-5 #1726 doesn't know the line and sends it to the game
+  #   as a command.
+  def initialize(host:, port:, connect_timeout: CONNECT_TIMEOUT, declare_capabilities: false)
     @host = host
     @port = port
     @connect_timeout = connect_timeout
+    @declare_capabilities = declare_capabilities
     @socket = nil
     # Receives the reader thread's outcome (see #start_reader)
     @session_end = Queue.new
     @reader = nil
   end
 
-  # Open the connection and tell the server the front end's PID.
+  # Open the connection and tell the server the front end's PID, then, with
+  # +declare_capabilities+, the parts of the rich stream it renders
+  # ({CAPABILITY_DECLARATION}). Both go before any command, on every
+  # connection, so Lich reads the declaration before most of the game's
+  # output; Lich sends no reply to either.
   #
   # @return [self]
-  # @raise [ConnectError] if the connection cannot be opened or the PID
-  #   line cannot be written
+  # @raise [ConnectError] if the connection cannot be opened or the lines
+  #   cannot be written
   def connect
     @socket = Socket.tcp(@host, @port, connect_timeout: @connect_timeout)
     @socket.puts "SET_FRONTEND_PID #{Process.pid}"
+    @socket.puts CAPABILITY_DECLARATION if @declare_capabilities
     @socket.flush
     self
   # SystemCallError covers refused, unreachable, timed out, and bad

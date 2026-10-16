@@ -118,6 +118,33 @@ RSpec.describe 'Starting the client' do
       expect(game_server.received).to eq ["SET_FRONTEND_PID #{Process.pid}"]
     end
 
+    context 'with --rich-stream' do
+      let(:app) do
+        Application.new({ char: nil, no_status: true, links: false, room_window_only: false, rich_stream: true },
+                        settings_file: settings_path, host: host, port: port)
+      end
+
+      it 'declares the rich-stream capabilities right after its PID, before any command' do
+        run_client(keyboard)
+
+        expect(game_server.received).to eq ["SET_FRONTEND_PID #{Process.pid}",
+                                            'SET_FRONTEND_CAPS room_element game_links double_bold']
+      end
+    end
+
+    context 'with --rich-stream off' do
+      let(:app) do
+        Application.new({ char: nil, no_status: true, links: false, room_window_only: false, rich_stream: false },
+                        settings_file: settings_path, host: host, port: port)
+      end
+
+      it 'declares nothing' do
+        run_client(keyboard)
+
+        expect(game_server.received).to eq ["SET_FRONTEND_PID #{Process.pid}"]
+      end
+    end
+
     it 'forgets the server time offset measured on the last connection' do
       app.window_mgr.clock.server_time_offset = 12.5
 
