@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'socket'
+require_relative '../../lib/server_connection'
 
 # Runs the real client, Application#run, on the virtual screen: it loads
 # the settings file, connects to a scripted game server, starts the server
@@ -78,8 +79,15 @@ module ClientRun
       nil
     end
 
-    # @return [Array<String>] the lines the client sent after its PID line
-    def commands = @received.drop(1)
+    # The lines the client sent after connecting: after its PID line and,
+    # with +--rich-stream+, the capability declaration that follows it
+    # ({ServerConnection::CAPABILITY_DECLARATION}).
+    #
+    # @return [Array<String>]
+    def commands
+      sent = @received.drop(1)
+      sent.first == ServerConnection::CAPABILITY_DECLARATION ? sent.drop(1) : sent
+    end
   end
 
   # What the input loop did, in order, while {#run_client} ran:

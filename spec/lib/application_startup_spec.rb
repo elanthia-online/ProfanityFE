@@ -130,6 +130,16 @@ RSpec.describe 'Starting the client' do
         expect(game_server.received).to eq ["SET_FRONTEND_PID #{Process.pid}",
                                             'SET_FRONTEND_CAPS room_element game_links double_bold']
       end
+
+      # The declaration is part of connecting, not a command: what the user
+      # types goes after it, and GameServer#commands leaves it out.
+      it 'sends what the user types after the declaration, as commands' do
+        run_client(keyboard("look\n"))
+
+        expect(game_server.received).to eq ["SET_FRONTEND_PID #{Process.pid}",
+                                            'SET_FRONTEND_CAPS room_element game_links double_bold', 'look']
+        expect(game_server.commands).to eq ['look']
+      end
     end
 
     context 'with --rich-stream off' do
