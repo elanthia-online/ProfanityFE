@@ -341,6 +341,35 @@ RSpec.describe 'Room component lines' do
         expect(color_of(indicator, 'Cithrin')).to eq '00ff00'
       end
 
+      # Main and the room window rank the colors under a link by size, the
+      # smallest first, so a highlight of one name beats one of the whole
+      # line, whatever order the highlights were defined in.
+      it 'draws a name in the color of a highlight of that name over a highlight of the whole line' do
+        HIGHLIGHT[/^Also here: .*/] = ['ff0000', nil, nil]
+        HIGHLIGHT[/Navesi/] = ['00ff00', nil, nil]
+
+        receive_from_server(
+          "<component id='room players'>Also here: <a exist=\"-101\" noun=\"Cithrin\">Cithrin</a> and " \
+          "<a exist=\"-102\" noun=\"Navesi\">Navesi</a>.</component>"
+        )
+
+        expect(color_of(indicator, 'Navesi')).to eq '00ff00'
+        expect(color_of(indicator, 'Cithrin')).to eq 'ff0000'
+      end
+
+      it 'draws a name in the color of a highlight of that name over a preset around every name' do
+        PRESET['speech'] = ['ff0000', nil]
+        HIGHLIGHT[/Navesi/] = ['00ff00', nil, nil]
+
+        receive_from_server(
+          "<component id='room players'>Also here: <preset id='speech'><a exist=\"-101\" noun=\"Cithrin\">" \
+          "Cithrin</a> and <a exist=\"-102\" noun=\"Navesi\">Navesi</a></preset>.</component>"
+        )
+
+        expect(color_of(indicator, 'Navesi')).to eq '00ff00'
+        expect(color_of(indicator, 'Cithrin')).to eq 'ff0000'
+      end
+
       it 'keeps the link color under a highlight that sets only a background' do
         HIGHLIGHT[/Cithrin/] = [nil, '444444', nil]
 
