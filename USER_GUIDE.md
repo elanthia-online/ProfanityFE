@@ -1528,6 +1528,16 @@ line still update, as does the room window from the objects DragonRealms can
 send after a creature's line. A gag that matches the line as sent hides the
 whole line but its stream tags (see Diagnosing Gags below).
 
+When Lich identifies as the Saga client, DragonRealms sends a whole room as one
+line. A gag is then tried on each part of the room (name, description, objects,
+players, exits) on its own, and hides only the part it matches, as it hid that
+part's own line before. A gag that would only match across two parts doesn't
+apply. A multi-line gag still applies to the whole line, so one that starts on
+a room's text hides the whole room. Its `end` is tried only on the lines after
+that one, so an `end` that matches a later part of the same room (such as
+`^Obvious paths:`) doesn't end it: the lines after the room are hidden too,
+until one matches `end` or the 100-line cap releases the block.
+
 ### Combat Gag Patterns
 
 Applied only to text in the **combat** stream. Use these to filter repetitive
@@ -1605,7 +1615,10 @@ Start Profanity with `--log-gags` to write every gagged line to the log file:
 Each entry shows the gag type, the start of the pattern that matched, and the
 full raw line. A general gag that matched the line's text but not the raw line
 shows as `general (text)`. Lines that carried a stream tag are marked
-`STREAM-TAG`.
+`STREAM-TAG`. A gag on a part of a room DragonRealms sends as one line (see
+[General Gag Patterns](#general-gag-patterns)) is logged with the part: the
+type names it, as in `general (text) room exists`, and the entry shows that
+part, not the whole line.
 
 ### Notes
 
@@ -1613,7 +1626,8 @@ shows as `general (text)`. Lines that carried a stream tag are marked
 - General gags are checked before any text processing or routing.
 - Combat gags are checked only for lines in the combat stream.
 - Multi-line gags are checked before general gags, against the raw line and
-  its text, as general gags are.
+  its text, as general gags are, but always on the whole line, never on one
+  part of a room.
 - On `.reload`, custom gag patterns from XML are reloaded (defaults are
   preserved).
 - Invalid regex patterns are logged as warnings and skipped.

@@ -45,6 +45,12 @@ class LineFilter
   # so the component would be lost with its text.
   COMPONENT_ELEMENTS = %w[component compDef].freeze
 
+  # A part of DragonRealms' one-line room (the <room> block it sends when
+  # Lich identifies as the Saga client; see TagHandlers#handle_room_open),
+  # captured with its element name. Each part is gagged on its own, as
+  # each of the old stream's room lines is (see #gag_room_parts).
+  ROOM_PART = %r{<(name|description|exists|players|exits|extra)>.*?</\1>}
+
   # Tags that only color or link the text they wrap (bold, presets, colors,
   # links). A gag that matched a line's text drops them with it (see
   # #without_text): nothing of them is left to show, and a roomDesc
@@ -98,7 +104,11 @@ class LineFilter
   def filter(line)
     @text_of = nil
     matched = multiline_gag(line)
-    if !matched && (gag, kind, matched = general_gag(line))
+    if matched
+      # The multi-line gag dropped the line
+    elsif room_line?(line)
+      line = gag_room_parts(line)
+    elsif (gag, kind, matched = general_gag(line))
       log_gagged_line(kind, gag, line)
     end
 
@@ -191,6 +201,44 @@ class LineFilter
       :line
     elsif gag_text(line)&.match?(pattern)
       :text
+    end
+  end
+
+  # Whether a line holds a whole <room> block (see {ROOM_PART}).
+  #
+  # @param line [String] raw server line
+  # @return [Boolean]
+  # @api private
+  def room_line?(line)
+    line.include?('<room>') && line.include?('</room>')
+  end
+
+  # Gag each part of a <room> block on its own (see {ROOM_PART}), so a gag
+  # on one part ("Also here:", "You also see ...") drops that part only,
+  # as it dropped the old stream's line for it, and not the whole room. A
+  # gagged part keeps its tags, empty: the room is read as if the game had
+  # sent the part with nothing in it. A gag on the line as a whole doesn't
+  # apply. A part that is empty already is left alone: a gag written
+  # against its tags (+<players>+) has nothing to drop, and logs nothing.
+  # (A gag on blank lines doesn't match an empty part: it has no text; see
+  # #gag_text.) Unlike a gagged line (see #filter), a gagged part keeps
+  # none of the tags inside it, whether the gag matched the part as sent or
+  # its text only (a part's tags are the links and directions of its text).
+  #
+  # @param line [String] raw server line holding a <room> block
+  # @return [String] the line, each gagged part emptied
+  # @api private
+  def gag_room_parts(line)
+    line.gsub(ROOM_PART) do |part|
+      element = Regexp.last_match(1)
+      emptied = "<#{element}></#{element}>"
+      next part if part == emptied
+
+      gag, kind = general_gag(part)
+      next part unless gag
+
+      log_gagged_line("#{kind} room #{element}", gag, part)
+      emptied
     end
   end
 
@@ -331,9 +379,11 @@ class LineFilter
   # +STREAM-TAG+; the tag itself is still processed after the text is dropped.
   #
   # @param kind [String] which gag type matched ('general', 'general (text)'
-  #   for a match on the line's text only, or 'multiline')
+  #   for a match on the line's text only, or 'multiline'); for a part of a
+  #   <room> block, the general kind followed by +room+ and the part's
+  #   element name ('general (text) room exists'; see #gag_room_parts)
   # @param pattern [Regexp] the gag pattern responsible (start pattern for multiline)
-  # @param line [String] raw server line being dropped
+  # @param line [String] raw server line being dropped, or the raw room part
   # @return [void]
   # @api private
   def log_gagged_line(kind, pattern, line)
