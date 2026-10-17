@@ -137,6 +137,19 @@ RSpec.describe Games::DragonRealms do
     end
   end
 
+  describe '.compass_dirs' do
+    it 'names the compass indicator of each exit that is a direction' do
+      expect(described_class.compass_dirs(%w[north northeast east southeast south southwest west northwest]))
+        .to eq %w[n ne e se s sw w nw]
+      expect(described_class.compass_dirs(%w[up down out])).to eq %w[up down out]
+    end
+
+    it 'leaves out an exit that is no direction, and answers an empty list for no exits (synthetic)' do
+      expect(described_class.compass_dirs(%w[gate north])).to eq %w[n]
+      expect(described_class.compass_dirs([])).to eq []
+    end
+  end
+
   describe '.room_list_cut_short?' do
     it 'is true for a room objs component that ends with the cut-short mark' do
       expect(described_class.room_list_cut_short?('You also see a rock, a stick and some other stuff.')).to be true

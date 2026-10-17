@@ -100,6 +100,10 @@ RSpec.describe Games::CombinedRules do
       expect(both.spell_line?('Roundtime: 1 sec.')).to be false
     end
 
+    it "takes the first game's compass directions" do
+      expect(both.compass_dirs(%w[north up])).to eq %w[n up]
+    end
+
     it 'answers nil when no game has an answer' do
       expect(both.death_summary(' * Mahtra fell off a cliff.')).to be_nil
       expect(both.logon(' * Mahtra tiptoes in.')).to be_nil
