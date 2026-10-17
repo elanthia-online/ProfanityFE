@@ -56,6 +56,19 @@ module Games
       @games.any? { |game| game.room_list_cut_short?(text) }
     end
 
+    # Whether any of the games takes the line for a spell line.
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean]
+    def spell_line?(text)
+      @games.any? { |game| game.spell_line?(text) }
+    end
+
+    # (see Games::Rules#compass_dirs)
+    def compass_dirs(exits)
+      first_answer { |game| game.compass_dirs(exits) }
+    end
+
     # (see Games::Rules#room_descriptions_shown)
     def room_descriptions_shown(text)
       first_answer { |game| game.room_descriptions_shown(text) }

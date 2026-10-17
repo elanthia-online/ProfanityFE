@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-# Tests that SettingsLoader applies <notification-stream> and <history-size>
-# and restores their defaults when the element is removed and settings are
+# Tests that SettingsLoader applies <notification-stream>, <history-size> and
+# <blank-lines> and restores their defaults when the element is removed and settings are
 # reloaded, that a reload replaces every setting or, when the file fails to
 # load, none, and that the settings cache never serves stale or foreign settings.
 
@@ -120,6 +120,56 @@ RSpec.describe SettingsLoader do
       File.write(path, '<settings><history-size>20</history-size><gag>x</gags></settings>')
       load_settings(path, reload: true)
       expect(CONFIG.history_size).to eq 50
+    end
+  end
+
+  describe '<blank-lines>' do
+    before { allow(ProfanityLog).to receive(:write) }
+
+    it 'defaults to false when the element is absent' do
+      load_settings(write_settings(@dir, ''))
+      expect(CONFIG.blank_lines).to be false
+    end
+
+    %w[on true ON True yes 1].each do |text|
+      it "is true for #{text.inspect}" do
+        load_settings(write_settings(@dir, "<blank-lines> #{text} </blank-lines>"))
+        expect(CONFIG.blank_lines).to be true
+      end
+    end
+
+    %w[off false OFF False no 0].each do |text|
+      it "is false for #{text.inspect}" do
+        CONFIG.blank_lines = true
+        load_settings(write_settings(@dir, "<blank-lines>#{text}</blank-lines>"))
+        expect(CONFIG.blank_lines).to be false
+      end
+    end
+
+    ['', 'maybe', 'onn'].each do |text|
+      it "keeps the default and logs a warning for #{text.inspect}" do
+        load_settings(write_settings(@dir, "<blank-lines>#{text}</blank-lines>"))
+        expect(CONFIG.blank_lines).to be false
+        expect(ProfanityLog).to have_received(:write).with('settings', "Invalid blank-lines '#{text}' (expected on/off), using off")
+      end
+    end
+
+    it 'updates the value on reload' do
+      path = write_settings(@dir, '<blank-lines>off</blank-lines>')
+      load_settings(path)
+      File.write(path, '<settings><blank-lines>on</blank-lines></settings>')
+      load_settings(path, reload: true)
+      expect(CONFIG.blank_lines).to be true
+    end
+
+    it 'restores the default when the element is removed and settings are reloaded' do
+      path = write_settings(@dir, '<blank-lines>on</blank-lines>')
+      load_settings(path)
+      expect(CONFIG.blank_lines).to be true
+
+      File.write(path, '<settings></settings>')
+      load_settings(path, reload: true)
+      expect(CONFIG.blank_lines).to be false
     end
   end
 

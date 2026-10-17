@@ -279,6 +279,7 @@
   <preset id='speech' fg='53a684'/>
   <preset id='roomName' fg='9BA2B2' bg='395573'/>     <!-- White on blue bg for room titles -->
   <preset id='monsterbold' fg='a29900'/>               <!-- Yellow for creature names -->
+  <preset id='creatureDead' fg='808080'/>              <!-- Grey for dead creatures (room window) -->
   <preset id='familiar' fg='767339'/>                  <!-- Dark yellow for familiar output -->
   <preset id='debug' fg='555555'/>                     <!-- Grey for debug messages -->
   <preset id='rpa' fg='bf4d80'/>                       <!-- Red for roleplay awards -->

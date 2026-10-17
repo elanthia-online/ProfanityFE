@@ -251,6 +251,7 @@
   <preset id='roomName' fg='ffffff' bg='0000ff'/>
   <!-- Bold creature names in room descriptions -->
   <preset id='monsterbold' fg='ffff00'/>
+  <preset id='creatureDead' fg='808080'/>
   <!-- Familiar window background (very dark blue tint) -->
   <preset id='familiar' bg='00001a'/>
   <!-- Thought net background (very dark green tint) -->

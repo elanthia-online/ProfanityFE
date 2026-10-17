@@ -36,9 +36,12 @@ require_relative 'effect_tracker'
 #   because room descriptions are off; reset at the end of every line)
 # - @room_part (nil until a part of a <room> block opens: the element name
 #   of the part open in it, or nil; see #close_room_block)
+# - @spell_refresh (whether a spell refresh with no pushStream may be
+#   under way: from a percWindow clearStream to the next prompt or
+#   percWindow pushStream; see GameTextProcessor#handle_game_text)
 # - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
-#   leaving only its kept tags; see LineFilter#gagged?)
+#   leaving only its tags; see LineFilter#gagged?)
 module TagHandlers
   # Base URL that every <LaunchURL src="..."/> path is appended to.
   LAUNCH_URL_BASE = 'https://www.play.net'
@@ -90,7 +93,13 @@ module TagHandlers
     'players'      => :handle_room_part_open,
     'exits'        => :handle_room_part_open,
     'extra'        => :handle_room_part_open,
+    'crtrStatus'   => :handle_creature_status,
   }.freeze
+
+  # The creature states a <crtrStatus> tag can set that the room window
+  # shows, the first one set winning: a dead creature is usually also
+  # sleeping, prone or both.
+  CREATURE_STATES = %w[dead sleeping prone].freeze
 
   # Dispatch table for closing tags (</tagname>).
   CLOSING_TAG_DISPATCH = {
@@ -146,6 +155,7 @@ module TagHandlers
       @marks.prompt
       @room.prompt_seen
       finalize_dialog_at_prompt
+      @spell_refresh = false
     end
 
     # <nav rm='NNN'/> names the player's room (see RoomAssembler#nav).
@@ -651,6 +661,8 @@ module TagHandlers
     return unless (new_stream = attrs['id'])
 
     flush_text_buffer(text_buffer)
+    # A pushed spell list needs no help (see #handle_clear_stream)
+    @spell_refresh = false if new_stream == Streams::PERC
     if (exp_match = new_stream.match(/^exp (?<skill>.+)/))
       stream = Streams::EXP
       @event_bus.emit(:exp_set_current, skill: exp_match[:skill])
@@ -724,13 +736,19 @@ module TagHandlers
     @router.resync
   end
 
-  # Handle <clearStream id="percWindow"/> tag.
+  # Handle <clearStream id="percWindow"/> tag: it clears the spell window,
+  # and the spell lines that follow it up to the next prompt are the spell
+  # window's, unless a percWindow pushStream comes (see
+  # GameTextProcessor#handle_game_text).
   #
   # @param xml [String] the tag
   # @param _text_buffer [String] the text collected so far on the line (unused)
   # @return [void]
   def handle_clear_stream(xml, _text_buffer)
-    @event_bus.emit(:clear_spells) if XmlTokenizer.attrs(xml)['id'] == Streams::PERC
+    return unless XmlTokenizer.attrs(xml)['id'] == Streams::PERC
+
+    @event_bus.emit(:clear_spells)
+    @spell_refresh = true
   end
 
   # Handle <cmdlist ...>, the start of the game's command table for coord
@@ -779,7 +797,8 @@ module TagHandlers
     # while .links is off, so they work once it is turned on. A GS link's
     # noun names what it links to: the logons window takes a custom logon
     # message's character from it.
-    @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd, noun: XmlTokenizer.attrs(xml)['noun'])
+    attrs = XmlTokenizer.attrs(xml)
+    @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd, noun: attrs['noun'], exist: attrs['exist'])
     # The link's color span: with .links on, and always in a room stream,
     # whose colors go to the room players indicator and to a text window
     # showing that stream (the room window takes its links from the room
@@ -814,6 +833,26 @@ module TagHandlers
     return unless span[:cmd].nil? && span[:start] && span[:end] > span[:start]
 
     span[:cmd] = text_buffer[span[:start]...span[:end]]
+  end
+
+  # Handle <crtrStatus exist='N' hostile='1' dead='1' .../>, the game's
+  # state of the creature with that id (its <a exist> link). Both games
+  # send it: GemStone inside the room objs compDef or component, just
+  # before each creature (and with health and maxhealth), DragonRealms on
+  # the line after the room objs component, or after </exists> in a <room>
+  # block. Each tag gives the creature's whole state, so a flag left out is
+  # no longer set (a "prone" goes when the creature clambers to its feet).
+  # The room window shows the first of {CREATURE_STATES} set (see
+  # RoomAssembler#creature_status).
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
+  def handle_creature_status(xml, _text_buffer)
+    attrs = XmlTokenizer.attrs(xml)
+    return unless (exist = attrs['exist'])
+
+    @room.creature_status(exist, CREATURE_STATES.find { |state| attrs[state] == '1' }&.to_sym)
   end
 
   # Handle <indicator id='IconXXX' visible='y|n'/> tag.

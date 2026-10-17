@@ -95,6 +95,15 @@ RSpec.describe Games::CombinedRules do
       expect(described_class.new(Games::DragonRealms, marks_everything).room_list_cut_short?('a rock and some junk.')).to be true
     end
 
+    it 'takes a line for a spell line when any game does' do
+      expect(both.spell_line?('Bless  (OM)')).to be true
+      expect(both.spell_line?('Roundtime: 1 sec.')).to be false
+    end
+
+    it "takes the first game's compass directions" do
+      expect(both.compass_dirs(%w[north up])).to eq %w[n up]
+    end
+
     it "takes a game's false as an answer for the room description setting" do
       expect(both.room_descriptions_shown('You will no longer see room descriptions.')).to be false
     end
