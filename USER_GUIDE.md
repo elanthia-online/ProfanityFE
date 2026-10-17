@@ -422,7 +422,7 @@ injury levels), each index corresponds to the severity level.
 | `right` | Item in your right hand |
 | `spell` | Currently prepared spell |
 | `prompt` | The game prompt (e.g., `H>`) |
-| `compass:n` | North exit available (also: `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`, `up`, `down`, `out`) |
+| `compass:n` | North exit available (also: `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`, `up`, `down`, `out`). When Lich identifies as the Saga client, DragonRealms sends no compass directions, so the room's exits ("Obvious paths" or "Obvious exits") light it |
 | `nsys` | Nerve damage level (integer 0-3) |
 | `head`, `neck`, `chest`, `abdomen`, `back`, `leftArm`, `rightArm`, `leftLeg`, `rightLeg`, `leftEye`, `rightEye`, `leftHand` | Body part injury level (integer 0-6) |
 | `room players` | Names of other players in the room |
@@ -685,6 +685,12 @@ some other stuff.") is replaced by the full list from the lines. When Lich
 adds a room id to the room name (`;display roomid title`), the title row
 shows it.
 
+When Lich identifies as the Saga client, DragonRealms sends the room's lines
+as one line, with each part (name, description, objects, players, exits)
+marked. The story window shows each part on a line of its own, and the room
+window reads them as it reads the lines above. That stream always sends the
+description, whatever `FLAG DESCRIPTION` is set to, so both windows show it.
+
 A view of another room, such as the one a Moon Mage's Locate shows, goes to
 the `familiar` window (or to the story window when the layout has none). It
 doesn't change the room window, the terminal title or the room players
@@ -780,6 +786,14 @@ to fit narrow windows.
 | `width` | yes | Width in columns (1 column reserved for padding) |
 
 The window is automatically wired to the `percWindow` stream.
+
+In some sessions where Lich identifies as the Saga client (it depends on the
+Lich build), the spell list comes in the `percWindow` stream only once, at login.
+After that each refresh clears the window and the spell lines come as plain
+text. When that happens, up to the next prompt, Profanity puts each
+line shaped like a spell line (a name with no period or colon, two spaces,
+then something in parentheses: `Bless  (OM)`, `Ease Burden  (12 roisaen)`) in
+this window. Other lines that arrive between them stay in the story window.
 
 **Example:**
 
@@ -1496,10 +1510,40 @@ before they reach any window.
 <gag>REGEX_PATTERN</gag>
 ```
 
+A gag is tried against the line as the game sends it, XML tags included, and
+then against its text, the way the window shows it. A gag written against the
+text therefore still matches when the game puts tags inside it: a link around
+each object, creature and player (when Lich identifies as the Saga client), or
+a creature's status tag at the start of a line. A gag written against the tags,
+such as one that matches `<preset id="whisper">`, still works too. The text of a
+component (a part of the room window or a skill of the experience window) is
+left out, so a gag on the room lines in the story window doesn't take the
+room window's copy with it. A line with no text of its own (only tags, such
+as a prompt or a component) is tried as sent only, so a gag on blank lines,
+such as `^\s*$`, hides blank lines and nothing else.
+
+A gag that matches only the text hides only the text. The line's other tags
+still do their work: the experience bars GemStone sends in front of a search
+line still update, as does the room window from the objects DragonRealms can
+send after a creature's line. A gag that matches the line as sent hides the
+whole line but its stream tags (see Diagnosing Gags below).
+
+When Lich identifies as the Saga client, DragonRealms sends a whole room as one
+line. A gag is then tried on each part of the room (name, description, objects,
+players, exits) on its own, and hides only the part it matches, as it hid that
+part's own line before. A gag that would only match across two parts doesn't
+apply. A multi-line gag still applies to the whole line, so one that starts on
+a room's text hides the whole room. Its `end` is tried only on the lines after
+that one, so an `end` that matches a later part of the same room (such as
+`^Obvious paths:`) doesn't end it: the lines after the room are hidden too,
+until one matches `end` or the 100-line cap releases the block.
+
 ### Combat Gag Patterns
 
 Applied only to text in the **combat** stream. Use these to filter repetitive
-combat messages.
+combat messages. Combat lines that come with no combat stream (as in some
+sessions where Lich identifies as the Saga client, depending on the Lich build)
+go to the story window, and combat gags don't apply to them.
 
 ```xml
 <combat_gag>REGEX_PATTERN</combat_gag>
@@ -1555,10 +1599,12 @@ a mistyped `end` pattern can never swallow the stream indefinitely.
 
 ### Diagnosing Gags
 
-General and multi-line gags match the raw server line, XML tags included. A
-gagged line's text is hidden, but its stream tags (`<pushStream>`,
-`<popStream/>`, `<clearStream>`) are still processed, so a gag can never leave
-text routed to the wrong window.
+General and multi-line gags match the raw server line, XML tags included, or
+its text (see General Gag Patterns above). A gagged line's text is hidden, but
+its stream tags (`<pushStream>`, `<popStream/>`, `<clearStream>`) are still
+processed, so a gag can never leave text routed to the wrong window. A line
+matched by its text only keeps all its other tags too, but those that color or
+link its text.
 
 Start Profanity with `--log-gags` to write every gagged line to the log file:
 
@@ -1567,14 +1613,21 @@ Start Profanity with `--log-gags` to write every gagged line to the log file:
 ```
 
 Each entry shows the gag type, the start of the pattern that matched, and the
-full raw line. Lines that carried a stream tag are marked `STREAM-TAG`.
+full raw line. A general gag that matched the line's text but not the raw line
+shows as `general (text)`. Lines that carried a stream tag are marked
+`STREAM-TAG`. A gag on a part of a room DragonRealms sends as one line (see
+[General Gag Patterns](#general-gag-patterns)) is logged with the part: the
+type names it, as in `general (text) room exists`, and the entry shows that
+part, not the whole line.
 
 ### Notes
 
 - Gag patterns use Ruby regular expression syntax.
 - General gags are checked before any text processing or routing.
 - Combat gags are checked only for lines in the combat stream.
-- Multi-line gags are checked before general gags, at the raw-line level.
+- Multi-line gags are checked before general gags, against the raw line and
+  its text, as general gags are, but always on the whole line, never on one
+  part of a room.
 - On `.reload`, custom gag patterns from XML are reloaded (defaults are
   preserved).
 - Invalid regex patterns are logged as warnings and skipped.
@@ -1803,6 +1856,26 @@ separated, case-insensitive), toggles each on or off. Valid names: `spells`,
 .effects
 .effects debuffs cooldowns
 .effects custom
+```
+
+### .blanklines
+
+By default Profanity does not show the blank lines the game sends between
+blocks of a command's output (for example `EXP`, help, or appraisal output),
+which keeps the output compact. `.blanklines` turns those interior blank
+lines on if you prefer the more spaced-out layout the game sends; with no
+argument it toggles the current state, and `on` or `off` sets it explicitly.
+Defaults to off; the choice is saved to `~/.profanity/settings.json`. A blank
+line the game sends right before a prompt is never shown as an empty row.
+
+You can also set the starting default in your settings XML with
+`<blank-lines>on</blank-lines>` (or `off`). Once you use `.blanklines`, the
+choice saved in `settings.json` overrides the XML value.
+
+```
+.blanklines
+.blanklines on
+.blanklines off
 ```
 
 ### .help

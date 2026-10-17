@@ -99,6 +99,18 @@ RSpec.describe Config do
     end
   end
 
+  describe '#blank_lines' do
+    it 'defaults to false' do
+      expect(config.blank_lines).to be false
+    end
+
+    it 'is restored by reset!' do
+      config.blank_lines = true
+      config.reset!
+      expect(config.blank_lines).to be false
+    end
+  end
+
   describe 'constant aliasing compatibility' do
     it 'mutating the hash via one reference is visible via the other' do
       # Simulate the aliasing pattern from constants.rb

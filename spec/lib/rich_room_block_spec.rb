@@ -62,11 +62,22 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
       expect(indicator).to eq 'Jorvin, Ilmar'
       expect(compass_lit).to eq %w[n w nw]
     end
+
+    # A room the game re-sends as components alone, with no lines on main,
+    # comes with no <compass> of directions: only the exits component's
+    # empty one. The exits light the compass.
+    it 'lights the compass for a room sent as components alone' do
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_old_move_greengrove'),
+                          *fixture('room_pipeline', 'dr_two_moves_one_cycle'))
+
+      expect(compass_lit).to eq %w[n s]
+    end
   end
 
   describe 'the rich stream' do
     it 'shows a move in the room window and as one line per part in main' do
-      pending 'the <room> block is not read yet'
       load_layout
 
       receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
@@ -84,7 +95,6 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
     end
 
     it 'shows a LOOK, which sends no subtitle, in the room window and the indicator' do
-      pending 'the <room> block is not read yet'
       load_layout
 
       receive_from_server(*fixture('room_pipeline', 'dr_rich_look'))
@@ -97,7 +107,6 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
     end
 
     it 'shows the room a FLAG DESCRIPTION re-sends in place, with its players in the indicator' do
-      pending 'the <room> block is not read yet'
       load_layout
 
       receive_from_server(*fixture('room_pipeline', 'dr_rich_view_in_place'))
@@ -109,7 +118,6 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
     end
 
     it 'keeps the room lines out of main under --room-window-only' do
-      pending 'the <room> block is not read yet'
       state.room_window_only = true
       load_layout
 
@@ -120,7 +128,6 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
     end
 
     it 'shows the room in main without a room window, and the players in the indicator' do
-      pending 'the <room> block is not read yet'
       load_layout(room_window: false)
 
       receive_from_server(*fixture('room_pipeline', 'dr_rich_view_in_place'))
@@ -146,13 +153,150 @@ RSpec.describe 'A DragonRealms room from the old and the rich stream' do
       expect(room_screen).to eq [old_room.first, *greengrove_desc, *old_room.drop(1)]
     end
 
-    it 'lights the compass from the exits' do
-      pending 'the compass is not lit from the exits yet'
-      load_layout
+    # Synthetic lines, in the rich stream's form, for cases the session
+    # didn't show: a block's parts are read from what its tags say.
+    describe 'synthetic blocks' do
+      # A view in place of the room the move named, with nothing in it
+      def block(name: '[Bosque Deriel, Greengrove] (230006)', description: '', exits: 'Obvious paths: south.')
+        "<resource picture=\"0\"/><room><name>#{name}</name><description>#{description}</description>" \
+          "<exists></exists><players></players><exits>#{exits}</exits><extra></extra></room>"
+      end
 
-      receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+      it 'clears the description for a block with an empty one' do
+        load_layout
 
-      expect(compass_lit).to eq %w[s nw]
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_move'), block, '<prompt time="1">&gt;</prompt>')
+
+        expect(room_screen).to eq ['{[Bosque Deriel, Greengrove] (230006):green}', 'Obvious paths: south.']
+      end
+
+      it 'shows nothing new for a block whose exits part is empty' do
+        load_layout
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+        moved = room_screen
+
+        receive_from_server(block(name: '[Elsewhere] (1)', description: 'Nowhere.', exits: ''),
+                            '<prompt time="1">&gt;</prompt>')
+
+        expect(room_screen).to eq moved
+      end
+
+      it 'leaves no capture for the next line after a block cut off at the end of its line' do
+        load_layout
+
+        receive_from_server('<room><name>[Cut, Short] (5)</name><description>Half of a', 'A goblin arrives.')
+
+        expect(main_rows.last).to eq 'A goblin arrives.'
+      end
+
+      it 'leaves no capture for the next line after a block cut off right after a part opens' do
+        load_layout
+
+        receive_from_server('<room><name>[Cut, Short] (5)</name><description>', 'A goblin arrives.',
+                            'Obvious paths: north.')
+
+        expect(room_screen).to eq ['{[Cut, Short] (5):green}', 'Obvious paths: north.']
+      end
+
+      it 'does not take the next line as the room name after a block cut off right after its name opens' do
+        load_layout
+
+        receive_from_server('<room><name>', 'A goblin arrives.')
+
+        expect(state.room_title).to eq ''
+      end
+
+      it 'leaves no roomName color for the next line after a block cut off in its name' do
+        load_layout(room_window: false)
+
+        receive_from_server('<room><name>[Cut, Short] (5)', 'A goblin arrives.')
+
+        expect(main_screen).to eq ['{[Cut, Short] (5):green}', 'A goblin arrives.']
+      end
+
+      it 'reads a name tag outside a block as text' do
+        load_layout
+
+        receive_from_server('<name>Bob</name> waves.')
+
+        expect(main_rows).to eq ['Bob waves.']
+        expect(state.room_title).to eq ''
+      end
+
+      it 'shows a block for another room after a move, as Locate sends one, in the familiar window' do
+        load_layout(extra: "<window class='text' top='5' left='0' height='10' width='100' value='familiar'/>")
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+        moved = room_screen
+
+        receive_from_server(block(name: '[Somewhere Else, Far Hall] (999999)', description: 'A far hall.',
+                                  exits: 'Obvious paths: <d>east</d>.'), '<prompt time="1">&gt;</prompt>')
+
+        expect(room_screen).to eq moved
+        expect(window_text('familiar')).to eq ['[Somewhere Else, Far Hall] (999999)', 'A far hall.',
+                                               'Obvious paths: east.']
+        expect(state.room_title).to eq 'Bosque Deriel, Greengrove (230006)'
+        expect(compass_lit).to eq %w[s nw]
+      end
+    end
+
+    describe 'the compass' do
+      it 'lights the compass from the exits' do
+        load_layout
+
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_move'))
+
+        expect(compass_lit).to eq %w[s nw]
+      end
+
+      it 'darkens the compass in a room with no exits' do
+        load_layout
+
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_move'), *fixture('room_pipeline', 'dr_rich_no_exits'))
+
+        expect(compass_lit).to eq []
+      end
+
+      it 'lights the compass for a LOOK without a room window' do
+        load_layout(room_window: false)
+
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_look'))
+
+        expect(compass_lit).to eq %w[n w nw]
+      end
+
+      it 'follows an exits component sent on its own, despite its empty <compass> (synthetic)' do
+        load_layout
+
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_move'),
+                            "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>")
+
+        expect(compass_lit).to eq %w[n]
+      end
+
+      it 'follows an exits component sent on its own without a room window (synthetic)' do
+        load_layout(room_window: false)
+
+        receive_from_server(*fixture('room_pipeline', 'dr_rich_move'),
+                            "<component id='room exits'>Obvious paths: <d>north</d>.<compass></compass></component>")
+
+        expect(compass_lit).to eq %w[n]
+      end
+
+      it "keeps GemStone's own compass directions (--game GS)" do
+        load_layout(game_rules: Games::GemStone)
+
+        receive_from_server(*fixture('room_pipeline', 'gs_move'))
+
+        expect(compass_lit).to eq %w[n s]
+      end
+
+      it "doesn't light GemStone's compass from its exits, in a room sent with no <compass> (--game GS)" do
+        load_layout(game_rules: Games::GemStone)
+
+        receive_from_server(*fixture('room_pipeline', 'gs_move'), *fixture('room_pipeline', 'gs_death_room'))
+
+        expect(compass_lit).to eq %w[n s]
+      end
     end
   end
 end

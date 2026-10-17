@@ -16,7 +16,12 @@ require_relative 'games'
 #   {#start_capture} and {#end_capture}, which the tag parser calls) and
 #   "You also see" / "Also here:" / "Obvious exits:" lines on main, with
 #   the links and creatures their room marks show, are staged, and
-#   committed as one batch when the exits arrive.
+#   committed as one batch when the exits arrive. DragonRealms' <room>
+#   block (the whole room on one line, when Lich identifies as the Saga
+#   client) takes this path too: the tag parser hands off each of its
+#   parts as a line of its own, and captures its name and description as
+#   it does the roomName style and the roomDesc preset (see
+#   TagHandlers#handle_room_part_open).
 #
 # Component data owns the room it described. A burst runs from a room
 # subtitle ({#subtitle}) or a prompt ({#prompt_seen}) to the next prompt,
@@ -285,6 +290,7 @@ class RoomAssembler
 
     return read_remote_text(text) if @remote_view || remote_title?(text)
 
+    update_compass(RoomPart.from_chunk(text, marks)) if text.match?(EXITS_LINE)
     room_data_captured = take_captured_text(text, marks)
     look_room(text)
 
@@ -365,6 +371,9 @@ class RoomAssembler
       @state.room_title = parsed.plain if parsed
     end
 
+    # The compass follows the exits, with or without a RoomWindow
+    update_compass(RoomPart.from_chunk(text, marks)) if stream == Streams::ROOM_EXITS
+
     # Without a RoomWindow, only handle room players for the indicator
     unless room_window?
       return stream == Streams::ROOM_PLAYERS ? :continue : nil
@@ -434,6 +443,24 @@ class RoomAssembler
   end
 
   private
+
+  # Light the compass for a room's exits, for a game that sends no compass
+  # directions of its own (see Games::Rules#compass_dirs): DragonRealms'
+  # stream when Lich identifies as the Saga client sends none, only the
+  # exits' links. With a game's own directions, the <compass> tag lights
+  # the compass (see TagHandlers#handle_compass_tag); in DR's old stream
+  # it comes after the exits and names the same directions. The empty
+  # <compass></compass> DR ends its room exits component with comes before
+  # the component's text, so the exits relight what it darkened.
+  #
+  # @param exits [RoomPart] the exits line or component
+  # @return [void]
+  def update_compass(exits)
+    return unless (dirs = @game_rules.compass_dirs(exits.links.map { |link| exits.text[link[:start]...link[:end]] }))
+
+    @event_bus.emit(:compass_update, dirs: dirs)
+    @pending_render.request_update
+  end
 
   # The room window event of each room field.
   FIELD_EVENTS = { title: :room_title, desc: :room_desc, objects: :room_objects, players: :room_players,
