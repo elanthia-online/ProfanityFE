@@ -72,6 +72,7 @@ ProfanityFE connects to `127.0.0.1` on the specified port.
 | `--links` | off | Enable in-game link highlighting |
 | `--speech-ts` | off | Add timestamps to speech, familiar, and thought windows |
 | `--room-window-only` | off | Do not echo room data to the story window (show only in room window) |
+| `--rich-stream` | off | Tell Lich that Profanity reads DragonRealms' rich stream, so Lich sends it unchanged (needs a Lich that reads `SET_FRONTEND_CAPS`; see [The rich stream and `--rich-stream`](#the-rich-stream-and---rich-stream)) |
 | `--remote-url` | off | Display LaunchURLs as text instead of opening browser (for SSH/remote sessions) |
 | `--log-gags` | off | Write every gagged line to the log in full (see [Gag Patterns](#6-gag-patterns)) |
 | `--default-color-id=<id>` | `7` | Curses color ID for the default foreground color |
@@ -111,6 +112,9 @@ ruby profanity.rb --port=8000 --char=Mahtra --log-file=~/logs/mahtra.log
 
 # Disable process title updates
 ruby profanity.rb --port=8000 --char=Mahtra --no-status
+
+# Ask a Lich that reads SET_FRONTEND_CAPS for the rich stream unchanged
+ruby profanity.rb --port=8000 --char=Mahtra --rich-stream
 
 # Multiple characters sharing one config (separate logs and process titles)
 ruby profanity.rb --port=8000 --char=Mahtra                     # config: mahtra.xml, log: mahtra.log
@@ -698,6 +702,9 @@ neither window shows a room description, as with the old stream. A view of
 another room (see below) keeps its description: the game sends it there too
 with the setting off. Until the game answers a change of the setting (after
 Profanity starts), descriptions are shown.
+A Lich that rewrites the rich stream for front ends that can't read it sends
+the old lines instead, unless Profanity asks for the block (see
+[The rich stream and `--rich-stream`](#the-rich-stream-and---rich-stream)).
 
 A view of another room, such as the one a Moon Mage's Locate shows, goes to
 the `familiar` window (or to the story window when the layout has none). It
@@ -2440,6 +2447,39 @@ Commands starting with `.` that are not recognized as dot-commands are
 forwarded to the game server with the leading `.` replaced by `;`, which is the
 standard Lich script command prefix. For example, typing `.e echo hello` sends
 `;e echo hello` to Lich.
+
+#### The rich stream and `--rich-stream`
+
+Lich identifies to DragonRealms as the Saga client, so DragonRealms sends it
+its rich stream: the room as one `<room>` block, an `<a exist>` link around
+every object, creature and player, and doubled bold around the creatures in
+a room's objects. A Lich that rewrites that stream for front ends that can't
+read it sends Profanity the old stream's shape instead (the room as separate
+lines with a compass, no links, single bold), unless Profanity tells it which
+parts it reads. GemStone's stream is unaffected: Lich leaves its links and
+bold alone, and it sends no `<room>` block.
+
+With `--rich-stream`, Profanity sends this line right after its PID, each
+time it connects:
+
+```
+SET_FRONTEND_CAPS room_element game_links double_bold
+```
+
+A Lich that reads the line (lich-5 #1726 and later) then sends this
+connection the rich stream as the game sent it, and sends no reply. It
+applies to Profanity's connection only: another front end attached to the
+same Lich keeps what it gets.
+
+`--rich-stream` is off by default because a Lich that doesn't know the line
+passes it to the game as if you had typed it, once each time Profanity
+connects, and Profanity can't tell which kind of Lich it is talking to (Lich
+doesn't answer the line). Without the flag, Profanity sends only its PID, as
+it always has, and shows whichever stream Lich sends; it reads both.
+
+Instead of `--rich-stream`, you can start Lich with
+`--frontend-caps=room_element,game_links,double_bold`, which gives the same
+set to every front end attached to that Lich that doesn't declare its own.
 
 ### Performance
 

@@ -33,6 +33,7 @@ module CliOptions
     links: false,
     speech_ts: false,
     room_window_only: false,
+    rich_stream: false,
     remote_url: false,
     log_gags: false,
     profile: false,
@@ -95,6 +96,9 @@ module CliOptions
       opts.on('--links', 'Enable in-game link highlighting') { options[:links] = true }
       opts.on('--speech-ts', 'Add timestamps to speech, familiar, and thought windows') { options[:speech_ts] = true }
       opts.on('--room-window-only', 'Do not echo room data to the story window') { options[:room_window_only] = true }
+      opts.on('--rich-stream', "Ask Lich for DragonRealms' rich stream unchanged (needs a Lich with SET_FRONTEND_CAPS)") do
+        options[:rich_stream] = true
+      end
       opts.on('--remote-url', 'Display LaunchURLs on screen instead of opening browser') { options[:remote_url] = true }
       opts.on('--log-gags', 'Log every gagged line in full (diagnostics)') { options[:log_gags] = true }
       opts.on('--log-file=PATH', 'Log file path (default: profanity.log)') { |v| options[:log_file] = v }

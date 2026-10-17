@@ -1,7 +1,8 @@
 # frozen_string_literal: true
 
 # Tests ServerConnection against a real TCP server on an ephemeral port:
-# the line it sends on connect, the order of writes made with and without
+# the lines it sends on connect (the PID, and with declare_capabilities the
+# rich-stream capability declaration Lich reads), the order of writes made with and without
 # the render lock, the errors for a refused or timed-out connection, and
 # how the reader thread reports the end of the session.
 
@@ -46,6 +47,62 @@ RSpec.describe ServerConnection do
       expect(peer.gets).to eq "SET_FRONTEND_PID #{Process.pid}\n"
     ensure
       peer&.close
+    end
+
+    # Everything the peer receives once the connection's writes are done:
+    # connect writes before it returns, and on loopback the bytes are there
+    # at once, so a quiet 0.3 s means nothing else was sent.
+    def received_after_connect(peer)
+      bytes = +''
+      bytes << peer.read_nonblock(4096) while peer.wait_readable(0.3)
+      bytes
+    rescue EOFError
+      bytes
+    end
+
+    it 'sends only the PID line by default, with no capability declaration' do
+      connection.connect
+      peer = accept_peer
+
+      expect(received_after_connect(peer)).to eq "SET_FRONTEND_PID #{Process.pid}\n"
+    ensure
+      peer&.close
+    end
+
+    # lich-5 #1726: SET_FRONTEND_CAPS, then the names, separated by spaces;
+    # Lich reads it on a detachable connection at any time and sends no
+    # reply.
+    it 'sends the PID line and then the capability declaration with declare_capabilities' do
+      declaring = described_class.new(host: '127.0.0.1', port: port, declare_capabilities: true)
+      declaring.connect
+      peer = accept_peer
+
+      expect(received_after_connect(peer)).to eq "SET_FRONTEND_PID #{Process.pid}\n" \
+                                                 "SET_FRONTEND_CAPS room_element game_links double_bold\n"
+    ensure
+      peer&.close
+      declaring&.close
+    end
+
+    it 'declares the capabilities again on each new connection' do
+      declaring = described_class.new(host: '127.0.0.1', port: port, declare_capabilities: true)
+      received = Array.new(2) do
+        declaring.connect
+        peer = accept_peer
+        received_after_connect(peer).tap do
+          declaring.close
+          peer.close
+        end
+      end
+
+      expect(received).to all(eq("SET_FRONTEND_PID #{Process.pid}\n" \
+                                 "SET_FRONTEND_CAPS room_element game_links double_bold\n"))
+    end
+
+    it 'names each capability once, in a line Lich reads as a declaration' do
+      expect(described_class::FRONTEND_CAPABILITIES).to eq %w[room_element game_links double_bold]
+      # Lich's pattern for the line (lib/common/client_capabilities.rb)
+      expect(described_class::CAPABILITY_DECLARATION).to match(/\ASET_FRONTEND_CAPS(?:[ \t]+[^\r\n]*?)?[ \t]*\r?\n?\z/)
     end
 
     it 'waits CONNECT_TIMEOUT (10) seconds by default' do

@@ -27,6 +27,14 @@ RSpec.describe CliOptions do
       expect { described_class.parse(['--p']) }.to raise_error(OptionParser::AmbiguousOption)
     end
 
+    it 'leaves --rich-stream off by default' do
+      expect(described_class.parse(['--char=Mahtra'])[:rich_stream]).to be(false)
+    end
+
+    it 'turns the capability declaration on for --rich-stream' do
+      expect(described_class.parse(['--rich-stream'])[:rich_stream]).to be(true)
+    end
+
     it 'leaves the game unknown without --game' do
       expect(described_class.parse([])[:game]).to be_nil
     end
@@ -193,6 +201,57 @@ RSpec.describe 'profanity.rb command line' do
     accepted&.kill
     server&.close
     FileUtils.remove_entry(dir) if dir
+  end
+
+  # Everything profanity.rb started with +args+ sends to a game server that
+  # sends it nothing, read until it has been quiet for a second, and the
+  # client's PID.
+  #
+  # @return [Array(String, Integer)]
+  def bytes_sent_on_connect(*args)
+    server = TCPServer.new('127.0.0.1', 0)
+    dir = Dir.mktmpdir('profanity-cli-spec')
+    args += ["--port=#{server.addr[1]}", "--log-file=#{File.join(dir, 'profanity.log')}",
+             "--settings-file=#{File.join(repo, 'templates', 'default.xml')}"]
+    bytes = +''
+    client_pid = nil
+    PTY.spawn(env, RbConfig.ruby, File.join(repo, 'profanity.rb'), *args, chdir: Dir.home) do |reader, _writer, pid|
+      client_pid = pid
+      drain = Thread.new do
+        reader.each_char { nil }
+      rescue Errno::EIO
+        nil
+      end
+      client = Timeout.timeout(20) { server.accept }
+      bytes << client.read_nonblock(4096) while client.wait_readable(bytes.empty? ? 20 : 1)
+    rescue EOFError
+      nil
+    ensure
+      client&.close
+      begin
+        Process.kill('KILL', pid)
+        Process.wait(pid)
+      rescue Errno::ESRCH, Errno::ECHILD
+        nil
+      end
+      drain&.kill
+    end
+    [bytes, client_pid]
+  ensure
+    server&.close
+    FileUtils.remove_entry(dir) if dir
+  end
+
+  it 'sends only its PID on connect without --rich-stream' do
+    bytes, pid = bytes_sent_on_connect
+
+    expect(bytes).to eq "SET_FRONTEND_PID #{pid}\n"
+  end
+
+  it 'declares the rich-stream capabilities after its PID with --rich-stream' do
+    bytes, pid = bytes_sent_on_connect('--rich-stream')
+
+    expect(bytes).to eq "SET_FRONTEND_PID #{pid}\nSET_FRONTEND_CAPS room_element game_links double_bold\n"
   end
 
   # Run profanity.rb with +args+ on a wide terminal against a fake game
