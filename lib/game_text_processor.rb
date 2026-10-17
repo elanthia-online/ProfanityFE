@@ -133,6 +133,11 @@ class GameTextProcessor
     # Whether a spell refresh with no pushStream may be under way (see
     # TagHandlers#handle_clear_stream)
     @spell_refresh = false
+    # Whether the game last said room descriptions are off (see
+    # #track_room_descriptions), and whether the description being read is
+    # dropped for it (see TagHandlers#open_room_desc)
+    @room_descriptions_off = false
+    @hiding_room_desc = false
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
@@ -286,6 +291,7 @@ class GameTextProcessor
     @room.end_line
     @room_block = false
     @room_part = nil
+    @hiding_room_desc = false
   end
 
   # Process a chunk of game text after XML tags have been stripped.
@@ -305,6 +311,11 @@ class GameTextProcessor
   # @return [void]
   # @api private
   def handle_game_text(text, runs, marks)
+    # A room description dropped while the game's room descriptions are off
+    return if @hiding_room_desc
+
+    track_room_descriptions(text)
+
     # A spell line of a refresh that came with no pushStream (as in some
     # sessions where Lich identifies as the Saga client) is the spell
     # window's, as a pushed one's lines are; the other lines of the refresh
@@ -364,5 +375,19 @@ class GameTextProcessor
     end
 
     @router.route(text, runs, room_captured: room_captured, marks: marks)
+  end
+
+  # Follow the game's room description setting from its answers to a
+  # change of it (see Games::Rules#room_descriptions_shown): while it is
+  # off, room descriptions are dropped (see TagHandlers#open_room_desc, a
+  # workaround for a confirmed DragonRealms game bug on the rich stream).
+  # Until the game answers a change, descriptions are shown.
+  #
+  # @param text [String] game text
+  # @return [void]
+  # @api private
+  def track_room_descriptions(text)
+    shown = @game_rules.room_descriptions_shown(text)
+    @room_descriptions_off = !shown unless shown.nil?
   end
 end

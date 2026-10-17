@@ -104,6 +104,10 @@ RSpec.describe Games::CombinedRules do
       expect(both.compass_dirs(%w[north up])).to eq %w[n up]
     end
 
+    it "takes a game's false as an answer for the room description setting" do
+      expect(both.room_descriptions_shown('You will no longer see room descriptions.')).to be false
+    end
+
     it 'answers nil when no game has an answer' do
       expect(both.death_summary(' * Mahtra fell off a cliff.')).to be_nil
       expect(both.logon(' * Mahtra tiptoes in.')).to be_nil
