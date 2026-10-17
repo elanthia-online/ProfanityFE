@@ -28,6 +28,10 @@ require_relative 'effect_tracker'
 # - @coord_commands (a CoordCommands: the game's commands for coord links)
 # - @effects (an EffectTracker: the effects of the open <dialogData> block)
 # - @dialog_open (false until a <dialogData> opens: whether a block is open)
+# - @room_block (false until a <room> opens: whether the line's <room>
+#   block is open; reset at the end of every line)
+# - @room_part (nil until a part of a <room> block opens: the element name
+#   of the part open in it, or nil; see #close_room_block)
 # - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
 #   leaving only its kept tags; see LineFilter#gagged?)
@@ -75,19 +79,42 @@ module TagHandlers
     'output'       => :handle_ignored_tag,
     'cmdlist'      => :handle_cmdlist_open,
     'cli'          => :handle_ignored_tag,
+    'room'         => :handle_room_open,
+    'name'         => :handle_room_part_open,
+    'description'  => :handle_room_part_open,
+    'exists'       => :handle_room_part_open,
+    'players'      => :handle_room_part_open,
+    'exits'        => :handle_room_part_open,
+    'extra'        => :handle_room_part_open,
   }.freeze
 
   # Dispatch table for closing tags (</tagname>).
   CLOSING_TAG_DISPATCH = {
-    'preset'     => :handle_close_preset,
-    'color'      => :handle_close_color,
-    'b'          => :handle_pop_bold,
-    'a'          => :handle_close_link,
-    'd'          => :handle_close_link,
-    'component'  => :handle_stream_close,
-    'compDef'    => :handle_stream_close,
-    'cmdlist'    => :handle_ignored_tag,
-    'dialogData' => :handle_dialog_close,
+    'preset'      => :handle_close_preset,
+    'color'       => :handle_close_color,
+    'b'           => :handle_pop_bold,
+    'a'           => :handle_close_link,
+    'd'           => :handle_close_link,
+    'component'   => :handle_stream_close,
+    'compDef'     => :handle_stream_close,
+    'cmdlist'     => :handle_ignored_tag,
+    'dialogData'  => :handle_dialog_close,
+    'room'        => :handle_room_close,
+    'name'        => :handle_room_part_close,
+    'description' => :handle_room_part_close,
+    'exists'      => :handle_room_part_close,
+    'players'     => :handle_room_part_close,
+    'exits'       => :handle_room_part_close,
+    'extra'       => :handle_room_part_close,
+  }.freeze
+
+  # The parts of DragonRealms' <room> block that are styled and captured
+  # as the roomName style and the roomDesc preset are: element => the
+  # preset that colors it and the room capture it starts (see
+  # RoomAssembler#start_capture).
+  ROOM_BLOCK_CAPTURES = {
+    'name'        => [Presets::ROOM_NAME, :title],
+    'description' => [Presets::ROOM_DESC, :desc],
   }.freeze
 
   # Dispatch an XML tag to its handler method.
@@ -472,6 +499,100 @@ module TagHandlers
       @room.start_capture(:title) if style_id == Presets::ROOM_NAME
       @room.start_capture(:desc, at: text_buffer.length) if style_id == Presets::ROOM_DESC
     end
+  end
+
+  # Handle the <room> tag that opens DragonRealms' room block. The game
+  # sends a whole room on one line when Lich identifies as the Saga client:
+  #
+  #   <room><name>[Town Square] (1234)</name><description>...</description>
+  #   <exists>You also see ...</exists><players>Also here: ...</players>
+  #   <exits>Obvious paths: ...</exits><extra></extra></room>
+  #
+  # The text before it goes on its own line. Its parts are read only while
+  # it is open (see #handle_room_part_open), until </room> or the end of
+  # the line (see #close_room_block).
+  #
+  # @param _xml [String] the tag (unused)
+  # @param text_buffer [String] the text collected so far on the line (tags removed)
+  # @return [void]
+  def handle_room_open(_xml, text_buffer)
+    flush_text_buffer(text_buffer)
+    @room_block = true
+  end
+
+  # Handle </room>: its last part goes on its own line, and the block is
+  # closed.
+  #
+  # @param _xml [String] the tag (unused)
+  # @param text_buffer [String] the text collected so far on the line (tags removed)
+  # @return [void]
+  def handle_room_close(_xml, text_buffer)
+    close_room_block(text_buffer)
+  end
+
+  # Close the open <room> block, at </room> or at the end of its line (a
+  # block cut short): a part still open is closed as its closing tag
+  # would close it, so its capture and its roomName/roomDesc style don't
+  # take or color the next line, and the text left goes on its own line.
+  # Does nothing when no block is open.
+  #
+  # @param text_buffer [String] the text collected so far on the line (tags removed)
+  # @return [void]
+  def close_room_block(text_buffer)
+    return unless @room_block
+
+    close_room_part(@room_part, text_buffer) if @room_part
+    flush_text_buffer(text_buffer)
+    @room_block = false
+  end
+
+  # Handle a part's opening tag in an open <room> block: the part's text
+  # goes on a line of its own, as the old stream's room lines did, so the
+  # room assembler reads each line as it reads those ("You also see",
+  # "Also here:", "Obvious paths:"; the exits line commits the room). The
+  # name and description are styled and captured as the roomName style and
+  # the roomDesc preset are (see ROOM_BLOCK_CAPTURES). Outside a block the
+  # tag does nothing, as an unknown tag does.
+  #
+  # @param xml [String] the tag
+  # @param text_buffer [String] the text collected so far on the line (tags removed)
+  # @return [void]
+  def handle_room_part_open(xml, text_buffer)
+    return unless @room_block
+
+    flush_text_buffer(text_buffer)
+    @room_part = XmlTokenizer.tag_name(xml)
+    preset_id, kind = ROOM_BLOCK_CAPTURES[@room_part]
+    return unless kind
+
+    @spans.open(:style, text_buffer.length, **Presets.colors(preset_id).to_h)
+    @room.start_capture(kind)
+  end
+
+  # Handle a part's closing tag in an open <room> block: the part's text
+  # is handed off, taken by the capture its opening tag started, if any,
+  # and its style ends.
+  #
+  # @param xml [String] the tag
+  # @param text_buffer [String] the text collected so far on the line (tags removed)
+  # @return [void]
+  def handle_room_part_close(xml, text_buffer)
+    return unless @room_block
+
+    close_room_part(XmlTokenizer.tag_name(xml), text_buffer)
+  end
+
+  # Close a part of the open <room> block (see #handle_room_part_close).
+  #
+  # @param part [String] the part's element name
+  # @param text_buffer [String] the text collected so far on the line (tags removed)
+  # @return [void]
+  def close_room_part(part, text_buffer)
+    @room_part = nil
+    _preset_id, kind = ROOM_BLOCK_CAPTURES[part]
+    @room.end_capture(kind) { flush_text_buffer(text_buffer) } if kind
+    @spans.close(:style, text_buffer.length) if kind
+    flush_text_buffer(text_buffer)
   end
 
   # Handle <pushStream>, <component>, or <compDef> stream-opening tag.

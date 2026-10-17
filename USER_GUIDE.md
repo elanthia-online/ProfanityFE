@@ -685,6 +685,12 @@ some other stuff.") is replaced by the full list from the lines. When Lich
 adds a room id to the room name (`;display roomid title`), the title row
 shows it.
 
+When Lich identifies as the Saga client, DragonRealms sends the room's lines
+as one line, with each part (name, description, objects, players, exits)
+marked. The story window shows each part on a line of its own, and the room
+window reads them as it reads the lines above. That stream always sends the
+description, whatever `FLAG DESCRIPTION` is set to, so both windows show it.
+
 A view of another room, such as the one a Moon Mage's Locate shows, goes to
 the `familiar` window (or to the story window when the layout has none). It
 doesn't change the room window, the terminal title or the room players

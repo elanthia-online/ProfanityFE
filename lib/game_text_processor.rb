@@ -125,6 +125,10 @@ class GameTextProcessor
                                  render_wanted: -> { !window_mgr.effects.empty? })
     # Whether a <dialogData> is open (see TagHandlers#handle_dialog_open)
     @dialog_open = false
+    # Whether the line's <room> block is open (see TagHandlers#handle_room_open)
+    @room_block = false
+    # The part open in that block (see TagHandlers#close_room_block)
+    @room_part = nil
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
@@ -268,11 +272,16 @@ class GameTextProcessor
       end
     end
 
+    # A <room> block is one line: one cut short is closed here, so it
+    # doesn't capture, color or read the next line
+    close_room_block(text_buffer)
     handle_game_text(text_buffer, *split_spans(:line_end, text_buffer.length))
   ensure
     @spans.end_line
     @marks.end_line
     @room.end_line
+    @room_block = false
+    @room_part = nil
   end
 
   # Process a chunk of game text after XML tags have been stripped.
