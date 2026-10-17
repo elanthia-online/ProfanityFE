@@ -93,6 +93,11 @@ class Application
     DotCommand.new(name: 'draghl',
                    help: ['.draghl            Toggle live highlight while dragging'],
                    handler: proc { handle_dot_draghl }),
+    DotCommand.new(name: 'blanklines',
+                   args: :optional,
+                   help: ['.blanklines        Toggle showing blank lines from the game',
+                          '.blanklines <on|off> Show or hide blank lines explicitly'],
+                   handler: proc { |arg| handle_dot_blanklines(arg) }),
     DotCommand.new(name: 'scrollcfg',
                    help: ['.scrollcfg         Configure mouse scroll wheel'],
                    handler: proc { @mouse_scroll.start_configuration }),
@@ -114,6 +119,11 @@ class Application
                    help: ['.help              Show this help'],
                    handler: proc { handle_dot_help })
   ].freeze
+
+  # The settings.json key under which whether the game's blank lines are
+  # shown is saved, as a Boolean. When absent, the +<blank-lines>+ default of
+  # the settings XML applies (hidden if that is not set either).
+  BLANK_LINES_SETTING_KEY = 'BLANK_LINES'
 
   # How long .key waits for a key press before giving up, in milliseconds.
   DOT_KEY_TIMEOUT_MS = 5000
@@ -454,6 +464,59 @@ class Application
     write_to_client(msg)
   end
 
+  # +.blanklines+: show or hide the interior blank lines the game sends
+  # between lines of text. They are hidden by default. With no argument,
+  # toggle; +on+ or +off+ (any case) sets it. The choice is applied to the
+  # running {GameTextProcessor} (if the server thread has started),
+  # remembered for the next session in
+  # settings.json under {BLANK_LINES_SETTING_KEY}, and the new state shown.
+  # Any other argument changes nothing and says how to use the command.
+  #
+  # @param arg [String, nil] +on+, +off+ or nil to toggle
+  # @return [void]
+  def handle_dot_blanklines(arg)
+    choice = arg.to_s.strip.downcase
+    value = case choice
+            when '' then !blank_lines_setting
+            when 'on' then true
+            when 'off' then false
+            else
+              write_to_client("* Usage: .blanklines [on|off] (now #{blank_lines_setting ? 'on' : 'off'})")
+              return
+            end
+    @blank_lines = value
+    @processor&.blank_lines_enabled = value
+    save_blank_lines(value)
+    write_to_client(value ? '* Blank lines shown' : '* Blank lines hidden')
+  end
+
+  # Whether the game's blank lines are shown. In order of precedence: the
+  # value of this session, the one saved in settings.json (by +.blanklines+),
+  # the +<blank-lines>+ default of the settings XML ({Config#blank_lines}),
+  # else off. Only +true+ counts as on; a saved non-Boolean value is off. A
+  # failure to read settings.json falls back to the XML default.
+  #
+  # @return [Boolean]
+  def blank_lines_setting
+    return @blank_lines unless @blank_lines.nil?
+
+    @blank_lines = ProfanitySettings.load_setting(BLANK_LINES_SETTING_KEY, CONFIG.blank_lines) == true
+  rescue StandardError => e
+    ProfanityLog.write('settings', "Could not read the blank lines setting: #{e.message}")
+    @blank_lines = CONFIG.blank_lines
+  end
+
+  # Remember whether blank lines are shown, in settings.json. A failure to
+  # write is logged and does not interrupt the game.
+  #
+  # @param value [Boolean]
+  # @return [void]
+  def save_blank_lines(value)
+    ProfanitySettings.save_setting(BLANK_LINES_SETTING_KEY, value)
+  rescue StandardError => e
+    ProfanityLog.write('settings', "Could not save the blank lines setting: #{e.message}")
+  end
+
   # Reload the settings file. A file that fails to load changes nothing,
   # and a one-line error in the main window says why. Highlights added with
   # +.highlight+ are kept on top of the file's.
@@ -759,7 +822,8 @@ class Application
       boot_profiler: @boot_profiler,
       speech_timestamps: @cli_options[:speech_ts],
       clock: @clock,
-      game_rules: @game_rules
+      game_rules: @game_rules,
+      blank_lines: blank_lines_setting
     )
     # The server thread only reports how the connection ended; the input
     # loop picks that up and ends the session on the main thread.

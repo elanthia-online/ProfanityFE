@@ -62,6 +62,16 @@ class RoomAssembler
   # @return [Symbol, nil]
   attr_reader :capture_mode
 
+  # Whether the inline lines being read are a view of another room (DR's
+  # Locate), from its roomName to its exits line (see #remote_title?). The
+  # roomName comes first, so a description in the view comes after this
+  # turned true.
+  #
+  # @return [Boolean]
+  def remote_view?
+    @remote_view
+  end
+
   # @param window_mgr [WindowManager] asked whether the layout has a RoomWindow
   # @param event_bus [EventBus] receives the room and indicator events
   # @param pending_render [PendingRender] asked for flushes and room renders
@@ -127,6 +137,35 @@ class RoomAssembler
     # Whether the inline lines being read are a view of another room, from
     # its roomName to its exits line (see #remote_title?)
     @remote_view = false
+    # The state each creature's last <crtrStatus> set, by the game's id of
+    # the creature (see #creature_status); kept for the creatures the
+    # objects shown link to
+    @creature_states = {}
+    # The ids the objects shown link to (see #emit)
+    @shown_ids = []
+  end
+
+  # The game sent a creature's state (see TagHandlers#handle_creature_status):
+  # the room window shows it when the objects it shows link to the
+  # creature, and is drawn again when the state of such a creature
+  # changes. Without a RoomWindow (a layout without one, loaded by
+  # +.layout+) only the states already kept follow, so they are still
+  # right when a layout with one is loaded again; no new one is kept, as
+  # only an objects update to the room window prunes the states kept.
+  #
+  # @param exist [String] the game's id of the creature
+  # @param state [Symbol, nil] +:dead+, +:sleeping+, +:prone+ or nil
+  # @return [void]
+  def creature_status(exist, state)
+    return if @creature_states.key?(exist) && @creature_states[exist] == state
+    return unless room_window? || @creature_states.key?(exist)
+
+    @creature_states[exist] = state
+    return unless room_window? && @shown_ids.include?(exist)
+
+    @event_bus.emit(:room_creature_states, states: shown_states)
+    @pending_render.request_room_render
+    @pending_render.request_update
   end
 
   # The game named the room the player is in: <nav rm='NNN'/>. Both games
@@ -290,6 +329,7 @@ class RoomAssembler
 
     return read_remote_text(text) if @remote_view || remote_title?(text)
 
+    update_compass(RoomPart.from_chunk(text, marks)) if text.match?(EXITS_LINE)
     room_data_captured = take_captured_text(text, marks)
     look_room(text)
 
@@ -370,6 +410,9 @@ class RoomAssembler
       @state.room_title = parsed.plain if parsed
     end
 
+    # The compass follows the exits, with or without a RoomWindow
+    update_compass(RoomPart.from_chunk(text, marks)) if stream == Streams::ROOM_EXITS
+
     # Without a RoomWindow, only handle room players for the indicator
     unless room_window?
       return stream == Streams::ROOM_PLAYERS ? :continue : nil
@@ -411,12 +454,14 @@ class RoomAssembler
 
   # Update the 'room players' indicator window with parsed player names.
   #
-  # Merges SAX link colors (GemStone <a> tags) with highlights applied to
-  # the full "Also here: ..." text, then remaps color regions covering
-  # each name to the indicator label. Only highlights that fully cover a
-  # name are included -- partial matches create visual noise on a compact
-  # indicator display. Asks for a flush, since a player arriving or
-  # leaving can be the only change in a burst.
+  # Merges the SAX color regions (the players' <a> links, which GemStone
+  # and DragonRealms' rich stream send, and any preset) with highlights
+  # applied to the full "Also here: ..." text, then remaps the regions
+  # covering each name to the indicator label, where a highlight or preset
+  # wins over a link's color as in main (see #remap_name_colors). Only
+  # regions that fully cover a name are included -- partial matches
+  # create visual noise on a compact indicator display. Asks for a flush,
+  # since a player arriving or leaving can be the only change in a burst.
   #
   # @param players_text [String, nil] raw "Also here:" text or nil
   # @param sax_colors [Array<Hash>] SAX-parsed color regions (link colors)
@@ -438,6 +483,24 @@ class RoomAssembler
 
   private
 
+  # Light the compass for a room's exits, for a game that sends no compass
+  # directions of its own (see Games::Rules#compass_dirs): DragonRealms'
+  # stream when Lich identifies as the Saga client sends none, only the
+  # exits' links. With a game's own directions, the <compass> tag lights
+  # the compass (see TagHandlers#handle_compass_tag); in DR's old stream
+  # it comes after the exits and names the same directions. The empty
+  # <compass></compass> DR ends its room exits component with comes before
+  # the component's text, so the exits relight what it darkened.
+  #
+  # @param exits [RoomPart] the exits line or component
+  # @return [void]
+  def update_compass(exits)
+    return unless (dirs = @game_rules.compass_dirs(exits.links.map { |link| exits.text[link[:start]...link[:end]] }))
+
+    @event_bus.emit(:compass_update, dirs: dirs)
+    @pending_render.request_update
+  end
+
   # The room window event of each room field.
   FIELD_EVENTS = { title: :room_title, desc: :room_desc, objects: :room_objects, players: :room_players,
                    exits: :room_exits }.freeze
@@ -456,11 +519,29 @@ class RoomAssembler
     @title_row = part if field == :title
     data = case field
            when :title then { text: part }
-           when :objects then { text: part.text, links: part.links, creatures: part.creatures }
+           when :objects then objects_data(part)
            else { text: part.text, links: part.links }
            end
     @event_bus.emit(FIELD_EVENTS.fetch(field), **data)
     @pending_render.request_room_render if render
+  end
+
+  # The room objects event's data for +part+. The creatures it links to
+  # are the ones whose states are kept from then on.
+  #
+  # @param part [RoomPart] the objects
+  # @return [Hash]
+  def objects_data(part)
+    @shown_ids = part.links.filter_map { |link| link[:exist] }.uniq
+    @creature_states = @creature_states.slice(*@shown_ids)
+    { text: part.text, links: part.links, creatures: part.creatures, states: shown_states }
+  end
+
+  # The kept states of the creatures the objects shown link to.
+  #
+  # @return [Hash{String => Symbol}] state by the creature's id, unset ones left out
+  def shown_states
+    @creature_states.slice(*@shown_ids).compact
   end
 
   # Show a field a room component delivered, and record it as delivered in
@@ -755,11 +836,24 @@ class RoomAssembler
     end
   end
 
-  # Map highlight color regions from full players text to indicator label positions.
+  # Map the color regions of the full players text to the indicator
+  # label: one region per name, from the regions that cover the whole name.
+  #
+  # The label's copy of a region is the name's size, so the label can't
+  # rank the copies by size as main does; they are resolved here instead,
+  # from the regions' sizes in the full text, as
+  # HighlightProcessor.render_colored_text ranks them: a link's region
+  # (one with a :cmd) after every other, then the smallest first. So a
+  # highlight or preset over a linked name shows its color, a highlight
+  # of one name wins over one of the whole line, and the link color shows
+  # only where nothing else colors the name. The region drops the :cmd:
+  # the label is not clickable, and a :cmd would rank it after the
+  # indicator's own color.
   #
   # @param full_text [String] the full "Also here: ..." text
   # @param names [Array<String>] parsed player names
-  # @param full_colors [Array<Hash>] highlight regions for the full text
+  # @param full_colors [Array<Hash>] link, preset and highlight regions for
+  #   the full text
   # @return [Array<Hash>] color regions remapped to the names-only label
   def remap_name_colors(full_text, names, full_colors)
     return [] if full_colors.empty?
@@ -774,24 +868,33 @@ class RoomAssembler
       name_end = name_start + name.length
       search_pos = name_end
 
-      full_colors.each do |c|
-        # Only include highlights that fully cover the name -- partial
-        # matches create visual noise on a compact indicator display.
-        next unless c[:start] <= name_start && c[:end] >= name_end
-
-        label_colors << {
-          start: label_pos,
-          end: label_pos + name.length,
-          fg: c[:fg],
-          bg: c[:bg],
-          ul: c[:ul]
-        }
-      end
+      # Only regions that fully cover the name -- partial matches create
+      # visual noise on a compact indicator display.
+      covering = full_colors.select { |c| c[:start] <= name_start && c[:end] >= name_end }
+      label_colors << name_color(covering, label_pos, label_pos + name.length) if covering.any?
 
       label_pos += name.length
       label_pos += 2 if i < names.length - 1 # ", " separator
     end
 
     label_colors
+  end
+
+  # The one region a name in the indicator label is drawn with: the first
+  # foreground and background among +covering+, ranked with the links
+  # (regions with a :cmd) last and then the smallest first (equal ones in
+  # their order), and underlined when any of them is.
+  #
+  # @param covering [Array<Hash>] the regions covering the whole name, in
+  #   their order (not empty)
+  # @param label_start [Integer] where the name starts in the label
+  # @param label_end [Integer] where the name ends in the label
+  # @return [Hash] the region, with :start, :end, :fg, :bg and :ul
+  def name_color(covering, label_start, label_end)
+    ranked = covering.each_with_index.sort_by { |c, i| [c[:cmd] ? 1 : 0, c[:end] - c[:start], i] }.map(&:first)
+    { start: label_start, end: label_end,
+      fg: ranked.map { |c| c[:fg] }.compact.first,
+      bg: ranked.map { |c| c[:bg] }.compact.first,
+      ul: ranked.any? { |c| c[:ul] == 'true' } ? 'true' : nil }
   end
 end

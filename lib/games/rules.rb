@@ -70,5 +70,32 @@ module Games
     # @return [Boolean, nil] true when the game marked the list as cut
     #   short; nil when the game has no such mark
     def room_list_cut_short?(text); end
+
+    # Whether a line of main text is a line of the spell list, as a spell
+    # refresh with no pushStream sends it (see
+    # GameTextProcessor#handle_game_text).
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean, nil] true for a spell line; nil when the game has
+    #   no such refresh
+    def spell_line?(text); end
+
+    # The compass directions of a room's exits, for a game that sends no
+    # compass directions of its own with them.
+    #
+    # @param exits [Array<String>] the exits' names, as their links show
+    #   them (e.g. "north", "up")
+    # @return [Array<String>, nil] the compass indicators to light (e.g.
+    #   +["n", "up"]+), the exits that are no compass direction left out;
+    #   nil when the game sends its own compass directions
+    def compass_dirs(exits); end
+
+    # Whether a game line says room descriptions are now shown or not, as
+    # the game answers a change to its room description setting.
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean, nil] true when they are now shown, false when not;
+    #   nil when the line says neither
+    def room_descriptions_shown(text); end
   end
 end

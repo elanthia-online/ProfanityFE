@@ -10,7 +10,8 @@
 # Runs are hashes with :start, :end (character positions in the text),
 # and optional :fg, :bg, :ul, :cmd keys. They are stored in insertion
 # order but may overlap — the renderer resolves priority by smallest
-# range first (most specific wins).
+# range first (most specific wins), a link's run (one with :cmd) last
+# (see HighlightProcessor.render_colored_text).
 #
 # @example Build styled text
 #   st = StyledText.new('Hello world')

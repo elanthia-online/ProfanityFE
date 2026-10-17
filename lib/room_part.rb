@@ -23,7 +23,8 @@ RoomPart = Data.define(:text, :links, :creatures)
 #   @return [String] the part's text, surrounding whitespace removed
 # @!attribute [r] links
 #   @return [Array<Hash>] `{start:, end:, cmd:}` for each link with a
-#     command, positions in {#text}, in the order the links closed
+#     command, and +exist+, the game's id of what it links to, when the
+#     link names one; positions in {#text}, in the order the links closed
 # @!attribute [r] creatures
 #   @return [Array<String>] the text of each bold span, stripped: each
 #     once, in the order the spans closed, empty ones left out
@@ -47,7 +48,7 @@ class RoomPart
     marks = marks.select { |mark| mark[:start] >= from }
                  .map { |mark| within(mark, shift, body.length) }
     links = marks.select { |mark| mark[:mark] == :link && mark[:cmd] }
-                 .map { |mark| { start: mark[:start], end: mark[:end], cmd: mark[:cmd] } }
+                 .map { |mark| { start: mark[:start], end: mark[:end], cmd: mark[:cmd], exist: mark[:exist] }.compact }
     creatures = marks.select { |mark| mark[:mark] == :bold }
                      .map { |mark| body[mark[:start]...mark[:end]].strip }
                      .reject(&:empty?)

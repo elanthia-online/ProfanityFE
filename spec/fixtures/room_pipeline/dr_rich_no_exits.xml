@@ -1,0 +1,12 @@
+<nav rm='2280077'/>
+<streamWindow id='main' title='Story' subtitle=" - [Chasm, Vertical Pothole] (2280077)" location='center' target='drop'/>
+<streamWindow id='room' title='Room' subtitle=" - [Chasm, Vertical Pothole] (2280077)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>A stand of tall trees comes into view overhead, further dimming the light and making it increasingly difficult to find a foothold up through the pothole.  Caution is absolutely necessary to prevent a case of vertigo from settling in and overwhelming the senses.</component>
+<component id='room objs'>You also see a <a exist="-23989" noun="branch">thin silverwood branch stripped of its leaves dangling out over the chasm</a> and a <a exist="-23991" noun="niche">craggy niche</a>.</component>
+<component id='room players'></component>
+<component id='room exits'>Obvious paths: none.<compass></compass></component>
+<component id='room extra'></component>
+<resource picture="0"/><room><name>[Chasm, Vertical Pothole] (2280077)</name><description>A stand of tall trees comes into view overhead, further dimming the light and making it increasingly difficult to find a foothold up through the pothole.  Caution is absolutely necessary to prevent a case of vertigo from settling in and overwhelming the senses.</description><exists>You also see a <a exist="-23989" noun="branch">thin silverwood branch stripped of its leaves dangling out over the chasm</a> and a <a exist="-23991" noun="niche">craggy niche</a>.</exists><players></players><exits>Obvious paths: none.</exits><extra></extra></room>
+<component id='room players'></component>
+<prompt time="1792032126">&gt;</prompt>
+<dialogData id='minivitals'><skin id='staminaSkin' name='staminaBar' controls='stamina' left='40%' top='0%' width='20%' height='100%'/><progressBar id='stamina' value='99' text='fatigue 99%' left='40%' customText='t' top='0%' width='20%' height='100%'/></dialogData>

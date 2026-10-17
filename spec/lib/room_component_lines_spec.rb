@@ -171,14 +171,16 @@ RSpec.describe 'Room component lines' do
         expect(color_of(room, 'the Wayside Lodge and ')).to be_nil
       end
 
-      it 'with links on, draws the bolded article in the monsterbold color and the creature, a link, in the link color' do
+      it 'with links on, draws the whole bolded creature in the monsterbold color, its name still a link' do
         state.blue_links = true
 
         receive_from_server(objects_line)
 
-        # The game bolds "a dwarven blacksmith assistant"; only the name is a link
-        expect(color_of(room, 'dwarven blacksmith assistant')).to eq '5555ff'
-        expect(color_of(room, 'a dwarven blacksmith assistant')).to eq %w[ff0000 5555ff]
+        # The game bolds "a dwarven blacksmith assistant"; only the name is a
+        # link, and a link's color yields to the creature's
+        expect(color_of(room, 'a dwarven blacksmith assistant')).to eq 'ff0000'
+        y, x = locate(room, 'dwarven blacksmith assistant')
+        expect(room.link_cmd_at(y, x)).not_to be_nil
       end
 
       it 'keeps the links of objects shown with links off, so they work once links are turned on' do
@@ -286,6 +288,97 @@ RSpec.describe 'Room component lines' do
       receive_from_server("<component id='room players'>Also here: Cithrin</component>")
 
       expect(color_of(indicator, 'Cithrin')).to eq 'ffff00'
+    end
+
+    # The rich stream links every player (DragonRealms as the Saga client,
+    # GemStone). As in main and the room window, a link's color shows only
+    # where no highlight or preset colors the name.
+    context 'when the stream links the players' do
+      it 'draws a linked name no highlight covers in the link color' do
+        receive_from_server(
+          "<component id='room players'>Also here: <a exist=\"-101\" noun=\"Cithrin\">Cithrin</a> and " \
+          "<a exist=\"-102\" noun=\"Navesi\">Navesi</a>.</component>"
+        )
+
+        expect(indicator_label).to eq 'Cithrin, Navesi'
+        expect(color_of(indicator, 'Cithrin')).to eq '5555ff'
+        expect(color_of(indicator, 'Navesi')).to eq '5555ff'
+        expect(color_of(indicator, ', ')).to eq 'ffff00'
+      end
+
+      it 'draws a highlighted linked name in the highlight color' do
+        HIGHLIGHT[/Navesi/] = ['00ff00', nil, nil]
+
+        receive_from_server(
+          "<component id='room players'>Also here: <a exist=\"-101\" noun=\"Cithrin\">Cithrin</a> and " \
+          "<a exist=\"-102\" noun=\"Navesi\">Navesi</a>.</component>"
+        )
+
+        expect(color_of(indicator, 'Navesi')).to eq '00ff00'
+        expect(color_of(indicator, 'Cithrin')).to eq '5555ff'
+      end
+
+      it 'draws linked names a highlight of the whole line covers in the highlight color' do
+        HIGHLIGHT[/^Also here: .*/] = ['ff0000', nil, nil]
+
+        receive_from_server(
+          "<component id='room players'>Also here: <a exist=\"-101\" noun=\"Cithrin\">Cithrin</a> and " \
+          "<a exist=\"-102\" noun=\"Navesi\">Navesi</a>.</component>"
+        )
+
+        expect(color_of(indicator, 'Cithrin')).to eq 'ff0000'
+        expect(color_of(indicator, 'Navesi')).to eq 'ff0000'
+      end
+
+      it 'draws a linked name inside a preset in the preset color' do
+        PRESET['speech'] = ['00ff00', nil]
+
+        receive_from_server(
+          "<component id='room players'>Also here: <preset id='speech'><a exist=\"-101\" noun=\"Cithrin\">" \
+          'Cithrin</a></preset></component>'
+        )
+
+        expect(color_of(indicator, 'Cithrin')).to eq '00ff00'
+      end
+
+      # Main and the room window rank the colors under a link by size, the
+      # smallest first, so a highlight of one name beats one of the whole
+      # line, whatever order the highlights were defined in.
+      it 'draws a name in the color of a highlight of that name over a highlight of the whole line' do
+        HIGHLIGHT[/^Also here: .*/] = ['ff0000', nil, nil]
+        HIGHLIGHT[/Navesi/] = ['00ff00', nil, nil]
+
+        receive_from_server(
+          "<component id='room players'>Also here: <a exist=\"-101\" noun=\"Cithrin\">Cithrin</a> and " \
+          "<a exist=\"-102\" noun=\"Navesi\">Navesi</a>.</component>"
+        )
+
+        expect(color_of(indicator, 'Navesi')).to eq '00ff00'
+        expect(color_of(indicator, 'Cithrin')).to eq 'ff0000'
+      end
+
+      it 'draws a name in the color of a highlight of that name over a preset around every name' do
+        PRESET['speech'] = ['ff0000', nil]
+        HIGHLIGHT[/Navesi/] = ['00ff00', nil, nil]
+
+        receive_from_server(
+          "<component id='room players'>Also here: <preset id='speech'><a exist=\"-101\" noun=\"Cithrin\">" \
+          "Cithrin</a> and <a exist=\"-102\" noun=\"Navesi\">Navesi</a></preset>.</component>"
+        )
+
+        expect(color_of(indicator, 'Navesi')).to eq '00ff00'
+        expect(color_of(indicator, 'Cithrin')).to eq 'ff0000'
+      end
+
+      it 'keeps the link color under a highlight that sets only a background' do
+        HIGHLIGHT[/Cithrin/] = [nil, '444444', nil]
+
+        receive_from_server(
+          "<component id='room players'>Also here: <a exist=\"-101\" noun=\"Cithrin\">Cithrin</a></component>"
+        )
+
+        expect(color_of(indicator, 'Cithrin')).to eq '5555ff'
+      end
     end
   end
 end

@@ -58,6 +58,7 @@
   <preset id='speech'     fg='&green;'/>
   <preset id='roomName'   fg='&green;'/>
   <preset id='monsterbold' fg='&yellow;'/>
+  <preset id='creatureDead' fg='&grey;'/>
   <preset id='thoughts'   fg='&cyan;'/>
   <preset id='voln'       fg='&teal;'/>
   <preset id='percWindow' fg='&cyan;'/>

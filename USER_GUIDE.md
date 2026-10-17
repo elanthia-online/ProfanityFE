@@ -426,7 +426,7 @@ injury levels), each index corresponds to the severity level.
 | `right` | Item in your right hand |
 | `spell` | Currently prepared spell |
 | `prompt` | The game prompt (e.g., `H>`) |
-| `compass:n` | North exit available (also: `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`, `up`, `down`, `out`) |
+| `compass:n` | North exit available (also: `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`, `up`, `down`, `out`). When Lich identifies as the Saga client, DragonRealms sends no compass directions, so the room's exits ("Obvious paths" or "Obvious exits") light it |
 | `nsys` | Nerve damage level (integer 0-3) |
 | `head`, `neck`, `chest`, `abdomen`, `back`, `leftArm`, `rightArm`, `leftLeg`, `rightLeg`, `leftEye`, `rightEye`, `leftHand` | Body part injury level (integer 0-6) |
 | `room players` | Names of other players in the room |
@@ -692,8 +692,16 @@ shows it.
 When Lich identifies as the Saga client, DragonRealms sends the room's lines
 as one line, with each part (name, description, objects, players, exits)
 marked. The story window shows each part on a line of its own, and the room
-window reads them as it reads the lines above. That stream always sends the
-description, whatever `FLAG DESCRIPTION` is set to, so both windows show it.
+window reads them as it reads the lines above. That stream sends the
+description whatever `FLAG DESCRIPTION` is set to, and so does Lich's rewrite of
+it into the old layout. This is a confirmed DragonRealms game bug; GemStone
+follows its setting. Until the game is fixed, Profanity works around it by
+following the setting from the game's answers to it ("You will no longer see
+room descriptions." / "You will now see room descriptions."): while it is off,
+neither window shows a room description, as with the old stream. A view of
+another room (see below) keeps its description: the game sends it there too
+with the setting off. Until the game answers a change of the setting (after
+Profanity starts), descriptions are shown.
 A Lich that rewrites the rich stream for front ends that can't read it sends
 the old lines instead, unless Profanity asks for the block (see
 [The rich stream and `--rich-stream`](#the-rich-stream-and---rich-stream)).
@@ -724,6 +732,9 @@ Pass `--room-window-only` to suppress room data from the story window.
 | `title-preset` | no | Preset color for the room title (default: `'roomName'`) |
 | `desc-preset` | no | Preset color for the room description |
 | `creatures-preset` | no | Preset color for creature names in objects (default: `'monsterbold'`) |
+| `dead-preset` | no | Preset color for a dead creature in objects (default: `'creatureDead'`) |
+| `sleeping-preset` | no | Preset color for a sleeping creature in objects (default: `'creatureSleeping'`) |
+| `prone-preset` | no | Preset color for a prone creature in objects (default: `'creatureProne'`) |
 
 To use a room window, you must also define the referenced presets. The room
 title is shown in brackets, creatures in the objects list are highlighted with
@@ -793,6 +804,14 @@ to fit narrow windows.
 | `width` | yes | Width in columns (1 column reserved for padding) |
 
 The window is automatically wired to the `percWindow` stream.
+
+In some sessions where Lich identifies as the Saga client (it depends on the
+Lich build), the spell list comes in the `percWindow` stream only once, at login.
+After that each refresh clears the window and the spell lines come as plain
+text. When that happens, up to the next prompt, Profanity puts each
+line shaped like a spell line (a name with no period or colon, two spaces,
+then something in parentheses: `Bless  (OM)`, `Ease Burden  (12 roisaen)`) in
+this window. Other lines that arrive between them stay in the story window.
 
 **Example:**
 
@@ -1509,10 +1528,40 @@ before they reach any window.
 <gag>REGEX_PATTERN</gag>
 ```
 
+A gag is tried against the line as the game sends it, XML tags included, and
+then against its text, the way the window shows it. A gag written against the
+text therefore still matches when the game puts tags inside it: a link around
+each object, creature and player (when Lich identifies as the Saga client), or
+a creature's status tag at the start of a line. A gag written against the tags,
+such as one that matches `<preset id="whisper">`, still works too. The text of a
+component (a part of the room window or a skill of the experience window) is
+left out, so a gag on the room lines in the story window doesn't take the
+room window's copy with it. A line with no text of its own (only tags, such
+as a prompt or a component) is tried as sent only, so a gag on blank lines,
+such as `^\s*$`, hides blank lines and nothing else.
+
+A gag that matches only the text hides only the text. The line's other tags
+still do their work: the experience bars GemStone sends in front of a search
+line still update, as does the room window from the objects DragonRealms can
+send after a creature's line. A gag that matches the line as sent hides the
+whole line but its stream tags (see Diagnosing Gags below).
+
+When Lich identifies as the Saga client, DragonRealms sends a whole room as one
+line. A gag is then tried on each part of the room (name, description, objects,
+players, exits) on its own, and hides only the part it matches, as it hid that
+part's own line before. A gag that would only match across two parts doesn't
+apply. A multi-line gag still applies to the whole line, so one that starts on
+a room's text hides the whole room. Its `end` is tried only on the lines after
+that one, so an `end` that matches a later part of the same room (such as
+`^Obvious paths:`) doesn't end it: the lines after the room are hidden too,
+until one matches `end` or the 100-line cap releases the block.
+
 ### Combat Gag Patterns
 
 Applied only to text in the **combat** stream. Use these to filter repetitive
-combat messages.
+combat messages. Combat lines that come with no combat stream (as in some
+sessions where Lich identifies as the Saga client, depending on the Lich build)
+go to the story window, and combat gags don't apply to them.
 
 ```xml
 <combat_gag>REGEX_PATTERN</combat_gag>
@@ -1568,10 +1617,12 @@ a mistyped `end` pattern can never swallow the stream indefinitely.
 
 ### Diagnosing Gags
 
-General and multi-line gags match the raw server line, XML tags included. A
-gagged line's text is hidden, but its stream tags (`<pushStream>`,
-`<popStream/>`, `<clearStream>`) are still processed, so a gag can never leave
-text routed to the wrong window.
+General and multi-line gags match the raw server line, XML tags included, or
+its text (see General Gag Patterns above). A gagged line's text is hidden, but
+its stream tags (`<pushStream>`, `<popStream/>`, `<clearStream>`) are still
+processed, so a gag can never leave text routed to the wrong window. A line
+matched by its text only keeps all its other tags too, but those that color or
+link its text.
 
 Start Profanity with `--log-gags` to write every gagged line to the log file:
 
@@ -1580,14 +1631,21 @@ Start Profanity with `--log-gags` to write every gagged line to the log file:
 ```
 
 Each entry shows the gag type, the start of the pattern that matched, and the
-full raw line. Lines that carried a stream tag are marked `STREAM-TAG`.
+full raw line. A general gag that matched the line's text but not the raw line
+shows as `general (text)`. Lines that carried a stream tag are marked
+`STREAM-TAG`. A gag on a part of a room DragonRealms sends as one line (see
+[General Gag Patterns](#general-gag-patterns)) is logged with the part: the
+type names it, as in `general (text) room exists`, and the entry shows that
+part, not the whole line.
 
 ### Notes
 
 - Gag patterns use Ruby regular expression syntax.
 - General gags are checked before any text processing or routing.
 - Combat gags are checked only for lines in the combat stream.
-- Multi-line gags are checked before general gags, at the raw-line level.
+- Multi-line gags are checked before general gags, against the raw line and
+  its text, as general gags are, but always on the whole line, never on one
+  part of a room.
 - On `.reload`, custom gag patterns from XML are reloaded (defaults are
   preserved).
 - Invalid regex patterns are logged as warnings and skipped.
@@ -1818,6 +1876,26 @@ separated, case-insensitive), toggles each on or off. Valid names: `spells`,
 .effects custom
 ```
 
+### .blanklines
+
+By default Profanity does not show the blank lines the game sends between
+blocks of a command's output (for example `EXP`, help, or appraisal output),
+which keeps the output compact. `.blanklines` turns those interior blank
+lines on if you prefer the more spaced-out layout the game sends; with no
+argument it toggles the current state, and `on` or `off` sets it explicitly.
+Defaults to off; the choice is saved to `~/.profanity/settings.json`. A blank
+line the game sends right before a prompt is never shown as an empty row.
+
+You can also set the starting default in your settings XML with
+`<blank-lines>on</blank-lines>` (or `off`). Once you use `.blanklines`, the
+choice saved in `settings.json` overrides the XML value.
+
+```
+.blanklines
+.blanklines on
+.blanklines off
+```
+
 ### .help
 
 Display a list of all available dot-commands with brief descriptions.
@@ -1889,6 +1967,7 @@ Common preset IDs used by the game:
 | `roomName` | Room title text (also used by room window) |
 | `roomDesc` | Room description text (also used by room window) |
 | `monsterbold` | Creature names in room objects (also used by room window) |
+| `creatureDead`, `creatureSleeping`, `creatureProne` | A dead, sleeping or prone creature in the room window's objects, in place of `monsterbold`. The built-in templates define only `creatureDead`; a state with no preset stays `monsterbold`. Both games report creatures' states: GemStone inside the room objects, just before each creature, and DragonRealms after the room objects. Profanity tells which creature a state belongs to by the creature's link, which GemStone always sends and DragonRealms sends when Lich identifies as the Saga client |
 | `speech` | Spoken text |
 | `whisper` | Whispered text |
 | `thoughts` | Thought network text |
@@ -2114,6 +2193,14 @@ tags. Both GemStone (`<a>` tags) and DragonRealms (`<d cmd='...'>` tags) are
 supported. When enabled, link text is rendered using the `links` preset color
 (falls back to blue `5555ff` if no preset is defined). All built-in templates
 include a `links` preset by default.
+
+The link color only shows on text that has no other color. A creature's name
+(`monsterbold`), a highlight or a preset under a link keeps its own color, and
+the text stays clickable. This matters in GemStone, and in DragonRealms when
+Lich identifies as the Saga client, which puts a link around every object,
+creature and player. The room players indicator follows the same rule: a
+player's name a highlight or a preset covers shows that color there too, and a
+linked name nothing else colors is drawn in the link color.
 
 **Clickable links:** When `.links` is enabled, clicking on highlighted link
 text sends the associated command to the game server. In DragonRealms, this
