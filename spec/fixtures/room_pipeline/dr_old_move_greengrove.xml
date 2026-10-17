@@ -1,0 +1,14 @@
+You stroll southeast.
+<nav rm='230006'/>
+<streamWindow id='main' title='Story' subtitle=" - [Bosque Deriel, Greengrove] (230006)" location='center' target='drop'/>
+<streamWindow id='room' title='Room' subtitle=" - [Bosque Deriel, Greengrove] (230006)" location='center' target='drop' ifClosed='' resident='true'/>
+<component id='room desc'>The trees here are uniform and have all the appearance of being trimmed by art or artifice.  They almost take on the shapes of the very woodland creatures that cavort among them.  One especially fine beech tree has clay watering pots filled with wine resting among its roots.</component>
+<component id='room objs'>You also see a deed register.</component>
+<component id='room players'></component>
+<component id='room exits'>Obvious paths: <d>south</d>, <d>northwest</d>.<compass></compass></component>
+<component id='room extra'></component>
+<resource picture="0"/><style id="roomName" />[Bosque Deriel, Greengrove] (230006)
+<style id=""/>  You also see a deed register.
+Obvious paths: <d>south</d>, <d>northwest</d>.
+<compass><dir value="s"/><dir value="nw"/></compass><component id='room players'></component>
+<prompt time="1792031029">&gt;</prompt>
