@@ -72,6 +72,7 @@
   <preset id='speech'      fg='66ff66'/>
   <preset id='roomName'    fg='ffffff'/>
   <preset id='monsterbold' fg='d2bc2a'/>
+  <preset id='creatureDead' fg='808080'/>
   <preset id='familiar'    bg='00001a'/>
   <preset id='thoughts'    bg='001a00'/>
   <preset id='voln'        bg='001a00'/>

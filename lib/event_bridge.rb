@@ -128,7 +128,12 @@ class EventBridge
     end
 
     event_bus.on(:room_objects) do |data|
-      @wm.room[Streams::ROOM]&.update_objects(data[:text], links: data[:links] || [], creatures: data[:creatures] || [])
+      @wm.room[Streams::ROOM]&.update_objects(data[:text], links: data[:links] || [], creatures: data[:creatures] || [],
+                                                            states: data[:states] || {})
+    end
+
+    event_bus.on(:room_creature_states) do |data|
+      @wm.room[Streams::ROOM]&.update_creature_states(data[:states])
     end
 
     event_bus.on(:room_players) do |data|

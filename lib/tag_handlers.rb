@@ -89,7 +89,13 @@ module TagHandlers
     'players'      => :handle_room_part_open,
     'exits'        => :handle_room_part_open,
     'extra'        => :handle_room_part_open,
+    'crtrStatus'   => :handle_creature_status,
   }.freeze
+
+  # The creature states a <crtrStatus> tag can set that the room window
+  # shows, the first one set winning: a dead creature is usually also
+  # sleeping, prone or both.
+  CREATURE_STATES = %w[dead sleeping prone].freeze
 
   # Dispatch table for closing tags (</tagname>).
   CLOSING_TAG_DISPATCH = {
@@ -747,7 +753,8 @@ module TagHandlers
     # while .links is off, so they work once it is turned on. A GS link's
     # noun names what it links to: the logons window takes a custom logon
     # message's character from it.
-    @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd, noun: XmlTokenizer.attrs(xml)['noun'])
+    attrs = XmlTokenizer.attrs(xml)
+    @marks.open(:link, text_buffer.length, mark: :link, cmd: cmd, noun: attrs['noun'], exist: attrs['exist'])
     # The link's color span: with .links on, and always in a room stream,
     # whose colors go to the room players indicator and to a text window
     # showing that stream (the room window takes its links from the room
@@ -782,6 +789,26 @@ module TagHandlers
     return unless span[:cmd].nil? && span[:start] && span[:end] > span[:start]
 
     span[:cmd] = text_buffer[span[:start]...span[:end]]
+  end
+
+  # Handle <crtrStatus exist='N' hostile='1' dead='1' .../>, the game's
+  # state of the creature with that id (its <a exist> link). Both games
+  # send it: GemStone inside the room objs compDef or component, just
+  # before each creature (and with health and maxhealth), DragonRealms on
+  # the line after the room objs component, or after </exists> in a <room>
+  # block. Each tag gives the creature's whole state, so a flag left out is
+  # no longer set (a "prone" goes when the creature clambers to its feet).
+  # The room window shows the first of {CREATURE_STATES} set (see
+  # RoomAssembler#creature_status).
+  #
+  # @param xml [String] the tag
+  # @param _text_buffer [String] the text collected so far on the line (unused)
+  # @return [void]
+  def handle_creature_status(xml, _text_buffer)
+    attrs = XmlTokenizer.attrs(xml)
+    return unless (exist = attrs['exist'])
+
+    @room.creature_status(exist, CREATURE_STATES.find { |state| attrs[state] == '1' }&.to_sym)
   end
 
   # Handle <indicator id='IconXXX' visible='y|n'/> tag.

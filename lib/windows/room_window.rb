@@ -38,6 +38,14 @@ class RoomWindow < BaseWindow
   # @return [String, nil] preset name applied to creature highlight color
   attr_accessor :creatures_preset
 
+  # The preset of each creature state the window shows a creature in, in
+  # place of {#creatures_preset} (its +dead-preset+, +sleeping-preset+ and
+  # +prone-preset+ attributes). A state whose preset isn't defined leaves
+  # the creature in the creatures preset.
+  #
+  # @return [Hash{Symbol => String}]
+  attr_accessor :creature_state_presets
+
   # Where the window reads whether links are on: the {SharedState} that
   # +--links+ and +.links+ set. The builder hands every room window the
   # {WindowManager}'s, so a window a layout builds, at startup or by
@@ -56,6 +64,8 @@ class RoomWindow < BaseWindow
     @objects = ''
     @objects_links = []
     @extracted_creatures = []
+    @creature_states = {}
+    @creature_state_presets = {}
     @players = ''
     @players_links = []
     @exits = ''
@@ -102,11 +112,25 @@ class RoomWindow < BaseWindow
   # @param text [String] clean objects text
   # @param links [Array<Hash>] pre-computed link regions `[{start:, end:, cmd:}]`
   # @param creatures [Array<String>] creature names for monsterbold highlighting
+  # @param states [Hash{String => Symbol}] the state of each creature the
+  #   links link to (see #update_creature_states)
   # @return [void]
-  def update_objects(text, links: [], creatures: [])
+  def update_objects(text, links: [], creatures: [], states: {})
     @objects = text.strip
     @objects_links = links
     @extracted_creatures = creatures
+    @creature_states = states
+  end
+
+  # Update the creatures' states: +:dead+, +:sleeping+ or +:prone+ by the
+  # game's id of the creature, as an objects link names it (its +:exist+).
+  # A creature in a state is drawn in that state's preset (see
+  # {#creature_state_presets}).
+  #
+  # @param states [Hash{String => Symbol}]
+  # @return [void]
+  def update_creature_states(states)
+    @creature_states = states
   end
 
   # Update the room players with pre-computed link data.
@@ -321,25 +345,43 @@ class RoomWindow < BaseWindow
   def objects_rows
     line_colors = build_link_colors(@objects_links)
 
-    # Highlight creatures with monsterbold preset
-    preset_name = @creatures_preset || Presets::MONSTERBOLD
-    if (colors = Presets.colors(preset_name))
-      @extracted_creatures.each do |creature|
-        next if creature.empty? # it would match at pos without moving on
+    # Highlight creatures with monsterbold preset, or a creature in a state
+    # with that state's preset (even when the creatures preset is not
+    # defined)
+    colors = Presets.colors(@creatures_preset || Presets::MONSTERBOLD)
+    @extracted_creatures.each do |creature|
+      next if creature.empty? # it would match at pos without moving on
 
-        # Whole words only ("rat" not inside "pirate"); apostrophes and
-        # hyphens count as part of a word, as in "Adan'f" or "void-black".
-        whole_word = /(?<![[:word:]'-])#{Regexp.escape(creature)}(?![[:word:]'-])/
-        pos = 0
-        while (idx = @objects.index(whole_word, pos))
-          line_colors.push({ start: idx, end: idx + creature.length, **colors })
-          pos = idx + creature.length
-        end
+      # Whole words only ("rat" not inside "pirate"); apostrophes and
+      # hyphens count as part of a word, as in "Adan'f" or "void-black".
+      whole_word = /(?<![[:word:]'-])#{Regexp.escape(creature)}(?![[:word:]'-])/
+      pos = 0
+      while (idx = @objects.index(whole_word, pos))
+        finish = idx + creature.length
+        creature_colors = state_colors(idx, finish) || colors
+        line_colors.push({ start: idx, end: finish, **creature_colors }) if creature_colors
+        pos = finish
       end
     end
 
     HighlightProcessor.apply_highlights(@objects, line_colors)
     wrap_rows(@objects, line_colors)
+  end
+
+  # The colors of the state of the creature an objects link inside
+  # +start...finish+ links to, when it is in a state whose preset is
+  # defined (see {#creature_state_presets}). Two creatures of one name are
+  # told apart by their links.
+  #
+  # @param start [Integer] where the creature's name starts in the objects
+  # @param finish [Integer] where it ends
+  # @return [Hash, nil] +{ fg:, bg: }+, or nil
+  # @api private
+  def state_colors(start, finish)
+    link = @objects_links.find { |l| l[:exist] && l[:start] >= start && l[:end] <= finish }
+    return unless link && (state = @creature_states[link[:exist]])
+
+    Presets.colors(@creature_state_presets[state])
   end
 
   # Wrap an exits section (the game's, or Lich's "Room Exits:") with
@@ -406,6 +448,11 @@ BaseWindow.register_type('room') do |height, width, top, left, element, wm|
   window.title_preset = element.attributes['title-preset'] || Presets::ROOM_NAME
   window.desc_preset = element.attributes['desc-preset']
   window.creatures_preset = element.attributes['creatures-preset'] || Presets::MONSTERBOLD
+  window.creature_state_presets = {
+    dead: element.attributes['dead-preset'] || Presets::CREATURE_DEAD,
+    sleeping: element.attributes['sleeping-preset'] || Presets::CREATURE_SLEEPING,
+    prone: element.attributes['prone-preset'] || Presets::CREATURE_PRONE
+  }
   window.shared_state = wm.shared_state
   wm.room[Streams::ROOM] = window
   window
