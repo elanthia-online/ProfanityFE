@@ -24,6 +24,10 @@ class Config
   # overrides it.
   DEFAULT_HISTORY_SIZE = 1000
 
+  # Whether the game's interior blank lines are shown unless <blank-lines>
+  # (or a saved +.blanklines+ choice) overrides it.
+  DEFAULT_BLANK_LINES = false
+
   # @return [Hash<Regexp, Array>] highlight patterns mapping regex => [fg, bg, ul]
   attr_reader :highlight
 
@@ -47,11 +51,16 @@ class Config
   #   (set with <history-size> in the settings XML)
   attr_accessor :history_size
 
+  # @return [Boolean] whether the game's interior blank lines are shown, as a
+  #   default (set with <blank-lines> in the settings XML; a choice saved by
+  #   +.blanklines+ takes precedence)
+  attr_accessor :blank_lines
+
   # @return [Mutex] synchronization lock for HIGHLIGHT reads during settings reload
   attr_reader :lock
 
   # Empty highlights, presets, layouts, scroll windows and perc-transforms,
-  # with the default notification stream and history size.
+  # with the default notification stream, history size and blank lines.
   def initialize
     @highlight = {}
     @preset = {}
@@ -60,6 +69,7 @@ class Config
     @perc_transforms = []
     @notification_stream = DEFAULT_NOTIFICATION_STREAM
     @history_size = DEFAULT_HISTORY_SIZE
+    @blank_lines = DEFAULT_BLANK_LINES
     @lock = Mutex.new
   end
 
@@ -75,6 +85,7 @@ class Config
       @perc_transforms.clear
       @notification_stream = DEFAULT_NOTIFICATION_STREAM
       @history_size = DEFAULT_HISTORY_SIZE
+      @blank_lines = DEFAULT_BLANK_LINES
     end
   end
 end
