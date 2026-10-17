@@ -81,6 +81,18 @@ module Games
     # all.
     ROOM_LIST_CUT_SHORT_PATTERN = /\band some other stuff\.\z/.freeze
 
+    # A line of the spell list: the spell's name, two spaces and what is
+    # left of it in parentheses ("Bless  (OM)", "Osrel Meraud  (91%)",
+    # "Ease Burden  (12 roisaen)", "Hydra Hex  (Indefinite)"). In some
+    # sessions where Lich identifies as the Saga client (it depends on the
+    # Lich build), every refresh after the first comes as
+    # <clearStream id="percWindow"/> and these lines with no pushStream.
+    # A spell's name has no period, which keeps out sentences that end in
+    # a parenthesis ("...in the area.  (Use SPELL RECOGNIZE OFF to change
+    # this.)"), and no colon, which keeps out the rows of the EXP skill
+    # table ("Shield Usage:   1750 00% clear          (0/34)").
+    SPELL_LINE_PATTERN = /\A[A-Z][^<>\[.:]*  \([^()]+\)\z/.freeze
+
     # Seconds of stun for a Raise Dead chant.
     RAISE_DEAD_STUN_SECONDS = 30.6
 
@@ -150,6 +162,14 @@ module Games
     #   other stuff."
     def self.room_list_cut_short?(text)
       text.match?(ROOM_LIST_CUT_SHORT_PATTERN)
+    end
+
+    # Whether a line is a line of the spell list ({SPELL_LINE_PATTERN}).
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean] e.g. true for "Bless  (OM)"
+    def self.spell_line?(text)
+      text.match?(SPELL_LINE_PATTERN)
     end
   end
 end
