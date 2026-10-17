@@ -333,6 +333,7 @@ class StreamRouter
     return if text.empty?
 
     # Detect movement in stream content too
+    @prompts.flush_pending_blank
     @prompts.movement_seen if @prompts.movement?(text)
     @prompts.emit_prompt_if_needed
     @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: text, colors: colors)
@@ -344,7 +345,8 @@ class StreamRouter
   end
 
   # Show main-window text, unless it is the game's copy of the line just
-  # sent to a stream window.
+  # sent to a stream window. A blank line the game sent before it, held by
+  # the {PromptTracker}, is shown just before it.
   #
   # @param text [String] non-blank game text
   # @param colors [Array<Hash>] its color regions
@@ -354,6 +356,10 @@ class StreamRouter
   def route_main_text(text, colors, room_captured)
     # Drop the game's main copy of the line just sent to a stream window.
     return if @prompts.stream_text_copy?(text)
+
+    # A blank line held before this line is shown first. Only here, once
+    # the line is known to show: a dropped copy leaves the blank held.
+    @prompts.flush_pending_blank
 
     # Detect movement messages to suppress following prompts/empty lines
     is_movement = @prompts.movement?(text)

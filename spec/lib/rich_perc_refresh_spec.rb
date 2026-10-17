@@ -16,9 +16,9 @@
 #   In a session on another Lich build, every refresh and every combat line
 #   came pushed, as in the old stream.
 #
-# The rich examples marked pending describe what the user should see; they
-# fail until a bare refresh is read (spec policy: AUDIT §0.2). Combat lines
-# that come with no combat pushStream stay in main: nothing else marks them.
+# A bare refresh's spell lines go to the spell window, from the clear up to
+# the next prompt or percWindow pushStream. Combat lines that come with no
+# combat pushStream stay in main: nothing else marks them.
 
 require_relative '../spec_helper'
 require_relative '../support/screen_replay'
@@ -76,7 +76,6 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
     end
 
     it 'shows a refresh with no pushStream in the spell window, and nothing of it in main' do
-      pending 'a spell refresh with no pushStream is not read yet'
       load_layout(room_window: false, extra: windows)
 
       receive_from_server(*fixture('rich_stream', 'dr_rich_perc_bare'))
@@ -89,7 +88,6 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
     end
 
     it 'takes the spell lines of a refresh that come after other lines, and leaves those lines in main' do
-      pending 'a spell refresh with no pushStream is not read yet'
       load_layout(room_window: false, extra: windows)
 
       receive_from_server(*fixture('rich_stream', 'dr_rich_perc_split'))
@@ -99,6 +97,69 @@ RSpec.describe 'The DragonRealms spell list and combat lines from the old and th
       expect(main_rows).to include('Roundtime: 1 sec.',
                                    'You tap into the mana from fifty of the surrounding streams and attempt to ' \
                                    'keep it channeling in')
+    end
+
+    it 'leaves a spell-shaped line after the refresh\'s prompt in main (synthetic)' do
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server(*fixture('rich_stream', 'dr_rich_perc_bare'), 'Sanctuary  (OM)')
+
+      expect(window_text('percWindow')).to eq spell_rows
+      expect(main_rows.last).to eq 'Sanctuary  (OM)'
+    end
+
+    it 'leaves a refresh in main when the game is GemStone (--game)' do
+      load_layout(room_window: false, extra: windows, game_rules: Games::GemStone)
+
+      receive_from_server(*fixture('rich_stream', 'dr_rich_perc_bare'))
+
+      expect(window_text('percWindow')).to be_empty
+      expect(main_rows.first).to eq 'Bless  (OM)'
+    end
+
+    it 'leaves a spell-shaped line in main after a pushed refresh, before its prompt (synthetic)' do
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server('<clearStream id="percWindow"/>', '<pushStream id="percWindow"/>Bless  (OM)',
+                          '<popStream/>Sanctuary  (OM)', '<prompt time="1792032076">&gt;</prompt>')
+
+      expect(window_text('percWindow')).to eq ['Bless (OM)']
+      expect(main_rows).to include('Sanctuary  (OM)')
+    end
+
+    it 'leaves a spell-shaped line on another stream during a bare refresh on that stream (synthetic)' do
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server('<clearStream id="percWindow"/>', '<pushStream id="combat"/>Sanctuary  (OM)',
+                          '<popStream/>Bless  (OM)', '<prompt time="1792032076">&gt;</prompt>')
+
+      expect(window_text('combat')).to eq ['Sanctuary  (OM)']
+      expect(window_text('percWindow')).to eq ['Bless (OM)']
+    end
+
+    it 'leaves the EXP skill table in main during a bare refresh' do
+      # Rows in the real shape (leading spaces, two spaces before each
+      # mindstate fraction), and the same row with no leading spaces
+      # (synthetic): the colons keep both out of the spell window.
+      row = 'Shield Usage:   1750 00% clear          (0/34)     Light Armor:   1750 01% clear          (0/34)'
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server('<clearStream id="percWindow"/>', 'Bless  (OM)',
+                          '          SKILL: Rank/Percent towards next rank/Amount learning/Mindstate Fraction',
+                          "    #{row}", row, '<prompt time="1792032076">&gt;</prompt>')
+
+      expect(window_text('percWindow')).to eq ['Bless (OM)']
+      expect(main_rows.join("\n")).to include('Shield Usage:').and include('Light Armor:')
+      expect(main_rows.count { |r| r.include?('Shield Usage:') }).to eq 2
+    end
+
+    it 'leaves a spell-shaped line in main after a clearStream of another stream (synthetic)' do
+      load_layout(room_window: false, extra: windows)
+
+      receive_from_server('<clearStream id="combat"/>', 'Bless  (OM)', '<prompt time="1792032076">&gt;</prompt>')
+
+      expect(window_text('percWindow')).to be_empty
+      expect(main_rows.first).to eq 'Bless  (OM)'
     end
 
     it 'shows combat lines that come with no combat pushStream in main' do

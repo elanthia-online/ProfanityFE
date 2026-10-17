@@ -685,6 +685,12 @@ some other stuff.") is replaced by the full list from the lines. When Lich
 adds a room id to the room name (`;display roomid title`), the title row
 shows it.
 
+When Lich identifies as the Saga client, DragonRealms sends the room's lines
+as one line, with each part (name, description, objects, players, exits)
+marked. The story window shows each part on a line of its own, and the room
+window reads them as it reads the lines above. That stream always sends the
+description, whatever `FLAG DESCRIPTION` is set to, so both windows show it.
+
 A view of another room, such as the one a Moon Mage's Locate shows, goes to
 the `familiar` window (or to the story window when the layout has none). It
 doesn't change the room window, the terminal title or the room players
@@ -780,6 +786,14 @@ to fit narrow windows.
 | `width` | yes | Width in columns (1 column reserved for padding) |
 
 The window is automatically wired to the `percWindow` stream.
+
+In some sessions where Lich identifies as the Saga client (it depends on the
+Lich build), the spell list comes in the `percWindow` stream only once, at login.
+After that each refresh clears the window and the spell lines come as plain
+text. When that happens, up to the next prompt, Profanity puts each
+line shaped like a spell line (a name with no period or colon, two spaces,
+then something in parentheses: `Bless  (OM)`, `Ease Burden  (12 roisaen)`) in
+this window. Other lines that arrive between them stay in the story window.
 
 **Example:**
 
@@ -1828,6 +1842,26 @@ separated, case-insensitive), toggles each on or off. Valid names: `spells`,
 .effects
 .effects debuffs cooldowns
 .effects custom
+```
+
+### .blanklines
+
+By default Profanity does not show the blank lines the game sends between
+blocks of a command's output (for example `EXP`, help, or appraisal output),
+which keeps the output compact. `.blanklines` turns those interior blank
+lines on if you prefer the more spaced-out layout the game sends; with no
+argument it toggles the current state, and `on` or `off` sets it explicitly.
+Defaults to off; the choice is saved to `~/.profanity/settings.json`. A blank
+line the game sends right before a prompt is never shown as an empty row.
+
+You can also set the starting default in your settings XML with
+`<blank-lines>on</blank-lines>` (or `off`). Once you use `.blanklines`, the
+choice saved in `settings.json` overrides the XML value.
+
+```
+.blanklines
+.blanklines on
+.blanklines off
 ```
 
 ### .help
