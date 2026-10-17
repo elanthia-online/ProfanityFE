@@ -71,6 +71,15 @@ module Games
     #   short; nil when the game has no such mark
     def room_list_cut_short?(text); end
 
+    # Whether a line of main text is a line of the spell list, as a spell
+    # refresh with no pushStream sends it (see
+    # GameTextProcessor#handle_game_text).
+    #
+    # @param text [String] the line, tags removed
+    # @return [Boolean, nil] true for a spell line; nil when the game has
+    #   no such refresh
+    def spell_line?(text); end
+
     # The compass directions of a room's exits, for a game that sends no
     # compass directions of its own with them.
     #

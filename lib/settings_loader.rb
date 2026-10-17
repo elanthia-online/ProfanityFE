@@ -114,7 +114,7 @@ module SettingsLoader
   # @param do_macro [#call] runs a macro; called with the macro string
   # @param reload [Boolean] when true, presets and layouts are not collected
   # @return [Hash] the settings, for {apply}: +:highlight+, +:perc_transforms+,
-  #   +:notification_stream+, +:history_size+, +:gags+ (keyword arguments for
+  #   +:notification_stream+, +:history_size+, +:blank_lines+, +:gags+ (keyword arguments for
   #   GagPatterns.replace_custom), +:key_binding+, +:presets+ and +:layouts+
   # @api private
   def parse(xml_root, key_action, do_macro, reload: false)
@@ -123,7 +123,7 @@ module SettingsLoader
     # (action vs combo) isn't reported as conflicting with the previous load.
     settings = {
       highlight: {}, perc_transforms: [], notification_stream: Config::DEFAULT_NOTIFICATION_STREAM,
-      history_size: Config::DEFAULT_HISTORY_SIZE,
+      history_size: Config::DEFAULT_HISTORY_SIZE, blank_lines: Config::DEFAULT_BLANK_LINES,
       gags: { general: [], multiline: [], combat: [] }, key_binding: {}, presets: {}, layouts: {}
     }
 
@@ -166,6 +166,15 @@ module SettingsLoader
           ProfanityLog.write('settings', "Invalid history-size '#{size}' (expected a whole number), using #{settings[:history_size]}")
         end
 
+      when 'blank-lines'
+        value = e.text&.strip
+        case value&.downcase
+        when 'on', 'true', 'yes', '1' then settings[:blank_lines] = true
+        when 'off', 'false', 'no', '0' then settings[:blank_lines] = false
+        else
+          ProfanityLog.write('settings', "Invalid blank-lines '#{value}' (expected on/off), using #{settings[:blank_lines] ? 'on' : 'off'}")
+        end
+
       when 'perc-transform'
         if e.attributes['pattern']
           begin
@@ -197,8 +206,8 @@ module SettingsLoader
   #
   # Highlights, perc-transforms, custom gags and key bindings are replaced,
   # so an entry removed from the file doesn't linger. The notification
-  # stream and history size fall back to their defaults when the file
-  # doesn't set them. Presets and layouts are added on initial load only.
+  # stream, history size and blank lines fall back to their defaults when
+  # the file doesn't set them. Presets and layouts are added on initial load only.
   #
   # +keep_highlights+ are merged over the file's highlights in the same
   # step, after them and winning for the same regex, as if they had been
@@ -219,6 +228,7 @@ module SettingsLoader
       PERC_TRANSFORMS.replace(settings[:perc_transforms])
       CONFIG.notification_stream = settings[:notification_stream]
       CONFIG.history_size = settings[:history_size]
+      CONFIG.blank_lines = settings[:blank_lines]
       key_binding.replace(settings[:key_binding])
       next if reload
 

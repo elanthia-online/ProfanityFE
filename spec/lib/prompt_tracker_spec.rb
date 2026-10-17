@@ -113,6 +113,118 @@ RSpec.describe PromptTracker do
     end
   end
 
+  describe 'blank lines by default' do
+    it 'does not show blank lines' do
+      expect(tracker.blank_lines_enabled).to be false
+    end
+
+    it 'holds no blank line' do
+      blanks = []
+      event_bus.on(:stream_text) { |data| blanks << data }
+      tracker.blank_line
+      tracker.flush_pending_blank
+
+      expect(blanks).to be_empty
+    end
+  end
+
+  describe 'deferred blank lines' do
+    let(:blanks) { [] }
+
+    before do
+      event_bus.on(:stream_text) { |data| blanks << data }
+      tracker.blank_lines_enabled = true
+    end
+
+    it 'holds a blank line without emitting it' do
+      tracker.blank_line
+
+      expect(blanks).to be_empty
+      expect(prompts).to be_empty
+    end
+
+    it 'emits the held blank to main as empty text on flush, once' do
+      tracker.blank_line
+      tracker.flush_pending_blank
+      tracker.flush_pending_blank
+
+      expect(blanks).to eq [{ stream: 'main', text: '', colors: [] }]
+    end
+
+    it 'emits nothing on flush when no blank is held' do
+      tracker.flush_pending_blank
+
+      expect(blanks).to be_empty
+    end
+
+    it 'holds one blank for a run of blank lines' do
+      3.times { tracker.blank_line }
+      tracker.flush_pending_blank
+
+      expect(blanks.length).to eq 1
+    end
+
+    it 'shows the pending prompt in place of the blank line, and holds no blank' do
+      blank_line_with_prompt_pending
+      tracker.flush_pending_blank
+
+      expect(prompts).to eq ['H>']
+      expect(blanks).to be_empty
+    end
+
+    it 'discards a held blank when a prompt tag arrives' do
+      tracker.server = StringIO.new
+      tracker.blank_line
+      tracker.prompt_tag('<prompt time="5">&gt;</prompt>')
+      tracker.flush_pending_blank
+
+      expect(blanks).to be_empty
+    end
+
+    it 'holds no blank right after a movement line' do
+      tracker.movement_seen
+      tracker.blank_line
+      tracker.flush_pending_blank
+
+      expect(blanks).to be_empty
+    end
+
+    it "holds no blank while the main window's newest line is movement" do
+      window_mgr.stream['main'].add_string('You walk north.')
+      tracker.blank_line
+      tracker.flush_pending_blank
+
+      expect(blanks).to be_empty
+    end
+
+    context 'with blank lines turned off' do
+      before { tracker.blank_lines_enabled = false }
+
+      it 'holds no blank line' do
+        tracker.blank_line
+        tracker.flush_pending_blank
+
+        expect(blanks).to be_empty
+      end
+
+      it 'still shows the pending prompt at a blank line' do
+        blank_line_with_prompt_pending
+
+        expect(prompts).to eq ['H>']
+      end
+
+      it 'drops a blank already held' do
+        tracker.blank_lines_enabled = true
+        tracker.blank_line
+        tracker.blank_lines_enabled = false
+        tracker.flush_pending_blank
+
+        expect(blanks).to be_empty
+        expect(tracker.blank_lines_enabled).to be false
+      end
+    end
+  end
+
   describe '#stream_text_copy?' do
     it "is true only for the next main line with the stream line's text, and uses the text up" do
       tracker.stream_text_sent('  Ytterby whispers, "Done!" ')
