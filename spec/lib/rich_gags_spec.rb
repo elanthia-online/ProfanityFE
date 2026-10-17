@@ -2,17 +2,19 @@
 
 # What gags hide in each of the two streams DragonRealms sends, from real
 # lines (spec/fixtures/, player names replaced). General gags are matched
-# against the raw server line, tags included (see LineFilter), and a
-# gagged line keeps only its stream and style tags.
+# against the raw server line, tags included, then against the line's text
+# (see LineFilter#line_text). A line matched as sent keeps only its stream and
+# style tags; one matched by its text only keeps every tag but those of its
+# text.
 #
 # The rich stream (the stream the game sends when Lich identifies as the
 # Saga client) puts an <a exist> link around every object, creature and
-# player, so a gag written against the text no longer matches the raw
-# line; and it sends a whole room as one line, so a gag on one part of a
-# room matches the line of the whole room. The examples marked pending
-# describe what the user should see; they fail until gags read the text
-# and a room's parts (spec policy: AUDIT §0.2). The patterns are trimmed
-# from the shipped templates' gags.
+# player, so a gag written against the text misses the raw line and
+# matches its text; and it sends a whole room as one line, so a gag on one
+# part of a room matches the line of the whole room. The examples marked
+# pending describe what the user should see; they fail until gags read a
+# room's parts (spec policy: AUDIT §0.2). The patterns are trimmed from
+# the shipped templates' gags.
 
 require_relative '../spec_helper'
 require_relative '../support/screen_replay'
@@ -39,11 +41,12 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
   end
 
   describe 'the old stream' do
-    # A gagged line drops a <component> with its text: a gag on the room's
-    # lines in main must leave the room components on their own lines.
+    # A line gagged as sent drops a <component> with its text: a gag on the
+    # room's lines in main must not match the room components on their own
+    # lines.
     # Matched against the raw lines, this anchored gag misses every line of
-    # the fixture (each players line starts with a tag; see the pending
-    # example below), so it guards gags read against a line's text.
+    # the fixture (each players line starts with a tag; see the example
+    # below), so it guards gags read against a line's text.
     it 'keeps the players in the room window and the indicator under a gag on the players line' do
       GagPatterns.add_general_pattern('^Also here:')
       load_layout
@@ -70,7 +73,6 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
     # With creatures in the room, the players line starts with their
     # <crtrStatus/> tags, so an anchored gag misses its raw line.
     it 'hides the players line in main when creature tags come before its text' do
-      pending 'gags are matched against the raw line only'
       GagPatterns.add_general_pattern('^Also here:')
       load_layout
 
@@ -89,8 +91,18 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
       expect(room_screen.last).to eq 'Obvious exits: north, northeast, east, southwest, west, northwest.'
     end
 
+    # The compass line has no text, only tags: a gag on blank lines must
+    # not take it for one.
+    it 'keeps the compass under a gag on blank lines' do
+      GagPatterns.add_general_pattern('^\s*$')
+      load_layout
+
+      receive_from_server(*fixture('room_pipeline', 'dr_old_creatures'))
+
+      expect(compass_lit).to eq %w[n ne e sw w nw]
+    end
+
     it 'hides a line whose text a gag matches after a leading stream tag' do
-      pending 'gags are matched against the raw line only'
       GagPatterns.add_general_pattern('^You search the')
       load_layout(room_window: false)
 
@@ -102,7 +114,6 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
 
   describe 'the rich stream' do
     it 'hides a line whose text a gag matches, links and all' do
-      pending 'gags are matched against the raw line only'
       GagPatterns.add_general_pattern('^(?:<.*>)?(?:The|A|An) jeol moradu begins to advance')
       load_layout(room_window: false)
 

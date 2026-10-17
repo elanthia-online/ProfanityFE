@@ -1510,10 +1510,30 @@ before they reach any window.
 <gag>REGEX_PATTERN</gag>
 ```
 
+A gag is tried against the line as the game sends it, XML tags included, and
+then against its text, the way the window shows it. A gag written against the
+text therefore still matches when the game puts tags inside it: a link around
+each object, creature and player (when Lich identifies as the Saga client), or
+a creature's status tag at the start of a line. A gag written against the tags,
+such as one that matches `<preset id="whisper">`, still works too. The text of a
+component (a part of the room window or a skill of the experience window) is
+left out, so a gag on the room lines in the story window doesn't take the
+room window's copy with it. A line with no text of its own (only tags, such
+as a prompt or a component) is tried as sent only, so a gag on blank lines,
+such as `^\s*$`, hides blank lines and nothing else.
+
+A gag that matches only the text hides only the text. The line's other tags
+still do their work: the experience bars GemStone sends in front of a search
+line still update, as does the room window from the objects DragonRealms can
+send after a creature's line. A gag that matches the line as sent hides the
+whole line but its stream tags (see Diagnosing Gags below).
+
 ### Combat Gag Patterns
 
 Applied only to text in the **combat** stream. Use these to filter repetitive
-combat messages.
+combat messages. Combat lines that come with no combat stream (as in some
+sessions where Lich identifies as the Saga client, depending on the Lich build)
+go to the story window, and combat gags don't apply to them.
 
 ```xml
 <combat_gag>REGEX_PATTERN</combat_gag>
@@ -1569,10 +1589,12 @@ a mistyped `end` pattern can never swallow the stream indefinitely.
 
 ### Diagnosing Gags
 
-General and multi-line gags match the raw server line, XML tags included. A
-gagged line's text is hidden, but its stream tags (`<pushStream>`,
-`<popStream/>`, `<clearStream>`) are still processed, so a gag can never leave
-text routed to the wrong window.
+General and multi-line gags match the raw server line, XML tags included, or
+its text (see General Gag Patterns above). A gagged line's text is hidden, but
+its stream tags (`<pushStream>`, `<popStream/>`, `<clearStream>`) are still
+processed, so a gag can never leave text routed to the wrong window. A line
+matched by its text only keeps all its other tags too, but those that color or
+link its text.
 
 Start Profanity with `--log-gags` to write every gagged line to the log file:
 
@@ -1581,14 +1603,17 @@ Start Profanity with `--log-gags` to write every gagged line to the log file:
 ```
 
 Each entry shows the gag type, the start of the pattern that matched, and the
-full raw line. Lines that carried a stream tag are marked `STREAM-TAG`.
+full raw line. A general gag that matched the line's text but not the raw line
+shows as `general (text)`. Lines that carried a stream tag are marked
+`STREAM-TAG`.
 
 ### Notes
 
 - Gag patterns use Ruby regular expression syntax.
 - General gags are checked before any text processing or routing.
 - Combat gags are checked only for lines in the combat stream.
-- Multi-line gags are checked before general gags, at the raw-line level.
+- Multi-line gags are checked before general gags, against the raw line and
+  its text, as general gags are.
 - On `.reload`, custom gag patterns from XML are reloaded (defaults are
   preserved).
 - Invalid regex patterns are logged as warnings and skipped.

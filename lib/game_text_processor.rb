@@ -27,7 +27,8 @@ require_relative 'effect_tracker'
 #
 # - {ServerReader} reads the socket, guards each line and flushes the
 #   screen when no more data is waiting; this class is its line handler.
-# - {LineFilter} drops gagged lines (keeping their stream and style tags)
+# - {LineFilter} drops gagged lines (keeping their stream and style tags,
+#   or every tag but those of the text for a gag on the text only)
 #   and runs of blank lines.
 # - The markup parse stays here: bold carry-over across lines, the
 #   tokenize-and-dispatch tag parser ({TagHandlers}: colors, bold, presets,
@@ -98,7 +99,7 @@ class GameTextProcessor
     @pending_render = PendingRender.new
     @reader = ServerReader.new(line_handler: self, pending_render: @pending_render, event_bus: event_bus,
                                cmd_buffer: cmd_buffer, shared_state: shared_state, boot_profiler: boot_profiler)
-    @line_filter = LineFilter.new(shared_state: shared_state)
+    @line_filter = LineFilter.new(shared_state: shared_state, xml_escapes: xml_escapes)
     @prompts = PromptTracker.new(shared_state: shared_state, event_bus: event_bus, pending_render: @pending_render,
                                  window_mgr: window_mgr, clock: clock, boot_profiler: boot_profiler)
     @prompts.blank_lines_enabled = blank_lines
