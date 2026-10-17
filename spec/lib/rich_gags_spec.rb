@@ -236,6 +236,20 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
       expect(main_rows).to eq ['You stroll southeast.']
     end
 
+    # Characterization of the documented limitation above: a multi-line
+    # gag's end is tried only on the lines after its start, so an end that
+    # matches a later part of the same room (its exits) never ends it, and
+    # the lines that follow the room are hidden until one matches the end.
+    it 'hides the lines after the room too when the end matches a later part of that room' do
+      GagPatterns.add_multiline_gag('^\\[Bosque Deriel, Greengrove\\]', '^Obvious paths:')
+      load_layout(room_window: false)
+
+      receive_from_server(*fixture('room_pipeline', 'dr_rich_move'), 'A songbird trills overhead.',
+                          'Obvious paths: <d>south</d>.', 'A breeze stirs the leaves.')
+
+      expect(main_rows).to eq ['You stroll southeast.', 'A breeze stirs the leaves.']
+    end
+
     # Combat gags apply to the combat stream. Combat lines that come with no
     # combat pushStream (as in the session these fixtures come from) are
     # main's, so combat gags don't apply to them.

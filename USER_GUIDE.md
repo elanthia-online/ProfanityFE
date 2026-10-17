@@ -1525,7 +1525,10 @@ line. A gag is then tried on each part of the room (name, description, objects,
 players, exits) on its own, and hides only the part it matches, as it hid that
 part's own line before. A gag that would only match across two parts doesn't
 apply. A multi-line gag still applies to the whole line, so one that starts on
-a room's text hides the whole room.
+a room's text hides the whole room. Its `end` is tried only on the lines after
+that one, so an `end` that matches a later part of the same room (such as
+`^Obvious paths:`) doesn't end it: the lines after the room are hidden too,
+until one matches `end` or the 100-line cap releases the block.
 
 ### Combat Gag Patterns
 
