@@ -25,6 +25,14 @@ class PromptTracker
   # @return [IO, nil]
   attr_writer :server
 
+  # Whether interior blank lines from the game are shown (see
+  # {#blank_line} and {#flush_pending_blank}). Off by default, so output
+  # stays compact; the +.blanklines+ dot-command turns it on. Turning it
+  # off again also drops a blank already held.
+  #
+  # @return [Boolean]
+  attr_reader :blank_lines_enabled
+
   # @param shared_state [SharedState] holds the prompt text, whether a
   #   prompt is pending, and whether the server time offset is known
   # @param event_bus [EventBus] receives +:add_prompt+ and +:prompt_changed+
@@ -52,6 +60,19 @@ class PromptTracker
 
     # Track movement messages to suppress prompts/empty lines after them
     @last_was_movement = false
+
+    # A blank line from the game is held, not shown, until a real line of
+    # main text follows it (see #flush_pending_blank). A prompt discards
+    # it, so no empty row shows before a prompt.
+    @blank_lines_enabled = false
+    @blank_pending = false
+  end
+
+  # @param value [Boolean] see {#blank_lines_enabled}
+  # @return [void]
+  def blank_lines_enabled=(value)
+    @blank_lines_enabled = value ? true : false
+    @blank_pending = false unless @blank_lines_enabled
   end
 
   # Handle a <prompt time='...'>text&gt;</prompt> paired tag.
@@ -63,6 +84,8 @@ class PromptTracker
   # @return [void]
   def prompt_tag(xml)
     @last_stream_text = nil
+    # A blank line before a prompt is not shown
+    @blank_pending = false
     return unless (time = XmlTokenizer.attrs(xml)['time'])&.match?(/\A[0-9]+\z/)
     # The text must end with an escaped >, the only part decoded.
     return unless (text = XmlTokenizer.content(xml))&.end_with?('&gt;')
@@ -94,10 +117,16 @@ class PromptTracker
   # A blank line from the game in main-window context: show the pending
   # prompt, unless the last line was movement.
   #
-  # Blank lines from the game are not displayed; a blank line is where a
-  # pending prompt is shown, except after movement (the flag, or the
-  # backup check of the main window's newest line), where the prompt is
-  # skipped too. The pending flag is consumed either way.
+  # A blank line is where a pending prompt is shown, except after movement
+  # (the flag, or the backup check of the main window's newest line), where
+  # the prompt is skipped too. The pending flag is consumed either way.
+  # The prompt takes the blank's place, and after movement the blank is
+  # not held.
+  #
+  # Any other blank line is held, when {#blank_lines_enabled}, and shown
+  # by {#flush_pending_blank} only if a real line of main text follows it;
+  # a prompt before that text first discards it. With blank lines off,
+  # such a blank is dropped.
   #
   # @return [void]
   def blank_line
@@ -105,10 +134,27 @@ class PromptTracker
     pending = @state.consume_prompt!
     if @last_was_movement || last_line_was_movement
       @last_was_movement = false
+      @blank_pending = false
     elsif pending
+      @blank_pending = false
       @event_bus.emit(:add_prompt, stream: MAIN_STREAM, text: @state.prompt_text)
       @pending_render.request_update
+    else
+      @blank_pending = @blank_lines_enabled
     end
+  end
+
+  # Show the held blank line, if any, as an empty main-window row. Called
+  # just before a real line of main text is emitted, so the blank comes
+  # first in the same flush. Does nothing when no blank is held.
+  #
+  # @return [void]
+  def flush_pending_blank
+    return unless @blank_pending
+
+    @blank_pending = false
+    @event_bus.emit(:stream_text, stream: MAIN_STREAM, text: '', colors: [])
+    @pending_render.request_update
   end
 
   # Emit a prompt to the main stream if one is pending and the last

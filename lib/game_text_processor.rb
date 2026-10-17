@@ -82,9 +82,13 @@ class GameTextProcessor
   # @param game_rules [Games::Rules] the game's death, logon, stun,
   #   spell-name and cut-short room list rules (--game, see
   #   Games.rules_for); both games' when the game isn't known
+  # @param blank_lines [Boolean] show the game's interior blank lines (see
+  #   {PromptTracker#blank_lines_enabled}); from the saved +.blanklines+
+  #   setting. Defaults to off: the game's interior blank lines are shown
+  #   only when +.blanklines+ turns them on
   def initialize(window_mgr:, shared_state:, cmd_buffer:, xml_escapes:, event_bus:,
                  boot_profiler: BootProfiler.new(enabled: false), speech_timestamps: false, clock: Clock.new,
-                 game_rules: Games::BOTH_GAMES)
+                 game_rules: Games::BOTH_GAMES, blank_lines: false)
     @wm = window_mgr
     @state = shared_state
     @xml_escapes = xml_escapes
@@ -98,6 +102,7 @@ class GameTextProcessor
     @line_filter = LineFilter.new(shared_state: shared_state, xml_escapes: xml_escapes)
     @prompts = PromptTracker.new(shared_state: shared_state, event_bus: event_bus, pending_render: @pending_render,
                                  window_mgr: window_mgr, clock: clock, boot_profiler: boot_profiler)
+    @prompts.blank_lines_enabled = blank_lines
     @room = RoomAssembler.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
                               shared_state: shared_state, game_rules: game_rules)
     @router = StreamRouter.new(window_mgr: window_mgr, event_bus: event_bus, pending_render: @pending_render,
@@ -125,6 +130,9 @@ class GameTextProcessor
     @room_block = false
     # The part open in that block (see TagHandlers#close_room_block)
     @room_part = nil
+    # Whether a spell refresh with no pushStream may be under way (see
+    # TagHandlers#handle_clear_stream)
+    @spell_refresh = false
 
     # Whether the last line left bold open (see #carry_bold)
     @bold_next_line = false
@@ -138,6 +146,16 @@ class GameTextProcessor
   def run(server)
     @prompts.server = server
     @reader.run(server)
+  end
+
+  # Show or hide the game's interior blank lines from now on (see
+  # {PromptTracker#blank_lines_enabled}). Called from the input thread by
+  # +.blanklines+; the change is a flag the server thread reads per line.
+  #
+  # @param value [Boolean]
+  # @return [void]
+  def blank_lines_enabled=(value)
+    @prompts.blank_lines_enabled = value
   end
 
   # Show the "Connection closed / Press any key to exit" notice in the
@@ -159,7 +177,9 @@ class GameTextProcessor
   end
 
   # Second step for one server line, inside the render lock: a blank line
-  # shows a pending prompt; any other line is parsed and routed.
+  # shows a pending prompt, or is held until main text follows it (see
+  # {PromptTracker#blank_line}); any other line is parsed and routed. A
+  # blank line inside an open stream is dropped.
   #
   # @param line [String] a line returned by {#prepare_line}
   # @return [void]
@@ -285,6 +305,15 @@ class GameTextProcessor
   # @return [void]
   # @api private
   def handle_game_text(text, runs, marks)
+    # A spell line of a refresh that came with no pushStream (as in some
+    # sessions where Lich identifies as the Saga client) is the spell
+    # window's, as a pushed one's lines are; the other lines of the refresh
+    # stay main's.
+    if @spell_refresh && @router.current_stream.nil? && @game_rules.spell_line?(text)
+      @router.route_to(Streams::PERC, text, runs, marks: marks)
+      return
+    end
+
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.

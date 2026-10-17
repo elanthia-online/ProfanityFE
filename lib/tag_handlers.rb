@@ -32,6 +32,9 @@ require_relative 'effect_tracker'
 #   block is open; reset at the end of every line)
 # - @room_part (nil until a part of a <room> block opens: the element name
 #   of the part open in it, or nil; see #close_room_block)
+# - @spell_refresh (whether a spell refresh with no pushStream may be
+#   under way: from a percWindow clearStream to the next prompt or
+#   percWindow pushStream; see GameTextProcessor#handle_game_text)
 # - handle_game_text(text, runs, marks)
 # - line_gagged? (whether a gag dropped the text of the line being parsed,
 #   leaving only its tags; see LineFilter#gagged?)
@@ -142,6 +145,7 @@ module TagHandlers
       @marks.prompt
       @room.prompt_seen
       finalize_dialog_at_prompt
+      @spell_refresh = false
     end
 
     # <nav rm='NNN'/> names the player's room (see RoomAssembler#nav).
@@ -607,6 +611,8 @@ module TagHandlers
     return unless (new_stream = attrs['id'])
 
     flush_text_buffer(text_buffer)
+    # A pushed spell list needs no help (see #handle_clear_stream)
+    @spell_refresh = false if new_stream == Streams::PERC
     if (exp_match = new_stream.match(/^exp (?<skill>.+)/))
       stream = Streams::EXP
       @event_bus.emit(:exp_set_current, skill: exp_match[:skill])
@@ -680,13 +686,19 @@ module TagHandlers
     @router.resync
   end
 
-  # Handle <clearStream id="percWindow"/> tag.
+  # Handle <clearStream id="percWindow"/> tag: it clears the spell window,
+  # and the spell lines that follow it up to the next prompt are the spell
+  # window's, unless a percWindow pushStream comes (see
+  # GameTextProcessor#handle_game_text).
   #
   # @param xml [String] the tag
   # @param _text_buffer [String] the text collected so far on the line (unused)
   # @return [void]
   def handle_clear_stream(xml, _text_buffer)
-    @event_bus.emit(:clear_spells) if XmlTokenizer.attrs(xml)['id'] == Streams::PERC
+    return unless XmlTokenizer.attrs(xml)['id'] == Streams::PERC
+
+    @event_bus.emit(:clear_spells)
+    @spell_refresh = true
   end
 
   # Handle <cmdlist ...>, the start of the game's command table for coord
