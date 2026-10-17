@@ -415,12 +415,14 @@ class RoomAssembler
 
   # Update the 'room players' indicator window with parsed player names.
   #
-  # Merges SAX link colors (GemStone <a> tags) with highlights applied to
-  # the full "Also here: ..." text, then remaps color regions covering
-  # each name to the indicator label. Only highlights that fully cover a
-  # name are included -- partial matches create visual noise on a compact
-  # indicator display. Asks for a flush, since a player arriving or
-  # leaving can be the only change in a burst.
+  # Merges the SAX color regions (the players' <a> links, which GemStone
+  # and DragonRealms' rich stream send, and any preset) with highlights
+  # applied to the full "Also here: ..." text, then remaps the regions
+  # covering each name to the indicator label, where a highlight or preset
+  # wins over a link's color as in main (see #remap_name_colors). Only
+  # regions that fully cover a name are included -- partial matches
+  # create visual noise on a compact indicator display. Asks for a flush,
+  # since a player arriving or leaving can be the only change in a burst.
   #
   # @param players_text [String, nil] raw "Also here:" text or nil
   # @param sax_colors [Array<Hash>] SAX-parsed color regions (link colors)
@@ -777,11 +779,24 @@ class RoomAssembler
     end
   end
 
-  # Map highlight color regions from full players text to indicator label positions.
+  # Map the color regions of the full players text to the indicator
+  # label: one region per name, from the regions that cover the whole name.
+  #
+  # The label's copy of a region is the name's size, so the label can't
+  # rank the copies by size as main does; they are resolved here instead,
+  # from the regions' sizes in the full text, as
+  # HighlightProcessor.render_colored_text ranks them: a link's region
+  # (one with a :cmd) after every other, then the smallest first. So a
+  # highlight or preset over a linked name shows its color, a highlight
+  # of one name wins over one of the whole line, and the link color shows
+  # only where nothing else colors the name. The region drops the :cmd:
+  # the label is not clickable, and a :cmd would rank it after the
+  # indicator's own color.
   #
   # @param full_text [String] the full "Also here: ..." text
   # @param names [Array<String>] parsed player names
-  # @param full_colors [Array<Hash>] highlight regions for the full text
+  # @param full_colors [Array<Hash>] link, preset and highlight regions for
+  #   the full text
   # @return [Array<Hash>] color regions remapped to the names-only label
   def remap_name_colors(full_text, names, full_colors)
     return [] if full_colors.empty?
@@ -796,24 +811,33 @@ class RoomAssembler
       name_end = name_start + name.length
       search_pos = name_end
 
-      full_colors.each do |c|
-        # Only include highlights that fully cover the name -- partial
-        # matches create visual noise on a compact indicator display.
-        next unless c[:start] <= name_start && c[:end] >= name_end
-
-        label_colors << {
-          start: label_pos,
-          end: label_pos + name.length,
-          fg: c[:fg],
-          bg: c[:bg],
-          ul: c[:ul]
-        }
-      end
+      # Only regions that fully cover the name -- partial matches create
+      # visual noise on a compact indicator display.
+      covering = full_colors.select { |c| c[:start] <= name_start && c[:end] >= name_end }
+      label_colors << name_color(covering, label_pos, label_pos + name.length) if covering.any?
 
       label_pos += name.length
       label_pos += 2 if i < names.length - 1 # ", " separator
     end
 
     label_colors
+  end
+
+  # The one region a name in the indicator label is drawn with: the first
+  # foreground and background among +covering+, ranked with the links
+  # (regions with a :cmd) last and then the smallest first (equal ones in
+  # their order), and underlined when any of them is.
+  #
+  # @param covering [Array<Hash>] the regions covering the whole name, in
+  #   their order (not empty)
+  # @param label_start [Integer] where the name starts in the label
+  # @param label_end [Integer] where the name ends in the label
+  # @return [Hash] the region, with :start, :end, :fg, :bg and :ul
+  def name_color(covering, label_start, label_end)
+    ranked = covering.each_with_index.sort_by { |c, i| [c[:cmd] ? 1 : 0, c[:end] - c[:start], i] }.map(&:first)
+    { start: label_start, end: label_end,
+      fg: ranked.map { |c| c[:fg] }.compact.first,
+      bg: ranked.map { |c| c[:bg] }.compact.first,
+      ul: ranked.any? { |c| c[:ul] == 'true' } ? 'true' : nil }
   end
 end

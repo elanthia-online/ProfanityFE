@@ -785,11 +785,12 @@ module LineBuffered
     sel_start = id == start_id ? start_x : 0
     sel_end = id == end_id ? end_x : line_text.length
 
+    # The copies keep every key of a region, :cmd too: the renderer ranks
+    # a link's region after the others (HighlightProcessor.render_colored_text).
     if sel_start > 0
       pre_text = line_text[0...sel_start]
-      pre_colors = line_colors.map do |h|
-        { start: h[:start], end: [h[:end], sel_start].min, fg: h[:fg], bg: h[:bg], ul: h[:ul] }
-      end.select { |h| h[:end] > h[:start] }
+      pre_colors = line_colors.map { |h| h.merge(end: [h[:end], sel_start].min) }
+                              .select { |h| h[:end] > h[:start] }
       add_line(pre_text, pre_colors)
     end
 
@@ -804,7 +805,7 @@ module LineBuffered
     post_colors = line_colors.map do |h|
       new_start = [h[:start] - sel_end, 0].max
       new_end = h[:end] - sel_end
-      { start: new_start, end: new_end, fg: h[:fg], bg: h[:bg], ul: h[:ul] }
+      h.merge(start: new_start, end: new_end)
     end.select { |h| h[:end] > 0 && h[:end] > h[:start] }
     add_line(post_text, post_colors)
   end
