@@ -10,7 +10,8 @@
 # bare pops, atmospherics, and combat closed by <popStream id="combat" />
 # (once more than it was opened). The expected windows are the ones the old
 # design (every pop returns to main) put these lines in; stream nesting must
-# not move any of them.
+# not move any of them. The processor is built with the default (blank lines
+# off), so the blank lines the game sends between main lines show no rows.
 
 require_relative '../spec_helper'
 require 'rexml/document'

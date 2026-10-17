@@ -1805,6 +1805,26 @@ separated, case-insensitive), toggles each on or off. Valid names: `spells`,
 .effects custom
 ```
 
+### .blanklines
+
+By default Profanity does not show the blank lines the game sends between
+blocks of a command's output (for example `EXP`, help, or appraisal output),
+which keeps the output compact. `.blanklines` turns those interior blank
+lines on if you prefer the more spaced-out layout the game sends; with no
+argument it toggles the current state, and `on` or `off` sets it explicitly.
+Defaults to off; the choice is saved to `~/.profanity/settings.json`. A blank
+line the game sends right before a prompt is never shown as an empty row.
+
+You can also set the starting default in your settings XML with
+`<blank-lines>on</blank-lines>` (or `off`). Once you use `.blanklines`, the
+choice saved in `settings.json` overrides the XML value.
+
+```
+.blanklines
+.blanklines on
+.blanklines off
+```
+
 ### .help
 
 Display a list of all available dot-commands with brief descriptions.
