@@ -77,6 +77,18 @@ boot_profiler.mark('stdlib loaded')
 
 # Initialize curses
 require_relative 'lib/curses_setup'
+require_relative 'lib/runtime_warnings'
+RuntimeWarnings.start(path: ProfanityLog.path)
+# Register cleanup before initialization, so startup errors also restore the
+# terminal before Ruby prints their backtrace. Ordinary fatal errors remain
+# visible; only warnings are routed to the log.
+at_exit do
+  begin
+    Curses.close_screen
+  ensure
+    RuntimeWarnings.stop
+  end
+end
 CursesSetup.start
 boot_profiler.mark('curses init')
 
@@ -125,13 +137,6 @@ require_relative 'lib/application'
 # Initialize gag patterns with defaults (can be extended via XML config)
 GagPatterns.load_defaults
 boot_profiler.mark('requires + gag defaults')
-
-# Ensure terminal is restored on any exit path (graceful shutdown)
-at_exit do
-  Curses.close_screen
-rescue StandardError
-  nil
-end
 
 # ========== GLOBAL CONSTANTS ==========
 
