@@ -672,6 +672,30 @@ RSpec.describe 'Windows off the screen when the layout loads' do
 
     before { start(layout, 24, 80) }
 
+    [0, 1].each do |tabs|
+      it "uses a new layout's cycle for reused panes after #{tabs} Tab presses" do
+        press_tab(tabs)
+        previous = wm.stream.slice('main', 'familiar', 'thoughts')
+        selected = SCROLL_WINDOW.first
+        LAYOUT['reordered'] = REXML::Document.new(<<~XML).root
+          <layout>
+            <window class='text' top='0' left='0' height='5' width='40' value='main'/>
+            <window class='text' top='6' left='0' height='5' width='40' value='thoughts'/>
+            <window class='text' top='12' left='0' height='5' width='40' value='familiar'/>
+            <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+          </layout>
+        XML
+        app.execute_command('.layout reordered')
+
+        expect(cycle).to eq(tabs.zero? ? %w[main thoughts familiar] : %w[familiar main thoughts])
+        previous.each { |stream, window| expect(wm.stream[stream]).to equal(window) }
+        expect(SCROLL_WINDOW.first).to equal(selected)
+        expect(TextWindow.list.select(&:active?)).to eq [selected]
+        press_tab(1)
+        expect(cycle.first).to eq(tabs.zero? ? 'thoughts' : 'main')
+      end
+    end
+
     it 'goes first in the cycle and becomes the current window when Tab was never pressed, as at load' do
       expect(cycle).to eq %w[main familiar thoughts]
 
@@ -710,8 +734,8 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       expect(TextWindow.list.select(&:active?)).to eq [wm.stream['speech']]
     end
 
-    # A .layout keeps the reused windows in the order they had in the
-    # cycle, so main, current before, stays current, as at load.
+    # A .layout follows the new cycle order, rotated to keep the current
+    # window selected when that window is reused.
     it 'leaves the current window current after a .layout that lists another window first' do
       LAYOUT['thoughtsfirst'] = REXML::Document.new(<<~XML).root
         <layout>
