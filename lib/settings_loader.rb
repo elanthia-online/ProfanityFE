@@ -46,7 +46,7 @@ end
 # HIGHLIGHT (regex-based text highlighting), PERC_TRANSFORMS (percWindow text
 # substitutions), gag patterns (via GagPatterns), and key bindings.
 # On reload, only refreshes HIGHLIGHT, gag patterns, perc-transforms, the
-# notification stream, the history size, and key bindings -- PRESET and
+# notification stream, history size, blank lines, duplicate suppression, and key bindings -- PRESET and
 # LAYOUT are preserved.
 #
 # The file is parsed in full before anything is applied, so a file that
@@ -69,7 +69,7 @@ module SettingsLoader
   # (+reload: false+), processes all element types including +preset+
   # and +layout+. On reload (+reload: true+), skips presets and layouts
   # and only refreshes highlights, gag patterns, perc-transforms, the
-  # notification stream, the history size, and key bindings.
+  # notification stream, history size, blank lines, duplicate suppression, and key bindings.
   #
   # The whole file is parsed before anything is applied, so a file that
   # fails to load (malformed XML, or any other error that aborts the parse)
@@ -114,7 +114,7 @@ module SettingsLoader
   # @param do_macro [#call] runs a macro; called with the macro string
   # @param reload [Boolean] when true, presets and layouts are not collected
   # @return [Hash] the settings, for {apply}: +:highlight+, +:perc_transforms+,
-  #   +:notification_stream+, +:history_size+, +:blank_lines+, +:gags+ (keyword arguments for
+  #   +:notification_stream+, +:history_size+, +:blank_lines+, +:duplicate_suppression+, +:gags+ (keyword arguments for
   #   GagPatterns.replace_custom), +:key_binding+, +:presets+ and +:layouts+
   # @api private
   def parse(xml_root, key_action, do_macro, reload: false)
@@ -124,6 +124,7 @@ module SettingsLoader
     settings = {
       highlight: {}, perc_transforms: [], notification_stream: Config::DEFAULT_NOTIFICATION_STREAM,
       history_size: Config::DEFAULT_HISTORY_SIZE, blank_lines: Config::DEFAULT_BLANK_LINES,
+      duplicate_suppression: Config::DEFAULT_DUPLICATE_SUPPRESSION,
       gags: { general: [], multiline: [], combat: [] }, key_binding: {}, presets: {}, layouts: {}
     }
 
@@ -165,6 +166,14 @@ module SettingsLoader
         else
           ProfanityLog.write('settings', "Invalid history-size '#{size}' (expected a whole number), using #{settings[:history_size]}")
         end
+
+      when 'duplicate-suppression'
+        enabled = (e.attributes['enabled'] || 'true').strip.downcase
+        unless %w[on true yes 1 off false no 0].include?(enabled)
+          raise ArgumentError, "Invalid duplicate-suppression enabled='#{enabled}' (expected true/false)"
+        end
+        exceptions = e.attributes['except'].to_s.split(',').map(&:strip).reject(&:empty?).uniq.freeze
+        settings[:duplicate_suppression] = { enabled: %w[on true yes 1].include?(enabled), except: exceptions }.freeze
 
       when 'blank-lines'
         value = e.text&.strip
@@ -229,6 +238,7 @@ module SettingsLoader
       CONFIG.notification_stream = settings[:notification_stream]
       CONFIG.history_size = settings[:history_size]
       CONFIG.blank_lines = settings[:blank_lines]
+      CONFIG.duplicate_suppression = settings[:duplicate_suppression]
       key_binding.replace(settings[:key_binding])
       next if reload
 
