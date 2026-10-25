@@ -56,6 +56,22 @@ If the log cannot be opened or written, startup continues and warnings are
 buffered (up to 64 KiB), then printed after the terminal UI closes.
 Startup errors and fatal errors still print normally.
 
+## Duplicate suppression
+
+Some game messages appear first on a side stream and then again in main.
+By default, Profanity hides the immediately repeated main-window copy. Configure
+this under the XML `<settings>` root; changes apply with `.reload`:
+
+```xml
+<duplicate-suppression enabled='true' except='speech'/>
+```
+
+`enabled='false'` disables suppression globally. `except` is a comma-separated
+list of stream IDs whose main-window copies should remain visible. Any stream
+ID is accepted, including streams supplied by scripts. Omitting the element
+restores the default: enabled, with no exceptions. Invalid enable values leave
+the current configuration unchanged and report a settings-load error.
+
 ## Dependencies
 
 - Ruby 4.0+
