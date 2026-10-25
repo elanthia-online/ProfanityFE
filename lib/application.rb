@@ -795,6 +795,10 @@ class Application
   # The input loop still coalesces resize bursts before this action runs.
   # @return [void]
   def resize_layout
+    # Match WindowManager's tiny-terminal guard before replacing a layout.
+    # Otherwise skipped windows would close the old panes and lose history.
+    return if Curses.lines < 3 || Curses.cols < 10
+
     selected = @auto_layout.choose(LAYOUT, Curses.cols) if @auto_layout.enabled
     if selected && selected != @current_layout_id
       apply_layout(selected)

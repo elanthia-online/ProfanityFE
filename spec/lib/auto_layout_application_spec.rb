@@ -85,6 +85,35 @@ RSpec.describe 'Automatic layout selection in the running client' do
     end))
   end
 
+  [[60, 1], [60, 2], [9, 30]].each do |cols, lines|
+    it "defers layout replacement at #{cols}x#{lines} and preserves live tab history" do
+      run_client(keyboard(press_after('a') do
+        original = app.window_mgr.stream.fetch('main')
+        original.add_string_to_tab('main', 'Keep main history.')
+        original.add_string_to_tab('combat', 'Keep hidden history.')
+        command = app.cmd_buffer.window
+
+        terminal.replace(cols: cols, lines: lines)
+        allow(app.window_mgr).to receive(:load_layout).and_call_original
+        app.key_action.fetch('resize').call
+        expect(app.window_mgr).not_to have_received(:load_layout)
+        expect(app.window_mgr.stream.fetch('main')).to equal(original)
+        expect(app.cmd_buffer.window).to equal(command)
+
+        # A usable resize must still reevaluate the pending width-tier change.
+        terminal.replace(cols: 60, lines: 30)
+        app.key_action.fetch('resize').call
+        expect(app.window_mgr).to have_received(:load_layout).with('mobile').once
+        live = app.window_mgr.stream.fetch('main')
+        expect(live).to equal(original)
+        expect(live.begx).to eq 0
+        expect(live.rows.join).to include('Keep main history.')
+        live.switch_tab('combat')
+        expect(live.rows.join).to include('Keep hidden history.')
+      end))
+    end
+  end
+
   it 'holds manual choices, leaves invalid choices unchanged, and resumes auto' do
     run_client(keyboard(press_after('a') do
       app.execute_command('.layout mobile')
