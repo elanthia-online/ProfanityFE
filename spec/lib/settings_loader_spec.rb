@@ -72,6 +72,32 @@ RSpec.describe SettingsLoader do
     end
   end
 
+  describe '<duplicate-suppression>' do
+    it 'defaults to enabled without hardcoded stream exceptions' do
+      load_settings(write_settings(@dir, ''))
+      expect(CONFIG.suppress_stream_duplicate?('speech')).to be true
+      expect(CONFIG.suppress_stream_duplicate?('compressed')).to be true
+    end
+
+    it 'loads stream exceptions and supports disabling globally on reload' do
+      load_settings(write_settings(@dir, '<duplicate-suppression except=" speech,compressed,speech, "/>'))
+      expect(CONFIG.duplicate_suppression[:except]).to eq %w[speech compressed]
+      expect(CONFIG.suppress_stream_duplicate?('speech')).to be false
+      expect(CONFIG.suppress_stream_duplicate?('thoughts')).to be true
+      load_settings(write_settings(@dir, '<duplicate-suppression enabled="false"/>'), reload: true)
+      expect(CONFIG.suppress_stream_duplicate?('thoughts')).to be false
+      load_settings(write_settings(@dir, ''), reload: true)
+      expect(CONFIG.suppress_stream_duplicate?('thoughts')).to be true
+    end
+
+    it 'rejects an invalid value without changing the current settings' do
+      load_settings(write_settings(@dir, '<duplicate-suppression enabled="false"/>'))
+      error = load_settings(write_settings(@dir, '<duplicate-suppression enabled="maybe"/>'), reload: true)
+      expect(error).to be_a(ArgumentError)
+      expect(CONFIG.suppress_stream_duplicate?('speech')).to be false
+    end
+  end
+
   describe '<history-size>' do
     before { allow(ProfanityLog).to receive(:write) }
 

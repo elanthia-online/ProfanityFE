@@ -308,7 +308,9 @@ class StreamRouter
 
     @event_bus.emit(:stream_text, stream: @current_stream, text: text, colors: colors)
     @pending_render.request_update
-    # Remembered so the game's main copy of it, if next, is dropped
+    # Remember the source as well, so the current (reloadable) settings decide
+    # whether to hide the main copy. No stream exceptions are hardcoded.
+    @last_display_stream = @current_stream
     @prompts.stream_text_sent(copy_text || text)
   end
 
@@ -355,7 +357,8 @@ class StreamRouter
   # @api private
   def route_main_text(text, colors, room_captured)
     # Drop the game's main copy of the line just sent to a stream window.
-    return if @prompts.stream_text_copy?(text)
+    duplicate = @prompts.stream_text_copy?(text)
+    return if duplicate && CONFIG.suppress_stream_duplicate?(@last_display_stream)
 
     # A blank line held before this line is shown first. Only here, once
     # the line is known to show: a dropped copy leaves the blank held.

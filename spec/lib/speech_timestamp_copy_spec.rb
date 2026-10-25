@@ -81,6 +81,26 @@ RSpec.describe 'The game\'s main copy of a stream line with --speech-ts' do
     window_manager.stream[stream].rows.map(&:rstrip).reject(&:empty?)
   end
 
+  context 'with speech excluded from duplicate suppression' do
+    before { CONFIG.duplicate_suppression = { enabled: true, except: ['speech'] } }
+
+    it 'keeps the raw main copy while timestamping the speech-window copy' do
+      receive_from_server(*ilten_speech, ilten_prompt)
+      expect(shown('speech')).to eq ["#{asks} (21:00:09)"]
+      expect(shown('main')).to eq [asks]
+    end
+
+    context 'without timestamps' do
+      let(:speech_ts) { false }
+
+      it 'keeps both copies' do
+        receive_from_server(*ilten_speech, ilten_prompt)
+        expect(shown('speech')).to eq [asks]
+        expect(shown('main')).to eq [asks]
+      end
+    end
+  end
+
   describe 'a GemStone speech line' do
     it 'shows once, timestamped in the speech window, and not again in main' do
       receive_from_server(*ilten_speech, ilten_prompt)

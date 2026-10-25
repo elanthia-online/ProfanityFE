@@ -10,6 +10,12 @@ RSpec.describe Config do
   subject(:config) { described_class.new }
 
   describe '#initialize' do
+    it 'restores duplicate suppression defaults on reset' do
+      config.duplicate_suppression = { enabled: false, except: ['speech'] }
+      config.reset!
+      expect(config.suppress_stream_duplicate?('speech')).to be true
+    end
+
     it 'starts with empty highlight hash' do
       expect(config.highlight).to eq({})
     end
