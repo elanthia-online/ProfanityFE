@@ -38,6 +38,12 @@ module CliOptions
     log_gags: false,
     profile: false,
     game: nil,
+    auto_layout: true,
+    narrow_layout: 'default',
+    wide_layout: 'wide',
+    mobile_layout: 'mobile',
+    wide_layout_cols: 160,
+    mobile_layout_cols: 90,
   }.freeze
 
   # Parse the command line into an options hash.
@@ -84,6 +90,17 @@ module CliOptions
       opts.on('--char=NAME', 'Character name (for log file & process title)') { |v| options[:char] = v }
       opts.on('--config=NAME', 'Config name to load (default: same as --char)') { |v| options[:config] = v }
       opts.on('--template=FILE', 'Template file name (from templates/)') { |v| options[:template] = v }
+      opts.on('--no-auto-layout', 'Disable width-based layout switching') { options[:auto_layout] = false }
+      %i[narrow wide mobile].each do |kind|
+        opts.on("--#{kind}-layout=NAME", "Layout for #{kind} terminals") { |v| options[:"#{kind}_layout"] = v }
+      end
+      %i[wide mobile].each do |kind|
+        opts.on("--#{kind}-layout-cols=COLS", Integer, "Width threshold for the #{kind} layout") do |v|
+          raise OptionParser::InvalidArgument, 'layout width must be positive' unless v.positive?
+
+          options[:"#{kind}_layout_cols"] = v
+        end
+      end
       opts.on('--port=PORT', Integer, 'Game server port (default: 8000)') { |v| options[:port] = v }
       opts.on('--host=HOST', 'Game server host (default: 127.0.0.1)') { |v| options[:host] = v }
       opts.on('--default-color-id=ID', Integer, 'Default foreground color (default: 7)') { |v| options[:default_color_id] = v }
