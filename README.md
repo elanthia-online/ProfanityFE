@@ -31,6 +31,23 @@ ruby profanity.rb --port=8000 --char=YourCharacter
 
 See the **[User Guide](USER_GUIDE.md)** for full documentation including settings XML reference, layout configuration, key bindings, and troubleshooting.
 
+## Automatic layout selection
+
+Layouts can switch automatically with terminal width: `mobile` below 90 columns,
+`default` at 90–159 columns, and `wide` at 160 columns or more. Define those
+layouts in your settings XML to use them. Missing optional layouts fall back
+to the normal layout, so existing single-layout templates continue to work.
+
+`.layout <name>` selects a layout and holds it through resizes. `.layout auto`
+resumes automatic selection immediately. Window creation, resizing, and buffer
+reuse use the same paths as manual layout switching.
+
+Command-line options:
+
+- `--no-auto-layout`: disable automatic selection.
+- `--narrow-layout=NAME`, `--mobile-layout=NAME`, `--wide-layout=NAME`: choose layout IDs.
+- `--mobile-layout-cols=N`, `--wide-layout-cols=N`: change the width thresholds.
+
 ## Runtime warnings
 
 While curses is active, Ruby warnings (including native mouse warnings) go to

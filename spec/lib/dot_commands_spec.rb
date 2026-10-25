@@ -612,7 +612,7 @@ RSpec.describe 'Dot-commands typed on the command line' do
         '.fixcolor          Reinitialize custom Curses colors',
         '.resync            Reset server time offset for timers',
         '.reload            Hot-reload settings XML file',
-        '.layout <name>     Switch to a named window layout',
+        ".layout <name>     Select layout; 'auto' resumes width switching",
         '.resize            Re-fit windows now (automatic on resize)',
         '.tab               List tabs (active marked with *)',
         '.tab <N|name>      Switch tab by number or name',

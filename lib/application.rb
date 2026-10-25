@@ -10,6 +10,7 @@ require_relative 'server_connection'
 require_relative 'key_action_registry'
 require_relative 'macro_interpreter'
 require_relative 'mouse_controller'
+require_relative 'auto_layout'
 
 # Core application class for ProfanityFE.
 #
@@ -71,8 +72,8 @@ class Application
                    handler: proc { handle_dot_reload }),
     DotCommand.new(name: 'layout',
                    args: :required,
-                   help: ['.layout <name>     Switch to a named window layout'],
-                   handler: proc { |layout| apply_layout(layout) }),
+                   help: [".layout <name>     Select layout; 'auto' resumes width switching"],
+                   handler: proc { |layout| select_layout(layout) }),
     DotCommand.new(name: 'resize',
                    help: ['.resize            Re-fit windows now (automatic on resize)'],
                    handler: proc { @key_action['resize'].call }),
@@ -166,6 +167,8 @@ class Application
   def initialize(cli_options, settings_file:, host:, port:, boot_profiler: BootProfiler.new(enabled: false),
                  game_rules: Games::BOTH_GAMES)
     @cli_options = cli_options
+    @auto_layout = AutoLayout.new(cli_options)
+    @current_layout_id = nil
     @settings_file = settings_file
     @boot_profiler = boot_profiler
     @game_rules = game_rules
@@ -198,6 +201,7 @@ class Application
                                         key_binding: @key_binding,
                                         send_command: method(:send_command),
                                         send_history_command: method(:send_history_command)).actions
+    @key_action['resize'] = proc { resize_layout }
     @macro_interpreter = MacroInterpreter.new(cmd_buffer: @cmd_buffer, send_command: method(:send_command))
 
     @mouse_controller = MouseController.new(key_action: @key_action, window_mgr: @window_mgr,
@@ -737,7 +741,7 @@ class Application
       end
     end
 
-    apply_layout('default')
+    apply_layout(@auto_layout.choose(LAYOUT, Curses.cols))
     return if @cmd_buffer.window
 
     fatal_error("ERROR: Layout has no command window. Add <window class='command'/> to your layout.")
@@ -757,14 +761,51 @@ class Application
   # @param layout_id [String] key into the global LAYOUT hash
   # @return [void]
   def apply_layout(layout_id)
+    return unless LAYOUT.key?(layout_id)
+
     kept = TextWindow.list.dup
     @window_mgr.load_layout(layout_id)
+    @current_layout_id = layout_id
     @cmd_buffer.window = @window_mgr.command_window
     TextWindow.list.each do |window|
       window.fill_with_blank_lines unless kept.any? { |old| old.equal?(window) }
     end
     @window_mgr.resize(@cmd_buffer)
     @cmd_buffer.flush_screen
+  end
+
+  # A manual selection stays selected through resizes; "auto" resumes the
+  # width policy immediately. An invalid name changes neither mode nor layout.
+  # @param layout_id [String] named layout or "auto"
+  # @return [void]
+  def select_layout(layout_id)
+    if layout_id.casecmp?('auto')
+      @auto_layout.enabled = true
+      resize_layout
+    elsif LAYOUT.key?(layout_id)
+      @auto_layout.enabled = false
+      apply_layout(layout_id)
+    else
+      warn "Warning: layout '#{layout_id}' not found in LAYOUT (available: #{LAYOUT.keys.join(', ')})"
+      @cmd_buffer.flush_screen
+    end
+  end
+
+  # Reuse upstream's resize path unless a width threshold changed the layout.
+  # The input loop still coalesces resize bursts before this action runs.
+  # @return [void]
+  def resize_layout
+    # Match WindowManager's tiny-terminal guard before replacing a layout.
+    # Otherwise skipped windows would close the old panes and lose history.
+    return if Curses.lines < 3 || Curses.cols < 10
+
+    selected = @auto_layout.choose(LAYOUT, Curses.cols) if @auto_layout.enabled
+    if selected && selected != @current_layout_id
+      apply_layout(selected)
+    else
+      @window_mgr.resize(@cmd_buffer)
+      @cmd_buffer.flush_screen
+    end
   end
 
   # Connect to the game server (see {ServerConnection#connect}), forget the
