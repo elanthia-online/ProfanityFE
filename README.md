@@ -31,6 +31,12 @@ ruby profanity.rb --port=8000 --char=YourCharacter
 
 See the **[User Guide](USER_GUIDE.md)** for full documentation including settings XML reference, layout configuration, key bindings, and troubleshooting.
 
+## Runtime warnings
+
+While curses is active, Ruby warnings (including native mouse warnings) go to
+the configured Profanity log instead of corrupting the terminal display.
+Startup errors and fatal errors still print normally.
+
 ## Dependencies
 
 - Ruby 4.0+
