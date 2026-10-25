@@ -62,7 +62,8 @@ class LayoutLoader
     @old_windows = BaseWindow.all_windows
     @previous_windows = @old_windows.dup
     @previous = REGISTRIES.to_h { |registry| [registry, @wm.public_send(registry)] }
-    chosen = SCROLL_WINDOW[0] if @current_window_chosen
+    current = SCROLL_WINDOW[0]
+    chosen = current if @current_window_chosen
     @wm.reset_registries
     forget_layout_order
 
@@ -70,6 +71,13 @@ class LayoutLoader
 
     @old_windows.each { |window| close_window(window) }
     forget_previous_layout
+    # Reused panes retain their buffers, not the previous layout's Tab order.
+    # Rotate the new cycle back to the user's selected pane when it survives.
+    SCROLL_WINDOW.each { |window| window.set_active(false) }
+    SCROLL_WINDOW.sort_by! { |window| @positions.fetch(window) }
+    if current && (index = SCROLL_WINDOW.index { |window| window.equal?(current) })
+      SCROLL_WINDOW.rotate!(index)
+    end
     @current_window_chosen = !chosen.nil? && SCROLL_WINDOW[0].equal?(chosen)
 
     SCROLL_WINDOW[0]&.set_active(true)
