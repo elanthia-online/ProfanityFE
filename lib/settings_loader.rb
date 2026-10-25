@@ -116,6 +116,7 @@ module SettingsLoader
   # @return [Hash] the settings, for {apply}: +:highlight+, +:perc_transforms+,
   #   +:notification_stream+, +:history_size+, +:blank_lines+, +:duplicate_suppression+, +:gags+ (keyword arguments for
   #   GagPatterns.replace_custom), +:key_binding+, +:presets+ and +:layouts+
+  # @raise [ArgumentError] if duplicate-suppression has an invalid enabled value
   # @api private
   def parse(xml_root, key_action, do_macro, reload: false)
     setup_key = build_setup_key(key_action, do_macro)
