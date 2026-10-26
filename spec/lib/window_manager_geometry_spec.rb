@@ -195,7 +195,7 @@ RSpec.describe WindowManager, '#resize geometry' do
       resize_to(40, 120)
 
       expect(scrollbars).to eq(
-        main: { at: [0, 59, 20, 1], rows: ["\u25B6"] + ["\u2503"] * 18 + [''], thumb: [19] },
+        main: { at: [0, 59, 20, 1], rows: [[0x25B6].pack('U')] + [[0x2503].pack('U')] * 18 + [''], thumb: [19] },
         thoughts: { at: [0, 89, 10, 1], rows: [''] * 10, thumb: [] },
         combat: { at: [0, 119, 20, 1], rows: [''] * 20, thumb: [] },
         atmo: { at: [10, 89, 1, 1], rows: [''], thumb: [] }
@@ -233,7 +233,7 @@ RSpec.describe WindowManager, '#resize geometry' do
         prompt: ['H>'], command: ['look at the stones']
       )
       expect(scrollbars).to eq(
-        main: { at: [0, 19, 6, 1], rows: ["\u25B6"] + ["\u2503"] * 4 + [''], thumb: [5] },
+        main: { at: [0, 19, 6, 1], rows: [[0x25B6].pack('U')] + [[0x2503].pack('U')] * 4 + [''], thumb: [5] },
         thoughts: { at: [0, 29, 3, 1], rows: [''] * 3, thumb: [] },
         combat: { at: [0, 39, 6, 1], rows: [''] * 6, thumb: [] },
         atmo: { at: [3, 29, 1, 1], rows: [''], thumb: [] }
@@ -373,7 +373,7 @@ RSpec.describe WindowManager, '#resize geometry' do
       expect([geometry(main), geometry(kneeling), geometry(wm.command_window)])
         .to eq [[15, 0, 14, 99], [0, 0, 1, 50], [0, 50, 1, 50]]
       expect(main.rows).to eq((2..14).map { |n| "main line #{n}" } + ['a main line long enough to wrap in a narrow window'])
-      expect(main.scrollbar.rows).to eq ["\u25B6"] + ["\u2503"] * 12 + ['']
+      expect(main.scrollbar.rows).to eq [[0x25B6].pack('U')] + [[0x2503].pack('U')] * 12 + ['']
       expect(geometry(main.scrollbar)).to eq [15, 99, 14, 1]
       expect(kneeling.rows).to eq ['Kneel']
       expect(wm.command_window.row(0)).to eq 'look at the stones'

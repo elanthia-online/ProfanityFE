@@ -19,10 +19,10 @@ require_relative '../selection_manager'
 # a buffer have them, so the one-row widgets don't carry either.
 module LineBuffered
   # Bold vertical line character used for the scrollbar when the window is active.
-  ACTIVE_SCROLLBAR_CHAR = "\u2503" # bold vertical line
+  ACTIVE_SCROLLBAR_CHAR = [0x2503].pack('U').freeze # bold vertical line
 
   # Right-pointing triangle shown at the top of the scrollbar for the active window.
-  ACTIVE_INDICATOR = "\u25B6" # right-pointing triangle
+  ACTIVE_INDICATOR = [0x25B6].pack('U').freeze # right-pointing triangle
 
   # @return [Boolean] whether continuation lines are indented during word wrap
   attr_accessor :indent_word_wrap
@@ -31,7 +31,7 @@ module LineBuffered
   attr_accessor :time_stamp
 
   # @return [Array<Integer>, nil] [line_id, x] where the selection begins
-  #   (line_id is a stable buffer line ID — see {AnchoredSelection})
+  #   (line_id is a stable buffer line ID - see {AnchoredSelection})
   attr_accessor :selection_start
 
   # @return [Array<Integer>, nil] [line_id, x] where the selection ends

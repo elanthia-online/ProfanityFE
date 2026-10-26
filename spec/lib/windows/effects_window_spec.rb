@@ -51,11 +51,11 @@ RSpec.describe EffectsWindow do
     "#{name.ljust(columns - 9)} #{time}"
   end
 
-  # The text of a category's header row: "── Title ──── count".
+  # The text of a category's header row: "-- Title ---- count".
   def header(title, count, columns = width)
-    lead = "\u2500\u2500 #{title} "
+    lead = "#{[0x2500, 0x2500].pack('U*')} #{title} "
     tail = " #{count}"
-    lead + ("\u2500" * (columns - lead.length - tail.length)) + tail
+    lead + ([0x2500].pack('U') * (columns - lead.length - tail.length)) + tail
   end
 
   def color_at(target, row, col)
@@ -73,7 +73,7 @@ RSpec.describe EffectsWindow do
 
   # The names of the effects shown, top to bottom, without headers.
   def names_shown(target = window)
-    target.rows.grep_v(/\A\u2500|\A\+|\A\z/).map { |row| row.split(/\s{2,}/).first }
+    target.rows.grep_v(/\A#{[0x2500].pack('U')}|\A\+|\A\z/).map { |row| row.split(/\s{2,}/).first }
   end
 
   describe '.format_duration' do
@@ -565,7 +565,7 @@ RSpec.describe EffectsWindow do
                                      effect('Brace', 200)])
 
       long, short = window.rows[1, 2]
-      expect(long).to eq "Elemental Defense II\u2026 00:01:40"
+      expect(long).to eq "Elemental Defense II#{[0x2026].pack('U')} 00:01:40"
       expect(long.length).to eq width
       expect(short.length).to eq width
       expect(long.index('00:01:40')).to eq short.index('00:03:20')
@@ -583,7 +583,7 @@ RSpec.describe EffectsWindow do
       narrow = build_window(3, 12)
       narrow.apply_effects(:spells, [effect('Strength', 100)])
 
-      expect(narrow.rows[1]).to eq "St\u2026 00:01:40"
+      expect(narrow.rows[1]).to eq "St#{[0x2026].pack('U')} 00:01:40"
     end
 
     it 'leave only the time in a window too narrow for a name' do
@@ -762,7 +762,7 @@ RSpec.describe EffectsWindow do
 
       window.repaint
 
-      expect(window.rows[1]).to eq "Elemental\u2026  00:01:40"
+      expect(window.rows[1]).to eq "Elemental#{[0x2026].pack('U')}  00:01:40"
     end
   end
 
@@ -1339,7 +1339,7 @@ RSpec.describe 'effects window in a layout' do
     it 'fills the window from an :effects_update and replaces the list on the next one' do
       event_bus.emit(:effects_update, category: :spells,
                                       effects: [effect('Strength', 12_007), effect('Blink', 40)])
-      expect(window.rows.first).to start_with("\u2500\u2500 Spells ")
+      expect(window.rows.first).to start_with("#{[0x2500, 0x2500].pack('U*')} Spells ")
       expect(window.rows[1, 2]).to eq ["Strength#{' ' * 13} 03:20:07", "Blink#{' ' * 16} 00:00:40"]
 
       event_bus.emit(:effects_update, category: :spells, effects: [effect('Iron Skin', 90)])
@@ -1369,7 +1369,7 @@ RSpec.describe 'effects window in a layout' do
     it 'fills the Custom section from a :custom update and hides a timer that runs out on tick' do
       window.show_category(:custom)
       event_bus.emit(:effects_update, category: :custom, effects: [effect('Pot', 30), effect('Keep', nil)])
-      expect(window.rows.grep(/\A\u2500\u2500 Custom /).size).to eq 1
+      expect(window.rows.grep(/\A#{[0x2500, 0x2500].pack('U*')} Custom /).size).to eq 1
       expect(window.rows.grep(/\A(Pot|Keep)/).size).to eq 2
 
       now[0] += 40

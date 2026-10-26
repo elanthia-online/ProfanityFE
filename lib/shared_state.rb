@@ -17,7 +17,7 @@
 class SharedState
   # C0 and C1 control characters, DEL, and backslash: anything that could
   # end a terminal title sequence (BEL, ESC \, 8-bit ST) or begin another.
-  TITLE_UNSAFE = /[\x00-\x1f\x7f\u0080-\u009f\\]/
+  TITLE_UNSAFE = /[\p{Cc}\\]/u
 
   # @return [String, nil] character name for terminal title (nil disables title updates)
   attr_accessor :char_name

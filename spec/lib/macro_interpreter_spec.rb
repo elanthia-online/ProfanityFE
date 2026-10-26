@@ -42,9 +42,9 @@ RSpec.describe MacroInterpreter do
     end
 
     it 'types a non-ASCII character as one character' do
-      macro.call('say café')
+      macro.call("say caf#{[0x00E9].pack('U')}")
 
-      expect([screen.visible, screen.curx]).to eq ['say café', 8]
+      expect([screen.visible, screen.curx]).to eq ["say caf#{[0x00E9].pack('U')}", 8]
     end
 
     it 'types \\\\ as a backslash and \\@ as an at sign' do

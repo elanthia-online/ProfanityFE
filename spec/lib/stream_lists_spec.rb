@@ -9,7 +9,7 @@
 # real server loop.
 #
 # The two timestamp lists differ on purpose (maintainer decision, audit
-# §0.2): speech is timestamped only in a speech window, never in main.
+# section 0.2): speech is timestamped only in a speech window, never in main.
 
 require_relative '../spec_helper'
 require 'rexml/document'

@@ -20,7 +20,7 @@ require_relative '../presets'
 # All room sections receive pre-computed structured data from the SAX
 # parser: clean text, link regions (with :cmd for click dispatch), and
 # creature names. The room window only applies its own presets/colors
-# during rendering — no XML parsing or regex tag stripping occurs here.
+# during rendering - no XML parsing or regex tag stripping occurs here.
 class RoomWindow < BaseWindow
   # Resized after the spell window (see {BaseWindow.resize_order}).
   #
@@ -303,7 +303,7 @@ class RoomWindow < BaseWindow
   end
 
   # Wrap a text section with an optional preset color.
-  # No link processing — used for title, room number, stringprocs.
+  # No link processing - used for title, room number, stringprocs.
   #
   # @param text [String] clean section text
   # @param preset_name [String, nil] preset color key from the PRESET hash

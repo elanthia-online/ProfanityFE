@@ -7,7 +7,7 @@
 # care about. Enables testing without curses and session replay/logging.
 #
 # All handlers run synchronously in the emitting thread. This is
-# intentional — the game text processor and curses rendering share a
+# intentional - the game text processor and curses rendering share a
 # single CursesRenderer.synchronize block, so async delivery would
 # require additional locking.
 #

@@ -67,7 +67,7 @@ module Games
       /has gone to feed the fishes in the Elemental Confluence!/                 => 'EC',
     }.freeze
 
-    # GS death message pattern — matches the full death cry line and captures
+    # GS death message pattern - matches the full death cry line and captures
     # the optional prefix, character name, and area-specific death message.
     # The area alternatives are the keys of DEATH_AREA_CODES.
     #

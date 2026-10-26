@@ -178,7 +178,7 @@ RSpec.describe SharedState do
 
       it 'strips them so the title cannot end or inject a sequence' do
         state.char_name = "Mah\e\\\etra\a"
-        state.prompt_text = "H\u009c>"
+        state.prompt_text = "H#{[0x009C].pack('U')}>"
         state.room_title = "Room\e]0;pwned\a\x01\n\\"
         expect(tty_bytes).to eq "\e]0;Mahtra [H:Room]0;pwned]\a\ekMahtra\e\\"
       end

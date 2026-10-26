@@ -306,7 +306,7 @@ class RoomAssembler
   # @return [Boolean, Symbol] true if this line was consumed by the
   #   RoomWindow (caller should not route it to the main window).  Returns
   #   false when title/desc text is captured for the terminal title but
-  #   the template has no RoomWindow — the text must still flow to the
+  #   the template has no RoomWindow - the text must still flow to the
   #   main text window for display. Returns +:remote+ for the text of a
   #   view of another room (see #remote_title?), with or without a
   #   RoomWindow: the caller shows it as the familiar stream's.

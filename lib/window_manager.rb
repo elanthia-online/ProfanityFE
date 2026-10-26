@@ -279,7 +279,7 @@ class WindowManager
       window.refresh
       window.close
 
-      # Skip resize when terminal is too small — ncurses segfaults on
+      # Skip resize when terminal is too small - ncurses segfaults on
       # invalid dimensions (negative/zero height or width, out-of-bounds
       # positions). The windows will be repositioned on the next resize
       # when the terminal is large enough.

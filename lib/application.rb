@@ -335,7 +335,7 @@ class Application
   # Read one key press from the command window.
   #
   # Reads with +get_char+ (wget_wch), not +getch+: getch hands back each
-  # byte of a non-ASCII character such as "é" as a separate Integer, so the
+  # byte of a non-ASCII character such as U+00E9 as a separate Integer, so the
   # character never reached the command line. Everything else keeps getch's
   # shape so key bindings match as before: a function key is its Integer
   # code, a control character (Enter, Tab, ESC, ctrl+letter, DEL) is its

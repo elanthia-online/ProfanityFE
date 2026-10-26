@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# GemStone's room titles show as DragonRealms shows its own (AUDIT §0.2,
+# GemStone's room titles show as DragonRealms shows its own (AUDIT section 0.2,
 # decisions of 2026-10-03: both games display the same way). With
 # ShowRoomID on, GemStone sends the room's id after a dash in the room
 # subtitle (" - Sanctum Tower, First Floor - 4216031") and after the

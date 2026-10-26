@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# What main shows around a multi-line gag (<gag start=… end=…>): the block
+# What main shows around a multi-line gag (<gag start=... end=...>): the block
 # is hidden from its starting line through its end line, or up to the next
 # prompt when the gag has no end pattern; a block that never ends is let go
 # after LineFilter::MULTILINE_GAG_MAX_LINES hidden lines.

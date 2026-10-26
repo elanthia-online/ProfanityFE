@@ -695,7 +695,7 @@ module TagHandlers
     pop = XmlTokenizer.start_tag_name(xml) == 'popStream'
     if text_buffer.empty? && empty_room_close?(stream, pop)
       # Empty room components (e.g., <component id='room players'></component>)
-      # are meaningful — they clear the displayed data. Since flush_text_buffer
+      # are meaningful - they clear the displayed data. Since flush_text_buffer
       # skips empty text, handle this directly. Without a RoomWindow only an
       # empty room players component does anything: it clears the indicator.
       result = @room.process_room_stream('', stream, @marks.runs)

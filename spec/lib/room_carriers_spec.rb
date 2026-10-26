@@ -17,7 +17,7 @@
 # synthetic Lich and GemStone lines, so the room pipeline can be rebuilt
 # without changing what the user sees. The examples marked pending
 # describe the correct behaviour for bugs the rebuild fixes (spec policy:
-# AUDIT §0.2).
+# AUDIT section 0.2).
 #
 # Lines are fed through the real server loop (GameTextProcessor#run) into
 # windows built from layout XML. The assertions read the virtual screen:

@@ -173,7 +173,7 @@ RSpec.describe 'The input loop' do
 
   # BUG FOUND (fixed here): the input loop read keys with getch, which
   # returns a non-ASCII character's UTF-8 bytes one Integer at a time, and
-  # only Strings are typed into the command line, so "café" became "caf".
+  # only Strings are typed into the command line, so "caf\u00e9" became "caf".
   describe 'typing non-ASCII characters' do
     before do
       File.write(settings_path, settings_binding(<<~XML))
@@ -190,41 +190,41 @@ RSpec.describe 'The input loop' do
     let(:yank) { "\x19" } # ctrl+y
 
     it 'shows each typed character on the command line, with the cursor after it' do
-      run_client(keyboard('café'))
+      run_client(keyboard("caf#{[0x00E9].pack('U')}"))
 
-      expect(command_line.row(0)).to eq 'café'
+      expect(command_line.row(0)).to eq "caf#{[0x00E9].pack('U')}"
       expect(command_line.curx).to eq 4
     end
 
     it 'sends the typed text to the server' do
-      run_client(keyboard("café au lait\n"))
+      run_client(keyboard("caf#{[0x00E9].pack('U')} au lait\n"))
 
-      expect(game_server.commands).to eq ['café au lait']
+      expect(game_server.commands).to eq ["caf#{[0x00E9].pack('U')} au lait"]
     end
 
     it 'backspaces over a non-ASCII character as one character' do
-      run_client(keyboard('café', backspace, "e\n"))
+      run_client(keyboard("caf#{[0x00E9].pack('U')}", backspace, "e\n"))
 
       expect(game_server.commands).to eq ['cafe']
     end
 
     it 'moves the cursor over a non-ASCII character as one character' do
-      run_client(keyboard('naïve', Curses::KEY_LEFT, Curses::KEY_LEFT, backspace, 'i'))
+      run_client(keyboard("na#{[0x00EF].pack('U')}ve", Curses::KEY_LEFT, Curses::KEY_LEFT, backspace, 'i'))
 
       expect(command_line.row(0)).to eq 'naive'
       expect(command_line.curx).to eq 3
     end
 
     it 'kills and yanks text with non-ASCII characters' do
-      run_client(keyboard('ñoño', kill_line, 'say ', yank, "\n"))
+      run_client(keyboard("#{[0x00F1].pack('U')}o#{[0x00F1].pack('U')}o", kill_line, 'say ', yank, "\n"))
 
-      expect(game_server.commands).to eq ['say ñoño']
+      expect(game_server.commands).to eq ["say #{[0x00F1].pack('U')}o#{[0x00F1].pack('U')}o"]
     end
 
     it 'reports a non-ASCII key as the character typed for .key' do
-      run_client(keyboard(".key\n", 'é'))
+      run_client(keyboard(".key\n", [0x00E9].pack('U')))
 
-      expect(main.rows).to include('* Detected keycode: é')
+      expect(main.rows).to include("* Detected keycode: #{[0x00E9].pack('U')}")
     end
 
     it 'drops a key the locale cannot decode and keeps reading' do

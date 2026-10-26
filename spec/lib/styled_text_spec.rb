@@ -140,7 +140,7 @@ RSpec.describe StyledText do
       expect(empty.slice(0...0).text).to eq ''
     end
 
-    it 'handles runs with zero length (start == end) — excludes them' do
+    it 'handles runs with zero length (start == end) - excludes them' do
       zero_run = described_class.new('abc', [{ start: 1, end: 1, fg: 'ff0000' }])
       result = zero_run.slice(0...3)
       expect(result.runs).to be_empty
@@ -485,21 +485,21 @@ RSpec.describe StyledText do
     end
 
     it 'handles UTF-8 multi-byte characters in text' do
-      st = described_class.new('café résumé', [
+      st = described_class.new("caf#{[0x00E9].pack('U')} r#{[0x00E9].pack('U')}sum#{[0x00E9].pack('U')}", [
                                  { start: 0, end: 4, fg: 'ff0000' },
                                  { start: 5, end: 11, fg: '00ff00' }
                                ])
       lines = st.wrap(6, indent: false)
-      expect(lines.map(&:text)).to eq ['café ', 'résumé']
+      expect(lines.map(&:text)).to eq ["caf#{[0x00E9].pack('U')} ", "r#{[0x00E9].pack('U')}sum#{[0x00E9].pack('U')}"]
       expect(lines.map(&:runs)).to eq [[{ start: 0, end: 4, fg: 'ff0000' }], [{ start: 0, end: 6, fg: '00ff00' }]]
     end
 
     it 'wraps CJK text by characters, splitting its run' do
-      st = described_class.new('日本語テスト', [
+      st = described_class.new([0x65E5, 0x672C, 0x8A9E, 0x30C6, 0x30B9, 0x30C8].pack('U*'), [
                                  { start: 0, end: 6, fg: 'ff0000' }
                                ])
       lines = st.wrap(3, indent: false)
-      expect(lines.map(&:text)).to eq %w[日本語 テスト]
+      expect(lines.map(&:text)).to eq [[0x65E5, 0x672C, 0x8A9E].pack('U*'), [0x30C6, 0x30B9, 0x30C8].pack('U*')]
       expect(lines.map(&:runs)).to eq [[{ start: 0, end: 3, fg: 'ff0000' }], [{ start: 0, end: 3, fg: 'ff0000' }]]
     end
 

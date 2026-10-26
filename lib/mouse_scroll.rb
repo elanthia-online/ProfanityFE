@@ -144,9 +144,9 @@ class MouseScroll
   # Called when .links or .select is toggled on.
   #
   # With drag highlight on, click resolution is also disabled
-  # (mouseinterval 0) so presses and releases arrive raw — the
+  # (mouseinterval 0) so presses and releases arrive raw - the
   # application's own click-vs-drag heuristic takes over, and no events
-  # are buffered waiting to synthesize BUTTON1_CLICKED — and pointer
+  # are buffered waiting to synthesize BUTTON1_CLICKED - and pointer
   # motion is requested too ({MOTION_EVENTS}).
   #
   # @return [void]

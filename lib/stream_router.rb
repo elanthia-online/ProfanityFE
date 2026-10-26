@@ -64,7 +64,7 @@ class StreamRouter
   #
   # Only a +<pushStream>+ is recorded as open, so a later pop can return
   # to it. A component or compDef (including a self-closing
-  # +<component id='…'/>+) only switches the current stream: nothing a pop
+  # +<component id='...'/>+) only switches the current stream: nothing a pop
   # could later restore.
   #
   # @param stream [String] the stream switched to

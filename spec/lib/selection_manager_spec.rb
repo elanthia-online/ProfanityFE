@@ -90,7 +90,7 @@ RSpec.describe SelectionManager do
     fill(window, 10)
     described_class.start_selection(window, 9, 0)
     window.add_line('intruder')
-    # Release on the same screen row the press landed on — which now
+    # Release on the same screen row the press landed on - which now
     # shows different text. The selection must span from the pressed
     # line to the line now under the cursor, not silently re-target.
     described_class.update_selection(9, 8)

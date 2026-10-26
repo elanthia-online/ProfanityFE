@@ -102,8 +102,8 @@ RSpec.describe 'Inline room lines' do
     y, = locate(prefix)
     row = room.row(y)
     row.each_char.with_index.chunk_while { |(_, a), (_, b)| red?(y, a) == red?(y, b) }
-                            .select { |chars| red?(y, chars.first.last) }
-                            .map { |chars| chars.map(&:first).join }
+       .select { |chars| red?(y, chars.first.last) }
+       .map { |chars| chars.map(&:first).join }
   end
 
   def red?(y, x) = room.attrs_at(y, x) >> 8 == 1
