@@ -1,30 +1,30 @@
-name: YARD Docs
+name: CI
+
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "**/*.rb"
-      - "*.rb"
-      - ".yardopts"
-      - "Gemfile"
-      - "Gemfile.lock"
-      - ".github/workflows/yard_docs.yaml"
+    branches: [main]
   pull_request:
-    paths:
-      - "**/*.rb"
-      - "*.rb"
-      - ".yardopts"
-      - "Gemfile"
-      - "Gemfile.lock"
-      - ".github/workflows/yard_docs.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUNDLE_WITHOUT: 'gtk:vscode:profanity'
 
 jobs:
+  # Shared lint + test from elanthia-online/.github, pinned by full SHA.
+  ruby:
+    uses: elanthia-online/.github/.github/workflows/ruby-ci.yml@277eba54e8b75c7e235e459ea53076f6151a4db0
+    with:
+      lint-scope: repo
+
   yard:
+    name: yard
     runs-on: ubuntu-latest
-    env:
-      BUNDLE_WITHOUT: 'gtk:vscode:profanity'
-    name: Check YARD documentation
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -65,3 +65,16 @@ jobs:
       # Each gap is listed as file:line.
       - name: YARD tags match the code
         run: bundle exec ruby script/check_yard_tags.rb
+
+  ci-gate:
+    name: ci-gate
+    if: always()
+    needs: [ruby, yard]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every job to pass
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")' > /dev/null
