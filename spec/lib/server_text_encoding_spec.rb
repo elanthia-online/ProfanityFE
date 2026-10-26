@@ -55,24 +55,24 @@ RSpec.describe 'GameTextProcessor server text encoding' do
   end
 
   it 'keeps processing after a non-ASCII line when a gag pattern is non-ASCII' do
-    GagPatterns.add_general_pattern('^Bob says — hi')
+    GagPatterns.add_general_pattern("^Bob says #{[0x2014].pack('U')} hi")
 
-    receive_from_server('You see a café sign.', 'You wave.')
+    receive_from_server("You see a caf#{[0x00E9].pack('U')} sign.", 'You wave.')
 
-    expect(displayed).to eq(['You see a café sign.', 'You wave.'])
+    expect(displayed).to eq(["You see a caf#{[0x00E9].pack('U')} sign.", 'You wave.'])
   end
 
   it 'keeps processing after a non-ASCII line when a highlight pattern is non-ASCII' do
-    HIGHLIGHT[/café/] = ['ff0000', nil, nil]
+    HIGHLIGHT[/caf#{[0x00E9].pack('U')}/] = ['ff0000', nil, nil]
 
-    receive_from_server('You see a café sign.', 'You wave.')
+    receive_from_server("You see a caf#{[0x00E9].pack('U')} sign.", 'You wave.')
 
-    expect(displayed).to eq(['You see a café sign.', 'You wave.'])
+    expect(displayed).to eq(["You see a caf#{[0x00E9].pack('U')} sign.", 'You wave.'])
   end
 
   it 'replaces invalid UTF-8 bytes instead of failing' do
-    receive_from_server("A broken \xFF byte.", 'You wave.')
+    receive_from_server("A broken #{0xFF.chr.force_encoding(Encoding::UTF_8)} byte.", 'You wave.')
 
-    expect(displayed).to eq(["A broken � byte.", 'You wave.'])
+    expect(displayed).to eq(["A broken #{[0xFFFD].pack('U')} byte.", 'You wave.'])
   end
 end

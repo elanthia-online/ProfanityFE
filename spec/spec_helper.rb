@@ -3,7 +3,7 @@
 # ProfanityFE spec helper.
 #
 # Stubs Curses and terminal dependencies so specs run headless.
-# Each spec requires only the files it needs — this helper does NOT
+# Each spec requires only the files it needs - this helper does NOT
 # load the full application.
 #
 # TESTING PHILOSOPHY:
@@ -149,7 +149,7 @@ module Curses
   def self.mousemask(*) = nil
 
   # Models the real curses 1.6.0 binding: NUM2INT raises on non-Integer
-  # args, and the return is a boolean — never the previous interval.
+  # args, and the return is a boolean - never the previous interval.
   def self.mouseinterval(interval)
     raise TypeError, "no implicit conversion of #{interval.class} into Integer" unless interval.is_a?(Integer)
 
@@ -196,7 +196,7 @@ FEEDBACK_COLOR = 'ffff00'
 BACKTRACE_LIMIT = 4
 
 # Mutable runtime state owned by CONFIG, aliased for compatibility.
-# Same pattern as lib/constants.rb — specs use the same Config object.
+# Same pattern as lib/constants.rb - specs use the same Config object.
 CONFIG = Config.new
 SETTINGS_LOCK   = CONFIG.lock
 HIGHLIGHT       = CONFIG.highlight

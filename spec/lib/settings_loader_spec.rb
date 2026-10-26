@@ -187,7 +187,7 @@ RSpec.describe SettingsLoader do
     end
 
     it 'loads a settings file containing non-ASCII text under a C locale' do
-      path = write_settings(@dir, '<!-- highlights — for goblins --><notification-stream>ooc</notification-stream>')
+      path = write_settings(@dir, "<!-- highlights #{[0x2014].pack('U')} for goblins --><notification-stream>ooc</notification-stream>")
 
       with_default_external(Encoding::US_ASCII) { load_settings(path) }
 

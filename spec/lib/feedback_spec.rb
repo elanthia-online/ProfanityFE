@@ -22,7 +22,7 @@ RSpec.describe Feedback do
   end
 
   it 'counts characters, not bytes, so a non-ASCII line is colored to its end' do
-    expect(Feedback.colors('* café').first[:end]).to eq 6
+    expect(Feedback.colors("* caf#{[0x00E9].pack('U')}").first[:end]).to eq 6
   end
 
   it 'writes nothing and says so for a nil window' do

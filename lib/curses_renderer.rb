@@ -4,7 +4,7 @@ require 'monitor'
 
 # Thread-safe rendering coordinator for curses screen updates.
 #
-# ncurses is not thread-safe — concurrent calls to +noutrefresh+ and
+# ncurses is not thread-safe - concurrent calls to +noutrefresh+ and
 # +doupdate+ from different threads can corrupt internal data structures
 # and cause visible flickering (especially on terminals with higher
 # rendering latency such as MobaXterm or SSH sessions).
@@ -40,7 +40,7 @@ module CursesRenderer
   # Serialize a block of curses (or terminal I/O) operations.
   #
   # Use when performing multiple curses calls that must not be
-  # interleaved with calls from other threads — for example, writing
+  # interleaved with calls from other threads - for example, writing
   # escape sequences directly to +$stdout+.
   #
   # @yield block of operations to serialize

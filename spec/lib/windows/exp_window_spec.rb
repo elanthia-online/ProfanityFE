@@ -3,7 +3,7 @@
 # Tests the experience window (ExpWindow) as a user sees it: the window is
 # built from layout XML by WindowManager, draws onto the virtual screen
 # (spec/support/virtual_screen.rb), and receives skill updates through
-# GameTextProcessor as <component id='exp …'> lines.
+# GameTextProcessor as <component id='exp ...'> lines.
 
 require 'rexml/document'
 require_relative '../../../lib/event_bus'

@@ -92,10 +92,10 @@ class EffectsWindow < BaseWindow
   WARNING_SECONDS = 60
 
   # Marks a name that was cut to fit.
-  ELLIPSIS = "\u2026"
+  ELLIPSIS = [0x2026].pack('U').freeze
 
   # Fills the header rows after the category name.
-  RULE = "\u2500"
+  RULE = [0x2500].pack('U').freeze
 
   # The colors of one kind of row: foreground and background of the filled
   # part of the bar, and of the empty part.

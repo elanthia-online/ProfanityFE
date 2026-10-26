@@ -9,7 +9,7 @@
 #
 # Runs are hashes with :start, :end (character positions in the text),
 # and optional :fg, :bg, :ul, :cmd keys. They are stored in insertion
-# order but may overlap — the renderer resolves priority by smallest
+# order but may overlap - the renderer resolves priority by smallest
 # range first (most specific wins), a link's run (one with :cmd) last
 # (see HighlightProcessor.render_colored_text).
 #
@@ -54,7 +54,7 @@ class StyledText
     @text.strip.empty?
   end
 
-  # Append text to the end. No new runs are added — the appended text
+  # Append text to the end. No new runs are added - the appended text
   # inherits whatever styling context the caller sets up afterward.
   #
   # @param str [String] text to append
@@ -200,7 +200,7 @@ class StyledText
   end
 
   # Word-wrap the text to the given width, returning an array of
-  # StyledText instances — one per wrapped line. Run positions are
+  # StyledText instances - one per wrapped line. Run positions are
   # correctly split across lines.
   #
   # The work per row is proportional to the runs on or around that row,
@@ -252,7 +252,7 @@ class StyledText
         if (break_pos = line.rindex(/\s/))
           # Only break at whitespace if it would leave non-whitespace
           # content on this line. Otherwise we'd emit a whitespace-only
-          # line and indent would re-add whitespace → infinite loop.
+          # line and indent would re-add whitespace -> infinite loop.
           candidate = remaining_text[0, break_pos + 1]
           line = candidate if candidate.strip.length > 0
         end

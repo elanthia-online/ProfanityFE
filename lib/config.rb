@@ -11,7 +11,7 @@ require_relative 'streams'
 # The existing global constants are aliased to this object's internal
 # hashes/arrays in constants.rb, so all existing code continues to
 # work unchanged (e.g., `PRESET['monsterbold']` reads from
-# `CONFIG.preset['monsterbold']` — same Hash object).
+# `CONFIG.preset['monsterbold']` - same Hash object).
 #
 # @example Reset all mutable state (e.g., between tests)
 #   CONFIG.reset!

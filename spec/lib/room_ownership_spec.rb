@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-# Component data owns the room it described (AUDIT §0.2, one room
+# Component data owns the room it described (AUDIT section 0.2, one room
 # pipeline). DragonRealms sends a room twice on a move: the room
 # components (after the room streamWindow's subtitle), then the inline
 # lines (roomName, roomDesc, "You also see", "Also here:", "Obvious
@@ -439,7 +439,7 @@ RSpec.describe 'Room ownership' do
   end
 
   # A new room clears the exits and objects its burst never delivers (AUDIT
-  # §0.2, survey F4). A subtitle names a new room when its text differs
+  # section 0.2, survey F4). A subtitle names a new room when its text differs
   # both from the last subtitle and from the title row shown: a subtitle
   # re-sent for the room shown clears nothing, even when the row shows
   # Lich's form of the roomName, or a LOOK's roomName before any subtitle.

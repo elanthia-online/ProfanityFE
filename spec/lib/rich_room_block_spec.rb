@@ -15,7 +15,7 @@
 # Both send the room components (room desc, objs, players, exits) on a
 # move. Profanity has to show a room alike from either stream. The rich
 # examples marked pending describe what the user should see; they fail
-# until the rich stream is read (spec policy: AUDIT §0.2).
+# until the rich stream is read (spec policy: AUDIT section 0.2).
 
 require_relative '../spec_helper'
 require_relative '../support/screen_replay'

@@ -48,7 +48,7 @@ RSpec.describe StringClassification do
   describe 'single characters' do
     classes = { alnum?: /[[:alnum:]]/, digits?: /[[:digit:]]/, punct?: /[[:punct:]]/, space?: /[[:space:]]/ }
     chars = (0..0xFF).map { |cp| cp.chr(Encoding::UTF_8) } +
-            ["́", " ", " ", "　", "€", "©", "é", "٣", "\u{1F600}"]
+            [0x0301, 0x00A0, 0x2009, 0x3000, 0x20AC, 0x00A9, 0x00E9, 0x0663, 0x1F600].map { |cp| cp.chr(Encoding::UTF_8) }
 
     classes.each do |predicate, klass|
       it "##{predicate} matches the character's own class for every sample character" do

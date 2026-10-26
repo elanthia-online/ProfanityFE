@@ -60,7 +60,7 @@ RSpec.describe GagPatterns do
       expect('The goblin MISSES').to match(described_class.combat_regexp)
     end
 
-    # String patterns are intentionally treated as regex — the module doc
+    # String patterns are intentionally treated as regex - the module doc
     # example uses 'You also see .* moth' and XML <gag> elements contain
     # regex patterns, not literal strings. This means metacharacters like
     # () are active. Users who want literal parens must escape them.
@@ -118,8 +118,8 @@ RSpec.describe GagPatterns do
 
     # Adversarial
     it 'handles unicode in patterns' do
-      described_class.add_general_pattern('café')
-      expect('a café appears').to match(described_class.general_regexp)
+      described_class.add_general_pattern("caf#{[0x00E9].pack('U')}")
+      expect("a caf#{[0x00E9].pack('U')} appears").to match(described_class.general_regexp)
     end
   end
 

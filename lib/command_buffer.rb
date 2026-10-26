@@ -49,7 +49,7 @@ class CommandBuffer
   # The characters that make up a word, for every word key (Ctrl+left,
   # Ctrl+right, {#backspace_word} and {#delete_word}), as the body of a
   # regex bracket expression. POSIX +[:word:]+ is Unicode-aware: letters,
-  # combining marks, digits and connector punctuation, so +é+ (precomposed
+  # combining marks, digits and connector punctuation, so U+00E9 (precomposed
   # or +e+ plus U+0301) is a word character, unlike with +\w+. On ASCII it
   # matches +\w+ exactly, so +_+ joins words: +foo_bar+ is one word.
   WORD_CHAR = '[:word:]'

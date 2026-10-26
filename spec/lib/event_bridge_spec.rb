@@ -158,7 +158,7 @@ RSpec.describe EventBridge do
                                       effects: [{ id: 't', name: 'My Timer', percent: 100, end_time: nil }])
 
       rows = wm.effects['effects'].rows
-      expect([rows[0], rows[1].rstrip]).to match([a_string_starting_with("\u2500\u2500 Custom ").and(end_with(' 1')),
+      expect([rows[0], rows[1].rstrip]).to match([a_string_starting_with("#{[0x2500, 0x2500].pack('U*')} Custom ").and(end_with(' 1')),
                                                   "My Timer#{' ' * 17}Indef"])
     end
   end

@@ -58,7 +58,7 @@ RSpec.describe ProfanitySettings do
   # non-ASCII character under LANG=C raised Encoding::InvalidByteSequenceError
   # out of MouseScroll.new.
   it 'reads settings.json as UTF-8 whatever the locale' do
-    File.write(path, '{"DRAG_HIGHLIGHT": false, "note": "café"}')
+    File.write(path, "{\"DRAG_HIGHLIGHT\": false, \"note\": \"caf#{[0x00E9].pack('U')}\"}")
     original = Encoding.default_external
     Encoding.default_external = Encoding::US_ASCII
 

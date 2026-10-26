@@ -27,7 +27,7 @@ module SafeArithmetic
   # Safe arithmetic expression evaluator for layout dimensions.
   # Parses integers, +, -, *, /, parentheses and the two-argument
   # functions +min(a, b)+ and +max(a, b)+ without using eval.
-  # Uses a simple recursive descent parser (expression → term → factor).
+  # Uses a simple recursive descent parser (expression -> term -> factor).
   #
   # A +min+/+max+ call is a factor, like a number or a parenthesised
   # expression, and its arguments are whole expressions, so calls nest and
@@ -68,7 +68,7 @@ module SafeArithmetic
     pos = [0] # mutable position index
     depth = 0 # parentheses, unary minus signs and call arguments open at pos
 
-    # Recursive descent: expr → term ((+|-) term)*
+    # Recursive descent: expr -> term ((+|-) term)*
     parse_expr = nil
     parse_term = nil
     parse_factor = nil
@@ -142,7 +142,7 @@ module SafeArithmetic
         elsif right != 0
           result /= right
         else
-          result = 0 # division by zero → 0
+          result = 0 # division by zero -> 0
         end
       end
       result

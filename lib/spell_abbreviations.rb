@@ -8,7 +8,7 @@
 #
 # Maps the full spell name (as sent by the game server in the percWindow
 # stream) to a short abbreviation for compact display. These are
-# universal game constants — they change only when Simutronics adds or
+# universal game constants - they change only when Simutronics adds or
 # renames spells.
 #
 # @example

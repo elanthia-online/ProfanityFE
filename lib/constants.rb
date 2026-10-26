@@ -8,7 +8,7 @@ require_relative 'streams'
 # Immutable constants (MAIN_STREAM, DEFAULT_BUFFER_SIZE, etc.) are
 # defined directly. Mutable runtime state (HIGHLIGHT, PRESET, LAYOUT,
 # etc.) is owned by the CONFIG object and aliased here for backward
-# compatibility — all existing code continues to use HIGHLIGHT[key],
+# compatibility - all existing code continues to use HIGHLIGHT[key],
 # PRESET[key], etc. unchanged.
 
 # ---- Immutable constants ----

@@ -727,7 +727,7 @@ RSpec.describe LayoutLoader do
     end
 
     it 'shows the current window\'s scrollbar as active after .layout, as at startup' do
-      active = ["\u25B6", *Array.new(8, "\u2503"), ''] # the thumb, at the bottom, is a reverse-video blank
+      active = [[0x25B6].pack('U'), *Array.new(8, [0x2503].pack('U')), ''] # the thumb, at the bottom, is a reverse-video blank
       main = app.window_mgr.stream['main']
       expect(main.scrollbar.rows).to eq active
 

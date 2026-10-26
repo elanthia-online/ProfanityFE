@@ -79,7 +79,7 @@ module SelectionManager
 
     # Return the window-relative [y, x] press coordinates, or nil if no
     # selection. Used by the input loop's click-vs-drag heuristic, which
-    # compares screen positions — not buffer anchors.
+    # compares screen positions - not buffer anchors.
     #
     # @return [Array<Integer>, nil] [y, x] pair or nil
     def start_pos
@@ -116,7 +116,7 @@ module SelectionManager
 
     # Begin a new text selection at the given window coordinates.
     # Clears any previous selection highlight first, then resolves the
-    # press position to a stable [line_id, x] anchor immediately — before
+    # press position to a stable [line_id, x] anchor immediately - before
     # any incoming text can shift the buffer under it.
     #
     # Rapid repeat presses at the same spot count as double/triple clicks
@@ -201,7 +201,7 @@ module SelectionManager
         ProfanityLog.write('SelectionManager', "No text extracted: start=(#{@start_id},#{@start_x}) end=(#{@end_id},#{@end_x})")
         nil
       end
-      # Keep highlight visible — cleared on next start_selection or clear_selection
+      # Keep highlight visible - cleared on next start_selection or clear_selection
     end
 
     # Reset all selection state and clear any active highlight.

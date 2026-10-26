@@ -227,11 +227,11 @@ RSpec.describe CommandBuffer do
       ['abc', 0, 0],
       ['abc', 1, 0],
       # non-ASCII
-      ['café é', 6, 5],
-      ['café latte', 10, 5],
-      ['naïve', 5, 0],
-      ["ab\u00A0c", 4, 3],
-      ['日本 語', 4, 3]
+      ["caf#{[0x00E9].pack('U')} #{[0x00E9].pack('U')}", 6, 5],
+      ["caf#{[0x00E9].pack('U')} latte", 10, 5],
+      ["na#{[0x00EF].pack('U')}ve", 5, 0],
+      ["ab#{[0x00A0].pack('U')}c", 4, 3],
+      ["#{[0x65E5, 0x672C].pack('U*')} #{[0x8A9E].pack('U')}", 4, 3]
     ].each do |str, from, to|
       it "moves from #{from} to #{to} in #{str.inspect}" do
         type(str)
@@ -314,10 +314,10 @@ RSpec.describe CommandBuffer do
     # Non-ASCII letters are part of a word and non-ASCII spaces separate
     # words, as for backspace_word/delete_word.
     {
-      'café latte' => [[10, 5, 0], [0, 5, 10]],
-      'naïve'      => [[5, 0], [0, 5]],
-      'über.alles' => [[10, 5, 4, 0], [0, 4, 5, 10]],
-      "ab\u00A0cd" => [[5, 3, 0], [0, 3, 5]]
+      "caf#{[0x00E9].pack('U')} latte" => [[10, 5, 0], [0, 5, 10]],
+      "na#{[0x00EF].pack('U')}ve"      => [[5, 0], [0, 5]],
+      "#{[0x00FC].pack('U')}ber.alles" => [[10, 5, 4, 0], [0, 4, 5, 10]],
+      "ab#{[0x00A0].pack('U')}cd"      => [[5, 3, 0], [0, 3, 5]]
     }.each do |str, (left, right)|
       it "stops at #{left.inspect} going left through #{str.inspect}" do
         expect(stops(str, :cursor_word_left)).to eq left
@@ -329,7 +329,7 @@ RSpec.describe CommandBuffer do
     end
 
     it 'moves over the same word that backspace_word deletes' do
-      type('say naïve')
+      type("say na#{[0x00EF].pack('U')}ve")
       buf.cursor_word_left
       expect(buf.pos).to eq 4
       buf.cursor_end
@@ -552,8 +552,8 @@ RSpec.describe CommandBuffer do
     # A combining mark (here U+0301 after `e`) is part of the word, as
     # for Ctrl+left/right.
     {
-      "cafe\u0301 au"   => [["cafe\u0301 ", ''], [' au', '']],
-      "e\u0301te\u0301" => [[''], ['']]
+      "cafe#{[0x0301].pack('U')} au"                  => [["cafe#{[0x0301].pack('U')} ", ''], [' au', '']],
+      "e#{[0x0301].pack('U')}te#{[0x0301].pack('U')}" => [[''], ['']]
     }.each do |str, (backward, forward)|
       it "backspace_word leaves #{backward.inspect} from the end of #{str.inspect}" do
         expect(deletions(str, :backspace_word)).to eq backward
@@ -569,7 +569,7 @@ RSpec.describe CommandBuffer do
   # of a word character: `_` and other connector punctuation, combining
   # marks and joiners (U+200D) are all part of the word.
   describe 'word motion and word deletion agree' do
-    ['run foo_bar', "say nai\u0308ve", "go e\u203Fe", "a\u200Db"].each do |str|
+    ['run foo_bar', "say nai#{[0x0308].pack('U')}ve", "go e#{[0x203F].pack('U')}e", "a#{[0x200D].pack('U')}b"].each do |str|
       it "backspace_word deletes the word Ctrl+left moves over in #{str.inspect}" do
         type(str)
         buf.cursor_word_left
@@ -1523,28 +1523,28 @@ RSpec.describe CommandBuffer do
 
   describe 'multi-byte UTF-8 characters' do
     it 'inserts multi-byte characters and tracks cursor position correctly' do
-      type('café')
-      expect(buf.text).to eq 'café'
+      type("caf#{[0x00E9].pack('U')}")
+      expect(buf.text).to eq "caf#{[0x00E9].pack('U')}"
       expect(buf.pos).to eq 4
     end
 
     it 'handles backspace on multi-byte character' do
-      type('café')
+      type("caf#{[0x00E9].pack('U')}")
       buf.backspace
       expect(buf.text).to eq 'caf'
       expect(buf.pos).to eq 3
     end
 
     it 'preserves emoji in buffer text' do
-      buf.put_ch('🎮')
+      buf.put_ch([0x1F3AE].pack('U'))
       buf.put_ch('!')
-      expect(buf.text).to include('🎮')
+      expect(buf.text).to include([0x1F3AE].pack('U'))
       expect(buf.text).to include('!')
     end
 
     it 'handles CJK characters in text' do
-      type('日本語')
-      expect(buf.text).to eq '日本語'
+      type([0x65E5, 0x672C, 0x8A9E].pack('U*'))
+      expect(buf.text).to eq [0x65E5, 0x672C, 0x8A9E].pack('U*')
       expect(buf.pos).to eq 3
     end
   end

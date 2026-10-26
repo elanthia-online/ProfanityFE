@@ -154,7 +154,7 @@ RSpec.describe 'Room capture' do
     expect(main_rows).to be_empty
   end
 
-  # Decided (PLAN §9 Q2 (a)): the description is the text the capture
+  # Decided (PLAN section 9 Q2 (a)): the description is the text the capture
   # took, so the room window loses the text after the preset, and main is
   # unchanged.
   it 'ends a roomDesc style capture at any preset close inside it, with the text before the close' do

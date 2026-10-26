@@ -17,7 +17,7 @@ module HighlightProcessor
   module_function
 
   # Apply all HIGHLIGHT patterns to text and append matches to line_colors.
-  # Thread-safe — acquires SETTINGS_LOCK while iterating patterns.
+  # Thread-safe - acquires SETTINGS_LOCK while iterating patterns.
   #
   # @param text [String] the text to apply highlights to
   # @param line_colors [Array<Hash>] existing color regions to append to

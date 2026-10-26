@@ -118,6 +118,8 @@ RSpec.describe 'Room title' do
 
   # What the game sends (decoded) => the title row, and the room as the
   # terminal title names it (the row's text without the name's brackets).
+  # A non-ASCII name: "Cafe, Unicode" with U+00E9, U+00DC, U+00EF and U+00F6.
+  accented = "Caf#{[0x00E9].pack('U')}, #{[0x00DC].pack('U')}n#{[0x00EF].pack('U')}c#{[0x00F6].pack('U')}d#{[0x00E9].pack('U')}"
   titles = {
     # Text after the closing bracket is shown as the game sends it.
     '[The Heavens] (**)'         => ['[The Heavens] (**)', 'The Heavens (**)'],
@@ -150,7 +152,7 @@ RSpec.describe 'Room title' do
     '[Room - 1234] (230008)'     => ['[Room - 1234] (230008)', 'Room - 1234 (230008)'],
     '[Room - 1234 - (u230008)]'  => ['[Room - 1234 - (u230008)]', 'Room - 1234 - (u230008)'],
     '[Room - (**)]'              => ['[Room - (**)]', 'Room - (**)'],
-    '[Café, Ünïcödé] (1234)'     => ['[Café, Ünïcödé] (1234)', 'Café, Ünïcödé (1234)'],
+    "[#{accented}] (1234)"       => ["[#{accented}] (1234)", "#{accented} (1234)"],
     # XML entities, decoded once.
     '[Smith & Sons] (1234)'      => ['[Smith & Sons] (1234)', 'Smith & Sons (1234)'],
     "[Smith's Forge]"            => ["[Smith's Forge]", "Smith's Forge"],
@@ -305,7 +307,7 @@ RSpec.describe 'Room title' do
   # the room compDefs, and <compDef id='sprite'></compDef><popStream
   # id='room'/>. Nothing is sent on the room stream itself, so its empty
   # pop ends the push and sends no title: the title row keeps the room
-  # the subtitle named, and agrees with the terminal title (AUDIT §0.2,
+  # the subtitle named, and agrees with the terminal title (AUDIT section 0.2,
   # GS pass 1, F3). The room components' empty closes still clear their
   # sections. Real lines, trimmed from a GemStone log, are in
   # spec/fixtures/room_pipeline/gs_*.xml.
