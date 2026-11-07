@@ -73,9 +73,30 @@ RSpec.describe 'script/bench tools' do
     dir
   end
 
-  # Command lines of running benchmark clients (replay.rb's --char=Bench).
-  def bench_clients
-    `ps -eo args`.lines.grep(/--config=bench --char=Bench/).grep_v(/grep/)
+  # PIDs of the benchmark clients (replay.rb's --char=Bench) running under
+  # +root+, at any depth. Only this example's processes count, so bench
+  # clients another checkout or suite run starts at the same time don't.
+  def bench_clients_under(root)
+    table = `ps -A -o pid=,ppid=,args=`.lines.map do |line|
+      pid, ppid, args = line.strip.split(/\s+/, 3)
+      [pid.to_i, ppid.to_i, args.to_s]
+    end
+    found = []
+    parents = [root]
+    until parents.empty?
+      children = table.select { |_, ppid, _| parents.include?(ppid) }
+      found.concat(children)
+      parents = children.map(&:first)
+    end
+    found.select { |_, _, args| args.include?('--config=bench --char=Bench') }.map(&:first)
+  end
+
+  # @return [Boolean] whether this bench client is still running: ps lists
+  # the PID, not as a zombie (an exited client its parent hasn't reaped),
+  # and still with a bench client's command line (not a reused PID)
+  def bench_client_running?(pid)
+    stat, args = `ps -o stat=,args= -p #{pid}`.strip.split(/\s+/, 2)
+    !stat.nil? && !stat.start_with?('Z') && args.to_s.include?('--config=bench --char=Bench')
   end
 
   describe 'replay.rb' do
@@ -206,25 +227,27 @@ RSpec.describe 'script/bench tools' do
     it 'ends every replay and client it started when sent TERM' do
       slow = File.join(@dir, 'slow.jsonl')
       File.write(slow, Array.new(40) { |i| JSON.generate('t' => i, 'data' => "Line #{i}.\n") }.join("\n"))
-      expect(bench_clients).to be_empty
-
       pid = Process.spawn(env, RbConfig.ruby, File.join(bench, 'fleet.rb'), '--windows=2', slow, chdir: repo,
                                                                                                   out: File::NULL, err: File::NULL)
+      clients = []
       300.times do
-        break if bench_clients.size == 2
+        clients = bench_clients_under(pid)
+        break if clients.size == 2
 
         sleep 0.1
       end
-      expect(bench_clients.size).to eq(2)
+      expect(clients.size).to eq(2)
       Process.kill('TERM', pid)
       Process.wait(pid)
+      # The clients are checked by PID: one left behind would no longer be
+      # under fleet.rb, so a search from it would miss it.
       50.times do
-        break if bench_clients.empty?
+        break if clients.none? { |client| bench_client_running?(client) }
 
         sleep 0.1
       end
 
-      expect(bench_clients).to be_empty
+      expect(clients.select { |client| bench_client_running?(client) }).to be_empty
       expect(`ps -eo args`.lines.grep(/replay\.rb .*#{Regexp.escape(slow)}/)).to be_empty
     end
   end
