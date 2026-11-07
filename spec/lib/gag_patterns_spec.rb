@@ -280,6 +280,33 @@ RSpec.describe GagPatterns do
     end
   end
 
+  # Each gag is tried alone. A union of them numbered capture groups across
+  # every gag, so a later gag's backreference pointed at an earlier gag's
+  # group and that gag silently never matched.
+  describe 'gags with backreferences' do
+    it 'gags a line with a backreference gag listed after another gag with a group' do
+      described_class.add_general_pattern('^A (\\w+) arrives')
+      described_class.add_general_pattern('(\\w+) and \\1')
+
+      expect(described_class.match_general('moth and moth')).to eq(/(\w+) and \1/)
+      expect(described_class.match_general('moth and bat')).to be_nil
+    end
+
+    it 'starts a multi-line block with a backreference gag listed after another' do
+      described_class.add_multiline_gag('^A (\\w+) arrives')
+      described_class.add_multiline_gag('(\\w+) and \\1')
+
+      expect(described_class.match_multiline_start('moth and moth')).to eq(start: /(\w+) and \1/, end: nil)
+    end
+
+    it 'loads a named-group gag alongside a numbered-backreference gag' do
+      described_class.replace_custom(general: ['(?<who>\\w+) waves', '(\\w+) and \\1'])
+
+      expect(described_class.match_general('The goblin waves')).to eq(/(?<who>\w+) waves/)
+      expect(described_class.match_general('moth and moth')).to eq(/(\w+) and \1/)
+    end
+  end
+
   describe '.load_defaults with multi-line gags' do
     it 'clears multi-line gags added before load_defaults' do
       described_class.add_multiline_gag('start')
