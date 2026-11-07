@@ -111,7 +111,87 @@ RSpec.describe FamiliarNotifier do
       it { is_expected.to eq ['Tarantula: Mahtra 15/34'] }
     end
 
+    # Only "***STATUS*** " with a space is taken out of the notification.
+    context 'with a script status followed by a tab' do
+      let(:text) { "[hunter: ***STATUS***\tgo]" }
+      it { is_expected.to eq ["hunter: ***STATUS***\tgo"] }
+    end
+
+    context 'with a tarantula progress line' do
+      let(:text) { 'Small Edged:  12 34.56% pondering  (5/34)' }
+      it { is_expected.to eq [text] }
+    end
+
+    context 'with a tarantula progress line spaced with tabs' do
+      let(:text) { "Edged:\t1 2.3% x\t(1/34)" }
+      it { is_expected.to eq [text] }
+    end
+
+    context 'with a long item accepting line spaced with a tab' do
+      let(:text) { "Longitem\taccepting from is Mahtra" }
+      it { is_expected.to eq [text] }
+    end
+
+    context 'with a character accepting line spaced with two spaces' do
+      let(:text) { 'Character  accepting from is' }
+      it { is_expected.to eq [text] }
+    end
+
+    context 'with a lockbox loot summary ending in another character' do
+      let(:text) { 'Spent 2 roisaen looting 3 boxes!' }
+      it { is_expected.to eq [text] }
+    end
+
+    context 'with a waiting list line whose name is one letter' do
+      let(:text) { 'a just opened the waiting list.' }
+      it { is_expected.to eq [text] }
+    end
+
+    # Each pattern's line starts after a newline as well as at the start.
+    context 'with focus effect start after a newline' do
+      let(:text) { "x\nYou raise the bead up, and a black glow surrounds it" }
+      it { is_expected.to eq ['Focus effect started.'] }
+    end
+
+    context 'with focus effect end after a newline' do
+      let(:text) { "x\nThe glow slowly fades away from around you" }
+      it { is_expected.to eq ['Focus effect ended.'] }
+    end
+
+    context 'with a word of an earlier pattern before a later pattern' do
+      let(:text) { 'STATUS: You sense nothing wrong with Mahtra' }
+      it { is_expected.to eq ['Mahtra is all healthy.'] }
+    end
+
+    context 'with two patterns in one line' do
+      let(:text) { '[a: ***STATUS*** go] You sense nothing wrong with Mahtra' }
+      it { is_expected.to eq ['a: go You sense nothing wrong with Mahtra'] }
+    end
+
     # ---- Lines that send no notification ----
+
+    context 'with a key word of every pattern but no whole pattern' do
+      let(:text) do
+        'STATUS Endlar waiting nothing reaches politely next on learned /34 of complete the bead fades looting /34) from is'
+      end
+
+      it { is_expected.to be_empty }
+    end
+
+    context 'with a script status in lower case' do
+      let(:text) { '[a: ***status*** go]' }
+      it { is_expected.to be_empty }
+    end
+
+    context 'with a waiting list line with no name' do
+      let(:text) { ' just opened the waiting list.' }
+      it { is_expected.to be_empty }
+    end
+
+    context 'with a next-on-list line whose list follows a tab' do
+      let(:text) { "Mahtra is next on the\tlist" }
+      it { is_expected.to be_empty }
+    end
 
     context 'with normal game text' do
       let(:text) { 'A goblin attacks you!' }
