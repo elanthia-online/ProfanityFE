@@ -696,6 +696,22 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       end
     end
 
+    it "starts the new layout's cycle at its first window that fits after a .layout closed the current window" do
+      press_tab(1)
+      LAYOUT['mainfirst'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='100' height='5' width='30' value='speech'/>
+          <window class='text' top='0' left='0' height='5' width='40' value='main'/>
+          <window class='text' top='12' left='0' height='5' width='40' value='thoughts'/>
+          <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+        </layout>
+      XML
+      app.execute_command('.layout mainfirst')
+
+      expect(cycle).to eq %w[main thoughts]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['main']]
+    end
+
     it 'goes first in the cycle and becomes the current window when Tab was never pressed, as at load' do
       expect(cycle).to eq %w[main familiar thoughts]
 

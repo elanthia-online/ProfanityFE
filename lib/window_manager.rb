@@ -167,6 +167,12 @@ class WindowManager
   # layout, of any window class, is closed and removed from its class list
   # and from SCROLL_WINDOW.
   #
+  # The switch-window (Tab) cycle, SCROLL_WINDOW, then follows the new
+  # layout's order, reused windows included. The current window stays
+  # current when the new layout reuses it; otherwise the first text or
+  # tabbed window the new layout lists that fits on the terminal now
+  # becomes current.
+  #
   # Each window built from a BaseWindow subclass gets the element's
   # {WindowLayout} as its +layout+, which {#resize} places it by. An
   # element whose window doesn't fit on the terminal now is not built;

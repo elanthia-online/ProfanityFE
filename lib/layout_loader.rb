@@ -44,9 +44,14 @@ class LayoutLoader
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
   # See {WindowManager#load_layout} for what is reused and what is closed.
   # The elements whose windows don't fit on the terminal are kept for
-  # {#build_skipped_windows}, in place of the previous layout's. A
-  # current window the user chose with Tab stays chosen if this layout
-  # keeps it current.
+  # {#build_skipped_windows}, in place of the previous layout's.
+  #
+  # The switch-window (Tab) cycle follows the new layout's order, not the
+  # previous layout's, for reused windows too. It starts at the current
+  # window when this layout reuses it, and otherwise at the first text or
+  # tabbed window this layout lists that fits on the terminal now.
+  # {#build_skipped_windows} adds the windows built later. A current
+  # window the user chose with Tab stays chosen if this layout reuses it.
   #
   # An unknown ID warns and changes nothing.
   #
