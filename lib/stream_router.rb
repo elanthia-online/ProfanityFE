@@ -239,7 +239,7 @@ class StreamRouter
   # @return [void]
   # @api private
   def route_stream_text(text, colors, marks)
-    return if @current_stream == Streams::COMBAT && text.match(GagPatterns.combat_regexp)
+    return if @current_stream == Streams::COMBAT && GagPatterns.match_combat(text)
 
     # LNet chat arrives on the thoughts stream. Move it to the lnet window
     # only when the layout has one; otherwise it stays on thoughts, which

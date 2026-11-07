@@ -12,9 +12,11 @@
 # == Concurrency
 #
 # The server thread reads the gags on every line ({match_general},
-# {match_multiline_start}, {combat_regexp}) while the input thread may
-# replace them (+.reload+). All gag state lives in one frozen {Snapshot}:
-# the three pattern lists and their union regexps. A writer builds a
+# {match_multiline_start}, {match_combat}) while the input thread may
+# replace them (+.reload+). All gag state lives in one {Snapshot}: the
+# three pattern lists, all frozen, plus the snapshot's own match memos
+# (see below), which are only ever written through that snapshot. A
+# writer builds a
 # complete new snapshot off to the side and publishes it with a single
 # ivar assignment, so a reader sees either the old configuration or the
 # new one, never a mix, without taking a lock. Each reader loads the
@@ -22,6 +24,19 @@
 # the +add_*+ methods, {clear_custom}, {replace_custom}) are serialized by
 # a mutex so concurrent adds are not lost. The lists returned by
 # {multiline_gags} are frozen and never change after they are returned.
+#
+# == Memoized matching
+#
+# Most server lines repeat: DragonRealms resends the whole worn-inventory
+# list every few seconds while crafting, and room text repeats on every
+# visit. Trying every gag on every line was most of ProfanityFE's CPU, and
+# a gag's verdict depends only on the line and the gags, so each snapshot
+# remembers its last {MatchMemo::CAPACITY} verdicts for {match_general} and
+# {match_multiline_start} by line. A new snapshot starts with empty memos,
+# so changed gags are never answered from an old verdict. Lines longer than
+# {MatchMemo::MAX_LINE_BYTES} are matched every time: in captured streams
+# none of them ever repeated, and keeping them would let a burst of long
+# lines hold megabytes.
 #
 # @example
 #   GagPatterns.load_defaults
@@ -33,8 +48,62 @@
 #   GagPatterns.match_multiline_start('Knowledge from your sanowret crystal ...')
 #   # => { start: /.../, end: nil }
 module GagPatterns
-  # One complete, immutable gag configuration: the pattern lists and the
-  # union regexps built from them. Build with {.build}; never mutated.
+  # A bounded memo of match verdicts by line, for one {Snapshot}. Holds
+  # nil verdicts too, since most lines match no gag. When full, the oldest
+  # verdict is forgotten first.
+  #
+  # Only the server thread matches lines. Were several threads to share a
+  # memo, each Hash operation is atomic under the GVL, so the worst case is
+  # a verdict computed twice or the memo holding a few verdicts over
+  # capacity (at most one per extra thread).
+  class MatchMemo
+    # Verdicts kept per memo. A crafting character's worn-inventory list is
+    # about 70 distinct lines; a few minutes of travel is about 1,000.
+    CAPACITY = 2048
+
+    # Longest line (in bytes) whose verdict is kept. Longer lines are
+    # matched every time, so the memo holds at most about 8 MB of lines.
+    MAX_LINE_BYTES = 4096
+
+    # Marks a line with no verdict yet (nil is a verdict: no gag matched).
+    MISSING = Object.new.freeze
+
+    # @param capacity [Integer] verdicts kept before the oldest is dropped
+    def initialize(capacity = CAPACITY)
+      @capacity = capacity
+      @verdicts = {}
+    end
+
+    # The verdict for +line+, from the memo or else from the block. A line
+    # over {MAX_LINE_BYTES} is not remembered: the block runs every time.
+    #
+    # @param line [String] the line matched (the memo keeps a frozen copy)
+    # @yield computes the verdict: on a miss, or every time for a long line
+    # @yieldreturn [Object, nil] the verdict
+    # @return [Object, nil] the verdict
+    def fetch(line)
+      return yield if line.bytesize > MAX_LINE_BYTES
+
+      verdict = @verdicts.fetch(line, MISSING)
+      return verdict unless MISSING.equal?(verdict)
+
+      verdict = yield
+      @verdicts.shift if @verdicts.size >= @capacity
+      @verdicts[line] = verdict
+    end
+
+    # @return [Integer] verdicts held
+    def size = @verdicts.size
+
+    # Short form, so a {Snapshot} inspects without every remembered line.
+    #
+    # @return [String]
+    def inspect = "#<#{self.class.name} #{@verdicts.size}/#{@capacity}>"
+  end
+
+  # One complete gag configuration: the pattern lists, all frozen, and the
+  # memos of verdicts found with them. Build with {.build}; only the memos
+  # change afterwards.
   #
   # @!attribute [r] general_patterns
   #   @return [Array<Regexp>] general gag patterns (frozen)
@@ -42,16 +111,13 @@ module GagPatterns
   #   @return [Array<Regexp>] combat gag patterns (frozen)
   # @!attribute [r] multiline_gags
   #   @return [Array<Hash>] multi-line gags, each a frozen { start:, end: } (frozen)
-  # @!attribute [r] general_regexp
-  #   @return [Regexp] union of the general patterns
-  # @!attribute [r] combat_regexp
-  #   @return [Regexp] union of the combat patterns
-  # @!attribute [r] multiline_start_regexp
-  #   @return [Regexp] union of the multi-line start patterns
+  # @!attribute [r] general_memo
+  #   @return [MatchMemo] {GagPatterns.match_general} verdicts by line
+  # @!attribute [r] multiline_memo
+  #   @return [MatchMemo] {GagPatterns.match_multiline_start} verdicts by line
   Snapshot = Data.define(:general_patterns, :combat_patterns, :multiline_gags,
-                         :general_regexp, :combat_regexp, :multiline_start_regexp) do
-    # Build a snapshot from pattern lists, freezing them and computing the
-    # union regexps.
+                         :general_memo, :multiline_memo) do
+    # Build a snapshot from pattern lists, freezing them.
     #
     # @param general [Array<Regexp>] general gag patterns
     # @param combat [Array<Regexp>] combat gag patterns
@@ -62,8 +128,7 @@ module GagPatterns
       combat = combat.dup.freeze
       multiline = multiline.map { |gag| gag.dup.freeze }.freeze
       new(general_patterns: general, combat_patterns: combat, multiline_gags: multiline,
-          general_regexp: Regexp.union(general), combat_regexp: Regexp.union(combat),
-          multiline_start_regexp: Regexp.union(multiline.map { |gag| gag[:start] }))
+          general_memo: MatchMemo.new, multiline_memo: MatchMemo.new)
     end
   end
 
@@ -71,11 +136,22 @@ module GagPatterns
   @snapshot = nil
 
   class << self
+    # A union of the combat gag patterns, built when asked for. Matching
+    # does not use it (see {match_combat}), for the same reasons as
+    # {general_regexp}.
+    #
     # @return [Regexp] combined regexp matching any combat gag pattern
-    def combat_regexp = @snapshot.combat_regexp
+    # @raise [RegexpError] when the patterns cannot form one regexp
+    def combat_regexp = Regexp.union(@snapshot.combat_patterns)
 
+    # A union of the general gag patterns, built when asked for. Matching
+    # does not use it (see {match_general}), so a union the patterns cannot
+    # form (a named group in one gag and a numbered backreference in
+    # another) no longer stops the gags from loading.
+    #
     # @return [Regexp] combined regexp matching any general gag pattern
-    def general_regexp = @snapshot.general_regexp
+    # @raise [RegexpError] when the patterns cannot form one regexp
+    def general_regexp = Regexp.union(@snapshot.general_patterns)
 
     # @return [Array<Hash>] multi-line gag definitions, each { start:, end: }
     #   (frozen; a later change publishes a new list instead)
@@ -152,31 +228,55 @@ module GagPatterns
 
     # Find the multi-line gag whose start pattern matches the given line.
     #
-    # A union regexp is checked first as a fast reject so the common
-    # no-match case costs a single match instead of one per gag.
+    # Each start pattern is tried in turn, alone, so a backreference in one
+    # refers to its own groups; the verdict is memoized by line (see
+    # "Memoized matching" above).
     #
     # @param line [String] raw server line to test
     # @return [Hash, nil] the matching { start:, end: } gag (frozen), or nil
     def match_multiline_start(line)
       snapshot = @snapshot
       return nil if snapshot.multiline_gags.empty?
-      return nil unless line.match?(snapshot.multiline_start_regexp)
 
-      snapshot.multiline_gags.find { |gag| line.match?(gag[:start]) }
+      snapshot.multiline_memo.fetch(line) do
+        snapshot.multiline_gags.find { |gag| line.match?(gag[:start]) }
+      end
     end
 
     # Find the general gag pattern that matches the given line.
     #
-    # The union regexp is checked first as a fast reject so the common
-    # no-match case costs a single match instead of one per pattern.
+    # Each pattern is tried in turn. There is no {general_regexp} pre-check:
+    # a union of the patterns loses Onigmo's per-pattern search
+    # optimizations, so on a line no gag matches it cost more than trying
+    # each pattern (59 vs 37 microseconds a line with a 52-gag settings
+    # file). A union also numbers capture groups across all the patterns,
+    # so a gag's +\1+ referred to another gag's group and that gag never
+    # matched; tried alone, it does. The verdict is memoized by line (see
+    # "Memoized matching" above).
     #
     # @param line [String] raw server line to test
     # @return [Regexp, nil] the first matching pattern, or nil
     def match_general(line)
       snapshot = @snapshot
-      return nil unless line.match?(snapshot.general_regexp)
+      return nil if snapshot.general_patterns.empty?
 
-      snapshot.general_patterns.find { |pattern| line.match?(pattern) }
+      snapshot.general_memo.fetch(line) do
+        snapshot.general_patterns.find { |pattern| line.match?(pattern) }
+      end
+    end
+
+    # Find the combat gag pattern that matches the given line of combat
+    # stream text.
+    #
+    # Each pattern is tried in turn, alone, as in {match_general}, so a
+    # backreference in one refers to its own groups. Unlike the other
+    # matchers this one keeps no memo: it runs only on combat stream text,
+    # and trying a handful of combat gags costs about a microsecond a line.
+    #
+    # @param line [String] combat stream text to test
+    # @return [Regexp, nil] the first matching pattern, or nil
+    def match_combat(line)
+      @snapshot.combat_patterns.find { |pattern| line.match?(pattern) }
     end
 
     # Reset to default patterns, discarding any custom patterns.
