@@ -198,4 +198,36 @@ RSpec.describe 'Reloading the settings with .reload' do
       expect(HIGHLIGHT.to_a).to eq [[/goblin/, ['ff0000', nil, nil]], [/goblin/i, [inline, nil, nil]]]
     end
   end
+
+  # Highlights remembered for a line the game sent before (room text,
+  # the inventory list) must follow every change of the highlights.
+  describe 'a line the game sends again' do
+    let(:settings) { super().sub("height='8'", "height='20'").sub("top='9'", "top='21'") }
+    let(:line) { 'A troll attacks a goblin.' }
+
+    # Keyboard steps: the game sends +line+ again, and the user waits
+    # until the main window shows it +times+ times in all.
+    def game_says_again(times)
+      [-> { game_server.say(line) }, wait_until { main.rows.count { |row| row.include?(line) } == times }]
+    end
+
+    # The color of +word+ on each main-window row showing +line+, oldest
+    # first (see #color_on_screen)
+    def colors_of(word)
+      main.rows.each_index.select { |y| main.row(y).include?(line) }.map do |y|
+        x = main.row(y).index(word)
+        colors = (x...(x + word.length)).map { |col| pairs.key(main.attrs_at(y, col) >> 8) }.uniq
+        colors.size == 1 ? colors.first : colors
+      end
+    end
+
+    it 'is colored by a .highlight added, not by one removed, and by the patterns of a reload' do
+      run_client(keyboard(*game_says_again(1), ".highlight troll\n", *game_says_again(2),
+                          ".unhighlight troll\n", *game_says_again(3),
+                          edit_settings(settings.sub('>goblin<', '>troll<')), ".reload\n", *game_says_again(4)))
+
+      expect(colors_of('troll')).to eq [nil, inline, nil, 'ff0000']
+      expect(colors_of('goblin')).to eq ['ff0000', 'ff0000', 'ff0000', nil]
+    end
+  end
 end
