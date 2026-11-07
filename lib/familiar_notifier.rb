@@ -49,34 +49,46 @@ module FamiliarNotifier
 
   # Extract a notification string from game text, or nil if no match.
   #
+  # This runs on every displayed line and almost none of them match, so
+  # each pattern is tried only when the text contains a word the pattern
+  # can't match without. A word is a few bytes of a literal part of its
+  # pattern, case and all; Ruby's String#include? checks a word of up to
+  # 8 bytes about twice as fast as a longer one, and both much faster than
+  # a regexp match. Removing a word only makes its branch slower; a word
+  # not in every text its pattern matches would hide that notification.
+  #
   # @param text [String] game text
   # @return [String, nil] notification text or nil
   def extract_notification(text)
-    if text =~ STATUS_PATTERN
+    if text.include?('STATUS') && text.match?(STATUS_PATTERN)
       text.gsub(%r{(\[|\]|\*\*\*STATUS\*\*\* |EXECUTE |custom/)}, '')
-    elsif text =~ /Auctioneer Endlar bangs his gavel and yells, "Bidding is now open/
+    elsif text.include?('Endlar') && text.match?(/Auctioneer Endlar bangs his gavel and yells, "Bidding is now open/)
       text
-    elsif text =~ /\w+ just opened the waiting list\./
+    elsif text.include?('waiting') && text.match?(/\w+ just opened the waiting list\./)
       text
-    elsif (match = text.match(/You sense nothing wrong with (?<name>\w+)/))
+    elsif text.include?('nothing') && (match = text.match(/You sense nothing wrong with (?<name>\w+)/))
       "#{match[:name]} is all healthy."
-    elsif text =~ /reaches over and holds|just tried to take your hand, but you politely pulled away|\w+ is next on .* list/
+    elsif (text.include?('reaches') || text.include?('politely') || text.include?('next on')) &&
+          text.match?(/reaches over and holds|just tried to take your hand, but you politely pulled away|\w+ is next on .* list/)
       text
-    elsif (match = text.match(/You believe you've learned something significant about (?<topic>\w+\s?\w*)!$/))
+    elsif text.include?('learned') &&
+          (match = text.match(/You believe you've learned something significant about (?<topic>\w+\s?\w*)!$/))
       "Almanac: #{match[:topic]}"
-    elsif (match = text.match(%r{Tarantula successfully sacrificed (?<count>\d+)/34 of (?<name>\w+\s?\w*) at}))
+    elsif text.include?('/34 of') &&
+          (match = text.match(%r{Tarantula successfully sacrificed (?<count>\d+)/34 of (?<name>\w+\s?\w*) at}))
       "Tarantula: #{match[:name]} #{match[:count]}/34"
-    elsif (match = text.match(/contains a complete description of the (?<spell>.*) spell/))
+    elsif text.include?('complete') && (match = text.match(/contains a complete description of the (?<spell>.*) spell/))
       "Scroll spell: #{match[:spell]}"
-    elsif text =~ /^You raise the bead up, and a black glow surrounds it/
+    elsif text.include?('the bead') && text.match?(/^You raise the bead up, and a black glow surrounds it/)
       'Focus effect started.'
-    elsif text =~ /^The glow slowly fades away from around you/
+    elsif text.include?('fades') && text.match?(/^The glow slowly fades away from around you/)
       'Focus effect ended.'
-    elsif (match = text.match(/(?<info>Spent .* looting \d+ boxes.)/))
+    elsif text.include?('looting') && (match = text.match(/(?<info>Spent .* looting \d+ boxes.)/))
       match[:info]
-    elsif (match = text.match(%r{(?<info>\w+\s?\w*:\s+\d+\s\d+\.\d+%\s\w+\s?\w*\s+\(\d+/34\))}))
+    elsif text.include?('/34)') &&
+          (match = text.match(%r{(?<info>\w+\s?\w*:\s+\d+\s\d+\.\d+%\s\w+\s?\w*\s+\(\d+/34\))}))
       match[:info]
-    elsif text =~ /(?:Character|Longitem)\s+accepting from is/
+    elsif text.include?('from is') && text.match?(/(?:Character|Longitem)\s+accepting from is/)
       text
     end
   end
