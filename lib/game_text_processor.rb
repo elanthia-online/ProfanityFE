@@ -41,7 +41,8 @@ require_relative 'effect_tracker'
 # - {RoomAssembler} assembles the room window's data from both room
 #   pipelines.
 # - {PromptTracker} decides when the prompt shows (movement suppression)
-#   and drops the game's main copy of stream text.
+#   and spots the game's main copy of stream text, which is dropped by
+#   default (see <duplicate-suppression>).
 #
 # UI updates are emitted via an EventBus rather than calling window
 # methods directly. This decouples parsing from rendering and enables

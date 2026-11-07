@@ -75,6 +75,15 @@ RSpec.describe 'GameTextProcessor main copy of a stream-window line' do
     expect(shown_in('main')).to eq [whisper]
   end
 
+  it 'keeps the main copy of an exempt DR whisper and still hides exempt-less speech' do
+    CONFIG.duplicate_suppression = { enabled: true, except: ['whispers'] }
+    build('main', 'whispers', 'speech')
+    receive_from_server(*whisper_lines, '<pushStream id="speech"/>Hello.', '<popStream/>', 'Hello.')
+    expect(shown_in('whispers')).to eq [whisper]
+    expect(shown_in('main')).to eq [whisper]
+    expect(shown_in('speech')).to eq ['Hello.']
+  end
+
   it 'checks the current policy even if reloaded after the stream line' do
     build('main', 'whispers')
     receive_from_server(whisper_lines.first)
@@ -83,7 +92,7 @@ RSpec.describe 'GameTextProcessor main copy of a stream-window line' do
     expect(shown_in('main')).to eq [whisper]
   end
 
-  it 'never lets a compressed copy suppress the next identical main line' do
+  it 'keeps the next identical main line after a line on an exempt compressed stream' do
     CONFIG.duplicate_suppression = { enabled: true, except: ['compressed'] }
     build('main', 'compressed')
     receive_from_server('Hello.', '<prompt time="1792892704">&gt;</prompt>',

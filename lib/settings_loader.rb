@@ -116,7 +116,6 @@ module SettingsLoader
   # @return [Hash] the settings, for {apply}: +:highlight+, +:perc_transforms+,
   #   +:notification_stream+, +:history_size+, +:blank_lines+, +:duplicate_suppression+, +:gags+ (keyword arguments for
   #   GagPatterns.replace_custom), +:key_binding+, +:presets+ and +:layouts+
-  # @raise [ArgumentError] if duplicate-suppression has an invalid enabled value
   # @api private
   def parse(xml_root, key_action, do_macro, reload: false)
     setup_key = build_setup_key(key_action, do_macro)
@@ -169,12 +168,17 @@ module SettingsLoader
         end
 
       when 'duplicate-suppression'
-        enabled = (e.attributes['enabled'] || 'true').strip.downcase
-        unless %w[on true yes 1 off false no 0].include?(enabled)
-          raise ArgumentError, "Invalid duplicate-suppression enabled='#{enabled}' (expected true/false)"
-        end
+        value = e.attributes['enabled'] || 'on'
+        enabled = case value.strip.downcase
+                  when 'on', 'true', 'yes', '1' then true
+                  when 'off', 'false', 'no', '0' then false
+                  else
+                    ProfanityLog.write('settings', "Invalid duplicate-suppression enabled='#{value}' " \
+                                                   '(expected on/off, true/false, yes/no or 1/0), using on')
+                    Config::DEFAULT_DUPLICATE_SUPPRESSION[:enabled]
+                  end
         exceptions = e.attributes['except'].to_s.split(',').map(&:strip).reject(&:empty?).uniq.freeze
-        settings[:duplicate_suppression] = { enabled: %w[on true yes 1].include?(enabled), except: exceptions }.freeze
+        settings[:duplicate_suppression] = { enabled: enabled, except: exceptions }.freeze
 
       when 'blank-lines'
         value = e.text&.strip
@@ -216,8 +220,8 @@ module SettingsLoader
   #
   # Highlights, perc-transforms, custom gags and key bindings are replaced,
   # so an entry removed from the file doesn't linger. The notification
-  # stream, history size and blank lines fall back to their defaults when
-  # the file doesn't set them. Presets and layouts are added on initial load only.
+  # stream, history size, blank lines and duplicate suppression fall back to
+  # their defaults when the file doesn't set them. Presets and layouts are added on initial load only.
   #
   # +keep_highlights+ are merged over the file's highlights in the same
   # step, after them and winning for the same regex, as if they had been
