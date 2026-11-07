@@ -78,7 +78,8 @@ module GagPatterns
     # over {MAX_LINE_BYTES} is not remembered: the block runs every time.
     #
     # @param line [String] the line matched (the memo keeps a frozen copy)
-    # @yieldreturn [Object, nil] the verdict, computed only on a miss
+    # @yield computes the verdict: on a miss, or every time for a long line
+    # @yieldreturn [Object, nil] the verdict
     # @return [Object, nil] the verdict
     def fetch(line)
       return yield if line.bytesize > MAX_LINE_BYTES
