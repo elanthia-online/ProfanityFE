@@ -382,7 +382,7 @@ RSpec.describe SettingsLoader do
       expect(CONFIG.notification_stream).to eq 'ooc'
       expect(key_binding).to eq(24 => first_action)
       expect(GagPatterns.match_general('A moth flutters by.')).not_to be_nil
-      expect('You feint high.').to match(GagPatterns.combat_regexp)
+      expect(GagPatterns.match_combat('You feint high.')).not_to be_nil
       expect(GagPatterns.match_multiline_start('Knowledge from your sanowret crystal')).not_to be_nil
     end
 
@@ -453,8 +453,8 @@ RSpec.describe SettingsLoader do
 
       expect(GagPatterns.match_general('A moth flutters by.')).to be_nil
       expect(GagPatterns.match_general('A bat squeaks.')).not_to be_nil
-      expect('You feint high.').not_to match(GagPatterns.combat_regexp)
-      expect('You lunge low.').to match(GagPatterns.combat_regexp)
+      expect(GagPatterns.match_combat('You feint high.')).to be_nil
+      expect(GagPatterns.match_combat('You lunge low.')).not_to be_nil
       expect(GagPatterns.match_multiline_start('Knowledge from your sanowret crystal')).to be_nil
       expect(GagPatterns.match_multiline_start('Your ring glows brightly.')).not_to be_nil
     end
@@ -515,6 +515,24 @@ RSpec.describe SettingsLoader do
       expect(HIGHLIGHT).to eq(/kobold/ => ['00ff00', nil, nil])
       expect(PERC_TRANSFORMS).to be_empty
       expect(GagPatterns.match_general('A bat squeaks.')).not_to be_nil
+    end
+
+    # BUG FOUND (fixed here): the combat gags were joined into one regexp
+    # as they loaded, which Ruby refuses for a named group in one gag and a
+    # numbered backreference in another, so the whole file was rejected.
+    it 'applies a file whose combat gags mix a named group and a numbered backreference' do
+      error = reload(<<~'XML')
+        <settings>
+          <highlight fg='00ff00'>kobold</highlight>
+          <combat_gag>(?&lt;who&gt;\w+) feints</combat_gag>
+          <combat_gag>(\w+) and \1</combat_gag>
+        </settings>
+      XML
+
+      expect(error).to be_nil
+      expect(HIGHLIGHT).to eq(/kobold/ => ['00ff00', nil, nil])
+      expect(GagPatterns.match_combat('The goblin feints')).to eq(/(?<who>\w+) feints/)
+      expect(GagPatterns.match_combat('moth and moth')).to eq(/(\w+) and \1/)
     end
   end
 
