@@ -14,42 +14,103 @@
 # @example Render colored text to a window
 #   HighlightProcessor.render_colored_text(window, "hello", colors, newline: true)
 module HighlightProcessor
+  # Texts whose regions are remembered, per generation of HIGHLIGHT. A few
+  # minutes of travel shows about 400 distinct texts; a crafting session's
+  # repeated inventory and room texts fewer.
+  SPANS_MEMO_CAPACITY = 2048
+
+  # Longest text (in bytes) whose regions are remembered. Longer texts are
+  # matched every time, so the memo holds at most about 8 MB of text.
+  SPANS_MEMO_MAX_BYTES = 4096
+
   module_function
 
-  # Apply all HIGHLIGHT patterns to text and append matches to line_colors.
-  # Thread-safe - acquires SETTINGS_LOCK while iterating patterns.
+  # Apply all HIGHLIGHT patterns to text and append matches to line_colors,
+  # pattern by pattern in HIGHLIGHT's order, each pattern's matches left to
+  # right. Thread-safe - acquires SETTINGS_LOCK while reading the patterns.
+  #
+  # Every displayed text is highlighted, and most texts repeat (room text on
+  # every visit, the inventory list while crafting), so the regions found
+  # for a text are remembered until HIGHLIGHT next changes (see
+  # HighlightTable#generation). Each call gets new region hashes, so a
+  # caller may change the ones it is given.
   #
   # @param text [String] the text to apply highlights to
   # @param line_colors [Array<Hash>] existing color regions to append to
   # @return [Array<Hash>] the updated line_colors array with any new matches
   def apply_highlights(text, line_colors = [])
     SETTINGS_LOCK.synchronize do
-      HIGHLIGHT.each_pair do |regex, colors|
-        pos = 0
-        # Bound pos explicitly: String#match with a start past the end still
-        # returns a zero-width match at the end of the string.
-        while pos <= text.length && (match_data = text.match(regex, pos))
-          if match_data.end(0) == match_data.begin(0)
-            # A zero-width match (e.g. /\b/, /x*/ or an empty pattern) colors
-            # nothing; step past it so the scan always advances.
-            pos = match_data.end(0) + 1
-            next
-          end
-
-          h = {
-            start: match_data.begin(0),
-            end: match_data.end(0),
-            fg: colors[0],
-            bg: colors[1],
-            ul: colors[2]
-          }
-          line_colors.push(h)
-          pos = match_data.end(0)
-        end
+      highlight_spans(text, HIGHLIGHT).each do |start, finish, colors|
+        line_colors.push({ start: start, end: finish, fg: colors[0], bg: colors[1], ul: colors[2] })
       end
     end
     line_colors
   end
+
+  # The regions of +text+ for +table+, remembered or found now. A table
+  # that does not count its changes (a plain Hash) is matched every time.
+  #
+  # @param text [String]
+  # @param table [HighlightTable, Hash] the highlight patterns
+  # @return [Array<Array(Integer, Integer, Array)>] frozen [start, end,
+  #   colors] per region
+  # @api private
+  def highlight_spans(text, table)
+    return scan_highlights(text, table) if text.bytesize > SPANS_MEMO_MAX_BYTES || !table.respond_to?(:generation)
+
+    memo = spans_memo(table)
+    spans = memo[text]
+    return spans if spans
+
+    spans = scan_highlights(text, table)
+    memo.shift if memo.size >= SPANS_MEMO_CAPACITY
+    memo[text] = spans
+  end
+
+  # The memo of regions for +table+ as it is now: emptied when the table
+  # is another one or has changed since the regions were found.
+  #
+  # @param table [HighlightTable]
+  # @return [Hash{String => Array}] regions by text, oldest first
+  # @api private
+  def spans_memo(table)
+    unless @spans_memo_table.equal?(table) && @spans_memo_generation == table.generation
+      @spans_memo = {}
+      @spans_memo_table = table
+      @spans_memo_generation = table.generation
+    end
+    @spans_memo
+  end
+
+  # Match every pattern of +table+ against +text+.
+  #
+  # @param text [String]
+  # @param table [Hash{Regexp => Array}] the highlight patterns
+  # @return [Array<Array(Integer, Integer, Array)>] frozen [start, end,
+  #   colors] per region, colors being the pattern's own array
+  # @api private
+  def scan_highlights(text, table)
+    spans = []
+    table.each_pair do |regex, colors|
+      pos = 0
+      # Bound pos explicitly: String#match with a start past the end still
+      # returns a zero-width match at the end of the string.
+      while pos <= text.length && (match_data = text.match(regex, pos))
+        if match_data.end(0) == match_data.begin(0)
+          # A zero-width match (e.g. /\b/, /x*/ or an empty pattern) colors
+          # nothing; step past it so the scan always advances.
+          pos = match_data.end(0) + 1
+          next
+        end
+
+        spans.push([match_data.begin(0), match_data.end(0), colors].freeze)
+        pos = match_data.end(0)
+      end
+    end
+    spans.freeze
+  end
+
+  private_class_method :highlight_spans, :spans_memo, :scan_highlights
 
   # Render text with color regions to a curses window.
   # Splits text at color region boundaries and applies the most specific

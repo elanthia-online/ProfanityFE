@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'streams'
+require_relative 'highlight_table'
 
 # Centralized mutable configuration for ProfanityFE.
 #
@@ -28,7 +29,7 @@ class Config
   # (or a saved +.blanklines+ choice) overrides it.
   DEFAULT_BLANK_LINES = false
 
-  # @return [Hash<Regexp, Array>] highlight patterns mapping regex => [fg, bg, ul]
+  # @return [HighlightTable] highlight patterns mapping regex => [fg, bg, ul]
   attr_reader :highlight
 
   # @return [Hash<String, Array>] color presets mapping id => [fg, bg]
@@ -62,7 +63,7 @@ class Config
   # Empty highlights, presets, layouts, scroll windows and perc-transforms,
   # with the default notification stream, history size and blank lines.
   def initialize
-    @highlight = {}
+    @highlight = HighlightTable.new
     @preset = {}
     @layout = {}
     @scroll_window = []
