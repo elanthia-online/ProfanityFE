@@ -12,11 +12,11 @@
 # == Concurrency
 #
 # The server thread reads the gags on every line ({match_general},
-# {match_multiline_start}, {combat_regexp}) while the input thread may
+# {match_multiline_start}, {match_combat}) while the input thread may
 # replace them (+.reload+). All gag state lives in one {Snapshot}: the
-# three pattern lists and the combat union regexp, all frozen, plus the
-# snapshot's own match memos (see below), which are only ever written
-# through that snapshot. A writer builds a
+# three pattern lists, all frozen, plus the snapshot's own match memos
+# (see below), which are only ever written through that snapshot. A
+# writer builds a
 # complete new snapshot off to the side and publishes it with a single
 # ivar assignment, so a reader sees either the old configuration or the
 # new one, never a mix, without taking a lock. Each reader loads the
@@ -101,9 +101,9 @@ module GagPatterns
     def inspect = "#<#{self.class.name} #{@verdicts.size}/#{@capacity}>"
   end
 
-  # One complete gag configuration: the pattern lists and the combat union
-  # regexp, all frozen, and the memos of verdicts found with them. Build
-  # with {.build}; only the memos change afterwards.
+  # One complete gag configuration: the pattern lists, all frozen, and the
+  # memos of verdicts found with them. Build with {.build}; only the memos
+  # change afterwards.
   #
   # @!attribute [r] general_patterns
   #   @return [Array<Regexp>] general gag patterns (frozen)
@@ -111,17 +111,13 @@ module GagPatterns
   #   @return [Array<Regexp>] combat gag patterns (frozen)
   # @!attribute [r] multiline_gags
   #   @return [Array<Hash>] multi-line gags, each a frozen { start:, end: } (frozen)
-  # @!attribute [r] combat_regexp
-  #   @return [Regexp] union of the combat patterns
   # @!attribute [r] general_memo
   #   @return [MatchMemo] {GagPatterns.match_general} verdicts by line
   # @!attribute [r] multiline_memo
   #   @return [MatchMemo] {GagPatterns.match_multiline_start} verdicts by line
   Snapshot = Data.define(:general_patterns, :combat_patterns, :multiline_gags,
-                         :combat_regexp,
                          :general_memo, :multiline_memo) do
-    # Build a snapshot from pattern lists, freezing them and computing the
-    # combat union regexp.
+    # Build a snapshot from pattern lists, freezing them.
     #
     # @param general [Array<Regexp>] general gag patterns
     # @param combat [Array<Regexp>] combat gag patterns
@@ -132,7 +128,6 @@ module GagPatterns
       combat = combat.dup.freeze
       multiline = multiline.map { |gag| gag.dup.freeze }.freeze
       new(general_patterns: general, combat_patterns: combat, multiline_gags: multiline,
-          combat_regexp: Regexp.union(combat),
           general_memo: MatchMemo.new, multiline_memo: MatchMemo.new)
     end
   end
@@ -141,8 +136,13 @@ module GagPatterns
   @snapshot = nil
 
   class << self
+    # A union of the combat gag patterns, built when asked for. Matching
+    # does not use it (see {match_combat}), for the same reasons as
+    # {general_regexp}.
+    #
     # @return [Regexp] combined regexp matching any combat gag pattern
-    def combat_regexp = @snapshot.combat_regexp
+    # @raise [RegexpError] when the patterns cannot form one regexp
+    def combat_regexp = Regexp.union(@snapshot.combat_patterns)
 
     # A union of the general gag patterns, built when asked for. Matching
     # does not use it (see {match_general}), so a union the patterns cannot
@@ -263,6 +263,20 @@ module GagPatterns
       snapshot.general_memo.fetch(line) do
         snapshot.general_patterns.find { |pattern| line.match?(pattern) }
       end
+    end
+
+    # Find the combat gag pattern that matches the given line of combat
+    # stream text.
+    #
+    # Each pattern is tried in turn, alone, as in {match_general}, so a
+    # backreference in one refers to its own groups. Unlike the other
+    # matchers this one keeps no memo: it runs only on combat stream text,
+    # and trying a handful of combat gags costs about a microsecond a line.
+    #
+    # @param line [String] combat stream text to test
+    # @return [Regexp, nil] the first matching pattern, or nil
+    def match_combat(line)
+      @snapshot.combat_patterns.find { |pattern| line.match?(pattern) }
     end
 
     # Reset to default patterns, discarding any custom patterns.
