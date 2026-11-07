@@ -33,3 +33,7 @@ doc/
 
 # Temporary files
 /tmp/
+
+# Replay benchmark captures (private game text) and results
+script/bench/fixtures/
+script/bench/out/
