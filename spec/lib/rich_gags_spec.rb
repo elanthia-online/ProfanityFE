@@ -109,6 +109,52 @@ RSpec.describe 'Gags on the old and the rich DragonRealms stream' do
 
       expect(main_rows.grep(/You search/)).to be_empty
     end
+
+    # The old stream wraps combat in a combat pushStream. With no combat
+    # window, its lines fall back to main unless a combat gag matches.
+    it 'shows a combat stream line no combat gag matches' do
+      GagPatterns.add_combat_pattern('lands a massive strike')
+      load_layout(room_window: false)
+
+      receive_from_server(*fixture('rich_stream', 'dr_old_combat'))
+
+      expect(main_rows.grep(/lands a solid hit/)).not_to be_empty
+    end
+
+    it 'hides a combat stream line a combat gag matches' do
+      GagPatterns.add_combat_pattern('lands a massive strike')
+      GagPatterns.add_combat_pattern('lands a solid hit')
+      load_layout(room_window: false)
+
+      receive_from_server(*fixture('rich_stream', 'dr_old_combat'))
+
+      expect(main_rows.grep(/lands a solid hit/)).to be_empty
+    end
+
+    # Each combat gag is tried alone, so a backreference refers to its own
+    # group, not to the group of a gag listed before it.
+    it 'hides a combat stream line a backreference gag matches after a gag with a group' do
+      GagPatterns.add_combat_pattern('^You reveal (\\w+)')
+      GagPatterns.add_combat_pattern("(\\w+) swings at you\\.  You dodge the \\1's")
+      load_layout(room_window: false)
+
+      receive_from_server(
+        "<pushStream id='combat'/>A goblin swings at you.  You dodge the goblin's swing.",
+        "<popStream id='combat'/>A goblin swings at you.  You dodge the goblin's swing."
+      )
+
+      expect(main_rows).to eq ["A goblin swings at you.  You dodge the goblin's swing."]
+    end
+
+    it 'shows a line on another stream that a combat gag matches' do
+      GagPatterns.add_combat_pattern('lands a solid hit')
+      load_layout(room_window: false)
+
+      receive_from_server("<pushStream id='atmospherics'/>Jorvin lands a solid hit on the training dummy.",
+                          "<popStream id='atmospherics'/>")
+
+      expect(main_rows).to eq ['Jorvin lands a solid hit on the training dummy.']
+    end
   end
 
   describe 'the rich stream' do

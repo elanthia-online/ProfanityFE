@@ -27,6 +27,7 @@ RSpec.describe GagPatterns do
 
       expect(gags.match_general('A goblin arrives.')).to be_nil
       expect('A goblin swings').not_to match(gags.combat_regexp)
+      expect(gags.match_combat('A goblin swings')).to be_nil
       expect(gags.match_multiline_start('Knowledge from your sanowret crystal')).to be_nil
     end
   end
@@ -220,8 +221,8 @@ RSpec.describe GagPatterns do
 
       expect(described_class.match_general('a moth')).to be_nil
       expect(described_class.match_general('a bat')).to eq(/bat/)
-      expect('sword').not_to match(described_class.combat_regexp)
-      expect('axe').to match(described_class.combat_regexp)
+      expect(described_class.match_combat('sword')).to be_nil
+      expect(described_class.match_combat('axe')).to eq(/axe/)
       expect(described_class.match_multiline_start('alpha line')).to be_nil
       expect(described_class.match_multiline_start('beta line')).to eq(start: /beta/, end: /end-b/)
     end
@@ -280,6 +281,57 @@ RSpec.describe GagPatterns do
     end
   end
 
+  describe '.match_combat' do
+    it 'returns nil when no combat gags are configured' do
+      expect(described_class.match_combat('A goblin swings at you.')).to be_nil
+    end
+
+    it 'returns the first matching pattern in the order the gags were added' do
+      described_class.add_combat_pattern('^(?!\\*)')
+      described_class.add_combat_pattern('swings')
+
+      expect(described_class.match_combat('A goblin swings at you.')).to eq(/^(?!\*)/)
+      expect(described_class.match_combat('* A goblin swings at you.')).to eq(/swings/)
+    end
+
+    it 'returns nil when no combat gag matches' do
+      described_class.add_combat_pattern('^You reveal')
+      described_class.add_combat_pattern('Roundtime')
+
+      expect(described_class.match_combat('A goblin swings at you.')).to be_nil
+    end
+
+    it 'ignores general gags' do
+      described_class.add_general_pattern('swings')
+
+      expect(described_class.match_combat('A goblin swings')).to be_nil
+    end
+
+    it 'matches an empty line against a gag that matches the empty string' do
+      described_class.add_combat_pattern('^$')
+
+      expect(described_class.match_combat('')).to eq(/^$/)
+    end
+
+    it 'answers from the new combat gags once they are replaced' do
+      described_class.add_combat_pattern('sword')
+      expect(described_class.match_combat('a sword')).to eq(/sword/)
+
+      described_class.replace_custom(combat: ['axe'])
+
+      expect(described_class.match_combat('a sword')).to be_nil
+      expect(described_class.match_combat('an axe')).to eq(/axe/)
+    end
+
+    it 'matches nothing after clear_custom' do
+      described_class.add_combat_pattern('sword')
+
+      described_class.clear_custom
+
+      expect(described_class.match_combat('a sword')).to be_nil
+    end
+  end
+
   # Each gag is tried alone. A union of them numbered capture groups across
   # every gag, so a later gag's backreference pointed at an earlier gag's
   # group and that gag silently never matched.
@@ -305,6 +357,22 @@ RSpec.describe GagPatterns do
       expect(described_class.match_general('The goblin waves')).to eq(/(?<who>\w+) waves/)
       expect(described_class.match_general('moth and moth')).to eq(/(\w+) and \1/)
     end
+
+    it 'gags combat text with a backreference gag listed after another gag with a group' do
+      described_class.add_combat_pattern('^You reveal (\\w+)')
+      described_class.add_combat_pattern("(\\w+) swings at you\\.  You dodge the \\1's")
+
+      expect(described_class.match_combat("A goblin swings at you.  You dodge the goblin's swing."))
+        .to eq(/(\w+) swings at you\.  You dodge the \1's/)
+      expect(described_class.match_combat("A goblin swings at you.  You dodge the troll's swing.")).to be_nil
+    end
+
+    it 'loads a named-group combat gag alongside a numbered-backreference combat gag' do
+      described_class.replace_custom(combat: ['(?<who>\\w+) feints', '(\\w+) and \\1'])
+
+      expect(described_class.match_combat('The goblin feints')).to eq(/(?<who>\w+) feints/)
+      expect(described_class.match_combat('moth and moth')).to eq(/(\w+) and \1/)
+    end
   end
 
   describe '.load_defaults with multi-line gags' do
@@ -317,28 +385,30 @@ RSpec.describe GagPatterns do
 
   # The server thread matches every line while .reload (input thread)
   # replaces the gags. A read in the middle of an update must see the old
-  # gags or the new ones, never a mix. The read is injected into each
-  # Regexp.union call the update makes, standing in for the server thread
-  # being scheduled at that point.
+  # gags or the new ones, never a mix. The read is injected just before and
+  # just after each snapshot the update builds, before it is published,
+  # standing in for the server thread being scheduled at those points.
   describe 'reading while the gags are replaced' do
     # Whether each probe line is gagged, read as the server thread does.
     def gag_state
       {
         general_moth: !described_class.match_general('a moth').nil?,
         general_bat: !described_class.match_general('a bat').nil?,
-        combat_sword: 'a sword'.match?(described_class.combat_regexp),
-        combat_axe: 'an axe'.match?(described_class.combat_regexp),
+        combat_sword: !described_class.match_combat('a sword').nil?,
+        combat_axe: !described_class.match_combat('an axe').nil?,
         multiline_alpha: !described_class.match_multiline_start('alpha line').nil?,
         multiline_beta: !described_class.match_multiline_start('beta line').nil?
       }
     end
 
-    # Run the update, recording gag_state at every Regexp.union call in it.
+    # Run the update, recording gag_state around every snapshot it builds.
     def states_read_during
       states = []
-      allow(Regexp).to receive(:union).and_wrap_original do |original, *args|
+      allow(GagPatterns::Snapshot).to receive(:build).and_wrap_original do |original, **args|
         states << gag_state
-        original.call(*args)
+        snapshot = original.call(**args)
+        states << gag_state
+        snapshot
       end
       yield
       states
