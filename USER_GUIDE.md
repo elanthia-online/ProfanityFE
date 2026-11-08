@@ -263,7 +263,9 @@ You can combine them with `+`, `-`, `*`, `/`, and parentheses:
 | `(cols/3)*2` | Two-thirds of terminal width |
 | `((cols/6)*5)+4` | Five-sixths of width plus 4 |
 
-All expressions are evaluated as integers.
+All expressions are evaluated as integers. `lines` and `cols` are names, so an
+operator is needed between them and a number: write `2*lines`, not `2lines` or
+`2 lines`, which are expressions that can't be worked out (see below).
 
 Two functions keep a fixed size from running past the screen: `min(a, b)` is
 the smaller of `a` and `b`, `max(a, b)` the larger. Each takes exactly two
@@ -282,8 +284,10 @@ A malformed call (`min(1)`, `min(1, 2, 3)`, `min(, 2)`, a missing `)`, a
 name not followed by `(`, a name with no operator before it as in
 `2min(30, 40)`) or a comma outside a call's arguments makes the expression 0
 and shows a warning in the main window (and the log), once until the next
-`.layout`; so does any other name (`MIN`, `abs`). Other text after a complete
-expression is ignored: `10)` is 10 and `2(3)` is 2.
+`.layout`; so does any other name (`MIN`, `abs`), and a name after a complete
+expression or a number or `(` right after `lines` or `cols`, where an operator
+is missing (`2 lines`, `lines 2`, `lines(2)`). Other text after a complete
+expression is ignored: `10)` is 10, `2(3)` is 2 and `(lines)2` is `lines`.
 
 A window whose top or left falls off the screen, or that gets no rows or
 columns, isn't built when the layout loads. It is built as soon as the

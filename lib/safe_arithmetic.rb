@@ -37,38 +37,42 @@ module SafeArithmetic
   # "2*min(3, 4)" is 6. A malformed call is an error: a name not followed
   # by "(", other than two arguments, an empty argument, or a missing ")"
   # ("min(1)", "min(1, 2, 3)", "min(, 2)", "min(1, 2"). So is a comma
-  # outside a call's argument list ("1, 2", "(1, 2)"), and so is a name
-  # after the first complete expression, where an operator is missing
-  # ("2min(30, 40)", "3max"). A name other than +min+ and +max+ counts as
-  # an unsafe character.
+  # outside a call's argument list ("1, 2", "(1, 2)"). The names in
+  # +variables+ (+lines+ and +cols+ for a layout) stand for their numbers;
+  # any other name counts as an unsafe character.
   #
-  # Otherwise the parser is lenient: a missing closing parenthesis is
-  # ignored ("(10" is 10), whitespace between digits is dropped ("3 3" is
-  # 33), a missing operand counts as 0 ("1+" is 1), and any other text
-  # after the first complete expression is ignored ("10)" and "2(3)" are
-  # 10 and 2).
+  # Where an operator is missing, the result is an error, not a number
+  # joined to the one before: a name after the first complete expression
+  # ("2min(30, 40)", "3max", "2 lines", "lines cols"), and a number or "("
+  # right after a variable ("lines 2", "lines(2)"). Otherwise the parser is
+  # lenient: a missing closing parenthesis is ignored ("(10" is 10),
+  # whitespace between digits is dropped ("3 3" is 33; other whitespace
+  # only separates), a missing operand counts as 0 ("1+" is 1), and any
+  # other text after the first complete expression is ignored ("10)",
+  # "2(3)" and "(lines)2" are 10, 2 and lines).
   #
   # Parentheses, unary minus signs and calls may nest {MAX_DEPTH} levels
   # deep ("-(1)" and "-min(1, 2)" are two levels); deeper nesting is an
   # error.
   #
   # @param expr [String] arithmetic expression (e.g., "lines-2", "cols/3+1",
-  #   "min(16, lines-19)"), after "lines"/"cols" have been replaced by
-  #   numbers
-  # @param source [String] the expression as written in the layout, for
-  #   the warning about an expression that can't be worked out (see
-  #   {SettingsWarnings}). The same expression then gives the same
-  #   warning whatever the terminal's size, so it is shown once, not on
+  #   "min(16, lines-19)"), as written in the layout. The warning about an
+  #   expression that can't be worked out (see {SettingsWarnings}) names
+  #   it so, whatever the terminal's size, so it is shown once, not on
   #   every resize.
+  # @param variables [Hash{String => Integer}] names that stand for numbers
+  #   (WindowLayout passes +lines+ and +cols+, the terminal's size)
   # @return [Integer] computed result, or 0 on error (including division by
   #   zero, a malformed call and nesting deeper than {MAX_DEPTH})
-  def evaluate(expr, source: expr)
-    tokens = expr.gsub(/\s+/, '').scan(%r{(\d+|[a-z]+|[+\-*/(),]|.)})
-                 .flatten.reject(&:empty?)
+  def evaluate(expr, variables: {})
+    # Whitespace between digits is dropped ("3 3" is 33); other whitespace
+    # only separates, so "2 lines" is two tokens, not one number.
+    tokens = expr.gsub(/(?<=\d)\s+(?=\d)/, '').scan(%r{(\d+|[a-z]+|[+\-*/(),]|\s+|.)})
+                 .flatten.reject { |token| token.empty? || token.match?(/\A\s+\z/) }
 
     # Reject tokens that aren't valid arithmetic
-    unless tokens.all? { |t| t.match?(%r{\A(\d+|[+\-*/(),])\z}) || FUNCTIONS.key?(t) }
-      SettingsWarnings.add("Invalid layout expression (unsafe characters): #{source}", kind: :layout)
+    unless tokens.all? { |t| t.match?(%r{\A(\d+|[+\-*/(),])\z}) || FUNCTIONS.key?(t) || variables.key?(t) }
+      SettingsWarnings.add("Invalid layout expression (unsafe characters): #{expr}", kind: :layout)
       return 0
     end
 
@@ -126,6 +130,10 @@ module SafeArithmetic
         name = tokens[pos[0]]
         pos[0] += 1
         parse_call.call(name)
+      elsif variables.key?(tokens[pos[0]])
+        val = Integer(variables.fetch(tokens[pos[0]]))
+        pos[0] += 1
+        val
       elsif tokens[pos[0]] == '-'
         pos[0] += 1
         -nested.call(parse_factor)
@@ -168,14 +176,18 @@ module SafeArithmetic
 
     result = parse_expr.call
     no_comma.call
-    # Text after the expression is ignored, but not a name: names came
-    # with min/max, so "2min(30, 40)" is a missing operator, not a 2
-    leftover = tokens[pos[0]..].find { |t| FUNCTIONS.key?(t) }
+    # Text after the expression is ignored ("10)", "2(3)"), but not a name
+    # ("2min(30, 40)", "2 lines"), nor a number or "(" right after a
+    # variable ("lines 2", "lines(2)"): an operator is missing, and the
+    # result would be wrong.
+    leftover = tokens[pos[0]..].find { |t| FUNCTIONS.key?(t) || variables.key?(t) }
+    after_variable = pos[0].positive? && variables.key?(tokens[pos[0] - 1])
+    leftover ||= tokens[pos[0]] if after_variable && (tokens[pos[0]] == '(' || tokens[pos[0]]&.match?(/\A\d+\z/))
     raise ArgumentError, "#{leftover} after the end of the expression (missing an operator?)" if leftover
 
     result.to_i
   rescue StandardError => e
-    SettingsWarnings.add("Layout expression error: #{e.message} in '#{source}'", kind: :layout)
+    SettingsWarnings.add("Layout expression error: #{e.message} in '#{expr}'", kind: :layout)
     0
   end
 end

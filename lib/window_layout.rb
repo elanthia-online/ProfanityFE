@@ -31,16 +31,17 @@ WindowLayout = Data.define(:height, :width, :top, :left) do
         top: element.attributes['top'], left: element.attributes['left'])
   end
 
-  # Evaluate a dimension expression to an integer, substituting the
-  # current terminal size for the tokens "lines" and "cols". A warning
-  # about the expression names it as written, with "lines" and "cols".
+  # Evaluate a dimension expression to an integer, with the names "lines"
+  # and "cols" standing for the terminal's size. They are names, not text
+  # to replace: "2lines", "2 lines" or "linescols" is an expression that
+  # can't be worked out (0, with a warning naming it as written), not 224
+  # or 2480.
   #
   # @param expression [String] dimension expression (e.g. "lines-2", "cols/3")
   # @return [Integer] the value (see {SafeArithmetic.evaluate} for how
   #   malformed expressions evaluate)
   def self.evaluate(expression)
-    SafeArithmetic.evaluate(expression.gsub('lines', Curses.lines.to_s).gsub('cols', Curses.cols.to_s),
-                            source: expression)
+    SafeArithmetic.evaluate(expression, variables: { 'lines' => Curses.lines, 'cols' => Curses.cols })
   end
 
   # Evaluate all four expressions for the current terminal size, in the
