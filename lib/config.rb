@@ -28,6 +28,20 @@ class Config
   # Whether the game's interior blank lines are shown unless <blank-lines>
   # (or a saved +.blanklines+ choice) overrides it.
   DEFAULT_BLANK_LINES = false
+  # Suppress adjacent main-window copies of side-stream text by default.
+  DEFAULT_DUPLICATE_SUPPRESSION = { enabled: true, except: [].freeze }.freeze
+
+  # Reloadable policy: global enable flag and exempt stream IDs.
+  # @return [Hash]
+  attr_accessor :duplicate_suppression
+
+  # Whether the next identical main line should be hidden for this stream.
+  # @param stream [String, nil] ID of the source stream
+  # @return [Boolean]
+  def suppress_stream_duplicate?(stream)
+    policy = @duplicate_suppression
+    policy[:enabled] && !policy[:except].include?(stream)
+  end
 
   # @return [HighlightTable] highlight patterns mapping regex => [fg, bg, ul]
   attr_reader :highlight
@@ -71,6 +85,7 @@ class Config
     @notification_stream = DEFAULT_NOTIFICATION_STREAM
     @history_size = DEFAULT_HISTORY_SIZE
     @blank_lines = DEFAULT_BLANK_LINES
+    @duplicate_suppression = DEFAULT_DUPLICATE_SUPPRESSION
     @lock = Mutex.new
   end
 
@@ -87,6 +102,7 @@ class Config
       @notification_stream = DEFAULT_NOTIFICATION_STREAM
       @history_size = DEFAULT_HISTORY_SIZE
       @blank_lines = DEFAULT_BLANK_LINES
+      @duplicate_suppression = DEFAULT_DUPLICATE_SUPPRESSION
     end
   end
 end

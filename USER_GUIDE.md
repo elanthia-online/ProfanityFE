@@ -214,6 +214,7 @@ restarting. On reload, the following are refreshed:
 - Gag patterns (general and combat)
 - Perc-transforms
 - History size
+- Duplicate suppression
 
 Presets and layouts are **not** reloaded by `.reload` -- they are only read on
 initial startup. To switch layouts at runtime, use `.layout <name>`.
@@ -1690,7 +1691,8 @@ displayed in the main window.
 ### .reload
 
 Hot-reload the settings XML file. Refreshes highlights, key bindings, gag
-patterns, perc-transforms, and the history size without restarting.
+patterns, perc-transforms, the history size, and duplicate suppression without
+restarting.
 
 ```
 .reload
@@ -2175,6 +2177,33 @@ The stream must have a window in your layout (for example a text window with
 may contain letters, digits, `_`, `-`, and `/`, and status text starting with a
 digit is ignored. The setting is refreshed on settings reload; removing the
 element and reloading restores the default (`familiar`).
+
+### Duplicate Suppression
+
+Some game text arrives on a stream (for example `speech` in GemStone or
+`whispers` in DragonRealms) and then, right after, as an identical line in the
+main window. When the stream has a window of its own, Profanity hides that
+repeated main-window copy by default. To keep the main copy for some streams,
+list their IDs in `except` (comma-separated; any stream ID works, including
+ones scripts send). Stream IDs are case-sensitive, as in layouts, and an
+unknown ID is accepted without a warning:
+
+```xml
+<duplicate-suppression except='speech,whispers'/>
+```
+
+To show every main-window copy, turn suppression off:
+
+```xml
+<duplicate-suppression enabled='off'/>
+```
+
+`enabled` accepts `on`/`off`, `true`/`false`, `yes`/`no` or `1`/`0`; any other
+value is logged and the default (on) is used, even if the file loaded before
+had it off. If the file has more than one
+`<duplicate-suppression>` element, the last one wins. The setting is refreshed
+on settings reload; removing the element and reloading restores the default
+(on, with no exceptions).
 
 ### Perc-Transforms
 

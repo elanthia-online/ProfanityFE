@@ -72,6 +72,85 @@ RSpec.describe SettingsLoader do
     end
   end
 
+  describe '<duplicate-suppression>' do
+    it 'defaults to enabled without hardcoded stream exceptions' do
+      load_settings(write_settings(@dir, ''))
+      expect(CONFIG.suppress_stream_duplicate?('speech')).to be true
+      expect(CONFIG.suppress_stream_duplicate?('compressed')).to be true
+    end
+
+    it 'loads stream exceptions and supports disabling globally on reload' do
+      load_settings(write_settings(@dir, '<duplicate-suppression except=" speech,compressed,speech, "/>'))
+      expect(CONFIG.duplicate_suppression[:except]).to eq %w[speech compressed]
+      expect(CONFIG.suppress_stream_duplicate?('speech')).to be false
+      expect(CONFIG.suppress_stream_duplicate?('thoughts')).to be true
+      load_settings(write_settings(@dir, '<duplicate-suppression enabled="false"/>'), reload: true)
+      expect(CONFIG.suppress_stream_duplicate?('thoughts')).to be false
+      load_settings(write_settings(@dir, ''), reload: true)
+      expect(CONFIG.suppress_stream_duplicate?('thoughts')).to be true
+    end
+
+    it 'matches exception stream IDs case-sensitively and accepts unknown IDs' do
+      load_settings(write_settings(@dir, '<duplicate-suppression except="Speech,noSuchStream"/>'))
+      expect(CONFIG.duplicate_suppression[:except]).to eq %w[Speech noSuchStream]
+      expect(CONFIG.suppress_stream_duplicate?('speech')).to be true
+      expect(CONFIG.suppress_stream_duplicate?('Speech')).to be false
+    end
+
+    it 'uses the last element when the file has more than one' do
+      body = '<duplicate-suppression enabled="off"/><duplicate-suppression except="whispers"/>'
+      load_settings(write_settings(@dir, body))
+      expect(CONFIG.duplicate_suppression).to eq(enabled: true, except: %w[whispers])
+    end
+
+    { 'on' => true, ' OFF ' => false, 'Yes' => true, 'no' => false, '1' => true, '0' => false,
+      'TRUE' => true, 'false' => false }.each do |value, enabled|
+      it "reads enabled=#{value.inspect} as #{enabled}" do
+        allow(ProfanityLog).to receive(:write)
+        # Start from the opposite, so an unread value can't pass by
+        # falling back to the default (on).
+        load_settings(write_settings(@dir, "<duplicate-suppression enabled='#{enabled ? 'off' : 'on'}'/>"))
+        load_settings(write_settings(@dir, "<duplicate-suppression enabled='#{value}'/>"), reload: true)
+
+        expect(CONFIG.duplicate_suppression[:enabled]).to be enabled
+        expect(ProfanityLog).not_to have_received(:write).with('settings', /duplicate-suppression/)
+      end
+    end
+
+    context 'with an invalid enabled value' do
+      before { allow(ProfanityLog).to receive(:write) }
+
+      ['', 'maybe', 'disabled'].each do |value|
+        it "keeps suppression on, honours except, and logs a warning for #{value.inspect} on reload" do
+          load_settings(write_settings(@dir, '<duplicate-suppression enabled="false"/>'))
+          body = "<duplicate-suppression enabled='#{value}' except='speech'/><history-size>42</history-size>"
+          error = load_settings(write_settings(@dir, body), reload: true)
+
+          expect(error).to be_nil
+          expect(CONFIG.duplicate_suppression).to eq(enabled: true, except: %w[speech])
+          expect(CONFIG.history_size).to eq 42
+          expect(ProfanityLog).to have_received(:write).with(
+            'settings',
+            "Invalid duplicate-suppression enabled='#{value}' (expected on/off, true/false, yes/no or 1/0), using on"
+          )
+        end
+      end
+
+      it 'still loads the layouts and highlights at startup (reload: false)' do
+        LAYOUT.clear
+        HIGHLIGHT.clear
+        body = "<layout id='default'><window class='command'/></layout>" \
+               "<highlight fg='ff0000'>goblin</highlight><duplicate-suppression enabled='disabled'/>"
+        error = load_settings(write_settings(@dir, body))
+
+        expect(error).to be_nil
+        expect(LAYOUT.keys).to eq %w[default]
+        expect(HIGHLIGHT.keys).to eq [/goblin/]
+        expect(CONFIG.suppress_stream_duplicate?('speech')).to be true
+      end
+    end
+  end
+
   describe '<history-size>' do
     before { allow(ProfanityLog).to receive(:write) }
 

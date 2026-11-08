@@ -33,7 +33,7 @@ class StreamRouter
   # @param event_bus [EventBus] receives +:stream_text+
   # @param pending_render [PendingRender] asked for a flush when text is shown
   # @param prompts [PromptTracker] shows a pending prompt before main text,
-  #   and drops the game's main copy of stream text
+  #   and spots the game's main copy of stream text, dropped by default
   # @param room [RoomAssembler] takes the text of room component streams
   # @param game_rules [Games::Rules] the death, logon and spell-name rules
   # @param clock [Clock] read for the death/logon time and speech timestamps
@@ -308,7 +308,9 @@ class StreamRouter
 
     @event_bus.emit(:stream_text, stream: @current_stream, text: text, colors: colors)
     @pending_render.request_update
-    # Remembered so the game's main copy of it, if next, is dropped
+    # Remember the source as well, so the current (reloadable) settings decide
+    # whether to hide the main copy. No stream exceptions are hardcoded.
+    @last_display_stream = @current_stream
     @prompts.stream_text_sent(copy_text || text)
   end
 
@@ -345,7 +347,8 @@ class StreamRouter
   end
 
   # Show main-window text, unless it is the game's copy of the line just
-  # sent to a stream window. A blank line the game sent before it, held by
+  # sent to a stream window and <duplicate-suppression> hides that stream's
+  # copies ({Config#suppress_stream_duplicate?}; it does by default). A blank line the game sent before it, held by
   # the {PromptTracker}, is shown just before it.
   #
   # @param text [String] non-blank game text
@@ -354,8 +357,10 @@ class StreamRouter
   # @return [void]
   # @api private
   def route_main_text(text, colors, room_captured)
-    # Drop the game's main copy of the line just sent to a stream window.
-    return if @prompts.stream_text_copy?(text)
+    # Drop the game's main copy of the line just sent to a stream window,
+    # unless <duplicate-suppression> is off or exempts that stream.
+    duplicate = @prompts.stream_text_copy?(text)
+    return if duplicate && CONFIG.suppress_stream_duplicate?(@last_display_stream)
 
     # A blank line held before this line is shown first. Only here, once
     # the line is known to show: a dropped copy leaves the blank held.
