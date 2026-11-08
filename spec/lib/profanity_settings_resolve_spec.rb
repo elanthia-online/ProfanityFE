@@ -169,6 +169,15 @@ RSpec.describe ProfanitySettings do
         expect(notice).to include(': no such file or directory. Logging to ')
       end
 
+      it 'falls back when profanity.log is a named pipe' do
+        File.mkfifo(File.join(dir, 'profanity.log'))
+
+        path, notice = Dir.chdir(dir) { described_class.choose_log }
+
+        expect(path).to eq fallback
+        expect(notice).to include(': it is not a regular file. Logging to ')
+      end
+
       it 'falls back when profanity.log is a directory' do
         FileUtils.mkdir(File.join(dir, 'profanity.log'))
 
@@ -357,6 +366,46 @@ RSpec.describe ProfanitySettings do
 
         expect { described_class.choose_log(log_file: log) }
           .to raise_error(described_class::LogNotWritableError, /: file name too long\. Check --log-file\.\z/)
+      end
+
+      # File.expand_path raises for these; the reason is reported like any
+      # other, instead of ending the client with a backtrace.
+      it 'raises for a --log-file or --log-dir in the home directory of a user that does not exist' do
+        expect { described_class.choose_log(log_file: '~nosuchuser-pfe/x.log') }
+          .to raise_error(described_class::LogNotWritableError,
+                          "Can't write the log file ~nosuchuser-pfe/x.log: user nosuchuser-pfe doesn't exist. Check --log-file.")
+        expect { described_class.choose_log(char: 'Mahtra', log_dir: '~nosuchuser-pfe') }
+          .to raise_error(described_class::LogNotWritableError,
+                          "Can't write the log file ~nosuchuser-pfe: user nosuchuser-pfe doesn't exist. Check --log-dir.")
+      end
+
+      # Only expanding the path given is reported as a log path problem;
+      # another error is not dressed up as one, naming an option not given.
+      it 'does not report an error that is not about the path as a log path problem' do
+        allow(described_class).to receive(:resolve_log).and_raise(ArgumentError, 'something else')
+
+        expect { described_class.choose_log(char: 'Mahtra') }.to raise_error(ArgumentError, 'something else')
+        expect { described_class.choose_log(log_dir: dir) }.to raise_error(ArgumentError, 'something else')
+      end
+
+      # A named pipe blocks the first write until something reads it, and a
+      # terminal is the screen curses draws on.
+      it 'raises for a --log-file that is a named pipe or a device other than /dev/null' do
+        fifo = File.join(dir, 'pipe')
+        File.mkfifo(fifo)
+
+        [fifo, '/dev/zero'].each do |log|
+          expect { described_class.choose_log(log_file: log) }
+            .to raise_error(described_class::LogNotWritableError,
+                            "Can't write the log file #{log}: it is not a regular file. Check --log-file.")
+        end
+      end
+
+      it 'accepts /dev/null, and a link to it, for no log at all' do
+        File.symlink(File::NULL, File.join(dir, 'nowhere.log'))
+
+        expect(described_class.choose_log(log_file: File::NULL)).to eq [File::NULL, nil]
+        expect(described_class.choose_log(log_file: File.join(dir, 'nowhere.log'))).to eq [File.join(dir, 'nowhere.log'), nil]
       end
 
       it 'raises for a --log-file that is a directory' do

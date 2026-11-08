@@ -52,6 +52,23 @@ RSpec.describe CliOptions do
       end
     end
 
+    # --char and --config name files in ~/.profanity (<name>.xml, <name>.log),
+    # so a value that is a path (or that a path can't hold) is refused
+    # before it can name a file anywhere else.
+    %w[char config].each do |option|
+      it "refuses a --#{option} that isn't one part of a file name" do
+        ["--#{option}=../evil", "--#{option}=a/b", "--#{option}=a\\b", "--#{option}="].each do |arg|
+          expect { described_class.parse([arg]) }.to raise_error(OptionParser::InvalidArgument), "#{arg.inspect} was accepted"
+        end
+      end
+
+      it "keeps a --#{option} name as typed" do
+        %w[Mahtra mahtra-alt Mahtra.2 ..].each do |name|
+          expect(described_class.parse(["--#{option}=#{name}"])[option.to_sym]).to eq name
+        end
+      end
+    end
+
     it 'refuses a --game no game code starts with, like any invalid value' do
       ['--game=XX', '--game=', '--game=D', '--game= DR', '--game=ADR'].each do |arg|
         expect { described_class.parse([arg]) }.to raise_error(OptionParser::InvalidArgument), "#{arg} was accepted"

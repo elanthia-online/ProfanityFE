@@ -47,6 +47,14 @@ RSpec.describe ProfanitySettings do
         .and output('').to_stderr
     end
 
+    # File.expand_path raises ArgumentError for this, which ended the
+    # client with a backtrace.
+    it 'raises NotFoundError for a --settings-file in the home directory of a user that does not exist' do
+      expect { described_class.resolve_template(settings_file: '~nosuchuser-pfe/x.xml', app_dir: app_dir) }
+        .to raise_error(described_class::NotFoundError,
+                        "Settings file not found: ~nosuchuser-pfe/x.xml: user nosuchuser-pfe doesn't exist")
+    end
+
     it 'raises for a missing --settings-file even when a default template exists' do
       FileUtils.mkdir_p(File.join(app_dir, 'templates'))
       File.write(File.join(app_dir, 'templates', 'default.xml'), '<settings/>')

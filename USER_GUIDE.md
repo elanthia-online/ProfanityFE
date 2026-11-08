@@ -65,8 +65,8 @@ ProfanityFE connects to `127.0.0.1` on the specified port.
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--port=<port>` | `8000` | TCP port to connect to on localhost |
-| `--char=<name>` | -- | Character name (for log file and process title) |
-| `--config=<name>` | same as `--char` | Config name to load (use when multiple characters share one config) |
+| `--char=<name>` | -- | Character name (for log file and process title); a name, so it can't contain `/` or `\` |
+| `--config=<name>` | same as `--char` | Config name to load (use when multiple characters share one config); like `--char`, it can't contain `/` or `\` |
 | `--template=<file>` | -- | Template filename from `templates/` subfolder (looked up as typed, then lowercased) |
 | `--no-status` | off | Disable process title updates |
 | `--links` | off | Enable in-game link highlighting |
@@ -2469,7 +2469,9 @@ The log file is checked before the client starts:
 
 - A `--log-file` or `--log-dir` that can't be written (a directory that
   doesn't exist, or one you can't write to) stops the client with the reason,
-  like a mistyped option.
+  like a mistyped option. So does a log file that isn't a regular file (a
+  named pipe, or a terminal such as `/dev/stderr`); `/dev/null` is accepted,
+  for no log at all.
 - If the default location can't be written (for example, you started the
   client from a read-only directory), the log goes to
   `~/.profanity/profanity.log` instead, and a line on the terminal says so.
