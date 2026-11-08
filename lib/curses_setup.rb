@@ -28,9 +28,11 @@ module CursesSetup
     Curses.init_screen
     MouseEventWarning.trigger_silently
     Curses.start_color
-    # Mouse tracking disabled - breaks terminal's native copy/paste
-    # Uncomment to enable custom mouse selection (Phase 3 - currently dormant)
-    # Curses.mousemask(Curses::ALL_MOUSE_EVENTS | Curses::REPORT_MOUSE_POSITION)
+    # Mouse capture stays off here, since it takes over the terminal's own
+    # copy and paste. MouseScroll turns it on only for the mouse features
+    # in use: links, selection and the scroll wheel (see
+    # MouseScroll#apply_mouse_mask, and MouseScroll#start_configuration for
+    # .scrollcfg).
     Curses.cbreak
     Curses.noecho
     # Keypad mode makes ncurses number the terminal's extended keys (ctrl/alt
