@@ -2458,6 +2458,19 @@ The `--log-file=<path>` flag overrides the log path entirely. The
 `--log-dir=<dir>` flag sets the directory while keeping the default filename
 (`<charname>.log` with `--char`, else `profanity.log`).
 
+The log file is checked before the client starts:
+
+- A `--log-file` or `--log-dir` that can't be written (a directory that
+  doesn't exist, or one you can't write to) stops the client with the reason,
+  like a mistyped option.
+- If the default location can't be written (for example, you started the
+  client from a read-only directory), the log goes to
+  `~/.profanity/profanity.log` instead, and a line on the terminal says so.
+  You can read it after the client exits.
+
+If the log file stops taking writes during a session (a full disk, say),
+those log messages are lost. They are never drawn over the screen.
+
 Check the log file if something goes wrong.
 
 ### GNU Screen and tmux

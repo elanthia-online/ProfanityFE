@@ -28,6 +28,10 @@ module ProfanitySettings
   # message is what profanity.rb prints to stderr before it exits 1.
   class NotFoundError < StandardError; end
 
+  # Raised by {choose_log} when the log file can't be written. The message
+  # is what profanity.rb prints to stderr before it exits 1.
+  class LogNotWritableError < StandardError; end
+
   # @return [String] the application data directory
   APP_DIR = File.join(Dir.home, '.profanity')
 
@@ -173,6 +177,78 @@ module ProfanitySettings
 
     char ? file(name) : File.expand_path(name)
   end
+
+  # Choose the log file for this session: the {resolve_log} path, checked
+  # before curses starts so that a log that can't be written is reported
+  # on the normal terminal instead of each log line being drawn over the
+  # client's screen.
+  #
+  # A --log-file or --log-dir that can't be written is an error, like a bad
+  # option. The default path (+profanity.log+ in the current directory, or
+  # +<char>.log+ in {APP_DIR}) that can't be written falls back to
+  # {DEFAULT_LOG_FILE} in {APP_DIR}, with a notice saying so. Nothing is
+  # created: the checks only ask whether the file could be written.
+  #
+  # @param char [String, nil] character name
+  # @param log_file [String, nil] explicit --log-file path
+  # @param log_dir [String, nil] explicit --log-dir path
+  # @return [Array(String, String)] the log path, and a notice for stderr
+  #   when the default path was replaced
+  # @return [Array(String, nil)] the log path when it is the one asked for
+  # @raise [LogNotWritableError] if the given log path, or both the default
+  #   and the fallback, can't be written
+  def self.choose_log(char: nil, log_file: nil, log_dir: nil)
+    path = resolve_log(char: char, log_file: log_file, log_dir: log_dir)
+    problem = log_problem(path)
+    return [path, nil] unless problem
+
+    option = log_file ? '--log-file' : '--log-dir'
+    raise LogNotWritableError, "Can't write the log file #{path}: #{problem}. Check #{option}." if log_file || log_dir
+
+    fallback = file(DEFAULT_LOG_FILE)
+    if log_problem(fallback)
+      raise LogNotWritableError, "Can't write the log file #{path}: #{problem}. " \
+                                 'Use --log-file=<path> or --log-dir=<dir> to choose one that can be written.'
+    end
+    [fallback, "Can't write the log file #{path}: #{problem}. Logging to #{fallback} instead."]
+  end
+
+  # Why the log file at +path+ can't be written, or nil if it can. Only
+  # asks the file system; creates nothing.
+  #
+  # Symbolic links are followed first, so the checks are on the file that
+  # would be opened: a link to a file in a directory that doesn't exist,
+  # a link loop, a directory that can't be searched or a name that is too
+  # long fail here, as opening the file would. (A file system can still
+  # refuse a name these checks allow, such as one that isn't valid UTF-8
+  # on APFS.)
+  #
+  # @param path [String] absolute path of the log file
+  # @return [String, nil] the reason, or nil
+  def self.log_problem(path)
+    dir = File.dirname(path)
+    return "#{dir} is not a directory" if File.exist?(dir) && !File.directory?(dir)
+    return "the directory #{dir} doesn't exist" unless File.directory?(dir)
+
+    begin
+      real = File.realdirpath(path)
+    rescue SystemCallError => e
+      # The system's text for the error alone ("Too many levels of symbolic
+      # links"): e.message also holds the path, in whatever encoding it
+      # came in, which may not be valid.
+      reason = SystemCallError.new(nil, e.errno).message
+      return reason[0].downcase + reason[1..]
+    end
+    return 'it is a directory' if File.directory?(real)
+    return (File.writable?(real) ? nil : 'permission denied') if File.exist?(real)
+
+    # Name the directory the user gave, unless the file itself is a link to
+    # somewhere else.
+    real_dir = File.dirname(real)
+    shown_dir = File.symlink?(path) ? real_dir : dir
+    File.writable?(real_dir) ? nil : "the directory #{shown_dir} can't be written"
+  end
+  private_class_method :log_problem
 
   # Load mouse scroll settings from settings.json.
   #
