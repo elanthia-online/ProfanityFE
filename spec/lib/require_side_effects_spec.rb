@@ -23,7 +23,7 @@ RSpec.describe 'requiring a lib file' do
     end
   end
 
-  %w[profanity_settings cli_options curses_setup].each do |name|
+  %w[profanity_settings cli_options curses_setup mouse_event_warning].each do |name|
     it "leaves HOME untouched for lib/#{name}.rb" do
       output, status, left = run_in_empty_home("require #{File.join(lib, name).inspect}")
 
