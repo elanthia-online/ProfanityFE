@@ -123,6 +123,40 @@ RSpec.describe 'profanity.rb startup errors' do
                                                 "the directory #{missing} doesn't exist. Check --log-dir.\n", 1])
   end
 
+  # These ended in a Ruby backtrace (File.expand_path raises for ~nosuchuser).
+  it 'prints a --log-file in the home directory of a user that does not exist, and exits 1' do
+    stdout, stderr, status = run_client('--log-file=~nosuchuser-pfe/x.log')
+
+    expect([stdout, stderr, status]).to eq(['', "Can't write the log file ~nosuchuser-pfe/x.log: " \
+                                                "user nosuchuser-pfe doesn't exist. Check --log-file.\n", 1])
+  end
+
+  it 'prints a --settings-file in the home directory of a user that does not exist, and exits 1' do
+    stdout, stderr, status = run_client('--settings-file=~nosuchuser-pfe/x.xml')
+
+    expect([stdout, stderr, status]).to eq(['', "Settings file not found: ~nosuchuser-pfe/x.xml: " \
+                                                "user nosuchuser-pfe doesn't exist\n", 1])
+  end
+
+  # --char names files in ~/.profanity; a path there could name a file
+  # anywhere.
+  it 'prints a --char that is a path and a usage hint to stderr, and exits 1' do
+    stdout, stderr, status = run_client('--char=../evil')
+
+    expect([stdout, stderr, status]).to eq(['', "profanity.rb: invalid argument: --char=../evil\n" \
+                                                "Try 'profanity.rb --help' for the list of options.\n", 1])
+  end
+
+  # A named pipe would block the first log write until something read it.
+  it 'prints a --log-file that is a named pipe to stderr and exits 1' do
+    fifo = File.join(home, 'pipe')
+    File.mkfifo(fifo)
+
+    stdout, stderr, status = run_client("--log-file=#{fifo}")
+
+    expect([stdout, stderr, status]).to eq(['', "Can't write the log file #{fifo}: it is not a regular file. Check --log-file.\n", 1])
+  end
+
   it 'prints a --log-file in a directory that does not exist to stderr and exits 1' do
     log = File.join(home, 'no-such-dir', 'mahtra.log')
 

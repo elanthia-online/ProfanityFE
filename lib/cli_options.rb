@@ -73,6 +73,20 @@ module CliOptions
                       "Try '#{program} --help' for the list of options."
   end
 
+  # Check a --char or --config value, which names files in
+  # ~/.profanity (+<name>.xml+, +<name>.log+): it must be one part of a
+  # file name, so it can't name a file anywhere else.
+  #
+  # @param value [String] the option's value
+  # @return [String] the value, unchanged
+  # @raise [OptionParser::InvalidArgument] for an empty value, or one
+  #   with a path separator
+  def self.file_name_part(value)
+    raise OptionParser::InvalidArgument, value if value.empty? || value.match?(%r{[/\\]})
+
+    value
+  end
+
   # Build the OptionParser that fills in +options+.
   #
   # @param options [Hash{Symbol => Object}] hash the option handlers write to
@@ -81,8 +95,8 @@ module CliOptions
     OptionParser.new do |opts|
       opts.banner = "\nProfanity FrontEnd v#{VERSION}\n\n"
 
-      opts.on('--char=NAME', 'Character name (for log file & process title)') { |v| options[:char] = v }
-      opts.on('--config=NAME', 'Config name to load (default: same as --char)') { |v| options[:config] = v }
+      opts.on('--char=NAME', 'Character name (for log file & process title)') { |v| options[:char] = file_name_part(v) }
+      opts.on('--config=NAME', 'Config name to load (default: same as --char)') { |v| options[:config] = file_name_part(v) }
       opts.on('--template=FILE', 'Template file name (from templates/)') { |v| options[:template] = v }
       opts.on('--port=PORT', Integer, 'Game server port (default: 8000)') { |v| options[:port] = v }
       opts.on('--host=HOST', 'Game server host (default: 127.0.0.1)') { |v| options[:host] = v }

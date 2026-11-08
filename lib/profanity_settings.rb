@@ -115,11 +115,16 @@ module ProfanitySettings
   #   --settings-file and ~/.profanity/, otherwise under +app_dir+ (so
   #   relative when +app_dir+ is)
   # @raise [NotFoundError] if --settings-file or --template names a file
-  #   that doesn't exist, or no settings file is found at all
+  #   that doesn't exist (or --settings-file starts with the home directory
+  #   of a user that doesn't exist), or no settings file is found at all
   def self.resolve_template(char: nil, template: nil, settings_file: nil, app_dir: '.')
     # Explicit --settings-file takes absolute precedence
     if settings_file
-      path = File.expand_path(settings_file)
+      begin
+        path = File.expand_path(settings_file)
+      rescue ArgumentError => e # ~nosuchuser: "user nosuchuser doesn't exist"
+        raise NotFoundError, "Settings file not found: #{settings_file}: #{e.message}"
+      end
       return path if File.exist?(path)
 
       raise NotFoundError, "Settings file not found: #{path}"
@@ -196,13 +201,21 @@ module ProfanitySettings
   #   when the default path was replaced
   # @return [Array(String, nil)] the log path when it is the one asked for
   # @raise [LogNotWritableError] if the given log path, or both the default
-  #   and the fallback, can't be written
+  #   and the fallback, can't be written, or the given path starts with the
+  #   home directory of a user that doesn't exist (+~nosuchuser/x.log+)
   def self.choose_log(char: nil, log_file: nil, log_dir: nil)
+    option = log_file ? '--log-file' : '--log-dir'
+    given = log_file || log_dir
+    begin
+      File.expand_path(given) if given
+    rescue ArgumentError => e
+      # ~nosuchuser: "user nosuchuser doesn't exist"
+      raise LogNotWritableError, "Can't write the log file #{given}: #{e.message}. Check #{option}."
+    end
     path = resolve_log(char: char, log_file: log_file, log_dir: log_dir)
     problem = log_problem(path)
     return [path, nil] unless problem
 
-    option = log_file ? '--log-file' : '--log-dir'
     raise LogNotWritableError, "Can't write the log file #{path}: #{problem}. Check #{option}." if log_file || log_dir
 
     fallback = file(DEFAULT_LOG_FILE)
@@ -240,6 +253,10 @@ module ProfanitySettings
       return reason[0].downcase + reason[1..]
     end
     return 'it is a directory' if File.directory?(real)
+    # A named pipe would block the first write, and a terminal (such as
+    # /dev/stderr) is the screen curses draws on. /dev/null is the one
+    # other file that makes sense, for no log at all.
+    return 'it is not a regular file' if File.exist?(real) && !File.file?(real) && real != File::NULL
     return (File.writable?(real) ? nil : 'permission denied') if File.exist?(real)
 
     # Name the directory the user gave, unless the file itself is a link to
