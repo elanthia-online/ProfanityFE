@@ -2,6 +2,8 @@
 
 # Safe arithmetic evaluation for layout dimension expressions.
 
+require_relative 'settings_warnings'
+
 # Safe arithmetic expression evaluator for layout dimensions.
 #
 # Lives in lib (rather than the profanity.rb entry script) so the classes
@@ -53,15 +55,20 @@ module SafeArithmetic
   # @param expr [String] arithmetic expression (e.g., "lines-2", "cols/3+1",
   #   "min(16, lines-19)"), after "lines"/"cols" have been replaced by
   #   numbers
+  # @param source [String] the expression as written in the layout, for
+  #   the warning about an expression that can't be worked out (see
+  #   {SettingsWarnings}). The same expression then gives the same
+  #   warning whatever the terminal's size, so it is shown once, not on
+  #   every resize.
   # @return [Integer] computed result, or 0 on error (including division by
   #   zero, a malformed call and nesting deeper than {MAX_DEPTH})
-  def evaluate(expr)
+  def evaluate(expr, source: expr)
     tokens = expr.gsub(/\s+/, '').scan(%r{(\d+|[a-z]+|[+\-*/(),]|.)})
                  .flatten.reject(&:empty?)
 
     # Reject tokens that aren't valid arithmetic
     unless tokens.all? { |t| t.match?(%r{\A(\d+|[+\-*/(),])\z}) || FUNCTIONS.key?(t) }
-      warn "Invalid layout expression (unsafe characters): #{expr}"
+      SettingsWarnings.add("Invalid layout expression (unsafe characters): #{source}", kind: :layout)
       return 0
     end
 
@@ -168,7 +175,7 @@ module SafeArithmetic
 
     result.to_i
   rescue StandardError => e
-    warn "Layout expression error: #{e.message} in '#{expr}'"
+    SettingsWarnings.add("Layout expression error: #{e.message} in '#{source}'", kind: :layout)
     0
   end
 end

@@ -121,9 +121,11 @@ RSpec.describe 'min and max in layout expressions' do
     expect(WindowLayout.evaluate('max(1, min(cols-104, 10))')).to eq 10
   end
 
+  # The warning names the expression as written, not with the terminal's
+  # size put in.
   it 'gives 0 and warns for a malformed call in a layout' do
     terminal(24, 80)
     expect { expect(WindowLayout.evaluate('min(lines)')).to eq 0 }
-      .to output(/min takes 2 arguments, not 1 in 'min\(24\)'/).to_stderr
+      .to warn_in_settings(/min takes 2 arguments, not 1 in 'min\(lines\)'/)
   end
 end

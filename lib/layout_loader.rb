@@ -2,6 +2,7 @@
 
 require_relative 'selection_manager'
 require_relative 'window_layout'
+require_relative 'settings_warnings'
 
 # Turns a layout from the settings file into windows.
 #
@@ -60,7 +61,7 @@ class LayoutLoader
   def load(layout_id)
     xml = LAYOUT[layout_id]
     unless xml
-      warn "Warning: layout '#{layout_id}' not found in LAYOUT (available: #{LAYOUT.keys.join(', ')})"
+      SettingsWarnings.add("Layout '#{layout_id}' not found (available: #{LAYOUT.keys.join(', ')})", kind: :layout)
       return
     end
 

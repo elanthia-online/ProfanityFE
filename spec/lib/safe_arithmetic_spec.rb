@@ -86,18 +86,18 @@ RSpec.describe SafeArithmetic do
 
     it 'returns 0 and warns one level past MAX_DEPTH' do
       expect { expect(evaluate("#{'(' * 101}7#{')' * 101}")).to eq 0 }
-        .to output(/Layout expression error: nested more than 100 levels deep/).to_stderr
-      expect { expect(evaluate("#{'-' * 101}7")).to eq 0 }.to output(/nested more than 100/).to_stderr
-      expect { expect(evaluate("#{'-(' * 50}-7#{')' * 50}")).to eq 0 }.to output(/nested more than 100/).to_stderr
+        .to warn_in_settings(/Layout expression error: nested more than 100 levels deep/)
+      expect { expect(evaluate("#{'-' * 101}7")).to eq 0 }.to warn_in_settings(/nested more than 100/)
+      expect { expect(evaluate("#{'-(' * 50}-7#{')' * 50}")).to eq 0 }.to warn_in_settings(/nested more than 100/)
     end
 
     # These used to overflow the stack: SystemStackError is not a
     # StandardError, so it escaped the rescue and ended the client.
     it 'returns 0 and warns instead of overflowing the stack' do
       expect { expect(evaluate("#{'(' * 100_000}1#{')' * 100_000}")).to eq 0 }
-        .to output(/nested more than 100 levels deep/).to_stderr
-      expect { expect(evaluate("#{'(' * 100_000}1")).to eq 0 }.to output(/nested more than 100/).to_stderr
-      expect { expect(evaluate("#{'-' * 100_000}1")).to eq 0 }.to output(/nested more than 100/).to_stderr
+        .to warn_in_settings(/nested more than 100 levels deep/)
+      expect { expect(evaluate("#{'(' * 100_000}1")).to eq 0 }.to warn_in_settings(/nested more than 100/)
+      expect { expect(evaluate("#{'-' * 100_000}1")).to eq 0 }.to warn_in_settings(/nested more than 100/)
     end
 
     it 'does not count parentheses that have closed' do
@@ -148,46 +148,46 @@ RSpec.describe SafeArithmetic do
     it 'counts each call as one level of nesting' do
       expect(evaluate("#{'min(1, ' * 100}7#{')' * 100}")).to eq 1
       expect { expect(evaluate("#{'min(9, ' * 101}7#{')' * 101}")).to eq 0 }
-        .to output(/nested more than 100 levels deep/).to_stderr
+        .to warn_in_settings(/nested more than 100 levels deep/)
       expect(evaluate("#{'-min(9, ' * 50}7#{')' * 50}")).to eq 7 # 50 minus signs and 50 calls
-      expect { expect(evaluate("#{'-min(9, ' * 51}7#{')' * 51}")).to eq 0 }.to output(/nested more than 100/).to_stderr
+      expect { expect(evaluate("#{'-min(9, ' * 51}7#{')' * 51}")).to eq 0 }.to warn_in_settings(/nested more than 100/)
     end
 
     it 'returns 0 and warns for a call with other than two arguments' do
       expect { expect(evaluate('min(1)')).to eq 0 }
-        .to output(/Layout expression error: min takes 2 arguments, not 1 in 'min\(1\)'/).to_stderr
-      expect { expect(evaluate('max(1, 2, 3)')).to eq 0 }.to output(/max takes 2 arguments, not 3/).to_stderr
+        .to warn_in_settings(/Layout expression error: min takes 2 arguments, not 1 in 'min\(1\)'/)
+      expect { expect(evaluate('max(1, 2, 3)')).to eq 0 }.to warn_in_settings(/max takes 2 arguments, not 3/)
     end
 
     it 'returns 0 and warns for an empty argument' do
       %w[min() min(,2) min(1,) max(1,,2) min(].each do |expr|
-        expect { expect(evaluate(expr)).to eq 0 }.to output(/empty argument in min\(\.\.\.\)|empty argument in max/).to_stderr
+        expect { expect(evaluate(expr)).to eq 0 }.to warn_in_settings(/empty argument in min\(\.\.\.\)|empty argument in max/)
       end
     end
 
     it 'returns 0 and warns for a call missing its closing parenthesis' do
       expect { expect(evaluate('min(1, 2')).to eq 0 }
-        .to output(/min\(\.\.\.\) is missing its closing parenthesis in 'min\(1, 2'/).to_stderr
-      expect { expect(evaluate('max(1, min(2, 3)')).to eq 0 }.to output(/max\(\.\.\.\) is missing its closing/).to_stderr
+        .to warn_in_settings(/min\(\.\.\.\) is missing its closing parenthesis in 'min\(1, 2'/)
+      expect { expect(evaluate('max(1, min(2, 3)')).to eq 0 }.to warn_in_settings(/max\(\.\.\.\) is missing its closing/)
     end
 
     it 'returns 0 and warns for a name not followed by a parenthesis' do
-      expect { expect(evaluate('min')).to eq 0 }.to output(/min must be followed by \(/).to_stderr
-      expect { expect(evaluate('max+1')).to eq 0 }.to output(/max must be followed by \(/).to_stderr
-      expect { expect(evaluate('2*min 3')).to eq 0 }.to output(/min must be followed by \(/).to_stderr
+      expect { expect(evaluate('min')).to eq 0 }.to warn_in_settings(/min must be followed by \(/)
+      expect { expect(evaluate('max+1')).to eq 0 }.to warn_in_settings(/max must be followed by \(/)
+      expect { expect(evaluate('2*min 3')).to eq 0 }.to warn_in_settings(/min must be followed by \(/)
     end
 
     it 'returns 0 and warns for a comma outside the arguments of a call' do
       ['1, 2', '(1, 2)', 'min(1, (2, 3))', '4+5, 6'].each do |expr|
         expect { expect(evaluate(expr)).to eq 0 }
-          .to output(/a comma only separates the arguments of min\(\.\.\.\) or max\(\.\.\.\)/).to_stderr
+          .to warn_in_settings(/a comma only separates the arguments of min\(\.\.\.\) or max\(\.\.\.\)/)
       end
     end
 
     it 'treats any other name, or min and max in capitals, as unsafe characters' do
       %w[mid(1,2) minimum(1,2) MIN(1,2) Max(1,2) abs(3)].each do |expr|
         expect { expect(evaluate(expr)).to eq 0 }
-          .to output(/Invalid layout expression \(unsafe characters\): #{Regexp.escape(expr)}/).to_stderr
+          .to warn_in_settings(/Invalid layout expression \(unsafe characters\): #{Regexp.escape(expr)}/)
       end
     end
 
@@ -206,7 +206,7 @@ RSpec.describe SafeArithmetic do
         '10)min(1, 2)' => 'min', '4 max(1, 2)' => 'max'
       }.each do |expr, name|
         expect { expect(evaluate(expr)).to eq 0 }
-          .to output(/#{name} after the end of the expression \(missing an operator\?\) in '#{Regexp.escape(expr)}'/).to_stderr
+          .to warn_in_settings(/#{name} after the end of the expression \(missing an operator\?\) in '#{Regexp.escape(expr)}'/)
       end
     end
 
@@ -219,15 +219,15 @@ RSpec.describe SafeArithmetic do
   describe '.evaluate with unsafe characters' do
     it 'returns 0 and warns instead of evaluating' do
       expect { expect(evaluate('lines-2')).to eq 0 }
-        .to output(/Invalid layout expression \(unsafe characters\): lines-2/).to_stderr
+        .to warn_in_settings(/Invalid layout expression \(unsafe characters\): lines-2/)
     end
 
     it 'never runs Ruby code' do
-      expect { expect(evaluate('`touch /tmp/pwned`')).to eq 0 }.to output(/unsafe characters/).to_stderr
-      expect { expect(evaluate('1.5')).to eq 0 }.to output(/unsafe characters/).to_stderr
-      expect { expect(evaluate('min(1, exit)')).to eq 0 }.to output(/unsafe characters/).to_stderr
-      expect { expect(evaluate('min.call(1, 2)')).to eq 0 }.to output(/unsafe characters/).to_stderr
-      expect { expect(evaluate('send(:min, 1, 2)')).to eq 0 }.to output(/unsafe characters/).to_stderr
+      expect { expect(evaluate('`touch /tmp/pwned`')).to eq 0 }.to warn_in_settings(/unsafe characters/)
+      expect { expect(evaluate('1.5')).to eq 0 }.to warn_in_settings(/unsafe characters/)
+      expect { expect(evaluate('min(1, exit)')).to eq 0 }.to warn_in_settings(/unsafe characters/)
+      expect { expect(evaluate('min.call(1, 2)')).to eq 0 }.to warn_in_settings(/unsafe characters/)
+      expect { expect(evaluate('send(:min, 1, 2)')).to eq 0 }.to warn_in_settings(/unsafe characters/)
     end
   end
 end

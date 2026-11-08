@@ -81,7 +81,7 @@ RSpec.describe GagPatterns do
     it 'warns on invalid regex and does not add it' do
       expect {
         described_class.add_combat_pattern('[unclosed')
-      }.to output(/Invalid combat gag pattern/).to_stderr
+      }.to warn_in_settings(/Invalid combat gag pattern/)
       expect('[unclosed').not_to match(described_class.combat_regexp)
     end
 
@@ -180,7 +180,7 @@ RSpec.describe GagPatterns do
     it 'warns on invalid start regex and does not add it' do
       expect {
         described_class.add_multiline_gag('[unclosed')
-      }.to output(/Invalid multiline gag pattern/).to_stderr
+      }.to warn_in_settings(/Invalid multiline gag pattern/)
       expect(described_class.match_multiline_start('[unclosed')).to be_nil
     end
 
@@ -243,8 +243,7 @@ RSpec.describe GagPatterns do
       expect {
         described_class.replace_custom(general: ['[unclosed', 'bat'], combat: ['(', 'axe'],
                                        multiline: [{ start: '[', end: nil }, { start: 'beta', end: '   ' }])
-      }.to output(/Invalid gag pattern: \[unclosed.*Invalid combat gag pattern: \(.*Invalid multiline gag pattern: \[/m)
-        .to_stderr
+      }.to warn_in_settings(/Invalid gag pattern: \[unclosed.*Invalid combat gag pattern: \(.*Invalid multiline gag pattern: \[/m)
 
       expect(described_class.match_general('a bat')).to eq(/bat/)
       expect('axe').to match(described_class.combat_regexp)

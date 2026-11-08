@@ -245,6 +245,43 @@ module GagPatterns
 end
 
 # ---------------------------------------------------------------------------
+# Settings warnings
+#
+# Problems in the settings and layouts go to SettingsWarnings (the log and
+# the main window), never to stderr, which curses draws over the screen.
+# ---------------------------------------------------------------------------
+
+require_relative '../lib/settings_warnings'
+
+# Block matcher: the block adds a settings warning matching +expected+
+# (the warnings it added are joined with newlines, so one pattern can span
+# several) and prints nothing to stderr.
+#
+#   expect { GagPatterns.add_combat_pattern('(') }.to warn_in_settings(/Invalid combat gag pattern/)
+RSpec::Matchers.define :warn_in_settings do |expected|
+  supports_block_expectations
+
+  match do |block|
+    SettingsWarnings.take
+    original = $stderr
+    $stderr = StringIO.new
+    begin
+      block.call
+      @stderr = $stderr.string
+    ensure
+      $stderr = original
+    end
+    @warnings = SettingsWarnings.take
+    @stderr.empty? && values_match?(expected, @warnings.join("\n"))
+  end
+
+  failure_message do
+    "expected a settings warning matching #{expected.inspect} and nothing on stderr, " \
+      "got warnings #{@warnings.inspect} and stderr #{@stderr.inspect}"
+  end
+end
+
+# ---------------------------------------------------------------------------
 # RSpec configuration
 # ---------------------------------------------------------------------------
 
@@ -271,6 +308,9 @@ RSpec.configure do |config|
     # Some spec files load the real GagPatterns over the stub above; start
     # each example with no gags so patterns never leak between examples.
     GagPatterns.load_defaults
+    # Settings warnings are kept for the main window until taken; start
+    # each example with none, and with every message reportable again.
+    SettingsWarnings.reset
     # Windows register themselves in per-class instance lists; start empty.
     BaseWindow.window_classes.each { |klass| klass.list.clear }
     Curses::TerminalCursor.reset
