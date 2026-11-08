@@ -289,11 +289,12 @@ columns, isn't built when the layout loads. It is built as soon as the
 terminal is large enough (on the next resize or `.resize`), where the layout
 puts it and serving its streams, so a client started in a small terminal and
 enlarged later shows the whole layout. If you haven't switched windows with
-Tab and the current window is the one the layout started on, the layout's
-first text or tabbed window becomes the current window once it is built, as in
-a client started at that size. A current window you chose with Tab, or one a
-`.layout` kept current, stays current. Once built, a window stays when the
-terminal shrinks again.
+Tab and the current window is the first one the layout lists among the windows
+already built, the layout's first text or tabbed window becomes the current
+window once it is built, as in a client started at that size. That holds after
+a `.layout` too, for a window it kept current. A current window you chose with
+Tab, or one a `.layout` kept current while listing another built window before
+it, stays current. Once built, a window stays when the terminal shrinks again.
 
 ### Window Types
 

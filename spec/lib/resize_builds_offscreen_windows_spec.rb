@@ -771,6 +771,26 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       expect(TextWindow.list.select(&:active?)).to eq [wm.stream['main']]
     end
 
+    it 'makes the first window built late current after a .layout kept the window it lists first among those it built' do
+      LAYOUT['mainkept'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='100' height='5' width='30' value='speech'/>
+          <window class='text' top='0' left='0' height='5' width='40' value='main'/>
+          <window class='text' top='12' left='0' height='5' width='40' value='thoughts'/>
+          <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+        </layout>
+      XML
+      app.execute_command('.layout mainkept')
+      expect(cycle).to eq %w[main thoughts]
+
+      terminal_resize(24, 200)
+
+      # As at load: main was this layout's first window built, so speech,
+      # listed before it, becomes current once built.
+      expect(cycle).to eq %w[speech main thoughts]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['speech']]
+    end
+
     it 'leaves main current when Tab went round the whole cycle back to it' do
       press_tab(3)
       expect(cycle).to eq %w[main familiar thoughts]
