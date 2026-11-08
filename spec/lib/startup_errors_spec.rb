@@ -23,8 +23,8 @@ RSpec.describe 'profanity.rb startup errors' do
   # passing +ruby_opts+ to the ruby interpreter.
   #
   # @return [Array(String, String, Integer)] stdout, stderr and exit status
-  def run_client(*args, script: File.join(repo, 'profanity.rb'), ruby_opts: [])
-    env = { 'HOME' => home, 'TERM' => 'xterm-256color', 'GEM_PATH' => Gem.path.join(File::PATH_SEPARATOR) }
+  def run_client(*args, script: File.join(repo, 'profanity.rb'), ruby_opts: [], extra_env: {})
+    env = { 'HOME' => home, 'TERM' => 'xterm-256color', 'GEM_PATH' => Gem.path.join(File::PATH_SEPARATOR) }.merge(extra_env)
     stdout, stderr, status = Open3.capture3(env, RbConfig.ruby, *ruby_opts, script, *args, chdir: home, stdin_data: '')
     # RubyGems' own notice about a locally installed gem whose extension
     # isn't built, not the client's output.
@@ -121,6 +121,20 @@ RSpec.describe 'profanity.rb startup errors' do
 
     expect([stdout, stderr, status]).to eq(['', "Can't write the log file #{File.join(missing, 'profanity.log')}: " \
                                                 "the directory #{missing} doesn't exist. Check --log-dir.\n", 1])
+  end
+
+  # Under a UTF-8 locale, an argument whose bytes aren't UTF-8 made
+  # OptionParser raise ArgumentError, which ended in a Ruby backtrace.
+  it 'prints an argument that is not valid UTF-8 and a usage hint to stderr, and exits 1' do
+    locale = %w[C.UTF-8 en_US.UTF-8].find do |name|
+      IO.popen({ 'LC_ALL' => name }, [RbConfig.ruby, '-e', 'print Encoding.find("locale")'], &:read) == 'UTF-8'
+    end
+    skip 'no UTF-8 locale on this machine' unless locale
+
+    stdout, stderr, status = run_client("--char=caf#{[0xFF].pack('C')}", extra_env: { 'LC_ALL' => locale })
+
+    expect([stdout, stderr, status]).to eq(['', "profanity.rb: invalid argument: --char=caf? (not valid UTF-8 text)\n" \
+                                                "Try 'profanity.rb --help' for the list of options.\n", 1])
   end
 
   # These ended in a Ruby backtrace (File.expand_path raises for ~nosuchuser).

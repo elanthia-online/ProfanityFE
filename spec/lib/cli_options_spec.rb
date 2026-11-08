@@ -113,6 +113,58 @@ RSpec.describe CliOptions do
     it 'returns the options when the command line is valid' do
       expect(described_class.parse_command_line(['--port=9000'])[:port]).to eq(9000)
     end
+
+    # Under a UTF-8 locale an argument with bytes that aren't UTF-8 made
+    # OptionParser raise ArgumentError, and the client ended with a Ruby
+    # backtrace. The bytes are shown as "?".
+    describe 'with an argument that is not valid text' do
+      let(:bad_byte) { [0xFF].pack('C') }
+
+      def utf8(text) = text.dup.force_encoding(Encoding::UTF_8)
+
+      it 'raises UsageError naming the argument, whether it is an option value, an option or anything else' do
+        {
+          "--char=caf#{bad_byte}" => '--char=caf?', "--bo#{bad_byte}gus" => '--bo?gus', "x#{bad_byte}y" => 'x?y'
+        }.each do |arg, shown|
+          expect { described_class.parse_command_line(['--port=9000', utf8(arg)], program: 'profanity.rb') }
+            .to raise_error(described_class::UsageError,
+                            "profanity.rb: invalid argument: #{shown} (not valid UTF-8 text)\n" \
+                            "Try 'profanity.rb --help' for the list of options.")
+        end
+      end
+
+      it 'names the first such argument, wherever it is, and its encoding' do
+        expect { described_class.parse_command_line([utf8("a#{bad_byte}"), '--port=9000', utf8("b#{bad_byte}")], program: 'p') }
+          .to raise_error(described_class::UsageError, /\Ap: invalid argument: a\? \(not valid UTF-8 text\)\n/)
+        expect { described_class.parse_command_line(['--char', utf8("caf#{bad_byte}")], program: 'p') }
+          .to raise_error(described_class::UsageError, /\Ap: invalid argument: caf\? /)
+
+        sjis = "caf#{bad_byte}".dup.force_encoding(Encoding::Windows_31J)
+        expect { described_class.parse_command_line(["--char=#{sjis}".dup.force_encoding(Encoding::Windows_31J)], program: 'p') }
+          .to raise_error(described_class::UsageError, /\(not valid Windows-31J text\)/)
+      end
+
+      # The parser stops at "--", and --help exits before it reads further.
+      it 'leaves alone an argument the parser never reaches, after "--" or after --help' do
+        expect(described_class.parse_command_line(['--port=9000', '--', utf8("caf#{bad_byte}")])[:port]).to eq 9000
+        expect { described_class.parse_command_line(['--help', utf8("caf#{bad_byte}")]) }
+          .to raise_error(SystemExit) { |exit| expect(exit.status).to eq 0 }
+          .and output(/--char=NAME/).to_stdout
+      end
+
+      it 'lets an ArgumentError through when every argument is valid text' do
+        allow(described_class).to receive(:parse).and_raise(ArgumentError, 'something else')
+
+        expect { described_class.parse_command_line(['--port=9000']) }.to raise_error(ArgumentError, 'something else')
+      end
+
+      it 'leaves valid UTF-8, and bytes from a locale without an encoding (LANG=C), to the parser' do
+        cafe = [0x43, 0x61, 0x66, 0xE9].pack('U*')
+
+        expect(described_class.parse_command_line(["--char=#{cafe}"])[:char]).to eq cafe
+        expect(described_class.parse_command_line(["--char=caf#{bad_byte}".b])[:char]).to eq "caf#{bad_byte}".b
+      end
+    end
   end
 end
 

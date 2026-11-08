@@ -59,17 +59,34 @@ module CliOptions
   # Parse the command line; on a bad option, raise {UsageError} carrying
   # the error and a usage hint.
   #
+  # An argument that isn't valid text in its encoding (bytes that aren't
+  # UTF-8 under a UTF-8 locale) is refused the same way when the parser
+  # reaches it: OptionParser raises ArgumentError matching it, which would
+  # end the client with a Ruby backtrace. Arguments the parser never
+  # reaches (after "--", or after --help) are left alone, as before.
+  #
   # @param argv [Array<String>] command-line arguments; parsed options are
   #   removed from it
   # @param program [String] program name shown in the error and hint
   # @return [Hash{Symbol => Object}] the options from {parse}
-  # @raise [UsageError] on an unknown, ambiguous or invalid option
+  # @raise [UsageError] on an unknown, ambiguous or invalid option, or an
+  #   argument that isn't valid text
+  # @raise [ArgumentError] from the parser for any other reason, unchanged
   # @raise [SystemExit] with status 0 after printing --help (OptionParser's
   #   built-in --help does that)
   def self.parse_command_line(argv, program: File.basename($PROGRAM_NAME))
+    given = argv.dup
     parse(argv)
   rescue OptionParser::ParseError => e
     raise UsageError, "#{program}: #{e.message}\n" \
+                      "Try '#{program} --help' for the list of options."
+  rescue ArgumentError
+    # The parser reads the arguments in order, so the argument it failed
+    # on is the first that isn't valid text.
+    invalid = given.find { |arg| !arg.valid_encoding? }
+    raise unless invalid
+
+    raise UsageError, "#{program}: invalid argument: #{invalid.scrub('?')} (not valid #{invalid.encoding} text)\n" \
                       "Try '#{program} --help' for the list of options."
   end
 
