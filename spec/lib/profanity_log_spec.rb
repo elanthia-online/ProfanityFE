@@ -105,4 +105,49 @@ RSpec.describe 'ProfanityLog' do
 
     expect(output).to eq "[main] not a file\n"
   end
+
+  # profanity.rb turns the fallback off as curses takes over the terminal:
+  # from then on stderr is drawn over the client's screen.
+  describe 'with stderr_fallback off' do
+    before { log.stderr_fallback = false }
+
+    it 'has the fallback on until it is turned off' do
+      stub_const('ProfanityLog', Module.new)
+      load File.expand_path('../../lib/profanity_log.rb', __dir__)
+
+      expect(ProfanityLog.stderr_fallback).to be true
+    end
+
+    it 'still appends to the configured file' do
+      log.configure(path: path)
+
+      output = capture_stderr { log.write('main', 'kept') }
+
+      expect(File.read(path)).to eq "[main] kept\n"
+      expect(output).to eq ''
+    end
+
+    it 'drops a message the file cannot take, printing nothing' do
+      log.configure(path: File.join(@dir, 'missing-dir', 'mahtra.log'))
+
+      output = capture_stderr { log.write('main', 'nowhere to go', backtrace: ['lib/x.rb:1']) }
+
+      expect(output).to eq ''
+      expect(Dir.children(@dir)).to be_empty
+    end
+
+    it 'drops a message written before a path is configured' do
+      output = capture_stderr { log.write('settings', 'too early') }
+
+      expect(output).to eq ''
+    end
+
+    it 'prints again once it is turned back on' do
+      log.stderr_fallback = true
+
+      output = capture_stderr { log.write('settings', 'visible') }
+
+      expect(output).to eq "[settings] visible\n"
+    end
+  end
 end

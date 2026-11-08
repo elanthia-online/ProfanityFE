@@ -111,9 +111,31 @@ RSpec.describe 'profanity.rb startup errors' do
                                                 "Or create #{File.join(app, 'templates', 'default.xml')}\n", 1])
   end
 
+  # A log file that can't be written is refused before curses starts, so
+  # the reason is readable instead of every log line being drawn over the
+  # client's screen.
+  it 'prints a --log-dir that does not exist to stderr and exits 1' do
+    missing = File.join(home, 'no-such-dir')
+
+    stdout, stderr, status = run_client("--log-dir=#{missing}")
+
+    expect([stdout, stderr, status]).to eq(['', "Can't write the log file #{File.join(missing, 'profanity.log')}: " \
+                                                "the directory #{missing} doesn't exist. Check --log-dir.\n", 1])
+  end
+
+  it 'prints a --log-file in a directory that does not exist to stderr and exits 1' do
+    log = File.join(home, 'no-such-dir', 'mahtra.log')
+
+    stdout, stderr, status = run_client("--log-file=#{log}")
+
+    expect([stdout, stderr, status]).to eq(['', "Can't write the log file #{log}: the directory " \
+                                                "#{File.dirname(log)} doesn't exist. Check --log-file.\n", 1])
+  end
+
   # ~/.profanity is created at startup, before the command line is checked,
   # so even a refused command line leaves it behind (as it always has).
-  [['--bogus'], ['--help'], ['--settings-file=/nonexistent/profanity.xml'], ['--template=NoSuch.xml']].each do |args|
+  [['--bogus'], ['--help'], ['--settings-file=/nonexistent/profanity.xml'], ['--template=NoSuch.xml'],
+   ['--log-dir=/nonexistent/logs']].each do |args|
     it "creates ~/.profanity (and nothing else in HOME) for #{args.first}" do
       run_client(*args)
 

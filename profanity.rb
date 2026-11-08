@@ -63,20 +63,33 @@ rescue ProfanitySettings::NotFoundError => e
   exit 1
 end
 
-# Log file path chosen by {ProfanitySettings.resolve_log}.
-ProfanityLog.configure(path: ProfanitySettings.resolve_log(
-  char: cli_options[:char],
-  log_file: cli_options[:log_file],
-  log_dir: cli_options[:log_dir]
-))
+# Log file path chosen by {ProfanitySettings.choose_log}. A --log-file or
+# --log-dir that can't be written: print the reason and exit 1, still on
+# the normal terminal. A default path that can't be written is replaced
+# by one in ~/.profanity, and the notice stays on the normal terminal,
+# where it can be read after the client exits.
+log_path, log_notice = begin
+  ProfanitySettings.choose_log(
+    char: cli_options[:char],
+    log_file: cli_options[:log_file],
+    log_dir: cli_options[:log_dir]
+  )
+rescue ProfanitySettings::LogNotWritableError => e
+  $stderr.puts e.message
+  exit 1
+end
+$stderr.puts log_notice if log_notice
+ProfanityLog.configure(path: log_path)
 
 # Boot timings, recorded and logged only with --profile (or an
 # abbreviation such as --prof); passed to Application.
 boot_profiler = BootProfiler.new(enabled: cli_options[:profile])
 boot_profiler.mark('stdlib loaded')
 
-# Initialize curses
+# Initialize curses. From here on anything printed to stderr is drawn over
+# the client's screen, so a log message that can't be written is dropped.
 require_relative 'lib/curses_setup'
+ProfanityLog.stderr_fallback = false
 CursesSetup.start
 boot_profiler.mark('curses init')
 
