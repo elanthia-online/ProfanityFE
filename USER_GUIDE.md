@@ -289,9 +289,12 @@ columns, isn't built when the layout loads. It is built as soon as the
 terminal is large enough (on the next resize or `.resize`), where the layout
 puts it and serving its streams, so a client started in a small terminal and
 enlarged later shows the whole layout. If you haven't switched windows with
-Tab, the layout's first text or tabbed window becomes the current window once
-it is built, as in a client started at that size. Once built, a window stays
-when the terminal shrinks again.
+Tab and the current window is the first one the layout lists among the windows
+already built, the layout's first text or tabbed window becomes the current
+window once it is built, as in a client started at that size. That holds after
+a `.layout` too, for a window it kept current. A current window you chose with
+Tab, or one a `.layout` kept current while listing another built window before
+it, stays current. Once built, a window stays when the terminal shrinks again.
 
 ### Window Types
 
@@ -1702,6 +1705,11 @@ their text, new tabs start empty), and the exp, spell, room, indicator,
 progress and countdown windows. The new layout's sizes, buffer size,
 timestamps, labels, colors and presets apply to the kept windows. Every other
 window starts empty.
+
+After the switch, Tab goes through the text and tabbed windows in the new
+layout's order. The current window stays current if the new layout keeps it;
+otherwise the new layout's first text or tabbed window that fits on the
+terminal becomes current.
 
 ```
 .layout default

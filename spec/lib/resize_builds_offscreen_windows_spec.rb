@@ -672,6 +672,46 @@ RSpec.describe 'Windows off the screen when the layout loads' do
 
     before { start(layout, 24, 80) }
 
+    [0, 1].each do |tabs|
+      it "uses a new layout's cycle for reused panes after #{tabs} Tab presses" do
+        press_tab(tabs)
+        previous = wm.stream.slice('main', 'familiar', 'thoughts')
+        selected = SCROLL_WINDOW.first
+        LAYOUT['reordered'] = REXML::Document.new(<<~XML).root
+          <layout>
+            <window class='text' top='0' left='0' height='5' width='40' value='main'/>
+            <window class='text' top='6' left='0' height='5' width='40' value='thoughts'/>
+            <window class='text' top='12' left='0' height='5' width='40' value='familiar'/>
+            <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+          </layout>
+        XML
+        app.execute_command('.layout reordered')
+
+        expect(cycle).to eq(tabs.zero? ? %w[main thoughts familiar] : %w[familiar main thoughts])
+        previous.each { |stream, window| expect(wm.stream[stream]).to equal(window) }
+        expect(SCROLL_WINDOW.first).to equal(selected)
+        expect(TextWindow.list.select(&:active?)).to eq [selected]
+        press_tab(1)
+        expect(cycle.first).to eq(tabs.zero? ? 'thoughts' : 'main')
+      end
+    end
+
+    it "starts the new layout's cycle at its first window that fits after a .layout closed the current window" do
+      press_tab(1)
+      LAYOUT['mainfirst'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='100' height='5' width='30' value='speech'/>
+          <window class='text' top='0' left='0' height='5' width='40' value='main'/>
+          <window class='text' top='12' left='0' height='5' width='40' value='thoughts'/>
+          <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+        </layout>
+      XML
+      app.execute_command('.layout mainfirst')
+
+      expect(cycle).to eq %w[main thoughts]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['main']]
+    end
+
     it 'goes first in the cycle and becomes the current window when Tab was never pressed, as at load' do
       expect(cycle).to eq %w[main familiar thoughts]
 
@@ -710,8 +750,8 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       expect(TextWindow.list.select(&:active?)).to eq [wm.stream['speech']]
     end
 
-    # A .layout keeps the reused windows in the order they had in the
-    # cycle, so main, current before, stays current, as at load.
+    # A .layout follows the new cycle order, rotated to keep the current
+    # window selected when that window is reused.
     it 'leaves the current window current after a .layout that lists another window first' do
       LAYOUT['thoughtsfirst'] = REXML::Document.new(<<~XML).root
         <layout>
@@ -729,6 +769,26 @@ RSpec.describe 'Windows off the screen when the layout loads' do
       # speech comes after main, the window the layout lists last.
       expect(cycle).to eq %w[main speech thoughts]
       expect(TextWindow.list.select(&:active?)).to eq [wm.stream['main']]
+    end
+
+    it 'makes the first window built late current after a .layout kept the window it lists first among those it built' do
+      LAYOUT['mainkept'] = REXML::Document.new(<<~XML).root
+        <layout>
+          <window class='text' top='0' left='100' height='5' width='30' value='speech'/>
+          <window class='text' top='0' left='0' height='5' width='40' value='main'/>
+          <window class='text' top='12' left='0' height='5' width='40' value='thoughts'/>
+          <window class='command' top='lines-1' left='0' height='1' width='cols'/>
+        </layout>
+      XML
+      app.execute_command('.layout mainkept')
+      expect(cycle).to eq %w[main thoughts]
+
+      terminal_resize(24, 200)
+
+      # As at load: main was this layout's first window built, so speech,
+      # listed before it, becomes current once built.
+      expect(cycle).to eq %w[speech main thoughts]
+      expect(TextWindow.list.select(&:active?)).to eq [wm.stream['speech']]
     end
 
     it 'leaves main current when Tab went round the whole cycle back to it' do

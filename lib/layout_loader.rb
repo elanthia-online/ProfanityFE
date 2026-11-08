@@ -44,9 +44,14 @@ class LayoutLoader
   # Load a layout by ID from the LAYOUT constant and rebuild all windows.
   # See {WindowManager#load_layout} for what is reused and what is closed.
   # The elements whose windows don't fit on the terminal are kept for
-  # {#build_skipped_windows}, in place of the previous layout's. A
-  # current window the user chose with Tab stays chosen if this layout
-  # keeps it current.
+  # {#build_skipped_windows}, in place of the previous layout's.
+  #
+  # The switch-window (Tab) cycle follows the new layout's order, not the
+  # previous layout's, for reused windows too. It starts at the current
+  # window when this layout reuses it, and otherwise at the first text or
+  # tabbed window this layout lists that fits on the terminal now.
+  # {#build_skipped_windows} adds the windows built later. A current
+  # window the user chose with Tab stays chosen if this layout reuses it.
   #
   # An unknown ID warns and changes nothing.
   #
@@ -62,7 +67,8 @@ class LayoutLoader
     @old_windows = BaseWindow.all_windows
     @previous_windows = @old_windows.dup
     @previous = REGISTRIES.to_h { |registry| [registry, @wm.public_send(registry)] }
-    chosen = SCROLL_WINDOW[0] if @current_window_chosen
+    current = SCROLL_WINDOW[0]
+    chosen = current if @current_window_chosen
     @wm.reset_registries
     forget_layout_order
 
@@ -70,6 +76,13 @@ class LayoutLoader
 
     @old_windows.each { |window| close_window(window) }
     forget_previous_layout
+    # Reused panes retain their buffers, not the previous layout's Tab order.
+    # Rotate the new cycle back to the user's selected pane when it survives.
+    SCROLL_WINDOW.each { |window| window.set_active(false) }
+    SCROLL_WINDOW.sort_by! { |window| @positions.fetch(window) }
+    if current && (index = SCROLL_WINDOW.index { |window| window.equal?(current) })
+      SCROLL_WINDOW.rotate!(index)
+    end
     @current_window_chosen = !chosen.nil? && SCROLL_WINDOW[0].equal?(chosen)
 
     SCROLL_WINDOW[0]&.set_active(true)
