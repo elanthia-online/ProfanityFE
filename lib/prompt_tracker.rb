@@ -14,7 +14,8 @@ require_relative 'clock'
 #   except right after a movement line (the movement flag and the backup
 #   check of the main window's newest line);
 # - the last line sent to a stream window, so the game's copy of it as the
-#   next main line is dropped.
+#   next main line is spotted; StreamRouter drops it by default (see
+#   <duplicate-suppression>).
 class PromptTracker
   # Movement verbs that suppress the following prompt and empty line.
   MOVEMENT_PATTERN = /^You (?:run|walk|go|swim|climb|crawl|drag|stride|sneak|stalk)\b/
@@ -54,7 +55,7 @@ class PromptTracker
 
     # The last line sent to a stream window, stripped. The game sends some
     # stream text again as the next main line (DR whispers); that copy is
-    # dropped. Only the next main-bound line is compared, and it uses the
+    # spotted here and dropped by default. Only the next main-bound line is compared, and it uses the
     # text up whether or not it matched; a <prompt> also clears it.
     @last_stream_text = nil
 
@@ -78,7 +79,7 @@ class PromptTracker
   # Handle a <prompt time='...'>text&gt;</prompt> paired tag.
   # Syncs server time offset and updates the prompt display.
   # Also forgets the last stream-window line, so a main line after the
-  # prompt is not taken for the game's copy of it and dropped.
+  # prompt is not taken for the game's copy of it.
   #
   # @param xml [String] the whole paired tag
   # @return [void]
@@ -181,7 +182,8 @@ class PromptTracker
   end
 
   # Remember a line sent to a stream window, so the game's copy of it, if
-  # it is the next main-bound line, is dropped.
+  # it is the next main-bound line, is spotted ({#stream_text_copy?}) and,
+  # by default, dropped (see <duplicate-suppression>).
   #
   # @param text [String] the line as sent to the window, without the
   #   --speech-ts timestamp the window adds (the game's copy has none)
