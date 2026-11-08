@@ -323,7 +323,7 @@ RSpec.describe WindowManager, '#load_layout' do
           <window class='text' top='0' left='40' height='10' width='40' value='thoughts'/>
           <window class='command' top='23' left='0' height='1' width='80'/>
         XML
-      end.to output(/Layout expression error: nested more than 100 levels deep/).to_stderr
+      end.to warn_in_settings(/Layout expression error: nested more than 100 levels deep/)
 
       expect(window_manager.stream.keys).to eq ['thoughts']
       expect(window_manager.stream['thoughts'].maxy).to eq 10

@@ -10,6 +10,7 @@ require_relative 'server_connection'
 require_relative 'key_action_registry'
 require_relative 'macro_interpreter'
 require_relative 'mouse_controller'
+require_relative 'settings_warnings'
 
 # Core application class for ProfanityFE.
 #
@@ -72,7 +73,7 @@ class Application
     DotCommand.new(name: 'layout',
                    args: :required,
                    help: ['.layout <name>     Switch to a named window layout'],
-                   handler: proc { |layout| apply_layout(layout) }),
+                   handler: proc { |layout| switch_layout(layout) }),
     DotCommand.new(name: 'resize',
                    help: ['.resize            Re-fit windows now (automatic on resize)'],
                    handler: proc { @key_action['resize'].call }),
@@ -518,14 +519,19 @@ class Application
   end
 
   # Reload the settings file. A file that fails to load changes nothing,
-  # and a one-line error in the main window says why. Highlights added with
+  # and a one-line error in the main window says why. Problems found in
+  # the file (a bad pattern, say) are shown after it, even if they were
+  # shown before (see {SettingsWarnings}); problems in the layout are
+  # shown again by +.layout+. Highlights added with
   # +.highlight+ are kept on top of the file's.
   #
   # @return [void]
   def handle_dot_reload
+    SettingsWarnings.forget_reported(:settings)
     error = SettingsLoader.load(@settings_file, @key_binding, @key_action, method(:do_macro),
                                 reload: true, keep_highlights: @inline_highlights || {})
     write_to_client("* Reload failed, settings unchanged: #{settings_error_reason(error)}") if error
+    show_settings_warnings
   end
 
   # Summarize a settings load error on one line: the first line of its
@@ -743,6 +749,17 @@ class Application
     fatal_error("ERROR: Layout has no command window. Add <window class='command'/> to your layout.")
   end
 
+  # +.layout+: switch to a layout and show the problems found in it (see
+  # {SettingsWarnings}), even if they were shown before.
+  #
+  # @param layout_id [String] key into the global LAYOUT hash
+  # @return [void]
+  def switch_layout(layout_id)
+    SettingsWarnings.forget_reported(:layout)
+    apply_layout(layout_id)
+    show_settings_warnings
+  end
+
   # Switch to a layout and show it: the one sequence for the default
   # layout at startup and for +.layout+. Builds the layout's windows
   # (reusing the previous layout's where it can, see
@@ -937,6 +954,7 @@ class Application
         effects_updated = tick_effects
         # Drag held at a window edge keeps scrolling once per tick
         drag_scrolled = @mouse_controller.tick_drag_auto_scroll
+        show_settings_warnings
 
         ch, key_combo = handle_next_key(key_combo)
         if ch.nil?
@@ -960,6 +978,22 @@ class Application
   ensure
     @connection.close
     Curses.close_screen
+  end
+
+  # Show the settings and layout warnings not shown yet (see
+  # {SettingsWarnings}) in the main window, one line each, and flush the
+  # screen. They are already in the log. Called on every pass of
+  # {#input_loop}, so a warning from loading the settings, a layout switch
+  # or a resize appears as soon as the main window can show it. With no
+  # main window (a layout without one, or a terminal too small for it)
+  # they are kept until there is one.
+  #
+  # @return [void]
+  def show_settings_warnings
+    return unless @window_mgr.stream[MAIN_STREAM]
+
+    warnings = SettingsWarnings.take
+    write_to_client(*warnings.map { |warning| "* #{warning}" }) unless warnings.empty?
   end
 
   # How long this pass of {#input_loop} waits for a key: {INPUT_POLL_SECONDS},

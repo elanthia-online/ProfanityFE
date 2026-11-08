@@ -507,13 +507,19 @@ RSpec.describe SettingsLoader do
         .with('settings', a_string_including("Missing end tag for 'gag'"), backtrace: an_instance_of(Array))
     end
 
+    # The caller shows the returned error (".reload" in the main window, a
+    # fatal error at startup), so the file is only logged, never printed to
+    # stderr, which curses draws over the screen.
     it 'reports a missing file without changing any setting' do
-      File.delete(File.join(@dir, 'settings.xml'))
+      path = File.join(@dir, 'settings.xml')
+      File.delete(path)
 
       error = nil
-      expect { error = described_class.load(File.join(@dir, 'settings.xml'), key_binding, key_action, proc {}, reload: true) }
-        .to output(/Settings file not found/).to_stderr
+      expect { error = described_class.load(path, key_binding, key_action, proc {}, reload: true) }
+        .not_to output.to_stderr
       expect(error).to be_a(Errno::ENOENT)
+      expect(ProfanityLog).to have_received(:write).with('settings', "Settings file not found: #{path}")
+      expect(SettingsWarnings.take).to be_empty
       expect_good_settings_in_effect
     end
 
@@ -588,7 +594,7 @@ RSpec.describe SettingsLoader do
             <perc-transform pattern='(' replace='x'/>
           </settings>
         XML
-      }.to output(/Invalid gag pattern: \[unclosed/).to_stderr
+      }.to warn_in_settings(/Invalid gag pattern: \[unclosed/)
 
       expect(error).to be_nil
       expect(HIGHLIGHT).to eq(/kobold/ => ['00ff00', nil, nil])

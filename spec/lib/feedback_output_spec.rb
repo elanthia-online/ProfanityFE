@@ -260,12 +260,22 @@ RSpec.describe 'Feedback lines in the main window' do
       expect(screen).to eq [[msg, feedback]]
     end
 
-    it 'a missing layout is only warned about on stderr, not shown in the main window' do
+    # The warning used to go to stderr, which curses draws over the screen.
+    it 'a missing layout is warned about in the main window, then flushed, not on stderr' do
       main.add_string('before')
-      expect { run('.layout nosuch') }
-        .to output(/Warning: layout 'nosuch' not found in LAYOUT \(available: .*feedback/).to_stderr
-      expect(shown).to eq ['before']
-      expect(events.grep(Array).map(&:last).uniq).to eq [['before']]
+      log = nil
+      expect { log = run('.layout nosuch') }.not_to output.to_stderr
+
+      expect(shown).to match [
+        'before', a_string_matching(/\A\* Layout 'nosuch' not found \(available: .*feedback.*\)\z/)
+      ]
+      expect(log.last).to match [:doupdate, shown]
+    end
+
+    it 'shows a missing layout again each time it is asked for' do
+      2.times { run('.layout nosuch') }
+
+      expect(shown.grep(/\A\* Layout 'nosuch' not found/).size).to eq 2
     end
 
     it 'autocomplete completes the common prefix, then lists the matches in its color with one flush' do

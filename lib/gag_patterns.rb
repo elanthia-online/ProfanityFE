@@ -3,6 +3,8 @@
 # gag_patterns.rb: Gag pattern management for filtering unwanted text from display.
 # Patterns loaded from XML config via <gag> and <combat_gag> elements.
 
+require_relative 'settings_warnings'
+
 # Manages gag patterns that filter unwanted text from the display.
 # Patterns can be loaded from the XML config file or added programmatically.
 # Maintains three pattern sets: general (all streams, single line), combat
@@ -298,7 +300,7 @@ module GagPatterns
     def compile_pattern(pattern, kind)
       pattern.is_a?(Regexp) ? pattern : Regexp.new(pattern)
     rescue RegexpError => e
-      warn "Invalid #{kind} pattern: #{pattern} - #{e.message}"
+      SettingsWarnings.add("Invalid #{kind} pattern: #{pattern} - #{e.message}")
       nil
     end
 
@@ -317,7 +319,7 @@ module GagPatterns
       end
       { start: start_regexp, end: end_regexp }
     rescue RegexpError => e
-      warn "Invalid multiline gag pattern: #{start_pattern} / #{end_pattern} - #{e.message}"
+      SettingsWarnings.add("Invalid multiline gag pattern: #{start_pattern} / #{end_pattern} - #{e.message}")
       nil
     end
 

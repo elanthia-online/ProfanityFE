@@ -281,9 +281,9 @@ with the operators:
 A malformed call (`min(1)`, `min(1, 2, 3)`, `min(, 2)`, a missing `)`, a
 name not followed by `(`, a name with no operator before it as in
 `2min(30, 40)`) or a comma outside a call's arguments makes the expression 0
-and prints a warning on standard error; so does any other name (`MIN`,
-`abs`). Other text after a complete expression is ignored: `10)` is 10 and
-`2(3)` is 2.
+and shows a warning in the main window (and the log), once until the next
+`.layout`; so does any other name (`MIN`, `abs`). Other text after a complete
+expression is ignored: `10)` is 10 and `2(3)` is 2.
 
 A window whose top or left falls off the screen, or that gets no rows or
 columns, isn't built when the layout loads. It is built as soon as the
@@ -1652,7 +1652,8 @@ part, not the whole line.
   part of a room.
 - On `.reload`, custom gag patterns from XML are reloaded (defaults are
   preserved).
-- Invalid regex patterns are logged as warnings and skipped.
+- Invalid regex patterns are skipped, with a warning in the main window and
+  the log.
 
 ---
 
@@ -2444,6 +2445,12 @@ support title updates or you find it distracting.
   file is empty" or the XML parser's message with a line number).
 - `.reload` parses the file first and only applies it if it loads: on an
   error it shows the reason and keeps the settings you had.
+- A file that loads can still hold a pattern that isn't valid (a gag,
+  highlight or perc-transform), a layout expression that can't be worked
+  out, or an unknown layout name. Each one is skipped and named on a line
+  starting with `*` in the main window, and in the log. A problem is shown
+  once: `.reload` shows the problems still in the file again, and `.layout`
+  the problems in the layout.
 
 ### Logging
 

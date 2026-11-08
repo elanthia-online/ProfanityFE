@@ -307,7 +307,7 @@ RSpec.describe LayoutLoader do
       registries = [wm.stream, wm.indicator, wm.progress, wm.countdown, wm.room]
       LAYOUT.delete('nope')
 
-      expect { wm.load_layout('nope') }.to output(/layout 'nope' not found in LAYOUT \(available: .*test/).to_stderr
+      expect { wm.load_layout('nope') }.to warn_in_settings(/\ALayout 'nope' not found \(available: .*test.*\)\z/)
 
       expect([wm.stream, wm.indicator, wm.progress, wm.countdown, wm.room]).to eq registries
       expect(registries.zip([wm.stream, wm.indicator, wm.progress, wm.countdown, wm.room]).map { |a, b| a.equal?(b) }).to all(be true)

@@ -4,6 +4,7 @@
 # (HIGHLIGHT, PRESET, LAYOUT, PERC_TRANSFORMS) and gag patterns.
 
 require 'digest'
+require_relative 'settings_warnings'
 
 # Lightweight stand-in for REXML::Element that can be Marshal'd.
 # Supports the same interface used by SettingsLoader and WindowManager:
@@ -94,7 +95,7 @@ module SettingsLoader
   #   was changed
   def load(filename, key_binding, key_action, do_macro, reload: false, keep_highlights: {})
     unless File.exist?(filename)
-      warn "Settings file not found: #{filename}"
+      ProfanityLog.write('settings', "Settings file not found: #{filename}")
       return Errno::ENOENT.new(filename)
     end
 
@@ -136,8 +137,7 @@ module SettingsLoader
           r = pattern && !pattern.empty? ? Regexp.new(pattern) : nil
         rescue StandardError => e_err
           r = nil
-          warn e
-          warn e_err
+          SettingsWarnings.add("Invalid highlight pattern: #{pattern} - #{e_err.message}")
         end
         settings[:highlight][r] = [e.attributes['fg'], e.attributes['bg'], e.attributes['ul']] if r
 
@@ -196,7 +196,7 @@ module SettingsLoader
             replacement = e.attributes['replace'] || ''
             settings[:perc_transforms].push([pattern, replacement])
           rescue RegexpError => e_err
-            warn "Invalid perc-transform pattern: #{e.attributes['pattern']} - #{e_err}"
+            SettingsWarnings.add("Invalid perc-transform pattern: #{e.attributes['pattern']} - #{e_err}")
           end
         end
       end
