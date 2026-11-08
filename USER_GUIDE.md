@@ -36,7 +36,7 @@ running inside a standard terminal emulator.
 
 ### Dependencies
 
-- **Ruby** (3.0 or later recommended)
+- **Ruby** 4.0.5 or later (4.0.9 recommended)
 - **Bundler** -- install gems with `bundle install` (handles curses, rexml, rspec)
 - A terminal emulator that supports at least 256 colors (iTerm2, kitty,
   gnome-terminal, etc.)
