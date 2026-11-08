@@ -60,11 +60,15 @@ RSpec.describe ProfanitySettings do
   it 'reads settings.json as UTF-8 whatever the locale' do
     File.write(path, "{\"DRAG_HIGHLIGHT\": false, \"note\": \"caf#{[0x00E9].pack('U')}\"}")
     original = Encoding.default_external
+    # Setting it warns; the warning is not what this example is about.
+    verbose = $VERBOSE
+    $VERBOSE = nil
     Encoding.default_external = Encoding::US_ASCII
 
     expect(described_class.load_setting('DRAG_HIGHLIGHT', true)).to be false
   ensure
     Encoding.default_external = original
+    $VERBOSE = verbose
   end
 
   describe 'saving' do

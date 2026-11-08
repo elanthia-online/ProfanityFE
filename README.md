@@ -38,7 +38,7 @@ See the **[User Guide](USER_GUIDE.md)** for full documentation including setting
   - [curses](https://rubygems.org/gems/curses) (~> 1.4)
   - [rexml](https://rubygems.org/gems/rexml) (~> 3.4)
 - Gems for development (the `test` group):
-  - [rspec](https://rubygems.org/gems/rspec) (~> 3.13): the test suite
+  - [rspec](https://rubygems.org/gems/rspec) (~> 3.13): the test suite; a run that prints anything to stderr fails (capture output a spec expects with `output(...).to_stderr`)
   - [rubocop](https://rubygems.org/gems/rubocop) (~> 1.75): style checks; CI runs the version locked in `Gemfile.lock`
   - [yard](https://rubygems.org/gems/yard) (~> 0.9): API documentation; CI fails on YARD warnings, on any undocumented object (private methods included), and on YARD tags that don't match the code (see below)
 

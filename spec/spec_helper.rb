@@ -36,6 +36,79 @@ require 'rspec'
 require 'stringio'
 require 'tmpdir'
 require 'fileutils'
+require 'delegate'
+
+# ---------------------------------------------------------------------------
+# Keep stderr clean
+#
+# Anything the suite writes to $stderr fails the run (see the after(:suite)
+# hook below): a Ruby warning, or a message that leaked past a stub, such
+# as a ProfanityLog line. In the client, stderr is drawn over the curses
+# screen, and a noisy run hides a new warning among the old ones. A spec
+# that expects output captures it (output(...).to_stderr, or its own
+# StringIO put back afterwards), which keeps it out of this record. An
+# example that leaves $stderr replaced fails, since nothing written after
+# it would be recorded. RSpec's own deprecation notices fail the example
+# that caused them (raise_errors_for_deprecations!).
+#
+# Not recorded: writes that bypass $stderr (STDERR, IO#syswrite, file
+# descriptor 2 from a C extension) and the stderr of child processes,
+# which the specs that start them capture themselves.
+# ---------------------------------------------------------------------------
+
+# Passes everything written to $stderr through to the real stderr and
+# keeps a copy. Ruby's warnings call +write+; +puts+, +print+, +<<+ and
+# +printf+ are routed through it too.
+class StderrRecorder < SimpleDelegator
+  # @return [String] everything written so far, as bytes (writes in
+  #   different encodings never clash here, as they don't in a real IO)
+  attr_reader :written
+
+  # @param io [IO] the real stderr
+  def initialize(io)
+    super
+    @written = String.new(encoding: Encoding::BINARY)
+  end
+
+  # @param strings [Array<Object>]
+  # @return [Integer] bytes written
+  def write(*strings)
+    strings.each { |string| @written << string.to_s.b }
+    __getobj__.write(*strings)
+  end
+
+  # @param args [Array<Object>]
+  # @return [nil]
+  def puts(*args)
+    lines = args.flatten.map(&:to_s)
+    write(lines.empty? ? "\n" : lines.map { |line| line.end_with?("\n") ? line : "#{line}\n" }.join)
+    nil
+  end
+
+  # @param args [Array<Object>]
+  # @return [nil]
+  def print(*args)
+    write(*args)
+    nil
+  end
+
+  # @param object [Object]
+  # @return [StderrRecorder]
+  def <<(object)
+    write(object)
+    self
+  end
+
+  # @param args [Array<Object>] a format string and its arguments
+  # @return [nil]
+  def printf(*args)
+    write(format(*args))
+    nil
+  end
+end
+
+SUITE_STDERR = StderrRecorder.new($stderr)
+$stderr = SUITE_STDERR
 
 # Keep the suite out of the real home directory: specs create ~/.profanity
 # (ProfanitySettings.ensure_app_dir) and write settings, the settings cache
@@ -185,25 +258,11 @@ end
 # Global constants expected by lib/ files
 # ---------------------------------------------------------------------------
 
-require_relative '../lib/config'
-
-MAIN_STREAM = Streams::MAIN
-DEFAULT_BUFFER_SIZE = 250
-DEFAULT_TERMINAL_WIDTH = 80
-COUNTDOWN_OFFSET = 0.2
-TIME_SYNC_DELAY = 15
-FEEDBACK_COLOR = 'ffff00'
-BACKTRACE_LIMIT = 4
-
-# Mutable runtime state owned by CONFIG, aliased for compatibility.
-# Same pattern as lib/constants.rb - specs use the same Config object.
-CONFIG = Config.new
-SETTINGS_LOCK   = CONFIG.lock
-HIGHLIGHT       = CONFIG.highlight
-PRESET          = CONFIG.preset
-LAYOUT          = CONFIG.layout
-SCROLL_WINDOW   = CONFIG.scroll_window
-PERC_TRANSFORMS = CONFIG.perc_transforms
+# The real lib/constants.rb (MAIN_STREAM, CONFIG and the HIGHLIGHT, LAYOUT
+# ... aliases of its state). It used to be copied here, and a spec that
+# loaded the real file (through lib/profanity_settings.rb) redefined every
+# constant with a warning, and replaced CONFIG for the rest of the run.
+require_relative '../lib/constants'
 
 # ---------------------------------------------------------------------------
 # Top-level helper stubs (the real get_color_pair_id is in lib/color_manager.rb)
@@ -324,6 +383,34 @@ RSpec.configure do |config|
     # a symlink at that path (clipboard_file_spec).
     FileUtils.rm_f(File.join(SPEC_HOME, '.profanity', 'selection.txt'))
   end
+
+  # See "Keep stderr clean" at the top of this file. Checked once the
+  # examples have run, so the record includes warnings printed while the
+  # spec files loaded.
+  config.after(:suite) do
+    unless SUITE_STDERR.written.empty?
+      # Shown as UTF-8 text (RSpec would escape a binary string's bytes).
+      printed = SUITE_STDERR.written.dup.force_encoding(Encoding::UTF_8)
+      raise "the suite printed to stderr (capture expected output with output(...).to_stderr):\n" \
+            "#{printed.lines.first(20).join}"
+    end
+  end
+
+  # Checked around each example, outside the example groups' own around
+  # hooks, some of which swap $stderr for the example and put it back.
+  # $stderr is put back here first, so one leak fails only the example
+  # that leaked, not every example after it. An example that already
+  # failed (or an error on its way out) keeps its own failure.
+  config.around do |example|
+    example.run
+  ensure
+    unless $stderr.equal?(SUITE_STDERR)
+      $stderr = SUITE_STDERR
+      raise 'the example left $stderr replaced, so later writes would not be checked' unless example.exception || $!
+    end
+  end
+
+  config.raise_errors_for_deprecations!
 
   # RSpec never rescues SystemExit: an example that lets `exit` escape (a
   # dot-command regression making a command match .quit, say) ends the
