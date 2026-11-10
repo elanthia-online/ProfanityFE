@@ -2133,7 +2133,7 @@ on text and tabbed windows.
 | `exp` | Experience/skill data (wired to exp windows) |
 | `percWindow` | Active spells/effects (wired to perc windows) |
 | `moonWindow` | Moon data |
-| `shopWindow` | Shop inventory |
+| `shopWindow` | Shop listings: SHOP WINDOW, and every SHOP after it (DragonRealms sends this stream as `ShopWindow`; either spelling works in a layout, and a tab named either way is named `shopWindow`) |
 | `loot` | GemStone loot results (what LOOT or a box search found, and where it went) |
 | `room` | Room component data (title, desc, objects, players, exits) |
 
@@ -2152,6 +2152,12 @@ on text and tabbed windows.
    `room players`, `room exits`) are routed to the room window if one exists.
    By default, inline room text (title, description, objects, players, exits)
    is also shown in the story window. Use `--room-window-only` to suppress it.
+5. Stream names are matched exactly, case included. The one exception is
+   the shop stream: `ShopWindow` (what DragonRealms sends now) and
+   `shopWindow` (what it used to send) are the same stream, in a window's
+   `value` or `tabs`, a `<preset>` id and the `<duplicate-suppression>`
+   `except` list. For a shop tab, add it to a tabbed window's tabs:
+   `tabs='main,combat,assess,shopWindow'`.
 
 ### Special Stream Processing
 

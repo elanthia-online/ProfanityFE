@@ -4,6 +4,7 @@
 
 require_relative 'line_buffered'
 require_relative 'stream_window'
+require_relative '../streams'
 
 # Scrollable text buffer window.
 #
@@ -125,7 +126,7 @@ BaseWindow.register_type('text') do |height, width, top, left, element, wm|
 
   # Reuse the previous layout's text window for one of this slot's streams.
   # Only text windows qualify: a sink or tabbed window can't fill a text slot.
-  streams = element.attributes['value']&.split(',') || []
+  streams = (element.attributes['value']&.split(',') || []).map { |str| Streams.canonical(str) }
   unless (window = wm.claim_window(:stream, streams, TextWindow))
     window = TextWindow.new(height, width - TextWindow.right_margin, top, left)
     window.add_scrollbar

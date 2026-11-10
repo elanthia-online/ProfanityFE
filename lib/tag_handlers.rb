@@ -660,6 +660,7 @@ module TagHandlers
     attrs = XmlTokenizer.attrs(xml)
     return unless (new_stream = attrs['id'])
 
+    new_stream = Streams.canonical(new_stream)
     flush_text_buffer(text_buffer)
     # A pushed spell list needs no help (see #handle_clear_stream)
     @spell_refresh = false if new_stream == Streams::PERC
@@ -704,7 +705,8 @@ module TagHandlers
       flush_text_buffer(text_buffer)
     end
     @event_bus.emit(:exp_delete_skill) if @router.current_stream == Streams::EXP
-    @router.close_stream(pop: pop, id: pop ? XmlTokenizer.attrs(xml)['id'] : nil)
+    pop_id = XmlTokenizer.attrs(xml)['id'] if pop
+    @router.close_stream(pop: pop, id: pop_id && Streams.canonical(pop_id))
   end
 
   # Whether an empty close of +stream+ sends its room section empty, which
