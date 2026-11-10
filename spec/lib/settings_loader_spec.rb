@@ -97,6 +97,12 @@ RSpec.describe SettingsLoader do
       expect(CONFIG.suppress_stream_duplicate?('Speech')).to be false
     end
 
+    it 'reads the shop stream named either way as the one shop stream, listed once' do
+      load_settings(write_settings(@dir, '<duplicate-suppression except="ShopWindow,shopWindow,shopwindow"/>'))
+      expect(CONFIG.duplicate_suppression[:except]).to eq %w[shopWindow shopwindow]
+      expect(CONFIG.suppress_stream_duplicate?(Streams::SHOP)).to be false
+    end
+
     it 'uses the last element when the file has more than one' do
       body = '<duplicate-suppression enabled="off"/><duplicate-suppression except="whispers"/>'
       load_settings(write_settings(@dir, body))

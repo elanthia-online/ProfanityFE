@@ -3,6 +3,7 @@
 require_relative 'selection_manager'
 require_relative 'window_layout'
 require_relative 'settings_warnings'
+require_relative 'streams'
 
 # Turns a layout from the settings file into windows.
 #
@@ -181,7 +182,7 @@ class LayoutLoader
       sink = SinkWindow.new
       @positions[sink] = position
       element.attributes['value']&.split(',')&.each do |str|
-        @wm.stream[str.strip] = sink
+        @wm.stream[Streams.canonical(str.strip)] = sink
       end
       return
     end

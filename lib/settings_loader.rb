@@ -5,6 +5,7 @@
 
 require 'digest'
 require_relative 'settings_warnings'
+require_relative 'streams'
 
 # Lightweight stand-in for REXML::Element that can be Marshal'd.
 # Supports the same interface used by SettingsLoader and WindowManager:
@@ -177,7 +178,8 @@ module SettingsLoader
                                                    '(expected on/off, true/false, yes/no or 1/0), using on')
                     Config::DEFAULT_DUPLICATE_SUPPRESSION[:enabled]
                   end
-        exceptions = e.attributes['except'].to_s.split(',').map(&:strip).reject(&:empty?).uniq.freeze
+        exceptions = e.attributes['except'].to_s.split(',').map(&:strip).reject(&:empty?)
+                      .map { |id| Streams.canonical(id) }.uniq.freeze
         settings[:duplicate_suppression] = { enabled: enabled, except: exceptions }.freeze
 
       when 'blank-lines'
@@ -206,7 +208,8 @@ module SettingsLoader
 
       case e.name
       when 'preset'
-        settings[:presets][e.attributes['id']] = [e.attributes['fg'], e.attributes['bg']]
+        # A stream's preset may name it either way (see Streams::ALIASES)
+        settings[:presets][Streams.canonical(e.attributes['id'])] = [e.attributes['fg'], e.attributes['bg']]
       when 'layout'
         settings[:layouts][e.attributes['id']] = e if e.attributes['id']
       end

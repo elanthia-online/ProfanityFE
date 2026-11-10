@@ -75,7 +75,8 @@ module Streams
   # Out-of-character messages.
   OOC = 'ooc'
 
-  # Shop listings.
+  # Shop listings (SHOP WINDOW, and SHOP output after it). The game now
+  # sends this stream as "ShopWindow"; see {ALIASES}.
   SHOP = 'shopWindow'
 
   # Moon status.
@@ -107,4 +108,26 @@ module Streams
   # speech line is timestamped only in a speech window (a maintainer
   # decision; speech isn't in {FALLBACK_TO_MAIN} either).
   TIMESTAMPED_IN_MAIN = [THOUGHTS, FAMILIAR].freeze
+
+  # Other spellings of a stream id, mapped to the id used here. Stream ids
+  # are matched exactly, so without this a spelling the game changed would
+  # reach no window and no fallback.
+  #
+  # DragonRealms sent the shop stream as "shopWindow" when shop support was
+  # added and sends "ShopWindow" now
+  # (+<streamWindow id='ShopWindow' title='Shopping' .../>+,
+  # +<pushStream id="ShopWindow" />+). A layout may list either spelling.
+  ALIASES = { 'ShopWindow' => SHOP }.freeze
+
+  # The stream id used here for one the game or a layout names: its
+  # {ALIASES} entry, or the id itself.
+  #
+  # @param id [String] a stream id as the game or a layout wrote it
+  # @return [String]
+  # @example
+  #   Streams.canonical('ShopWindow') # => "shopWindow"
+  #   Streams.canonical('combat')     # => "combat"
+  def self.canonical(id)
+    ALIASES.fetch(id, id)
+  end
 end
