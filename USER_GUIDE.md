@@ -6,7 +6,7 @@ configurable multi-window interface with color highlighting, key bindings,
 scrollable text buffers, progress bars, countdown timers, and more -- all
 running inside a standard terminal emulator.
 
-**Version:** 1.0.0
+**Version:** 1.0.1
 
 ---
 
@@ -36,7 +36,8 @@ running inside a standard terminal emulator.
 
 ### Dependencies
 
-- **Ruby** 4.0.5 or later (4.0.9 recommended)
+- **Ruby** 4.0.5 or later (4.0.10 recommended; on 4.0.0 to 4.0.9 the client warns at
+  startup about security bugs that Ruby fixed on 2026-11-18)
 - **Bundler** -- install gems with `bundle install` (handles curses, rexml, rspec)
 - A terminal emulator that supports at least 256 colors (iTerm2, kitty,
   gnome-terminal, etc.)

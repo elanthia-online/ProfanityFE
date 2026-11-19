@@ -33,7 +33,7 @@ See the **[User Guide](USER_GUIDE.md)** for full documentation including setting
 
 ## Dependencies
 
-- Ruby 4.0.5 or later (4.0.9 recommended; CI uses the version in `.ruby-version`)
+- Ruby 4.0.5 or later (4.0.10 recommended). Ruby 4.0.0 to 4.0.9 have security bugs in regular expressions and strings that Ruby fixed on 2026-11-18, and the client warns at startup when it runs on one of them. CI still runs the version in `.ruby-version` (4.0.9) until its setup action can install 4.0.10.
 - Gems to run the client:
   - [curses](https://rubygems.org/gems/curses) (~> 1.4)
   - [rexml](https://rubygems.org/gems/rexml) (~> 3.4)
