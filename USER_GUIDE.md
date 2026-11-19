@@ -2463,6 +2463,25 @@ support title updates or you find it distracting.
   once: `.reload` shows the problems still in the file again, and `.layout`
   the problems in the layout.
 
+**A character shows as `?`:**
+- Text from the game connection is shown as ASCII. Game text is ASCII;
+  other characters come from Lich scripts (their own banners, quotes and
+  arrows, or other players' text they pass on), and Ruby's security bugs
+  in regular expressions and strings, fixed on 2026-11-18, need them.
+- The characters scripts use most are drawn with ASCII look-alikes: curly
+  quotes and primes as `'` and `"`, dashes as `-`, an ellipsis as `...`,
+  a no-break space as a space, the arrows `→` and `←` as `->` and `<-`,
+  and box-drawing lines as `-`, `|`, `=` and `+`. Any other character
+  outside ASCII (an accented letter, another symbol, an emoji), and each
+  byte that isn't valid text, shows as `?`. NUL bytes are dropped.
+- A line where a look-alike could change what the client reads as markup
+  (a `<-` with a `>` after it, or a quote next to a tag a script got
+  wrong) shows `?` for each of those characters instead, as does a `←`
+  inside a tag.
+- A highlight or gag written with a character outside ASCII no longer
+  matches: write it against what is shown, with the `?` escaped (`caf\?`
+  rather than the accented word).
+
 ### Logging
 
 ProfanityFE writes errors and debug information to a log file. The default

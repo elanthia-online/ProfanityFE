@@ -3,7 +3,10 @@
 # Tests that GameTextProcessor#run survives non-ASCII bytes from the server.
 # Socket reads are BINARY while gag and highlight patterns from the settings
 # file are UTF-8; matching one against the other used to raise
-# Encoding::CompatibilityError and end the session.
+# Encoding::CompatibilityError and end the session. A character outside
+# ASCII without an ASCII look-alike, such as an accented letter, now
+# arrives as "?" (ServerText.normalize!), so a pattern written with one
+# no longer matches game text.
 
 require_relative '../spec_helper'
 require 'rexml/document'
@@ -59,7 +62,7 @@ RSpec.describe 'GameTextProcessor server text encoding' do
 
     receive_from_server("You see a caf#{[0x00E9].pack('U')} sign.", 'You wave.')
 
-    expect(displayed).to eq(["You see a caf#{[0x00E9].pack('U')} sign.", 'You wave.'])
+    expect(displayed).to eq(['You see a caf? sign.', 'You wave.'])
   end
 
   it 'keeps processing after a non-ASCII line when a highlight pattern is non-ASCII' do
@@ -67,12 +70,23 @@ RSpec.describe 'GameTextProcessor server text encoding' do
 
     receive_from_server("You see a caf#{[0x00E9].pack('U')} sign.", 'You wave.')
 
-    expect(displayed).to eq(["You see a caf#{[0x00E9].pack('U')} sign.", 'You wave.'])
+    expect(displayed).to eq(['You see a caf? sign.', 'You wave.'])
+  end
+
+  # The gags see the line as it is shown: a gag written against the "?"
+  # hides it, and a NUL is gone before they look.
+  it 'matches the gags against the ASCII line' do
+    GagPatterns.add_general_pattern('^Kri\? waves\.$')
+    GagPatterns.add_general_pattern('^kK$')
+
+    receive_from_server("Kri#{[0x00DF].pack('U')} waves.", "k\0K", 'You wave.')
+
+    expect(displayed).to eq(['You wave.'])
   end
 
   it 'replaces invalid UTF-8 bytes instead of failing' do
     receive_from_server("A broken #{0xFF.chr.force_encoding(Encoding::UTF_8)} byte.", 'You wave.')
 
-    expect(displayed).to eq(["A broken #{[0xFFFD].pack('U')} byte.", 'You wave.'])
+    expect(displayed).to eq(['A broken ? byte.', 'You wave.'])
   end
 end

@@ -388,7 +388,7 @@ RSpec.describe 'script/bench tools' do
       expect(dumps.first.lines.size).to eq(150)
     end
 
-    it 'reads a log with invalid UTF-8 as the client would, replacing the bad bytes' do
+    it 'reads a log with invalid UTF-8 as the client would, replacing the bad bytes with "?"' do
       log = File.join(@dir, 'bad.xml')
       File.binwrite(log, "2026-11-07 19:15:00 NZDT\n2026-11-07 19:15:01 NZDT: caf#{233.chr} line\n")
       out_file = File.join(@dir, 'bad.txt')
@@ -396,7 +396,7 @@ RSpec.describe 'script/bench tools' do
       _, err, status = tool('filter_dump.rb', repo, File.join(repo, 'templates/default.xml'), out_file, log)
 
       expect(status).to be_success, err
-      expect(File.read(out_file).lines.first).to eq("0 - \"caf#{[0xFFFD].pack('U')} line\"\n")
+      expect(File.read(out_file).lines.first).to eq("0 - \"caf? line\"\n")
     end
   end
 end

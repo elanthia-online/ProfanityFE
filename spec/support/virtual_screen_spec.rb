@@ -35,6 +35,14 @@ RSpec.describe Curses::Window do
       win.addstr("\nsecond")
       expect(screen(win)).to eq(rows: ['first', 'second', ''], cursor: [2, 0])
     end
+
+    # The curses gem passes the string to waddstr with StringValueCStr.
+    it 'raises on a string with a NUL in it, as the curses gem does, and draws nothing' do
+      win = window(1, 10)
+
+      expect { win.addstr("a\0b") }.to raise_error(ArgumentError, 'string contains null byte')
+      expect(screen(win)).to eq(rows: [''], cursor: [0, 0])
+    end
   end
 
   describe 'reaching the bottom line' do

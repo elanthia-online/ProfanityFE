@@ -107,4 +107,13 @@ RSpec.describe 'Script progress bars (arbProgress)' do
 
     expect([bar.rows, bar_draws]).to eq [['Spirit Shield.......[00:00:59]  59'], 1]
   end
+
+  # effectmon.lic puts a curly apostrophe (U+2019) in place of each ' in a
+  # label, so the single-quoted label still ends where it should. The line
+  # comes in as ASCII (ServerText), with the apostrophe back.
+  it "shows a label's curly apostrophe as an apostrophe" do
+    receive_from_server(effect_bar("Thurfel#{[0x2019].pack('U')}s Ward......[00:10:00]", 600, '395573,9BA2B2'))
+
+    expect(bar.rows).to eq ["Thurfel's Ward......[00:10:00] 600"]
+  end
 end

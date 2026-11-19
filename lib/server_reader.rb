@@ -2,6 +2,7 @@
 
 require_relative 'boot_profiler'
 require_relative 'pending_render'
+require_relative 'server_text'
 
 # Reads the game server socket and hands each line to a line handler,
 # flushing the screen only when no more server data is waiting.
@@ -107,10 +108,10 @@ class ServerReader
   #   {#run}
   # @api private
   def process_server_line(line)
-    # Socket reads are BINARY. Treat them as UTF-8 (replacing invalid bytes)
-    # so a non-ASCII byte can't raise Encoding::CompatibilityError against
-    # the UTF-8 gag and highlight patterns loaded from settings.
-    line.force_encoding(Encoding::UTF_8).scrub!
+    # ASCII-only and tagged UTF-8 (see ServerText), so no byte can raise
+    # Encoding::CompatibilityError against the UTF-8 gag and highlight
+    # patterns loaded from settings, or reach Ruby's Regexp and String bugs.
+    ServerText.normalize!(line)
     line.chomp!
     kept = @line_handler.prepare_line(line)
 
