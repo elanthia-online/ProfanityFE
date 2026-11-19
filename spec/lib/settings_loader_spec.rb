@@ -37,6 +37,19 @@ RSpec.describe SettingsLoader do
     Dir.mktmpdir { |dir| @dir = dir; example.run }
   end
 
+  # A preset with no id names nothing. It used to be stored under nil and
+  # never looked up; it must not stop the rest of the file from loading.
+  describe '<preset>' do
+    it 'skips a preset with no id, and loads the rest of the file' do
+      path = write_settings(@dir, "<preset fg='00ff00'/><preset id='speech' fg='0000ff'/>" \
+                                  "<layout id='default'><window class='command' top='0' left='0' height='1' width='10'/></layout>")
+
+      expect(load_settings(path)).to be_nil
+      expect(PRESET).to include('speech' => ['0000ff', nil])
+      expect(LAYOUT).to have_key('default')
+    end
+  end
+
   describe '<notification-stream>' do
     it 'defaults to familiar when the element is absent' do
       load_settings(write_settings(@dir, ''))

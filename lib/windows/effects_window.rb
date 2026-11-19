@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../server_text'
+
 # Active effects (spells, buffs, debuffs, cooldowns, custom) with live countdowns.
 
 # Live list of the character's active effects.
@@ -155,7 +157,8 @@ class EffectsWindow < BaseWindow
     # @return [Array<String, nil>, nil] background colors: filled, empty
     attr_reader :bg
 
-    # @param id [String, Integer, nil] an effect id, matched exactly
+    # @param id [String, Integer, nil] an effect id, matched exactly against
+    #   the key the game connection gives it (ServerText.identity)
     # @param id_min [String, Integer, nil] lowest numeric id (inclusive)
     # @param id_max [String, Integer, nil] highest numeric id (inclusive)
     # @param name [String, nil] an effect name, matched whole, ignoring case
@@ -166,7 +169,8 @@ class EffectsWindow < BaseWindow
     # @raise [ArgumentError] when it has no matcher, a bound is not a whole
     #   number, the range is empty, or the pattern is not a valid regexp
     def initialize(id: nil, id_min: nil, id_max: nil, name: nil, name_pattern: nil, fg: nil, bg: nil)
-      @id = presence(id)
+      # Keyed as the game connection keys a timer's id
+      @id = presence(id)&.then { |text| ServerText.identity(text) }
       @id_min = integer(id_min, 'id_min')
       @id_max = integer(id_max, 'id_max')
       @name = presence(name)&.downcase

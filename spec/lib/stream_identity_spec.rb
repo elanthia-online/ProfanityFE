@@ -19,6 +19,7 @@ require_relative '../../lib/settings_loader'
 require_relative '../../lib/shared_state'
 require_relative '../../lib/window_manager'
 require_relative '../../lib/server_text'
+require_relative '../../lib/windows/effects_window'
 
 RSpec.describe 'Stream ids outside ASCII' do
   let(:default_xml) { File.expand_path('../../templates/default.xml', __dir__) }
@@ -130,5 +131,30 @@ RSpec.describe 'Stream ids outside ASCII' do
     expect(settings[:duplicate_suppression][:except]).to eq [incoming, ServerText.identity(cafe_spelled)]
     expect(settings[:notification_stream]).to eq incoming
     expect(incoming).not_to eq ServerText.identity(cafe_spelled)
+  end
+
+  # The key a preset or an exact effectColor id from the connection gets.
+  def incoming_id(id) = XmlTokenizer.attrs(ServerText.normalize!(%(<preset id="#{id}"/>).b))['id']
+
+  # A preset is keyed as the connection keys it, so the room window's
+  # references to presets must be too.
+  it 'colors the room title with a preset the room window names, even one with a %' do
+    load_layout do |xml|
+      xml.sub("<layout id='default'>", "<preset id='50%' fg='ff0000'/>\n<layout id='default'>")
+         .sub("title-preset='roomName'", "title-preset='50%' desc-preset='#{cafe}'")
+         .sub("<layout id='default'>", "<preset id='#{cafe}' fg='00ff00'/>\n<layout id='default'>")
+    end
+    room = wm.room[Streams::ROOM]
+
+    expect(Presets.colors(room.title_preset)).to eq(fg: 'ff0000', bg: nil)
+    expect(Presets.colors(room.desc_preset)).to eq(fg: '00ff00', bg: nil)
+  end
+
+  # An exact effectColor id matches the timer the connection keys the same
+  # way, and not one whose id it spells.
+  it "matches an exact effectColor id against the connection's key for that id" do
+    expect(EffectsWindow::ColorRule.new(id: '50%').match?(incoming_id('50%'), nil)).to be true
+    expect(EffectsWindow::ColorRule.new(id: cafe).match?(incoming_id(cafe), nil)).to be true
+    expect(EffectsWindow::ColorRule.new(id: cafe_spelled).match?(incoming_id(cafe), nil)).to be false
   end
 end
