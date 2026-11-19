@@ -11,6 +11,7 @@ require_relative 'key_action_registry'
 require_relative 'macro_interpreter'
 require_relative 'mouse_controller'
 require_relative 'settings_warnings'
+require_relative 'windows/sink_window'
 
 # Core application class for ProfanityFE.
 #
@@ -1007,12 +1008,14 @@ class Application
   # given to {#initialize}) in the main window, framed by {Feedback::BANNER}
   # rows, and flush the screen. Shown once per run: not again on +.reload+
   # or +.layout+. Called by {#run} once the layout is loaded, before the
-  # game's first lines, and on every pass of {#input_loop}; with no main
-  # window it is kept until there is one.
+  # game's first lines, and on every pass of {#input_loop}; while there is
+  # no main window, or the layout sends main to a {SinkWindow} (which
+  # discards it), it is kept until there is one that shows it.
   #
   # @return [void]
   def show_ruby_warning
-    return unless @ruby_warning && @window_mgr.stream[MAIN_STREAM]
+    main = @window_mgr.stream[MAIN_STREAM]
+    return unless @ruby_warning && main && !main.is_a?(SinkWindow)
 
     write_to_client(*@ruby_warning.map { |line| "* #{line}" }, banner: true)
     @ruby_warning = nil
