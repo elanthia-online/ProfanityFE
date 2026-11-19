@@ -208,8 +208,11 @@ module SettingsLoader
 
       case e.name
       when 'preset'
-        # A stream's preset may name it either way (see Streams::ALIASES)
-        settings[:presets][Streams.from_settings(e.attributes['id'])] = [e.attributes['fg'], e.attributes['bg']]
+        # A preset with no id names nothing. A stream's preset may name it
+        # either way (see Streams::ALIASES)
+        next unless (id = e.attributes['id'])
+
+        settings[:presets][Streams.from_settings(id)] = [e.attributes['fg'], e.attributes['bg']]
       when 'layout'
         settings[:layouts][e.attributes['id']] = e if e.attributes['id']
       end
