@@ -375,6 +375,27 @@ RSpec.describe 'profanity.rb command line' do
     FileUtils.remove_entry(dir) if dir
   end
 
+  # profanity.rb asks RubyAdvisory about the Ruby running it and passes the
+  # warning to Application. RUBY_VERSION is set to an affected release
+  # before profanity.rb runs, so the result doesn't depend on the Ruby
+  # running the suite.
+  context 'on a Ruby with the Regexp and String security bugs fixed on 2026-11-18' do
+    let(:preload_dir) { Dir.mktmpdir('profanity-ruby-version') }
+    let(:env) do
+      preload = File.join(preload_dir, 'ruby_4_0_9.rb')
+      File.write(preload, "Object.send(:remove_const, :RUBY_VERSION)\nRUBY_VERSION = '4.0.9'\n")
+      super().merge('RUBYOPT' => "#{ENV.fetch('RUBYOPT', '')} -r#{preload}".strip)
+    end
+
+    after { FileUtils.remove_entry(preload_dir) }
+
+    it 'warns in the main window at startup' do
+      output = terminal_after_server_lines([], ['<prompt time="1790000000">&gt;</prompt>'], /Please upgrade Ruby/)
+
+      expect(output).to match(/Ruby 4\.0\.9 has security bugs in regular expressions and strings, fixed in Ruby 4\.0\.10/)
+    end
+  end
+
   describe '--game' do
     # A Bloodriven bank death ending in "!": DragonRealms' "failed within
     # .*!" catch-all and GemStone's DR-B area both match it.

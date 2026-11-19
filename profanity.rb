@@ -81,6 +81,12 @@ end
 $stderr.puts log_notice if log_notice
 ProfanityLog.configure(path: log_path)
 
+# A Ruby with the Regexp and String security bugs fixed on 2026-11-18:
+# logged now and shown once in the main window (see RubyAdvisory).
+require_relative 'lib/ruby_advisory'
+ruby_warning = RubyAdvisory.warning
+ruby_warning&.each { |line| ProfanityLog.write('main', line) }
+
 # Boot timings, recorded and logged only with --profile (or an
 # abbreviation such as --prof); passed to Application.
 boot_profiler = BootProfiler.new(enabled: cli_options[:profile])
@@ -170,4 +176,5 @@ Application.new(cli_options,
                 host: cli_options[:host],
                 port: cli_options[:port],
                 boot_profiler: boot_profiler,
-                game_rules: Games.rules_for(cli_options[:game])).run
+                game_rules: Games.rules_for(cli_options[:game]),
+                ruby_warning: ruby_warning).run
