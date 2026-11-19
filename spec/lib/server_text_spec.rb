@@ -21,6 +21,8 @@ RSpec.describe ServerText do
       ['a lone Latin-1 byte', [0x53, 0x74, 0x72, 0x61, 0xDF, 0x65], 'Stra?e'],
       ['invalid bytes', [0xFF, 0xFE, 0x6F, 0x6B], '??ok'],
       ['a truncated character', [0x43, 0x61, 0x66, 0xC3], 'Caf?'],
+      # scrub replaces each invalid sequence, which may be several bytes.
+      ['a truncated three-byte character', [0x43, 0x61, 0x66, 0xE2, 0x82, 0x41], 'Caf?A'],
       ['NUL bytes', [0x6B, 0x00, 0x4B, 0x00], 'kK'],
       ['NUL bytes and characters outside ASCII', [0x63, 0x61, 0x66, 0xC3, 0xA9, 0x00, 0x21], 'caf?!'],
       # A BOM, then NULs between ASCII letters: used to reach the handlers
@@ -47,7 +49,8 @@ RSpec.describe ServerText do
         'curly quotes'                     => [[0x2018, 0x2019, 0x201C, 0x201D], %q(' ' " ")],
         'dashes'                           => [[0x2010, 0x2011, 0x2013, 0x2014, 0x2212], '- - - - -'],
         'an ellipsis and a no-break space' => [[0x2026, 0x00A0], '...  '],
-        'arrows'                           => [[0x2192, 0x2190], '-> <-']
+        # A < goes in as an entity, which text has decoded.
+        'arrows'                           => [[0x2192, 0x2190], '-> &lt;-']
       }.each do |what, (codes, expected)|
         it "puts ASCII look-alikes in place of #{what}" do
           text = codes.map { |code| char(code) }.join(' ')
@@ -98,6 +101,15 @@ RSpec.describe ServerText do
         expect(normalize(line)).to eq %(<a label='a -> b ? c'/>)
       end
 
+      # A custom timer, a stream or a window is named by its id: ids that
+      # differed must still differ.
+      it 'writes an id with characters outside ASCII losslessly, and leaves an ASCII id alone' do
+        line = "<progressBar id='caf#{char(0x00E9)} 50%' text='caf#{char(0x00E9)}'/><progressBar id='50%' text='x'/>"
+
+        expect(normalize(line)).to eq "<progressBar id='caf%C3%A9 50%25' text='caf?'/><progressBar id='50%' text='x'/>"
+        expect(normalize("<progressBar id='caf#{char(0x00E8)}'/>")).not_to eq normalize("<progressBar id='caf#{char(0x00E9)}'/>")
+      end
+
       it 'puts "?" in place of a character outside ASCII elsewhere in a tag' do
         expect(normalize("<a#{char(0x00E9)} x='1'/>text")).to eq "<a? x='1'/>text"
       end
@@ -119,12 +131,18 @@ RSpec.describe ServerText do
         expect(normalize(line)).to eq "<pushBold title='Bob's'/>Thurfel?s Ward -> 5 min<popBold/>"
       end
 
-      it 'keeps a left arrow from starting a tag that a later > would close' do
-        expect(normalize("a #{char(0x2190)} b > c")).to eq 'a ? b > c'
+      # As an entity it can't start a tag that a later > would close.
+      it 'writes a left arrow in text as an entity, even with a > after it' do
+        expect(normalize("a #{char(0x2190)} b > c")).to eq 'a &lt;- b > c'
       end
     end
 
     # The game writes these whole, and their handlers use the content as sent.
+    # Their content is used as sent, entities and all, and can't hold a <.
+    it 'writes a left arrow in the content of a paired tag as "?"' do
+      expect(normalize("<right>a #{char(0x2190)}sword</right>")).to eq '<right>a ?sword</right>'
+    end
+
     it 'writes an arrow in the content of a paired tag as an ASCII arrow' do
       expect(normalize("<spell>Fire#{char(0x2192)}Ball</spell>")).to eq '<spell>Fire->Ball</spell>'
     end

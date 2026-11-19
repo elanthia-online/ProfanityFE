@@ -266,6 +266,19 @@ RSpec.describe 'Effect dialogs (<dialogData>)' do
       expect([effects_events.map { |e| e[:category] }, progress_events]).to eq [[:custom], []]
     end
 
+    # The line comes in as ASCII (ServerText), and an id that differed only
+    # in a character outside ASCII must still name its own timer.
+    it 'keeps apart timers whose ids differ only outside ASCII, through add, update and clear' do
+      e_acute = [0xE9].pack('U')
+      e_grave = [0xE8].pack('U')
+      receive_from_server(%(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_acute}' text='One' time='00:10:00'/></dialogData>),
+                          %(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_grave}' text='Two' time='00:10:00'/></dialogData>),
+                          %(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_acute}' text='Uno' time='00:05:00'/></dialogData>),
+                          %(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_acute}' clear='t'/></dialogData>))
+
+      expect(custom_events.map { |e| e[:effects].map { |x| x[:name] } }).to eq [%w[One], %w[One Two], %w[Uno Two], %w[Two]]
+    end
+
     it 'removes one timer with a per-bar clear' do
       receive_from_server(%(<dialogData id='ProfanityCustom'><progressBar id='a' text='A' time='00:10:00'/>) +
                           %(<progressBar id='b' text='B' time='00:10:00'/></dialogData>),

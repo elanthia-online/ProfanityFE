@@ -6,7 +6,7 @@ configurable multi-window interface with color highlighting, key bindings,
 scrollable text buffers, progress bars, countdown timers, and more -- all
 running inside a standard terminal emulator.
 
-**Version:** 1.0.1
+**Version:** 1.0.2
 
 ---
 
@@ -1538,16 +1538,17 @@ before they reach any window.
 ```
 
 A gag is tried against the line as the game sends it, XML tags included, and
-then against its text, the way the window shows it. A gag written against the
-text therefore still matches when the game puts tags inside it: a link around
-each object, creature and player (when Lich identifies as the Saga client), or
-a creature's status tag at the start of a line. A gag written against the tags,
-such as one that matches `<preset id="whisper">`, still works too. The text of a
-component (a part of the room window or a skill of the experience window) is
-left out, so a gag on the room lines in the story window doesn't take the
-room window's copy with it. A line with no text of its own (only tags, such
-as a prompt or a component) is tried as sent only, so a gag on blank lines,
-such as `^\s*$`, hides blank lines and nothing else.
+then against its text, the way the window shows it. Both have been made ASCII
+first (see "A character shows as `?`" under Tips and Troubleshooting). A gag
+written against the text therefore still matches when the game puts tags inside
+it: a link around each object, creature and player (when Lich identifies as the
+Saga client), or a creature's status tag at the start of a line. A gag written
+against the tags, such as one that matches `<preset id="whisper">`, still works
+too. The text of a component (a part of the room window or a skill of the
+experience window) is left out, so a gag on the room lines in the story window
+doesn't take the room window's copy with it. A line with no text of its own
+(only tags, such as a prompt or a component) is tried as sent only, so a gag on
+blank lines, such as `^\s*$`, hides blank lines and nothing else.
 
 A gag that matches only the text hides only the text. The line's other tags
 still do their work: the experience bars GemStone sends in front of a search
@@ -1640,7 +1641,7 @@ Start Profanity with `--log-gags` to write every gagged line to the log file:
 ```
 
 Each entry shows the gag type, the start of the pattern that matched, and the
-full raw line. A general gag that matched the line's text but not the raw line
+full raw line, as made ASCII. A general gag that matched the line's text but not the raw line
 shows as `general (text)`. Lines that carried a stream tag are marked
 `STREAM-TAG`. A gag on a part of a room DragonRealms sends as one line (see
 [General Gag Patterns](#general-gag-patterns)) is logged with the part: the
@@ -2466,21 +2467,30 @@ support title updates or you find it distracting.
 **A character shows as `?`:**
 - Text from the game connection is shown as ASCII. Game text is ASCII;
   other characters come from Lich scripts (their own banners, quotes and
-  arrows, or other players' text they pass on), and Ruby's security bugs
-  in regular expressions and strings, fixed on 2026-11-18, need them.
+  arrows, or other players' text they pass on). Two of Ruby's security
+  bugs in regular expressions and strings, fixed on 2026-11-18, can be
+  reached through such characters or a NUL byte in that text, so the
+  client takes them out where the text comes in. Upgrading Ruby to 4.0.10
+  or later is still the fix; the client warns at startup on an affected
+  release.
 - The characters scripts use most are drawn with ASCII look-alikes: curly
   quotes and primes as `'` and `"`, dashes as `-`, an ellipsis as `...`,
   a no-break space as a space, the arrows `→` and `←` as `->` and `<-`,
   and box-drawing lines as `-`, `|`, `=` and `+`. Any other character
-  outside ASCII (an accented letter, another symbol, an emoji), and each
-  byte that isn't valid text, shows as `?`. NUL bytes are dropped.
-- A line where a look-alike could change what the client reads as markup
-  (a `<-` with a `>` after it, or a quote next to a tag a script got
-  wrong) shows `?` for each of those characters instead, as does a `←`
-  inside a tag.
+  outside ASCII (an accented letter, another symbol, an emoji) shows as
+  `?`, as does each run of bytes that isn't valid text (one `?` for the
+  run). NUL bytes are dropped.
+- A `←` inside a tag, or in the text of a hand, spell or prompt, shows as
+  `?`. So does each such character on a line where a look-alike quote or
+  `>` would change what the client reads as markup (next to a tag a
+  script got wrong).
+- An id (of a custom timer, a stream or a window) with characters outside
+  ASCII is kept apart from other ids: each such character is written as
+  `%` codes, as in `caf%C3%A9`.
 - A highlight or gag written with a character outside ASCII no longer
-  matches: write it against what is shown, with the `?` escaped (`caf\?`
-  rather than the accented word).
+  matches. Use `.highlight caf?` for a highlight typed in the client
+  (it matches the text literally), or `caf\?` in an XML highlight or
+  gag pattern.
 
 ### Logging
 
