@@ -264,5 +264,35 @@ RSpec.describe SettingsWarnings do
 
       expect(warnings_shown).to include('* Invalid gag pattern: [later - premature end of char-class')
     end
+
+    # A sink discards what is sent to it: a warning taken while the layout
+    # sent main to a sink was lost, and the dedup kept it from coming back.
+    context 'with main sent to a sink in the default layout' do
+      before do
+        File.write(settings_path, <<~XML)
+          <settings>
+            <gag>(unclosed</gag>
+            <key id='enter' action='send_command'/>
+            <layout id='default'>
+              <window class='sink' value='main'/>
+              <window class='text' value='thoughts' top='0' left='0' height='12' width='70'/>
+              <window class='command' top='12' left='0' height='1' width='70'/>
+            </layout>
+            <layout id='withmain'>
+              <window class='text' value='main' top='0' left='0' height='12' width='70'/>
+              <window class='command' top='12' left='0' height='1' width='70'/>
+            </layout>
+          </settings>
+        XML
+      end
+
+      # Each Proc step ends a pass of the input loop, which shows the
+      # warnings once there is a main window that shows them.
+      it 'keeps the warnings, and shows them once a layout with a main window is chosen' do
+        run_client(keyboard(-> {}, ".layout withmain\n", -> {}, 'x', -> {}))
+
+        expect(warnings_shown.grep(gag_warning).size).to eq 1
+      end
+    end
   end
 end
