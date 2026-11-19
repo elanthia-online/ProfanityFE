@@ -189,7 +189,7 @@ class TabbedTextWindow < BaseWindow
 
     tab_names.each_with_index do |name, idx|
       activity = @tab_activity[name] && name != @active_tab ? '*' : ''
-      label = " #{idx + 1}:#{name}#{activity} "
+      label = " #{idx + 1}:#{ServerText.readable(name)}#{activity} "
 
       room = add_tab_bar_text(label, room, name == @active_tab ? Curses::A_REVERSE : Curses::A_NORMAL)
       room = add_tab_bar_text('|', room) if idx < tab_names.length - 1
