@@ -2478,15 +2478,18 @@ support title updates or you find it distracting.
   a no-break space as a space, the arrows `→` and `←` as `->` and `<-`,
   and box-drawing lines as `-`, `|`, `=` and `+`. Any other character
   outside ASCII (an accented letter, another symbol, an emoji) shows as
-  `?`, as does each run of bytes that isn't valid text (one `?` for the
-  run). NUL bytes are dropped.
+  `?`. So does each malformed UTF-8 sequence: one question mark per
+  malformed sequence, so two stray bytes in a row show as `??` and a
+  character cut short shows as one `?`. NUL bytes are dropped.
 - A `←` inside a tag, or in the text of a hand, spell or prompt, shows as
   `?`. So does each such character on a line where a look-alike quote or
   `>` would change what the client reads as markup (next to a tag a
   script got wrong).
-- An id (of a custom timer, a stream or a window) with characters outside
-  ASCII is kept apart from other ids: each such character is written as
-  `%` codes, as in `caf%C3%A9`.
+- An id (of a custom timer, a stream or a window) keeps one key: each
+  character outside ASCII, and each `%`, is written as `%` codes, as in
+  `caf%C3%A9`, both where it comes in and where a layout names it, so a
+  layout window, tab, sink or preset named `café` still gets that
+  stream. A custom timer with no label shows its id with look-alikes.
 - A highlight or gag written with a character outside ASCII no longer
   matches. Use `.highlight caf?` for a highlight typed in the client
   (it matches the text literally), or `caf\?` in an XML highlight or

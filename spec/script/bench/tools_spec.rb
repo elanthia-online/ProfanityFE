@@ -427,5 +427,35 @@ RSpec.describe 'script/bench tools' do
         expect(dump(fixture)).to eq ['0 G nil', '0 - "Zoe waves."', '1 G nil', '1 - "Zoe waves."']
       end
     end
+
+    # A plain recording goes through the checkout's normalizer as the bytes
+    # came, and is chomped once, as ServerReader does. Reading it as
+    # stream_fixture.rb does (chomp, then scrub) lost a CR the client keeps,
+    # and turned a bad byte in an id into %EF%BF%BD where the client has ?.
+    context 'with a plain recording' do
+      let(:settings) { File.join(@dir, 'none.xml').tap { |path| File.write(path, "<settings/>\n") } }
+
+      def dump(input)
+        out_file = File.join(@dir, 'dump.txt')
+        _, err, status = tool('filter_dump.rb', repo, settings, out_file, input)
+        raise err unless status.success?
+
+        File.read(out_file).lines.map(&:chomp)
+      end
+
+      it 'keeps the one CR the client keeps of a line ending CR, CR, LF' do
+        stream = File.join(@dir, 'stream.txt')
+        File.binwrite(stream, "Kai waves.\r\r\n")
+
+        expect(dump(stream)).to eq ['0 - "Kai waves.\r"', '1 - "Kai waves.\r"']
+      end
+
+      it 'puts ? for a bad byte in an id, as the client does' do
+        stream = File.join(@dir, 'stream.txt')
+        File.binwrite(stream, "<pushStream id='caf#{[0xFF].pack('C')}'/>Hi<popStream/>\n".b)
+
+        expect(dump(stream).first).to include("id='caf?'")
+      end
+    end
   end
 end
