@@ -222,6 +222,8 @@ class Application
   #   otherwise ends through +exit+ (+.quit+, a disconnect or a fatal error)
   def run
     load_settings_and_layout
+    # Before the game's first lines, which could scroll it away.
+    CursesRenderer.synchronize { show_ruby_warning }
     @boot_profiler.mark('settings + layout')
     connect_server
     @boot_profiler.mark('connect_server')
@@ -1004,7 +1006,8 @@ class Application
   # Show the warning about the Ruby running the client (the +ruby_warning+
   # given to {#initialize}) in the main window, framed by {Feedback::BANNER}
   # rows, and flush the screen. Shown once per run: not again on +.reload+
-  # or +.layout+. Called on every pass of {#input_loop}; with no main
+  # or +.layout+. Called by {#run} once the layout is loaded, before the
+  # game's first lines, and on every pass of {#input_loop}; with no main
   # window it is kept until there is one.
   #
   # @return [void]
