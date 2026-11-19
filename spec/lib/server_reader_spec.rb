@@ -101,4 +101,12 @@ RSpec.describe ServerReader do
   it 'reports a disconnect at the end of the stream' do
     expect(read_lines(%w[one])).to eq :disconnected
   end
+
+  it 'hands the line handler only ASCII-only lines, without NULs' do
+    read_lines([[0x53, 0x74, 0x72, 0x61, 0xDF, 0x65].pack('U*'), "k\0K", 'plain'])
+
+    processed = timeline.select { |step| step.is_a?(Array) }.map(&:last)
+    expect(processed).to eq ['Stra?e', 'kK', 'plain']
+    expect(processed).to all(satisfy(&:ascii_only?))
+  end
 end

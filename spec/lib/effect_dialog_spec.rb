@@ -266,6 +266,38 @@ RSpec.describe 'Effect dialogs (<dialogData>)' do
       expect([effects_events.map { |e| e[:category] }, progress_events]).to eq [[:custom], []]
     end
 
+    # The line comes in as ASCII (ServerText), and an id that differed only
+    # in a character outside ASCII must still name its own timer.
+    it 'keeps apart timers whose ids differ only outside ASCII, through add, update and clear' do
+      e_acute = [0xE9].pack('U')
+      e_grave = [0xE8].pack('U')
+      receive_from_server(%(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_acute}' text='One' time='00:10:00'/></dialogData>),
+                          %(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_grave}' text='Two' time='00:10:00'/></dialogData>),
+                          %(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_acute}' text='Uno' time='00:05:00'/></dialogData>),
+                          %(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_acute}' clear='t'/></dialogData>))
+
+      expect(custom_events.map { |e| e[:effects].map { |x| x[:name] } }).to eq [%w[One], %w[One Two], %w[Uno Two], %w[Two]]
+    end
+
+    # An ASCII id that spells another id's %XX form is another timer.
+    it 'keeps apart a timer whose id has characters outside ASCII and one whose id spells their %XX form' do
+      e_acute = [0xE9].pack('U')
+      receive_from_server(%(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_acute}' text='One' time='00:10:00'/></dialogData>),
+                          %(<dialogData id='ProfanityCustom'><progressBar id='caf%C3%A9' text='Two' time='00:10:00'/></dialogData>),
+                          %(<dialogData id='ProfanityCustom'><progressBar id='caf#{e_acute}' clear='t'/></dialogData>))
+
+      expect(custom_events.map { |e| e[:effects].map { |x| x[:name] } }).to eq [%w[One], %w[One Two], %w[Two]]
+    end
+
+    # The key is not for show: a timer with no label shows its id as sent,
+    # made ASCII the way text is.
+    it 'shows a timer with no label by its id, with look-alikes, not by its key' do
+      receive_from_server(%(<dialogData id='ProfanityCustom'><progressBar id='Thurfel#{[0x2019].pack('U')}s caf#{[0xE9].pack('U')}' ) +
+                          %(time='00:10:00'/></dialogData>))
+
+      expect(custom_names).to eq ["Thurfel's caf?"]
+    end
+
     it 'removes one timer with a per-bar clear' do
       receive_from_server(%(<dialogData id='ProfanityCustom'><progressBar id='a' text='A' time='00:10:00'/>) +
                           %(<progressBar id='b' text='B' time='00:10:00'/></dialogData>),

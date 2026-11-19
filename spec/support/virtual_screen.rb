@@ -225,8 +225,11 @@ module Curses
     end
 
     # Like waddstr, stops at the first character that can't be placed
-    # (moving past the bottom line without scrollok).
+    # (moving past the bottom line without scrollok). Like the curses gem
+    # (StringValueCStr), raises on a string with a NUL in it.
     def addstr(str)
+      raise ArgumentError, 'string contains null byte' if str.to_s.include?("\0")
+
       log(:addstr, str)
       str.to_s.each_char { |ch| break unless put_char(ch) }
       nil

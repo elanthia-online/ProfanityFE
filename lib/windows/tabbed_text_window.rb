@@ -189,7 +189,7 @@ class TabbedTextWindow < BaseWindow
 
     tab_names.each_with_index do |name, idx|
       activity = @tab_activity[name] && name != @active_tab ? '*' : ''
-      label = " #{idx + 1}:#{name}#{activity} "
+      label = " #{idx + 1}:#{ServerText.readable(name)}#{activity} "
 
       room = add_tab_bar_text(label, room, name == @active_tab ? Curses::A_REVERSE : Curses::A_NORMAL)
       room = add_tab_bar_text('|', room) if idx < tab_names.length - 1
@@ -386,7 +386,7 @@ BaseWindow.register_type('tabbed') do |height, width, top, left, element, wm|
   next nil unless width > 1
 
   # A tab is named by its stream's id, so a "ShopWindow" tab is named "shopWindow" (see Streams::ALIASES)
-  tab_names = (element.attributes['tabs'] || element.attributes['value'] || MAIN_STREAM).split(',').map { |name| Streams.canonical(name.strip) }
+  tab_names = (element.attributes['tabs'] || element.attributes['value'] || MAIN_STREAM).split(',').map { |name| Streams.from_settings(name.strip) }
   # Reuse the previous layout's tabbed window that has any of these tabs
   unless (window = wm.claim_window(:stream, tab_names, TabbedTextWindow))
     window = TabbedTextWindow.new(height, width - TabbedTextWindow.right_margin, top, left)

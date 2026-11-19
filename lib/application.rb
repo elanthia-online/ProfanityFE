@@ -379,7 +379,7 @@ class Application
     elsif arg.nil? || arg.empty?
       lines = TabbedTextWindow.list.map do |win|
         tabs_info = win.tab_names.each_with_index.map do |name, i|
-          "#{i + 1}:#{name}#{name == win.active_tab ? '*' : ''}"
+          "#{i + 1}:#{ServerText.readable(name)}#{name == win.active_tab ? '*' : ''}"
         end.join(' ')
         "* Tabs: #{tabs_info}"
       end
@@ -388,7 +388,8 @@ class Application
       TabbedTextWindow.list.each { |w| w.switch_tab_by_index(arg.to_i) }
       @cmd_buffer.flush_screen
     else
-      TabbedTextWindow.list.each { |w| w.switch_tab(arg) }
+      # Named as the layout names it, keyed as the layout's tabs are
+      TabbedTextWindow.list.each { |w| w.switch_tab(Streams.from_settings(arg)) }
       @cmd_buffer.flush_screen
     end
   end

@@ -38,6 +38,18 @@ end
 require File.join(File.expand_path(code), 'lib', 'gag_patterns')
 require File.join(File.expand_path(code), 'lib', 'line_filter')
 
+# What ServerReader does to each line, with its ending, before the filter
+# sees it, in its order: ServerText.normalize! (so a NUL before the ending
+# goes before the ending is removed), then chomp. Older checkouts only
+# tagged it UTF-8 and scrubbed it.
+server_text = File.join(File.expand_path(code), 'lib', 'server_text.rb')
+NORMALIZE = if File.exist?(server_text)
+              require server_text
+              ->(line) { ServerText.normalize!(line.dup).chomp }
+            else
+              ->(line) { line.dup.force_encoding(Encoding::UTF_8).scrub.chomp }
+            end
+
 # The settings the filter reads (SharedState#log_gags only).
 FilterState = Struct.new(:log_gags)
 
@@ -57,13 +69,16 @@ REXML::Document.new(File.read(settings)).root.each_element do |e|
 end
 GagPatterns.replace_custom(**gags)
 
+# Each input line with its ending. A plain recording (no Lich log
+# timestamps) is read as the bytes came, as the client reads the socket; a
+# fixture or a Lich log is read as stream_fixture.rb prepares it, and each
+# of its lines gets the line ending back.
 lines = inputs.flat_map do |file|
-  chunks = if file.end_with?('.jsonl')
-             File.readlines(file).reject { |l| l.strip.empty? }.map { |l| JSON.parse(l) }
-           else
-             StreamFixture.new.convert(File.readlines(file, mode: 'rb'))
-           end
-  chunks.flat_map { |chunk| chunk['data'].split("\n", -1)[0..-2] }
+  raw = File.readlines(file, mode: 'rb') unless file.end_with?('.jsonl')
+  next raw if raw && raw.none? { |line| StreamFixture::TIMESTAMP.match?(line) }
+
+  chunks = raw ? StreamFixture.new.convert(raw) : File.readlines(file).reject { |l| l.strip.empty? }.map { |l| JSON.parse(l) }
+  chunks.flat_map { |chunk| chunk['data'].split("\n", -1)[0..-2].map { |line| "#{line}\n" } }
 end
 
 filter = LineFilter.new(shared_state: FilterState.new(false), xml_escapes: XML_ESCAPES)
@@ -71,8 +86,7 @@ gagged = 0
 File.open(out, 'w') do |file|
   2.times do |pass|
     lines.each do |line|
-      # ServerReader treats socket bytes as UTF-8 and scrubs them first.
-      kept = filter.filter(line.dup.force_encoding(Encoding::UTF_8).scrub)
+      kept = filter.filter(NORMALIZE.call(line))
       gagged += 1 if filter.gagged?
       file.puts "#{pass} #{filter.gagged? ? 'G' : '-'} #{kept.inspect}"
     end

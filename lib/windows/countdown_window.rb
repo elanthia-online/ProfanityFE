@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../server_text'
+
 # Roundtime and casttime countdown display window.
 
 # Countdown timer window for roundtime/casttime display.
@@ -139,7 +141,9 @@ class CountdownWindow < BaseWindow
 end
 
 BaseWindow.register_type('countdown') do |height, width, top, left, element, wm|
-  unless (window = wm.claim_window(:countdown, element.attributes['value'], CountdownWindow))
+  # The id the game connection sends for this window, as it keys it (ServerText.identity).
+  key = element.attributes['value'] && ServerText.identity(element.attributes['value'])
+  unless (window = wm.claim_window(:countdown, key, CountdownWindow))
     window = CountdownWindow.new(height, width, top, left)
   end
   window.scrollok(false)
@@ -147,7 +151,7 @@ BaseWindow.register_type('countdown') do |height, width, top, left, element, wm|
   window.label = element.attributes['label'] if element.attributes['label']
   window.fg = BaseWindow.parse_color_attrs(element, 'fg') if element.attributes['fg']
   window.bg = BaseWindow.parse_color_attrs(element, 'bg') if element.attributes['bg']
-  wm.countdown[element.attributes['value']] = window if element.attributes['value']
+  wm.countdown[key] = window if key
   window.tick
   window
 end

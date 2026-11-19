@@ -445,13 +445,15 @@ BaseWindow.register_type('room') do |height, width, top, left, element, wm|
   # The previous layout's room window keeps the room it shows
   window = wm.claim_window(:room, Streams::ROOM, RoomWindow) || RoomWindow.new(height, width, top, left)
   window.scrollok(false)
-  window.title_preset = element.attributes['title-preset'] || Presets::ROOM_NAME
-  window.desc_preset = element.attributes['desc-preset']
-  window.creatures_preset = element.attributes['creatures-preset'] || Presets::MONSTERBOLD
+  # A preset is keyed as the game connection keys its id (see Streams.from_settings)
+  preset = ->(name) { element.attributes[name] && Streams.from_settings(element.attributes[name]) }
+  window.title_preset = preset.call('title-preset') || Presets::ROOM_NAME
+  window.desc_preset = preset.call('desc-preset')
+  window.creatures_preset = preset.call('creatures-preset') || Presets::MONSTERBOLD
   window.creature_state_presets = {
-    dead: element.attributes['dead-preset'] || Presets::CREATURE_DEAD,
-    sleeping: element.attributes['sleeping-preset'] || Presets::CREATURE_SLEEPING,
-    prone: element.attributes['prone-preset'] || Presets::CREATURE_PRONE
+    dead: preset.call('dead-preset') || Presets::CREATURE_DEAD,
+    sleeping: preset.call('sleeping-preset') || Presets::CREATURE_SLEEPING,
+    prone: preset.call('prone-preset') || Presets::CREATURE_PRONE
   }
   window.shared_state = wm.shared_state
   wm.room[Streams::ROOM] = window
