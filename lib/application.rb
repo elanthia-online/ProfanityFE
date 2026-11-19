@@ -995,8 +995,8 @@ class Application
   # {#input_loop}, so a warning from loading the settings, a layout switch
   # or a resize appears as soon as the main window can show it. With no
   # main window that shows them ({#notice_window}: a layout without one, a
-  # terminal too small for it, or main sent to a sink) they are kept until
-  # there is one.
+  # terminal too small for it, main sent to a sink, or a main window with no
+  # rows for text) they are kept until there is one.
   #
   # @return [void]
   def show_settings_warnings
@@ -1023,14 +1023,18 @@ class Application
   end
 
   # The main window, when the layout has one that shows what is written to
-  # it: nil while there is none, or while main goes to a {SinkWindow},
-  # which discards it. The notices kept for the main window (settings
-  # warnings, the Ruby warning) wait until there is one.
+  # it: nil while there is none, while main goes to a {SinkWindow} (which
+  # discards it), or while the main window has no rows for text (a one-row
+  # tabbed window shows only its tab bar). The notices kept for the main
+  # window (settings warnings, the Ruby warning) wait until there is one.
   #
   # @return [#add_string, nil] the main window, or nil
   def notice_window
     main = @window_mgr.stream[MAIN_STREAM]
-    main unless main.is_a?(SinkWindow)
+    return nil if main.is_a?(SinkWindow)
+    return nil if main.respond_to?(:content_height) && !main.content_height.positive?
+
+    main
   end
 
   # How long this pass of {#input_loop} waits for a key: {INPUT_POLL_SECONDS},
