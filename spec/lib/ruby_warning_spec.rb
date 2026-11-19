@@ -61,6 +61,16 @@ RSpec.describe 'The warning about an affected Ruby' do
     expect(main_rows).to eq ['*', "* #{ruby_warning[0]}", "* #{ruby_warning[1]}", '*']
   end
 
+  # Shown only from the input loop, it came after the game's first lines,
+  # and a login's burst of text could scroll it away.
+  it "shows the warning before the game's first lines" do
+    game_server.say('Hello from the game.')
+
+    run_client(keyboard)
+
+    expect(main_rows).to eq ['*', "* #{ruby_warning[0]}", "* #{ruby_warning[1]}", '*', 'Hello from the game.']
+  end
+
   it 'shows it once: not again on .reload or .layout' do
     run_client(keyboard(".reload\n", ".layout default\n", 'x'))
 
