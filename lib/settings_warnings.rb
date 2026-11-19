@@ -46,7 +46,15 @@ module SettingsWarnings
       raise ArgumentError, "unknown warning kind #{kind.inspect}" unless KINDS.include?(kind)
 
       fresh = @lock.synchronize do
-        next false if @reported.key?(message) || @pending.include?(message)
+        next false if @reported.key?(message)
+
+        # Found again while it still waits to be shown (after
+        # {forget_reported}, with no main window to take it): it counts as
+        # reported again, without being kept or logged twice.
+        if @pending.include?(message)
+          @reported[message] = kind
+          next false
+        end
 
         @reported[message] = kind
         @pending << message
