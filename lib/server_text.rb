@@ -26,10 +26,12 @@ require_relative 'xml_tokenizer'
 #
 # The characters scripts send most become their ASCII look-alikes
 # ({ASCII_IN_TEXT}, {ASCII_IN_ATTRIBUTE}, box drawing); any other character
-# outside ASCII, and each invalid byte sequence (one or more bytes that
-# don't make a character), becomes {REPLACEMENT}; NUL bytes are deleted.
-# An id ({IDENTITY_ATTRIBUTES}) with characters outside ASCII is written
-# losslessly instead, so ids that differed still differ.
+# outside ASCII, and each malformed UTF-8 sequence (one REPLACEMENT per
+# sequence, which may be one byte or several), becomes {REPLACEMENT}; NUL
+# bytes are deleted.
+# An id ({IDENTITY_ATTRIBUTES}) is written as its key instead ({.identity}:
+# % and each character outside ASCII as %XX), on every line and in the
+# fallback below, so ids that differed still differ.
 #
 # The line's tags stay as they were. An attribute value whose look-alikes
 # hold its quote is quoted with the other one (effectmon.lic writes
@@ -64,11 +66,15 @@ module ServerText
   # ({XmlTokenizer::PAIRED_TAGS}), which its handler uses as sent.
   ASCII_IN_ATTRIBUTE = ASCII_IN_TEXT.merge(0x2190 => REPLACEMENT).freeze
 
-  # Attributes that name something (a custom timer, a stream, a window):
-  # a value with characters outside ASCII is written losslessly, each such
-  # character, and each %, as %XX per UTF-8 byte, so values that differed
-  # still differ.
+  # Attributes that name something (a custom timer, a stream, a window).
+  # Their values are written by {.identity}, which the settings side uses
+  # for the same names too ({Streams.from_settings}), so a name keeps one
+  # key, and names that differed still differ.
   IDENTITY_ATTRIBUTES = %w[id].freeze
+
+  # An id with a % in it, which {.identity} writes as %25 on a line that is
+  # otherwise all ASCII as well.
+  PERCENT_IN_ID = /\sid=(?:"[^"]*%|'[^']*%)/
 
   # A paired element whole, as {XmlTokenizer.tokenize} reads one.
   PAIRED_ELEMENT = %r{\A<(#{XmlTokenizer::PAIRED_TAGS.join("|")})\b.*</\1>\z}m
@@ -90,7 +96,7 @@ module ServerText
 
   # Make a line read from the game connection ASCII, in place (see
   # {ServerText}): tag it UTF-8 (socket reads are BINARY), put
-  # {REPLACEMENT} in place of each invalid byte sequence, delete NUL bytes,
+  # {REPLACEMENT} in place of each malformed UTF-8 sequence, delete NUL bytes,
   # and put a look-alike or {REPLACEMENT} in place of each character
   # outside ASCII.
   #
@@ -101,17 +107,65 @@ module ServerText
     # Before delete!, which raises on invalid UTF-8.
     line.scrub!(REPLACEMENT) unless line.valid_encoding?
     line.delete!("\0") if line.include?("\0")
-    return line if line.ascii_only?
+    return line if line.ascii_only? && !(line.include?('%') && line.match?(PERCENT_IN_ID))
 
-    plain = line.gsub(NON_ASCII, REPLACEMENT)
-    segments = XmlTokenizer.tokenize(line).flat_map do |type, segment|
-      next [[type, ascii(type, segment, ASCII_IN_TEXT)]] unless type == :tag && segment.match?(PAIRED_ELEMENT)
+    # Ids by {.identity}, and every other character outside ASCII as
+    # REPLACEMENT, which means nothing in markup.
+    plain = segments(line, nil, nil).map(&:last).join
+    return line.replace(plain) if line.ascii_only?
 
-      XmlTokenizer.tokenize(segment, paired: false).map { |part_type, part| [part_type, ascii(part_type, part, ASCII_IN_ATTRIBUTE)] }
-    end
-    alike = segments.map(&:last).join
-    line.replace(same_markup?(alike, segments, plain) ? alike : plain)
+    alike_segments = segments(line, ASCII_IN_TEXT, ASCII_IN_ATTRIBUTE)
+    alike = alike_segments.map(&:last).join
+    line.replace(same_markup?(alike, alike_segments, plain) ? alike : plain)
   end
+
+  # The key an id is known by: the id with % and each character outside
+  # ASCII written as %XX per UTF-8 byte ("caf%C3%A9", "50%25"), the rest as
+  # it is. Different ids get different keys. ServerText writes every
+  # {IDENTITY_ATTRIBUTES} value from the game connection this way, and the
+  # settings side names streams and windows the same way
+  # ({Streams.from_settings}).
+  #
+  # @param id [String] an id, as sent or as a settings file writes it
+  # @return [String] the key, ASCII
+  def self.identity(id)
+    id.gsub(/%|#{NON_ASCII.source}/) { |char| char.bytes.map { |byte| format('%%%02X', byte) }.join }
+  end
+
+  # What a key {.identity} made shows as (a custom timer with no label):
+  # the id it was made from, with look-alikes and REPLACEMENT as an
+  # attribute value gets them.
+  #
+  # @param key [String] a key from {.identity}
+  # @return [String] ASCII
+  def self.readable(key)
+    return key unless key.include?('%')
+
+    id = key.b.gsub(/%(\h\h)/n) { Regexp.last_match(1).hex.chr }.force_encoding(Encoding::UTF_8).scrub(REPLACEMENT)
+    id.gsub(NON_ASCII) { |char| look_alike(char, ASCII_IN_ATTRIBUTE) }
+  end
+
+  # The segments of a line, paired elements split into theirs, each in
+  # ASCII.
+  #
+  # @param line [String] the line, valid UTF-8
+  # @param text_table [Hash{Integer => String}, nil] look-alikes for text
+  #   outside paired elements; nil for REPLACEMENT only
+  # @param attribute_table [Hash{Integer => String}, nil] look-alikes for
+  #   attribute values and the content of paired elements; nil for
+  #   REPLACEMENT only
+  # @return [Array<Array(Symbol, String)>] +:text+ and +:tag+ segments, in
+  #   order, as {XmlTokenizer.tokenize} with +paired: false+ gives them
+  def self.segments(line, text_table, attribute_table)
+    XmlTokenizer.tokenize(line).flat_map do |type, segment|
+      next [[type, ascii(type, segment, text_table, attribute_table)]] unless type == :tag && segment.match?(PAIRED_ELEMENT)
+
+      XmlTokenizer.tokenize(segment, paired: false).map do |part_type, part|
+        [part_type, ascii(part_type, part, attribute_table, attribute_table)]
+      end
+    end
+  end
+  private_class_method :segments
 
   # Whether the line with its look-alikes reads as the same tags as the
   # line with {REPLACEMENT} for every character outside ASCII: tag for tag
@@ -137,29 +191,33 @@ module ServerText
   #
   # @param type [Symbol] +:text+ or +:tag+
   # @param segment [String] the segment
-  # @param text_table [Hash{Integer => String}] the look-alikes for text:
-  #   {ASCII_IN_TEXT}, or {ASCII_IN_ATTRIBUTE} inside a paired element
+  # @param text_table [Hash{Integer => String}, nil] look-alikes for text
+  # @param attribute_table [Hash{Integer => String}, nil] look-alikes for
+  #   attribute values
   # @return [String] the segment, ASCII-only
-  def self.ascii(type, segment, text_table)
-    return segment if segment.ascii_only?
+  def self.ascii(type, segment, text_table, attribute_table)
+    return segment if segment.ascii_only? && !(type == :tag && segment.include?('%'))
     return segment.gsub(NON_ASCII) { |char| look_alike(char, text_table) } if type == :text
 
-    ascii_tag(segment)
+    ascii_tag(segment, attribute_table)
   end
   private_class_method :ascii
 
   # A tag in ASCII: each attribute value, read as {XmlTokenizer.attrs}
-  # reads them, gets its look-alikes and the quote that still holds it;
-  # any other character outside ASCII in the tag becomes {REPLACEMENT}.
+  # reads them, gets its look-alikes (an id its key, {.identity}) and the
+  # quote that still holds it; any other character outside ASCII in the tag
+  # becomes {REPLACEMENT}.
   #
   # @param tag [String] the tag
+  # @param table [Hash{Integer => String}, nil] look-alikes for attribute
+  #   values; nil for REPLACEMENT only
   # @return [String] the tag, ASCII-only
-  def self.ascii_tag(tag)
+  def self.ascii_tag(tag, table)
     scanner = StringScanner.new(tag)
     ascii = +''
     if scanner.scan(/<\w+/)
       ascii << scanner.matched
-      ascii << ascii_attribute(scanner) while scanner.scan(XmlTokenizer::ATTRIBUTE)
+      ascii << ascii_attribute(scanner, table) while scanner.scan(XmlTokenizer::ATTRIBUTE)
     end
     ascii << scanner.rest
     ascii.gsub(NON_ASCII, REPLACEMENT)
@@ -170,18 +228,19 @@ module ServerText
   # ASCII, quoted so the value still ends where it did.
   #
   # @param scanner [StringScanner] positioned just after the attribute
+  # @param table [Hash{Integer => String}, nil] look-alikes for the value;
+  #   nil for REPLACEMENT only
   # @return [String] the attribute: its leading space, name, = and value
-  def self.ascii_attribute(scanner)
+  def self.ascii_attribute(scanner, table)
     matched = scanner.matched
     name = matched[0..matched.index('=')]
     quote, value = scanner[2] ? ['"', scanner[2]] : ["'", scanner[3]]
-    # An ASCII value stays as it is, as it does on a line that is all ASCII.
-    value = if value.ascii_only?
+    value = if IDENTITY_ATTRIBUTES.include?(scanner[1])
+              identity(value)
+            elsif value.ascii_only?
               value
-            elsif IDENTITY_ATTRIBUTES.include?(scanner[1])
-              lossless(value)
             else
-              value.gsub(NON_ASCII) { |char| look_alike(char, ASCII_IN_ATTRIBUTE) }
+              value.gsub(NON_ASCII) { |char| look_alike(char, table) }
             end
     other = quote == '"' ? "'" : '"'
     if value.include?(quote)
@@ -192,25 +251,15 @@ module ServerText
   end
   private_class_method :ascii_attribute
 
-  # A value of one of {IDENTITY_ATTRIBUTES} with a character outside ASCII,
-  # in ASCII without losing what tells it apart: each such character, and
-  # each %, as %XX per UTF-8 byte ("caf%C3%A9"). Only an ASCII value written
-  # exactly like that could read as the same.
-  #
-  # @param value [String] the attribute value
-  # @return [String] ASCII
-  def self.lossless(value)
-    value.gsub(/%|#{NON_ASCII.source}/) { |char| char.bytes.map { |byte| format('%%%02X', byte) }.join }
-  end
-  private_class_method :lossless
-
   # The ASCII look-alike of one character outside ASCII, or {REPLACEMENT}.
   #
   # @param char [String] the character
-  # @param table [Hash{Integer => String}] {ASCII_IN_TEXT} or
-  #   {ASCII_IN_ATTRIBUTE}
+  # @param table [Hash{Integer => String}, nil] {ASCII_IN_TEXT} or
+  #   {ASCII_IN_ATTRIBUTE}; nil for REPLACEMENT only
   # @return [String] ASCII
   def self.look_alike(char, table)
+    return REPLACEMENT unless table
+
     code = char.ord
     table.fetch(code) do
       next REPLACEMENT unless BOX_DRAWING.cover?(code)
