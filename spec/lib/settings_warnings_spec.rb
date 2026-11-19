@@ -264,5 +264,103 @@ RSpec.describe SettingsWarnings do
 
       expect(warnings_shown).to include('* Invalid gag pattern: [later - premature end of char-class')
     end
+
+    # A sink discards what is sent to it: a warning taken while the layout
+    # sent main to a sink was lost, and the dedup kept it from coming back.
+    context 'with main sent to a sink in the default layout' do
+      before do
+        File.write(settings_path, <<~XML)
+          <settings>
+            <gag>(unclosed</gag>
+            <key id='enter' action='send_command'/>
+            <layout id='default'>
+              <window class='sink' value='main'/>
+              <window class='text' value='thoughts' top='0' left='0' height='12' width='70'/>
+              <window class='command' top='12' left='0' height='1' width='70'/>
+            </layout>
+            <layout id='withmain'>
+              <window class='text' value='main' top='0' left='0' height='12' width='70'/>
+              <window class='command' top='12' left='0' height='1' width='70'/>
+            </layout>
+          </settings>
+        XML
+      end
+
+      # Each Proc step ends a pass of the input loop, which shows the
+      # warnings once there is a main window that shows them.
+      it 'keeps the warnings, and shows them once a layout with a main window is chosen' do
+        run_client(keyboard(-> {}, ".layout withmain\n", -> {}, 'x', -> {}))
+
+        expect(warnings_shown.grep(gag_warning).size).to eq 1
+      end
+    end
+
+    # .layout forgets the layout warnings it has reported, then finds the
+    # problem again. A warning still pending (held while main went to the
+    # sink) was not marked reported again, so after it was shown each
+    # resize reported it once more.
+    context 'with main sent to a sink and the same layout problem in the next layout' do
+      before do
+        File.write(settings_path, <<~XML)
+          <settings>
+            <key id='enter' action='send_command'/>
+            <layout id='default'>
+              <window class='sink' value='main'/>
+              <window class='text' value='thoughts' top='12' left='0' height='4' width='cols*2.5'/>
+              <window class='command' top='16' left='0' height='1' width='70'/>
+            </layout>
+            <layout id='withmain'>
+              <window class='text' value='main' top='0' left='0' height='12' width='70'/>
+              <window class='text' value='thoughts' top='12' left='0' height='4' width='cols*2.5'/>
+              <window class='command' top='16' left='0' height='1' width='70'/>
+            </layout>
+          </settings>
+        XML
+      end
+
+      it 'shows the layout problem once after the switch, and not again on each resize' do
+        resizes = lambda do
+          [90, 100, 110].each do |cols|
+            allow(Curses).to receive(:cols).and_return(cols)
+            app.window_mgr.resize(app.cmd_buffer)
+          end
+        end
+
+        run_client(keyboard(-> {}, ".layout withmain\n", -> {}, resizes, -> {}, 'x', -> {}))
+
+        expect(warnings_shown.grep(width_warning).size).to eq 1
+      end
+    end
+
+    # A one-row tabbed window has only its tab bar: a warning written to it
+    # is never seen, and was lost there.
+    context 'with main sent to a sink, then to a one-row tabbed window' do
+      before do
+        File.write(settings_path, <<~XML)
+          <settings>
+            <gag>(unclosed</gag>
+            <key id='enter' action='send_command'/>
+            <layout id='default'>
+              <window class='sink' value='main'/>
+              <window class='command' top='12' left='0' height='1' width='70'/>
+            </layout>
+            <layout id='onerow'>
+              <window class='tabbed' top='0' left='0' height='1' width='70' tabs='main'/>
+              <window class='command' top='12' left='0' height='1' width='70'/>
+            </layout>
+            <layout id='withmain'>
+              <window class='text' value='main' top='0' left='0' height='12' width='70'/>
+              <window class='command' top='12' left='0' height='1' width='70'/>
+            </layout>
+          </settings>
+        XML
+      end
+
+      it 'keeps the warnings through it, and shows them in the next main window with room for text' do
+        run_client(keyboard(-> {}, ".layout onerow\n", -> {}, ".layout withmain\n", -> {}, 'x', -> {}))
+
+        expect(warnings_shown.grep(gag_warning).size).to eq 1
+      end
+    end
   end
 end

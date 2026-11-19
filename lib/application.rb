@@ -994,12 +994,13 @@ class Application
   # screen. They are already in the log. Called on every pass of
   # {#input_loop}, so a warning from loading the settings, a layout switch
   # or a resize appears as soon as the main window can show it. With no
-  # main window (a layout without one, or a terminal too small for it)
-  # they are kept until there is one.
+  # main window that shows them ({#notice_window}: a layout without one, a
+  # terminal too small for it, main sent to a sink, or a main window with no
+  # rows for text) they are kept until there is one.
   #
   # @return [void]
   def show_settings_warnings
-    return unless @window_mgr.stream[MAIN_STREAM]
+    return unless notice_window
 
     warnings = SettingsWarnings.take
     write_to_client(*warnings.map { |warning| "* #{warning}" }) unless warnings.empty?
@@ -1010,16 +1011,30 @@ class Application
   # rows, and flush the screen. Shown once per run: not again on +.reload+
   # or +.layout+. Called by {#run} once the layout is loaded, before the
   # game's first lines, and on every pass of {#input_loop}; while there is
-  # no main window, or the layout sends main to a {SinkWindow} (which
-  # discards it), it is kept until there is one that shows it.
+  # no main window that shows it ({#notice_window}), it is kept until there
+  # is one.
   #
   # @return [void]
   def show_ruby_warning
-    main = @window_mgr.stream[MAIN_STREAM]
-    return unless @ruby_warning && main && !main.is_a?(SinkWindow)
+    return unless @ruby_warning && notice_window
 
     write_to_client(*@ruby_warning.map { |line| "* #{line}" }, banner: true)
     @ruby_warning = nil
+  end
+
+  # The main window, when the layout has one that shows what is written to
+  # it: nil while there is none, while main goes to a {SinkWindow} (which
+  # discards it), or while the main window has no rows for text (a one-row
+  # tabbed window shows only its tab bar). The notices kept for the main
+  # window (settings warnings, the Ruby warning) wait until there is one.
+  #
+  # @return [#add_string, nil] the main window, or nil
+  def notice_window
+    main = @window_mgr.stream[MAIN_STREAM]
+    return nil if main.is_a?(SinkWindow)
+    return nil if main.respond_to?(:content_height) && !main.content_height.positive?
+
+    main
   end
 
   # How long this pass of {#input_loop} waits for a key: {INPUT_POLL_SECONDS},

@@ -6,7 +6,7 @@ configurable multi-window interface with color highlighting, key bindings,
 scrollable text buffers, progress bars, countdown timers, and more -- all
 running inside a standard terminal emulator.
 
-**Version:** 1.0.2
+**Version:** 1.0.3
 
 ---
 
@@ -1060,6 +1060,11 @@ game streams you do not want to see without creating a visible window.
 
 Sink windows do **not** need `top`, `left`, `height`, or `width` attributes --
 they are invisible.
+
+The client's own warnings for the main window (problems in the settings, a Ruby
+with known security bugs) are not sent to a sink: while a layout sends `main` to
+one, they are kept, and shown once a layout with a main window is chosen. They
+are in the log meanwhile.
 
 **Examples:**
 
@@ -2462,7 +2467,9 @@ support title updates or you find it distracting.
   out, or an unknown layout name. Each one is skipped and named on a line
   starting with `*` in the main window, and in the log. A problem is shown
   once: `.reload` shows the problems still in the file again, and `.layout`
-  the problems in the layout.
+  the problems in the layout. While the layout has no main window, sends
+  `main` to a sink, or gives `main` only a one-row tabbed window (its tab
+  bar), the problems are kept until a main window shows them.
 
 **A character shows as `?`:**
 - Text from the game connection is shown as ASCII. Game text is ASCII;
