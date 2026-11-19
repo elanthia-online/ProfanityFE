@@ -79,16 +79,30 @@ RSpec.describe 'The warning about an affected Ruby' do
 
   # A layout with no main window, or a terminal too small for it, must not
   # lose the warning.
-  it 'keeps the warning while there is no main window, and shows it once there is one' do
-    without_main = lambda do
-      main_window = app.window_mgr.stream.delete('main')
-      app.send(:show_ruby_warning)
-      app.window_mgr.stream['main'] = main_window
+  context 'with no main window in the default layout' do
+    before do
+      File.write(settings_path, <<~XML)
+        <settings>
+          <key id='enter' action='send_command'/>
+          <layout id='default'>
+            <window class='text' value='thoughts' top='0' left='0' height='12' width='200'/>
+            <window class='command' top='12' left='0' height='1' width='200'/>
+          </layout>
+          <layout id='withmain'>
+            <window class='text' value='main' top='0' left='0' height='12' width='200'/>
+            <window class='command' top='12' left='0' height='1' width='200'/>
+          </layout>
+        </settings>
+      XML
     end
 
-    run_client(keyboard(without_main, 'x'))
+    # Each Proc step ends a pass of the input loop, which shows the
+    # warning once there is a main window.
+    it 'keeps the warning, and shows it once a layout with a main window is chosen' do
+      run_client(keyboard(-> {}, ".layout withmain\n", -> {}, 'x', -> {}))
 
-    expect(main_rows.grep(first_line).size).to eq 1
+      expect(main_rows).to eq ['*', "* #{ruby_warning[0]}", "* #{ruby_warning[1]}", '*']
+    end
   end
 
   context 'without a warning' do

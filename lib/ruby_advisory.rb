@@ -29,17 +29,19 @@ module RubyAdvisory
   # ("major.minor").
   FIXED_RELEASES = { '3.3' => '3.3.14', '3.4' => '3.4.13', '4.0' => '4.0.10' }.freeze
 
-  # The release to upgrade to from a series older than all of
-  # {FIXED_RELEASES}, which gets no fix.
+  # The release to upgrade to from a series that gets no fix: one past its
+  # end of life (3.2 and earlier) or a preview series (3.5).
   NEWEST_FIXED_RELEASE = '4.0.10'
 
-  # The oldest series with a fix. Older series are past their end of life
-  # and are affected.
-  OLDEST_FIXED_SERIES = Gem::Version.new('3.3')
+  # A Ruby version as +RUBY_VERSION+ gives it: three numbers, then
+  # possibly a prerelease part ("4.1.0.dev").
+  VERSION_FORMAT = /\A\d+\.\d+\.\d+(?:\.[0-9A-Za-z]+)*\z/
 
   # The warning for a Ruby that has the bugs, or nil for one that
-  # doesn't: a release at or after its series' fix, a series newer than
-  # 4.0, a Ruby other than CRuby, or a version that can't be read.
+  # doesn't: a release at or after its series' fix, a release after
+  # {NEWEST_FIXED_RELEASE} in a series without a fix of its own (4.1 and
+  # later), a Ruby other than CRuby, or a version not in
+  # {VERSION_FORMAT}.
   #
   # @param version [String] the Ruby version, such as "4.0.9"
   # @param engine [String] the Ruby implementation, such as "ruby"
@@ -53,20 +55,18 @@ module RubyAdvisory
             "Details: #{URL}"]
   end
 
-  # The release that fixes the bugs for +version+, or nil when +version+
-  # doesn't have them or can't be read.
+  # The release that fixes the bugs for +version+: its series' fix, or
+  # {NEWEST_FIXED_RELEASE} for an older series without one. Nil when
+  # +version+ doesn't have the bugs or is not in {VERSION_FORMAT}.
   #
   # @param version [String] the Ruby version
   # @return [String, nil] the fixed release to upgrade to, or nil
   def self.fixed_release(version)
-    release = Gem::Version.new(version)
-    series = release.segments.first(2).join('.')
-    fix = FIXED_RELEASES[series]
-    return (release < Gem::Version.new(fix) ? fix : nil) if fix
+    return nil unless version.is_a?(String) && version.match?(VERSION_FORMAT)
 
-    NEWEST_FIXED_RELEASE if release < OLDEST_FIXED_SERIES
-  rescue ArgumentError
-    nil
+    release = Gem::Version.new(version)
+    fix = FIXED_RELEASES[release.segments.first(2).join('.')] || NEWEST_FIXED_RELEASE
+    fix if release < Gem::Version.new(fix)
   end
   private_class_method :fixed_release
 end
