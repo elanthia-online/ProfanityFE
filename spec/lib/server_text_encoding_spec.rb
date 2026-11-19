@@ -84,6 +84,18 @@ RSpec.describe 'GameTextProcessor server text encoding' do
     expect(displayed).to eq(['You wave.'])
   end
 
+  # A bold line gets <popBold/> added after it was made ASCII
+  # (GameTextProcessor#carry_bold): a left arrow written as a raw < would
+  # make a tag of everything up to that >, and the words after the arrow
+  # would be gone.
+  it 'keeps the words after a left arrow on bold lines' do
+    arrow = [0x2190].pack('U')
+
+    receive_from_server("<pushBold/>Zoe #{arrow} waves.", "Bob #{arrow} nods.<popBold/>", "<pushBold/>Kai #{arrow} grins.")
+
+    expect(displayed).to eq(['Zoe <- waves.', 'Bob <- nods.', 'Kai <- grins.'])
+  end
+
   it 'replaces invalid UTF-8 bytes instead of failing' do
     receive_from_server("A broken #{0xFF.chr.force_encoding(Encoding::UTF_8)} byte.", 'You wave.')
 

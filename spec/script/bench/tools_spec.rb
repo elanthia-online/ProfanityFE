@@ -398,5 +398,34 @@ RSpec.describe 'script/bench tools' do
       expect(status).to be_success, err
       expect(File.read(out_file).lines.first).to eq("0 - \"caf? line\"\n")
     end
+
+    # The client deletes a NUL before it removes the line ending, so a line
+    # ending CR NUL LF loses its CR as well; the dump used to keep it, and an
+    # exact gag the client applies missed.
+    context 'with a line ending CR, NUL, LF' do
+      let(:settings) { File.join(@dir, 'gags.xml').tap { |path| File.write(path, "<settings>\n<gag>^Kai waves\\.$</gag>\n</settings>\n") } }
+
+      def dump(input)
+        out_file = File.join(@dir, 'dump.txt')
+        _, err, status = tool('filter_dump.rb', repo, settings, out_file, input)
+        raise err unless status.success?
+
+        File.read(out_file).lines.map(&:chomp)
+      end
+
+      it 'gags it as the client does, read from a plain stream' do
+        stream = File.join(@dir, 'stream.txt')
+        File.binwrite(stream, "Kai waves.\r\0\nZoe waves.\r\n")
+
+        expect(dump(stream)).to eq ['0 G nil', '0 - "Zoe waves."', '1 G nil', '1 - "Zoe waves."']
+      end
+
+      it 'gags it as the client does, read from a prepared fixture' do
+        fixture = File.join(@dir, 'fixture.jsonl')
+        File.write(fixture, "#{JSON.generate('t' => 0.0, 'data' => "Kai waves.\r\0\nZoe waves.\r\n")}\n")
+
+        expect(dump(fixture)).to eq ['0 G nil', '0 - "Zoe waves."', '1 G nil', '1 - "Zoe waves."']
+      end
+    end
   end
 end

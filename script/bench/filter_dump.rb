@@ -38,15 +38,16 @@ end
 require File.join(File.expand_path(code), 'lib', 'gag_patterns')
 require File.join(File.expand_path(code), 'lib', 'line_filter')
 
-# What ServerReader does to each line before the filter sees it
-# (ServerText.normalize!). Older checkouts only tagged it UTF-8 and
-# scrubbed it.
+# What ServerReader does to each line before the filter sees it, in its
+# order: ServerText.normalize! on the line with its ending (so a NUL before
+# the ending goes before the ending is removed), then chomp. Older
+# checkouts only tagged it UTF-8 and scrubbed it.
 server_text = File.join(File.expand_path(code), 'lib', 'server_text.rb')
 NORMALIZE = if File.exist?(server_text)
               require server_text
-              ->(line) { ServerText.normalize!(line.dup) }
+              ->(line) { ServerText.normalize!("#{line}\n").chomp }
             else
-              ->(line) { line.dup.force_encoding(Encoding::UTF_8).scrub }
+              ->(line) { "#{line}\n".force_encoding(Encoding::UTF_8).scrub.chomp }
             end
 
 # The settings the filter reads (SharedState#log_gags only).

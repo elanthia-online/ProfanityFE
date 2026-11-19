@@ -110,7 +110,8 @@ class ServerReader
   def process_server_line(line)
     # ASCII-only and tagged UTF-8 (see ServerText), so no byte can raise
     # Encoding::CompatibilityError against the UTF-8 gag and highlight
-    # patterns loaded from settings, or reach Ruby's Regexp and String bugs.
+    # patterns loaded from settings, and no character or NUL that two of the
+    # Regexp and String bugs Ruby fixed on 2026-11-18 need comes through.
     ServerText.normalize!(line)
     line.chomp!
     kept = @line_handler.prepare_line(line)

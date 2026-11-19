@@ -13,27 +13,32 @@ require_relative 'xml_tokenizer'
 #
 # Game text is ASCII. Other characters come from Lich and its scripts:
 # their own banners, punctuation and arrows (box drawing, curly quotes,
-# dashes), and other players' text that a script relays. They are what the
-# Regexp and String bugs Ruby fixed on 2026-11-18 need: a highlight the
-# user added with +.highlight+ or +(?i)+ could read past the end of a
-# buffer on a line with a character such as U+00DF (sharp s) in it, and a
-# case-insensitive backreference could match past the end of a line with a
-# NUL in it. A NUL also makes the curses gem raise when it draws the line
-# with waddstr.
+# dashes), and other players' text that a script relays. Two of the
+# Regexp and String bugs Ruby fixed on 2026-11-18 can be reached through
+# that text: a highlight the user added with +.highlight+ or +(?i)+ could
+# read past the end of a buffer on a line with a character such as U+00DF
+# (sharp s) in it, and a case-insensitive backreference could match past
+# the end of a line with a NUL in it. This takes both conditions out of
+# the text at the connection. The other bugs in the advisory need a
+# pattern or a size that doesn't come from the connection; upgrading Ruby
+# is still the fix ({RubyAdvisory}). A NUL also makes the curses gem raise
+# when it draws the line with waddstr.
 #
 # The characters scripts send most become their ASCII look-alikes
 # ({ASCII_IN_TEXT}, {ASCII_IN_ATTRIBUTE}, box drawing); any other character
-# outside ASCII, and each byte that isn't valid UTF-8, becomes
-# {REPLACEMENT}; NUL bytes are deleted.
+# outside ASCII, and each invalid byte sequence (one or more bytes that
+# don't make a character), becomes {REPLACEMENT}; NUL bytes are deleted.
+# An id ({IDENTITY_ATTRIBUTES}) with characters outside ASCII is written
+# losslessly instead, so ids that differed still differ.
 #
 # The line's tags stay as they were. An attribute value whose look-alikes
 # hold its quote is quoted with the other one (effectmon.lic writes
 # label='Thurfel(U+2019)s Ward' so the single-quoted label ends where it
-# should). A look-alike can add a quote, < or >, which next to a tag a
-# script got wrong (a stray quote) could end that tag elsewhere: a line
-# whose look-alikes don't read as the same tags as the line with
-# {REPLACEMENT} for every such character gets {REPLACEMENT} throughout,
-# which means nothing in markup.
+# should). A look-alike never adds a < (in text it goes in as &lt;), but
+# it can add a quote or >, which next to a tag a script got wrong (a stray
+# quote) could end that tag elsewhere: a line whose look-alikes don't read
+# as the same tags as the line with {REPLACEMENT} for every such
+# character gets {REPLACEMENT} throughout, which means nothing in markup.
 module ServerText
   # A character outside ASCII.
   NON_ASCII = /[^\x00-\x7F]/
@@ -41,18 +46,32 @@ module ServerText
   # What a character outside ASCII without a look-alike becomes.
   REPLACEMENT = '?'
 
-  # ASCII look-alikes, by code point, as they stand in text.
+  # ASCII look-alikes, by code point, as they stand in text. A < goes in as
+  # an entity, which text has decoded: the client adds tags to a line after
+  # it was made ASCII (<popBold/> at the end of a bold line), and a raw <
+  # would make a tag of everything up to their >.
   ASCII_IN_TEXT = {
     0x00A0 => ' ', # no-break space
     0x2010 => '-', 0x2011 => '-', 0x2012 => '-', 0x2013 => '-', 0x2014 => '-', 0x2015 => '-', 0x2212 => '-',
     0x2018 => "'", 0x2019 => "'", 0x201A => "'", 0x201B => "'", 0x2032 => "'",
     0x201C => '"', 0x201D => '"', 0x201E => '"', 0x201F => '"', 0x2033 => '"',
     0x2026 => '...',
-    0x2190 => '<-', 0x2192 => '->'
+    0x2190 => '&lt;-', 0x2192 => '->'
   }.freeze
 
-  # The same as they stand in an attribute value, which can't hold a <.
+  # The same as they stand where entities are not decoded and a < can't
+  # go: an attribute value, and the content of a paired element
+  # ({XmlTokenizer::PAIRED_TAGS}), which its handler uses as sent.
   ASCII_IN_ATTRIBUTE = ASCII_IN_TEXT.merge(0x2190 => REPLACEMENT).freeze
+
+  # Attributes that name something (a custom timer, a stream, a window):
+  # a value with characters outside ASCII is written losslessly, each such
+  # character, and each %, as %XX per UTF-8 byte, so values that differed
+  # still differ.
+  IDENTITY_ATTRIBUTES = %w[id].freeze
+
+  # A paired element whole, as {XmlTokenizer.tokenize} reads one.
+  PAIRED_ELEMENT = %r{\A<(#{XmlTokenizer::PAIRED_TAGS.join("|")})\b.*</\1>\z}m
 
   # The box-drawing block: lines become - | = and every corner, tee or
   # cross becomes +.
@@ -71,8 +90,9 @@ module ServerText
 
   # Make a line read from the game connection ASCII, in place (see
   # {ServerText}): tag it UTF-8 (socket reads are BINARY), put
-  # {REPLACEMENT} in place of each invalid byte, delete NUL bytes, and put
-  # a look-alike or {REPLACEMENT} in place of each character outside ASCII.
+  # {REPLACEMENT} in place of each invalid byte sequence, delete NUL bytes,
+  # and put a look-alike or {REPLACEMENT} in place of each character
+  # outside ASCII.
   #
   # @param line [String] raw bytes read from the server
   # @return [String] +line+, now ASCII-only and tagged UTF-8
@@ -84,7 +104,11 @@ module ServerText
     return line if line.ascii_only?
 
     plain = line.gsub(NON_ASCII, REPLACEMENT)
-    segments = XmlTokenizer.tokenize(line, paired: false).map { |type, segment| [type, ascii(type, segment)] }
+    segments = XmlTokenizer.tokenize(line).flat_map do |type, segment|
+      next [[type, ascii(type, segment, ASCII_IN_TEXT)]] unless type == :tag && segment.match?(PAIRED_ELEMENT)
+
+      XmlTokenizer.tokenize(segment, paired: false).map { |part_type, part| [part_type, ascii(part_type, part, ASCII_IN_ATTRIBUTE)] }
+    end
     alike = segments.map(&:last).join
     line.replace(same_markup?(alike, segments, plain) ? alike : plain)
   end
@@ -113,10 +137,12 @@ module ServerText
   #
   # @param type [Symbol] +:text+ or +:tag+
   # @param segment [String] the segment
+  # @param text_table [Hash{Integer => String}] the look-alikes for text:
+  #   {ASCII_IN_TEXT}, or {ASCII_IN_ATTRIBUTE} inside a paired element
   # @return [String] the segment, ASCII-only
-  def self.ascii(type, segment)
+  def self.ascii(type, segment, text_table)
     return segment if segment.ascii_only?
-    return segment.gsub(NON_ASCII) { |char| look_alike(char, ASCII_IN_TEXT) } if type == :text
+    return segment.gsub(NON_ASCII) { |char| look_alike(char, text_table) } if type == :text
 
     ascii_tag(segment)
   end
@@ -149,7 +175,14 @@ module ServerText
     matched = scanner.matched
     name = matched[0..matched.index('=')]
     quote, value = scanner[2] ? ['"', scanner[2]] : ["'", scanner[3]]
-    value = value.gsub(NON_ASCII) { |char| look_alike(char, ASCII_IN_ATTRIBUTE) }
+    # An ASCII value stays as it is, as it does on a line that is all ASCII.
+    value = if value.ascii_only?
+              value
+            elsif IDENTITY_ATTRIBUTES.include?(scanner[1])
+              lossless(value)
+            else
+              value.gsub(NON_ASCII) { |char| look_alike(char, ASCII_IN_ATTRIBUTE) }
+            end
     other = quote == '"' ? "'" : '"'
     if value.include?(quote)
       quote, other = other, quote unless value.include?(other)
@@ -158,6 +191,18 @@ module ServerText
     "#{name}#{quote}#{value}#{quote}"
   end
   private_class_method :ascii_attribute
+
+  # A value of one of {IDENTITY_ATTRIBUTES} with a character outside ASCII,
+  # in ASCII without losing what tells it apart: each such character, and
+  # each %, as %XX per UTF-8 byte ("caf%C3%A9"). Only an ASCII value written
+  # exactly like that could read as the same.
+  #
+  # @param value [String] the attribute value
+  # @return [String] ASCII
+  def self.lossless(value)
+    value.gsub(/%|#{NON_ASCII.source}/) { |char| char.bytes.map { |byte| format('%%%02X', byte) }.join }
+  end
+  private_class_method :lossless
 
   # The ASCII look-alike of one character outside ASCII, or {REPLACEMENT}.
   #
