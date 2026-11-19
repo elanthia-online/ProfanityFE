@@ -105,6 +105,32 @@ RSpec.describe 'The warning about an affected Ruby' do
     end
   end
 
+  # A sink discards what is sent to it: the warning sent there was lost.
+  context 'with main sent to a sink in the default layout' do
+    before do
+      File.write(settings_path, <<~XML)
+        <settings>
+          <key id='enter' action='send_command'/>
+          <layout id='default'>
+            <window class='sink' value='main'/>
+            <window class='text' value='thoughts' top='0' left='0' height='12' width='200'/>
+            <window class='command' top='12' left='0' height='1' width='200'/>
+          </layout>
+          <layout id='withmain'>
+            <window class='text' value='main' top='0' left='0' height='12' width='200'/>
+            <window class='command' top='12' left='0' height='1' width='200'/>
+          </layout>
+        </settings>
+      XML
+    end
+
+    it 'keeps the warning, and shows it once a layout with a main window is chosen' do
+      run_client(keyboard(-> {}, ".layout withmain\n", -> {}, 'x', -> {}))
+
+      expect(main_rows).to eq ['*', "* #{ruby_warning[0]}", "* #{ruby_warning[1]}", '*']
+    end
+  end
+
   context 'without a warning' do
     let(:ruby_warning) { nil }
 
