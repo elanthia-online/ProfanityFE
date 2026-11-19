@@ -12,6 +12,26 @@ RSpec.describe ServerText do
   # normalize! on a copy of +text+ as raw bytes.
   def normalize(text) = described_class.normalize!(text.b)
 
+  describe '.identity' do
+    it 'writes % and each character outside ASCII as %XX per UTF-8 byte, and leaves the rest' do
+      expect(described_class.identity("caf#{char(0x00E9)} 50% done")).to eq 'caf%C3%A9 50%25 done'
+      expect(described_class.identity('combat')).to eq 'combat'
+    end
+  end
+
+  # What a key ServerText.identity made looks like where the client shows it
+  # (a custom timer with no label).
+  describe '.readable' do
+    {
+      'caf%C3%A9' => 'caf?', 'Thurfel%E2%80%99s' => "Thurfel's", '50%25' => '50%',
+      'plain' => 'plain', 'caf%C3' => 'caf?', '100%' => '100%'
+    }.each do |key, shown|
+      it "shows #{key.inspect} as #{shown.inspect}" do
+        expect(described_class.readable(key)).to eq shown
+      end
+    end
+  end
+
   describe '.normalize!' do
     [
       ['ASCII', 'A goblin dies.'.bytes, 'A goblin dies.'],
@@ -103,11 +123,37 @@ RSpec.describe ServerText do
 
       # A custom timer, a stream or a window is named by its id: ids that
       # differed must still differ.
-      it 'writes an id with characters outside ASCII losslessly, and leaves an ASCII id alone' do
+      it 'writes an id losslessly: % and each character outside ASCII as %XX' do
         line = "<progressBar id='caf#{char(0x00E9)} 50%' text='caf#{char(0x00E9)}'/><progressBar id='50%' text='x'/>"
 
-        expect(normalize(line)).to eq "<progressBar id='caf%C3%A9 50%25' text='caf?'/><progressBar id='50%' text='x'/>"
+        expect(normalize(line)).to eq "<progressBar id='caf%C3%A9 50%25' text='caf?'/><progressBar id='50%25' text='x'/>"
         expect(normalize("<progressBar id='caf#{char(0x00E8)}'/>")).not_to eq normalize("<progressBar id='caf#{char(0x00E9)}'/>")
+      end
+
+      # An ASCII id that spells another id's %XX form must not become it.
+      it 'keeps apart an id with characters outside ASCII and an ASCII id spelled like its %XX form' do
+        expect(normalize("<a id='caf#{char(0x00E9)}'/>")).to eq "<a id='caf%C3%A9'/>"
+        expect(normalize("<a id='caf%C3%A9'/>")).to eq "<a id='caf%25C3%25A9'/>"
+      end
+
+      # The same id must read the same on any line, all ASCII or not.
+      it 'escapes % in an id on an all-ASCII line, as on any other line' do
+        expect(normalize("<pushStream id='50%'/>plain")).to eq "<pushStream id='50%25'/>plain"
+        expect(normalize("<pushStream id='50%'/>caf#{char(0x00E9)}")).to eq "<pushStream id='50%25'/>caf?"
+        expect(normalize('You are 50% done.')).to eq 'You are 50% done.'
+      end
+
+      it 'keeps an id lossless on a line that gets ? throughout' do
+        line = "<pushBold id='caf#{char(0x00E9)}' title='Bob's'/>Thurfel#{char(0x2019)}s Ward -> 5 min<popBold/>"
+
+        expect(normalize(line)).to eq "<pushBold id='caf%C3%A9' title='Bob's'/>Thurfel?s Ward -> 5 min<popBold/>"
+      end
+
+      # A raw < in text (a script echoing it) and an arrow after it also
+      # send a line to the ? fallback, with no tag gone wrong.
+      it 'keeps the same key for an id on a line that falls back because of a raw < in text' do
+        expect(normalize(%(<pushStream id="caf#{char(0x00E9)}"/>a < b #{char(0x2192)} c))).to eq '<pushStream id="caf%C3%A9"/>a < b ? c'
+        expect(normalize(%(<pushStream id="caf#{char(0x00E9)}"/>plain))).to eq '<pushStream id="caf%C3%A9"/>plain'
       end
 
       it 'puts "?" in place of a character outside ASCII elsewhere in a tag' do

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'clock'
+require_relative 'server_text'
 
 # The active effects (spells, buffs, debuffs, cooldowns) the game server
 # sends as +<dialogData>+ blocks, one list per category. The tracker keeps no
@@ -41,7 +42,8 @@ require_relative 'clock'
 #
 # - +<progressBar id='X' text='Name' time='HH:MM:SS' value='0..100'/>+ adds
 #   timer X, or updates it if X exists (it keeps its place in the list).
-#   Only +id+ is required. +text+ defaults to the id, +value+ to 100, and a
+#   Only +id+ is required. +text+ defaults to the id as sent (made ASCII,
+#   see ServerText.readable), +value+ to 100, and a
 #   missing or unreadable +time+ makes the timer indefinite. An +end_time+
 #   attribute (server epoch seconds) is used instead of +time+ when given.
 # - +<progressBar id='X' clear='t'/>+ removes timer X.
@@ -227,7 +229,8 @@ class EffectTracker
     return { id: id, remove: true } if attrs['clear'] == 't'
 
     name = @unescape.call(attrs['text'].to_s)
-    { id: id, name: name.strip.empty? ? id : name, percent: percent_of(attrs['value'], default: 100),
+    # The id is a key (ServerText.identity); with no label, show what it was sent as.
+    { id: id, name: name.strip.empty? ? ServerText.readable(id) : name, percent: percent_of(attrs['value'], default: 100),
       seconds: self.class.parse_seconds(attrs['time']), end_time: epoch_of(attrs['end_time']) }
   end
 
