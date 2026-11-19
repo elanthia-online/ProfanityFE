@@ -324,12 +324,15 @@ RSpec.describe 'profanity.rb command line' do
   end
 
   # Run profanity.rb with +args+ on a wide terminal against a fake game
-  # server that sends +lines+, until the terminal shows +pattern+.
+  # server that sends +lines+, until the terminal shows +pattern+. The
+  # interpreter gets +ruby_opts+ before the script. The client logs to
+  # +log_path+ when given (the caller removes it), else to a file removed
+  # afterwards.
   #
   # @return [String] everything written to the terminal
   # @raise [RuntimeError] naming what the terminal showed and the client's
   #   log, when the client exits or 20s pass before +pattern+ shows
-  def terminal_after_server_lines(args, lines, pattern)
+  def terminal_after_server_lines(args, lines, pattern, ruby_opts: [], log_path: nil)
     server = TCPServer.new('127.0.0.1', 0)
     sender = Thread.new do
       client = server.accept
@@ -340,9 +343,9 @@ RSpec.describe 'profanity.rb command line' do
     end
     output = +''
     dir = Dir.mktmpdir('profanity-cli-spec')
-    log = File.join(dir, 'profanity.log')
+    log = log_path || File.join(dir, 'profanity.log')
     wide = env.merge('COLUMNS' => '240', 'LINES' => '50')
-    command = [RbConfig.ruby, File.join(repo, 'profanity.rb'), "--port=#{server.addr[1]}", "--log-file=#{log}",
+    command = [RbConfig.ruby, *ruby_opts, File.join(repo, 'profanity.rb'), "--port=#{server.addr[1]}", "--log-file=#{log}",
                "--settings-file=#{File.join(repo, 'templates', 'default.xml')}", *args]
     PTY.spawn(wide, *command, chdir: Dir.home) do |reader, _writer, pid|
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 20
@@ -375,24 +378,46 @@ RSpec.describe 'profanity.rb command line' do
     FileUtils.remove_entry(dir) if dir
   end
 
-  # profanity.rb asks RubyAdvisory about the Ruby running it and passes the
-  # warning to Application. RUBY_VERSION is set to an affected release
-  # before profanity.rb runs, so the result doesn't depend on the Ruby
-  # running the suite.
-  context 'on a Ruby with the Regexp and String security bugs fixed on 2026-11-18' do
-    let(:preload_dir) { Dir.mktmpdir('profanity-ruby-version') }
-    let(:env) do
-      preload = File.join(preload_dir, 'ruby_4_0_9.rb')
-      File.write(preload, "Object.send(:remove_const, :RUBY_VERSION)\nRUBY_VERSION = '4.0.9'\n")
-      super().merge('RUBYOPT' => "#{ENV.fetch('RUBYOPT', '')} -r#{preload}".strip)
+  # profanity.rb asks RubyAdvisory about the Ruby running it, logs the
+  # warning and passes it to Application. RUBY_VERSION is set before
+  # profanity.rb runs, so the result doesn't depend on the Ruby running the
+  # suite.
+  describe 'the warning about a Ruby with the 2026-11-18 Regexp and String security bugs' do
+    let(:dir) { Dir.mktmpdir('profanity-ruby-version') }
+    let(:log) { File.join(dir, 'profanity.log') }
+    let(:lines) { ['<prompt time="1790000000">&gt;</prompt>', 'Hello from the game.'] }
+
+    after { FileUtils.remove_entry(dir) }
+
+    # Interpreter options that load a file setting RUBY_VERSION to +version+.
+    #
+    # @return [Array<String>]
+    def ruby_version_preload(version)
+      preload = File.join(dir, 'ruby_version.rb')
+      File.write(preload, "Object.send(:remove_const, :RUBY_VERSION)\nRUBY_VERSION = #{version.dump}\n")
+      ['-r', preload]
     end
 
-    after { FileUtils.remove_entry(preload_dir) }
-
-    it 'warns in the main window at startup' do
-      output = terminal_after_server_lines([], ['<prompt time="1790000000">&gt;</prompt>'], /Please upgrade Ruby/)
+    it 'is logged and shown in the main window on an affected release' do
+      output = terminal_after_server_lines([], lines, /Hello from the game/,
+                                           ruby_opts: ruby_version_preload('4.0.9'), log_path: log)
 
       expect(output).to match(/Ruby 4\.0\.9 has security bugs in regular expressions and strings, fixed in Ruby 4\.0\.10/)
+      expect(File.read(log).lines.map(&:chomp))
+        .to include('[main] Ruby 4.0.9 has security bugs in regular expressions and strings, fixed in Ruby 4.0.10. ' \
+                    'Please upgrade Ruby.',
+                    '[main] Details: https://www.ruby-lang.org/en/news/2026/11/18/multiple-vulnerabilities-in-regexp-and-string/')
+    end
+
+    # The warning is drawn before the game's first lines, so once they show
+    # it would be there. The log file is made only when something is
+    # logged.
+    it 'is neither logged nor shown on a fixed release' do
+      output = terminal_after_server_lines([], lines, /Hello from the game/,
+                                           ruby_opts: ruby_version_preload('4.0.10'), log_path: log)
+
+      expect(output).not_to include('security bugs')
+      expect(File.exist?(log) ? File.read(log) : '').not_to include('security bugs')
     end
   end
 
