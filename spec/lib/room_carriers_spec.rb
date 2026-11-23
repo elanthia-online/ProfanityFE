@@ -616,7 +616,7 @@ RSpec.describe 'Room carriers' do
       expect(main_rows).to eq ['[Wayside Inn, Lobby]', 'Some text. A cozy fire warms the lobby.', 'You also see a bench and a rat.',
                                'Also here: Bob.', 'Obvious paths: out']
       # The players component delivered the players: the indicator keeps its
-      # link's color, which the inline line doesn't have.
+      # link's color.
       expect(indicator).to eq %w[Bob link]
       expect(state.room_title).to eq 'Wayside Inn, Lobby'
     end
@@ -645,7 +645,8 @@ RSpec.describe 'Room carriers' do
 
       expect(main_rows).to eq ['[Wayside Inn, Lobby]', 'Some text. A cozy fire warms the lobby.  You also see a bench and a rat.',
                                'Also here: Bob.', 'Obvious paths: out']
-      expect(indicator).to eq %w[Bob yellow]
+      # The inline line's link colors the name, as the component's would
+      expect(indicator).to eq %w[Bob link]
     end
   end
 

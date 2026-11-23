@@ -329,7 +329,7 @@ class GameTextProcessor
     # Room data capture for RoomWindow.
     # Always capture for the room window; only suppress from the story window
     # when --room-window-only is active.
-    room_captured = @room.process_room_data(text, @router.current_stream, marks)
+    room_captured = @room.process_room_data(text, @router.current_stream, marks, runs)
     if room_captured == :remote
       # A view of another room (DR's Locate) is the familiar window's, as
       # a familiar's view is in GemStone, which pushes it to that stream.

@@ -55,6 +55,24 @@ class RoomAssembler
   # ShowRoomID; GemStone's death room's is negative): +" (230008)"+.
   ROOM_ID_SUFFIX = /\A \((?<id>-?\d+)\)\z/
 
+  # A player's name in "Also here:" text without links: a capitalized word
+  # that ends the player's entry. What follows a name is the end of the
+  # list, the next entry (+", "+ or +" and "+), a status in parentheses or
+  # a post string (+" who "+, +" whose "+, or the bare verb of
+  # +"Stelling is surrounded by swirling flames"+). Titles come before the
+  # name and post strings after it, and both are free text with their own
+  # commas and +" and "+ ("who is coated in grime and surrounded by a
+  # swirling cloud of filth", "whose form is ablaze"), so the list can't be
+  # split on its separators first. A capitalized word in a post string
+  # just before a separator would read as a name; none of the 854,341
+  # distinct DragonRealms players lists since 2026-11-12 has one.
+  PLAYER_NAME = /(?<![\w'-])[A-Z][A-Za-z'-]*(?=\.?\s*\z|,| and | who | whose | \(| (?:is|has|appears|glows) )/
+
+  # A player's link in a players list: there, a link with a negative game
+  # id is a player, in both games. Elsewhere scenery and exits can have
+  # negative ids too (DragonRealms' rich stream, GemStone).
+  PLAYER_EXIST = /\A-\d/
+
   # What styled text is being captured for the room: +:title+ (roomName),
   # +:desc+ (roomDesc) or nil. See {#start_capture}: the next text
   # {#process_room_data} sees is captured and ends the capture.
@@ -76,7 +94,8 @@ class RoomAssembler
   # @param event_bus [EventBus] receives the room and indicator events
   # @param pending_render [PendingRender] asked for flushes and room renders
   # @param shared_state [SharedState] its +room_title+ is set from roomName
-  #   text and room title component text
+  #   text and room title component text; its +blue_links+ says whether the
+  #   room players indicator shows link colors
   # @param game_rules [Games::Rules] asked whether a room objs component was
   #   cut short (see Games::Rules#room_list_cut_short?); both games' when
   #   the game isn't known
@@ -303,6 +322,9 @@ class RoomAssembler
   # @param stream [String, nil] the stream the text is routed to
   # @param marks [Array<Hash>] the room marks for +text+ (see
   #   SpanTracker::ROOM_MARKS): its links and creatures
+  # @param runs [Array<Hash>] the color runs for +text+ (its links' colors
+  #   and presets), which an "Also here:" line passes on to the room
+  #   players indicator as a room players component's colors are
   # @return [Boolean, Symbol] true if this line was consumed by the
   #   RoomWindow (caller should not route it to the main window).  Returns
   #   false when title/desc text is captured for the terminal title but
@@ -310,7 +332,7 @@ class RoomAssembler
   #   main text window for display. Returns +:remote+ for the text of a
   #   view of another room (see #remote_title?), with or without a
   #   RoomWindow: the caller shows it as the familiar stream's.
-  def process_room_data(text, stream, marks)
+  def process_room_data(text, stream, marks, runs = [])
     return false if text.empty?
 
     # The inline lines are room data only on main: only room text on main
@@ -337,7 +359,7 @@ class RoomAssembler
     # inline text patterns (objects, exits, etc. are not applicable).
     unless room_window?
       if text =~ /^Also here:\s*(.+)$/
-        update_room_players_indicator(text.strip)
+        update_room_players_indicator(text, runs, links: marks)
       end
       return room_data_captured
     end
@@ -348,9 +370,14 @@ class RoomAssembler
       room_data_captured = true
     end
 
-    # Detect "Also here:" for players; the view keeps the first one
+    # Detect "Also here:" for players; the view keeps the first one, with
+    # its colors moved as RoomPart moves its links (copies: routing the
+    # line to main adds highlights to its runs in place)
     if text =~ /^Also here:\s*(.+)$/
-      @view[:players] ||= RoomPart.from_chunk(text, marks)
+      unless @view.key?(:players)
+        @view[:players] = RoomPart.from_chunk(text, marks)
+        @view[:players_colors] = shift_regions(runs, text.length - text.lstrip.length).map(&:dup)
+      end
       room_data_captured = true
     end
 
@@ -454,26 +481,34 @@ class RoomAssembler
 
   # Update the 'room players' indicator window with parsed player names.
   #
-  # Merges the SAX color regions (the players' <a> links, which GemStone
-  # and DragonRealms' rich stream send, and any preset) with highlights
-  # applied to the full "Also here: ..." text, then remaps the regions
-  # covering each name to the indicator label, where a highlight or preset
-  # wins over a link's color as in main (see #remap_name_colors). Only
-  # regions that fully cover a name are included -- partial matches
-  # create visual noise on a compact indicator display. Asks for a flush,
-  # since a player arriving or leaving can be the only change in a burst.
+  # The names come from the players' links when the text has any (see
+  # #player_names), else from the text. Merges the SAX color regions (the
+  # players' <a> links, which GemStone and DragonRealms' rich stream send,
+  # and any preset) with highlights applied to the full "Also here: ..."
+  # text, then remaps the regions covering each name to the indicator
+  # label, where a highlight or preset wins over a link's color as in main
+  # (see #remap_name_colors). The links' colors count only while links are
+  # on (+--links+ / +.links+): with them off, as in the main and room
+  # windows, a linked name shows no link color. Only regions that fully
+  # cover a name are included -- partial matches create visual noise on a
+  # compact indicator display. Asks for a flush, since a player arriving or
+  # leaving can be the only change in a burst.
   #
   # @param players_text [String, nil] raw "Also here:" text or nil
   # @param sax_colors [Array<Hash>] SAX-parsed color regions (link colors)
+  # @param links [Array<Hash>] the links in +players_text+: room marks or
+  #   RoomPart links, with +:start+, +:end+ and, for a game link, +:exist+
+  #   and +:noun+ (other marks are skipped)
   # @return [void]
-  def update_room_players_indicator(players_text, sax_colors = [])
-    names = players_text ? parse_player_names(players_text) : []
+  def update_room_players_indicator(players_text, sax_colors = [], links: [])
+    full_text = players_text&.strip
+    lead = players_text ? players_text.length - players_text.lstrip.length : 0
+    names = full_text ? player_names(full_text, shift_regions(links, lead)) : []
     if names.any?
-      names_text = names.join(', ')
-      full_text = players_text.strip
-      full_colors = sax_colors.dup
+      names_text = names.map { |name| name[:name] }.join(', ')
+      full_colors = shift_regions(@state.blue_links ? sax_colors : sax_colors.reject { |c| c.key?(:cmd) }, lead)
       HighlightProcessor.apply_highlights(full_text, full_colors)
-      label_colors = remap_name_colors(full_text, names, full_colors)
+      label_colors = remap_name_colors(names, full_colors)
       @event_bus.emit(:indicator_update, id: 'room players', label: names_text, label_colors: label_colors, value: true)
     else
       @event_bus.emit(:indicator_update, id: 'room players', label: ' ', label_colors: nil, value: false)
@@ -716,20 +751,64 @@ class RoomAssembler
     RoomPart.from_chunk(text, marks, from: @capture_at)
   end
 
-  # Extract player names from "Also here: ..." room text.
-  # Strips status descriptions, titles, and grouping to return bare names.
+  # The players named in "Also here: ..." room text, in list order, each
+  # with where its name is in the text.
   #
-  # @param text [String] raw "Also here: ..." line from the game
-  # @return [Array<String>] list of player names
+  # When the text has player links (GemStone's, and DragonRealms' when
+  # Lich passes its links on, see ServerConnection::FRONTEND_CAPABILITIES),
+  # each link is a player: its name is the link's noun (its text when it
+  # has none). Otherwise the names are read from the text (see
+  # {PLAYER_NAME}). A player left unlinked in a linked list would be
+  # missed; no real list has one.
+  #
+  # @param text [String] the "Also here: ..." text, surrounding whitespace
+  #   removed
+  # @param links [Array<Hash>] the links in +text+, positions in +text+
+  # @return [Array<Hash>] +{name:, start:, end:}+ for each player, +start+
+  #   and +end+ the span of its name in +text+ (see #linked_player)
   # @api private
-  def parse_player_names(text)
-    text.sub(/^Also here:\s*/, '')
-        .sub(/\.\s*$/, '')
-        .sub(/ and (?<rest>.*)$/) { ", #{Regexp.last_match[:rest]}" }
-        .split(', ')
-        .map { |obj| obj.sub(/ (who|whose body)? ?(has|is|appears|glows) .+/, '').sub(/ \(.+\)/, '') }
-        .map { |obj| obj.strip.scan(/\w+$/).first }
-        .compact
+  def player_names(text, links)
+    players = links.select { |link| (link[:mark].nil? || link[:mark] == :link) && PLAYER_EXIST.match?(link[:exist].to_s) }
+    if players.any?
+      return players.sort_by { |link| link[:start] }.map { |link| linked_player(text, link) }
+    end
+
+    from = text.match(/\AAlso here:\s*/)&.end(0) || 0
+    text.to_enum(:scan, PLAYER_NAME).filter_map do
+      match = Regexp.last_match
+      { name: match[0], start: match.begin(0), end: match.end(0) } if match.begin(0) >= from
+    end
+  end
+
+  # A linked player: the link's noun (its text when it has none), spanning
+  # the noun's word in the link's text ("Aldric" in a link reading "Aldric
+  # the Bold"), so a highlight on the name covers it, or the whole link
+  # when the text doesn't show the noun as a word.
+  #
+  # @param text [String] the "Also here: ..." text
+  # @param link [Hash] a player's link, +:start+ and +:end+ in +text+
+  # @return [Hash] +{name:, start:, end:}+
+  def linked_player(text, link)
+    body = text[link[:start]...link[:end]]
+    noun = link[:noun].to_s
+    return { name: body, start: link[:start], end: link[:end] } if noun.empty?
+
+    at = body.index(/(?<![A-Za-z'-])#{Regexp.escape(noun)}(?![A-Za-z'-])/)
+    return { name: noun, start: link[:start], end: link[:end] } unless at
+
+    { name: noun, start: link[:start] + at, end: link[:start] + at + noun.length }
+  end
+
+  # Regions (links or color runs) moved back by +shift+, for text that
+  # lost +shift+ leading characters.
+  #
+  # @param regions [Array<Hash>] regions with +:start+ and +:end+
+  # @param shift [Integer] how many characters the text lost at its start
+  # @return [Array<Hash>] the moved regions (new hashes when moved)
+  def shift_regions(regions, shift)
+    return regions.dup if shift.zero?
+
+    regions.map { |region| region.merge(start: region[:start] - shift, end: region[:end] - shift) }
   end
 
   # Commit the inline view to the RoomWindow, and start a new one.
@@ -783,7 +862,10 @@ class RoomAssembler
 
       # Also update the room players indicator (fallback for games that
       # don't use streams); players a component delivered updated it already
-      update_room_players_indicator(view[:players]&.text) unless @delivered.key?(:players)
+      players = view[:players]
+      unless @delivered.key?(:players)
+        update_room_players_indicator(players&.text, view[:players_colors] || [], links: players&.links || [])
+      end
     end
 
     # Update exits on every exits line, unless a component delivered them.
@@ -850,30 +932,24 @@ class RoomAssembler
   # the label is not clickable, and a :cmd would rank it after the
   # indicator's own color.
   #
-  # @param full_text [String] the full "Also here: ..." text
-  # @param names [Array<String>] parsed player names
+  # @param names [Array<Hash>] the players, +{name:, start:, end:}+ (see
+  #   #player_names), +start+ and +end+ where the name is in the full text
   # @param full_colors [Array<Hash>] link, preset and highlight regions for
   #   the full text
   # @return [Array<Hash>] color regions remapped to the names-only label
-  def remap_name_colors(full_text, names, full_colors)
+  def remap_name_colors(names, full_colors)
     return [] if full_colors.empty?
 
     label_colors = []
     label_pos = 0
-    search_pos = 0
 
     names.each_with_index do |name, i|
-      name_start = full_text.index(name, search_pos)
-      next unless name_start
-      name_end = name_start + name.length
-      search_pos = name_end
-
       # Only regions that fully cover the name -- partial matches create
       # visual noise on a compact indicator display.
-      covering = full_colors.select { |c| c[:start] <= name_start && c[:end] >= name_end }
-      label_colors << name_color(covering, label_pos, label_pos + name.length) if covering.any?
+      covering = full_colors.select { |c| c[:start] <= name[:start] && c[:end] >= name[:end] }
+      label_colors << name_color(covering, label_pos, label_pos + name[:name].length) if covering.any?
 
-      label_pos += name.length
+      label_pos += name[:name].length
       label_pos += 2 if i < names.length - 1 # ", " separator
     end
 
