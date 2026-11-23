@@ -255,7 +255,7 @@ class StreamRouter
     elsif room_result == :continue
       # Room players: also update the indicator, then stop
       HighlightProcessor.apply_highlights(text, colors) if routable?
-      @room.update_room_players_indicator(text, colors)
+      @room.update_room_players_indicator(text, colors, links: marks)
       return
     end
 

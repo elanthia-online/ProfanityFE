@@ -53,5 +53,56 @@ RSpec.describe RoomAssembler do
       expect(indicator_label('Also here: Grand Lord Treeze who is sitting and Dark Summoner Vlachodimos.'))
         .to eq 'Treeze, Vlachodimos'
     end
+
+    # Post strings are free text: their own words, commas and " and " are
+    # not names or list separators.
+    it 'keeps the name before a "whose form ..." post string' do
+      expect(indicator_label('Also here: Goblin Bait Aldric whose form wavers within a cloud of grey smoke.')).to eq 'Aldric'
+    end
+
+    it 'keeps a post string with its own " and " inside one entry' do
+      expect(indicator_label('Also here: Daydreamer Brenna who is coated in grime and surrounded by filth, ' \
+                             'Delphine (prone) and Druid Corwin who is sitting.')).to eq 'Brenna, Delphine, Corwin'
+    end
+
+    it 'keeps the name before a bare verb' do
+      expect(indicator_label('Also here: Stray Eamon is surrounded by swirling flames and Fenna.')).to eq 'Eamon, Fenna'
+    end
+
+    it 'reads a title with lowercase words as a title' do
+      expect(indicator_label('Also here: Keeper of Secrets Aldric.')).to eq 'Aldric'
+    end
+
+    it 'reads a list without a final period (GemStone)' do
+      expect(indicator_label('Also here: Aldric, Brenna')).to eq 'Aldric, Brenna'
+    end
+
+    context 'with the players\' links' do
+      def linked_label(text, links)
+        host.update_room_players_indicator(text, links: links)
+        indicator_updates.last[:label]
+      end
+
+      it 'names each player by its link, in list order' do
+        text = 'Also here: Lord Aldric the Bold and Brenna who wears a Sun Crown, Glorious.'
+        links = [{ start: 36, end: 42, exist: '-2', noun: 'Brenna' }, { start: 16, end: 31, exist: '-1', noun: 'Aldric' }]
+        expect(linked_label(text, links)).to eq 'Aldric, Brenna'
+      end
+
+      it 'takes the link text when the link has no noun' do
+        expect(linked_label('Also here: Aldric.', [{ start: 11, end: 17, exist: '-1' }])).to eq 'Aldric'
+      end
+
+      # Only players have negative ids; any other link leaves the text to
+      # name the players.
+      it 'reads the text when no link is a player\'s' do
+        expect(linked_label('Also here: Aldric.', [{ start: 11, end: 17, exist: '42', noun: 'rat' }])).to eq 'Aldric'
+      end
+
+      # Positions in the text as given; the label is read from it stripped.
+      it 'moves the links with text that has leading whitespace' do
+        expect(linked_label('  Also here: Aldric.', [{ start: 13, end: 19, exist: '-1' }])).to eq 'Aldric'
+      end
+    end
   end
 end
