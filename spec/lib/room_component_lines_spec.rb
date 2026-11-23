@@ -292,8 +292,23 @@ RSpec.describe 'Room component lines' do
 
     # The rich stream links every player (DragonRealms as the Saga client,
     # GemStone). As in main and the room window, a link's color shows only
-    # where no highlight or preset colors the name.
+    # while links are on, and only where no highlight or preset colors the
+    # name.
     context 'when the stream links the players' do
+      before { state.blue_links = true }
+
+      it 'draws linked names in the indicator color while links are off' do
+        state.blue_links = false
+
+        receive_from_server(
+          "<component id='room players'>Also here: <a exist=\"-101\" noun=\"Cithrin\">Cithrin</a> and " \
+          "<a exist=\"-102\" noun=\"Navesi\">Navesi</a>.</component>"
+        )
+
+        expect(indicator_label).to eq 'Cithrin, Navesi'
+        expect(color_of(indicator, 'Cithrin, Navesi')).to eq 'ffff00'
+      end
+
       it 'draws a linked name no highlight covers in the link color' do
         receive_from_server(
           "<component id='room players'>Also here: <a exist=\"-101\" noun=\"Cithrin\">Cithrin</a> and " \

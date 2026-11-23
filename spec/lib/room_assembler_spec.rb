@@ -14,7 +14,7 @@ RSpec.describe RoomAssembler do
   subject(:host) { assembler(room_windows: { 'room' => Object.new }) }
 
   let(:event_bus) { EventBus.new }
-  let(:shared_state) { Struct.new(:room_title).new(nil) }
+  let(:shared_state) { Struct.new(:room_title, :blue_links).new(nil, false) }
   # Every indicator update the assembler emitted, oldest first.
   let(:indicator_updates) { [] }
 

@@ -135,13 +135,35 @@ RSpec.describe 'Room players indicator names' do
       expect(label).to eq 'Aldric'
     end
 
-    # Each name's color region lands on the name in the label, not on a
-    # title or post string that shares its letters.
-    it 'colors each name in the label at its own place' do
-      receive_from_server("<component id='room players'>Also here: Corwinite #{link('Corwin', 1)} and #{link('Ash', 2)} " \
-                          'who is wrapped in ash.</component>')
+    let(:corwin_and_ash) do
+      "<component id='room players'>Also here: Corwinite #{link('Corwin', 1)} and #{link('Ash', 2)} " \
+        'who is wrapped in ash.</component>'
+    end
+
+    # With links on, each name's link color lands on the name in the label,
+    # not on a title or post string that shares its letters.
+    it 'colors each name in the label at its own place while links are on' do
+      state.blue_links = true
+      receive_from_server(corwin_and_ash)
       expect(label).to eq 'Corwin, Ash'
       expect(indicator_updates.last[:label_colors].map { |c| [c[:start], c[:end]] }).to eq [[0, 6], [8, 11]]
+    end
+
+    # With links off (the default), the links name the players but show no
+    # color, as in the main and room windows.
+    it 'shows no link color while links are off' do
+      receive_from_server(corwin_and_ash)
+      expect(label).to eq 'Corwin, Ash'
+      expect(indicator_updates.last[:label_colors]).to eq []
+    end
+
+    it 'still shows a highlight on a linked name while links are off' do
+      allow(HighlightProcessor).to receive(:apply_highlights) do |text, colors|
+        start = text.index('Ash')
+        colors << { start: start, end: start + 3, fg: 'ff0000' }
+      end
+      receive_from_server(corwin_and_ash)
+      expect(indicator_updates.last[:label_colors]).to eq [{ start: 8, end: 11, fg: 'ff0000', bg: nil, ul: nil }]
     end
 
     it 'clears the indicator when the room empties' do

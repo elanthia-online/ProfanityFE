@@ -92,7 +92,8 @@ class RoomAssembler
   # @param event_bus [EventBus] receives the room and indicator events
   # @param pending_render [PendingRender] asked for flushes and room renders
   # @param shared_state [SharedState] its +room_title+ is set from roomName
-  #   text and room title component text
+  #   text and room title component text; its +blue_links+ says whether the
+  #   room players indicator shows link colors
   # @param game_rules [Games::Rules] asked whether a room objs component was
   #   cut short (see Games::Rules#room_list_cut_short?); both games' when
   #   the game isn't known
@@ -476,10 +477,12 @@ class RoomAssembler
   # and any preset) with highlights applied to the full "Also here: ..."
   # text, then remaps the regions covering each name to the indicator
   # label, where a highlight or preset wins over a link's color as in main
-  # (see #remap_name_colors). Only regions that fully cover a name are
-  # included -- partial matches create visual noise on a compact indicator
-  # display. Asks for a flush, since a player arriving or leaving can be
-  # the only change in a burst.
+  # (see #remap_name_colors). The links' colors count only while links are
+  # on (+--links+ / +.links+): with them off, as in the main and room
+  # windows, a linked name shows no link color. Only regions that fully
+  # cover a name are included -- partial matches create visual noise on a
+  # compact indicator display. Asks for a flush, since a player arriving or
+  # leaving can be the only change in a burst.
   #
   # @param players_text [String, nil] raw "Also here:" text or nil
   # @param sax_colors [Array<Hash>] SAX-parsed color regions (link colors)
@@ -493,7 +496,7 @@ class RoomAssembler
     names = full_text ? player_names(full_text, shift_regions(links, lead)) : []
     if names.any?
       names_text = names.map { |name| name[:name] }.join(', ')
-      full_colors = shift_regions(sax_colors, lead)
+      full_colors = shift_regions(@state.blue_links ? sax_colors : sax_colors.reject { |c| c.key?(:cmd) }, lead)
       HighlightProcessor.apply_highlights(full_text, full_colors)
       label_colors = remap_name_colors(names, full_colors)
       @event_bus.emit(:indicator_update, id: 'room players', label: names_text, label_colors: label_colors, value: true)
