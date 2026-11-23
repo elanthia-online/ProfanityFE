@@ -49,6 +49,7 @@ class TabbedTextWindow < BaseWindow
   def initialize(*args)
     @tab_buffers = {}       # { "main" => LineBuffer, ... }: lines and scroll position per tab
     @tab_activity = {}      # Track unread content in background tabs
+    @tab_labels = {}        # { "caf%C3%A9" => "cafe" with an acute e, ... }: what each tab shows as
     @active_tab = nil
     @max_buffer_size = DEFAULT_BUFFER_SIZE
     @indent_word_wrap = true
@@ -81,6 +82,16 @@ class TabbedTextWindow < BaseWindow
     @tab_buffers.keys
   end
 
+  # What a tab shows as in the tab bar and the +.tab+ list: the name the
+  # layout wrote, which can differ from the key the tab is found by
+  # ("cafe" with an acute e for "caf%C3%A9").
+  #
+  # @param name [String] a tab name, as {#tab_names} gives it
+  # @return [String]
+  def tab_label(name)
+    @tab_labels[name] || ServerText.readable(name)
+  end
+
   # Each tab's newest row that the block accepts, as
   # {LineBuffer#newest_row} finds it, without re-wrapping a hidden tab
   # whose re-wrap was put off.
@@ -103,9 +114,13 @@ class TabbedTextWindow < BaseWindow
   #
   # @param names [Array<String>] tab names (e.g. "main", "combat"); a
   #   repeated name counts once
+  # @param labels [Hash{String => String}] what a tab shows as, by name,
+  #   for a name the layout wrote differently (see {#tab_label}); a tab
+  #   not listed shows as {ServerText.readable} of its name
   # @return [void]
-  def keep_tabs(names)
+  def keep_tabs(names, labels: {})
     names = names.uniq
+    @tab_labels = labels.slice(*names)
     @tab_buffers = names.to_h { |name| [name, @tab_buffers[name] || LineBuffer.new(cap: @max_buffer_size, width: wrap_width)] }
     @tab_activity = names.to_h { |name| [name, @tab_activity.fetch(name, false)] }
     unless @tab_buffers.key?(@active_tab)
@@ -189,7 +204,7 @@ class TabbedTextWindow < BaseWindow
 
     tab_names.each_with_index do |name, idx|
       activity = @tab_activity[name] && name != @active_tab ? '*' : ''
-      label = " #{idx + 1}:#{name}#{activity} "
+      label = " #{idx + 1}:#{tab_label(name)}#{activity} "
 
       room = add_tab_bar_text(label, room, name == @active_tab ? Curses::A_REVERSE : Curses::A_NORMAL)
       room = add_tab_bar_text('|', room) if idx < tab_names.length - 1
@@ -386,7 +401,10 @@ BaseWindow.register_type('tabbed') do |height, width, top, left, element, wm|
   next nil unless width > 1
 
   # A tab is named by its stream's id, so a "ShopWindow" tab is named "shopWindow" (see Streams::ALIASES)
-  tab_names = (element.attributes['tabs'] || element.attributes['value'] || MAIN_STREAM).split(',').map { |name| Streams.canonical(name.strip) }
+  # and shown by that id unencoded ("cafe" with an acute e for the tab keyed "caf%C3%A9")
+  written = (element.attributes['tabs'] || element.attributes['value'] || MAIN_STREAM).split(',').map(&:strip)
+  labels = written.to_h { |name| [Streams.from_settings(name), Streams.canonical(name)] }
+  tab_names = labels.keys
   # Reuse the previous layout's tabbed window that has any of these tabs
   unless (window = wm.claim_window(:stream, tab_names, TabbedTextWindow))
     window = TabbedTextWindow.new(height, width - TabbedTextWindow.right_margin, top, left)
@@ -397,7 +415,7 @@ BaseWindow.register_type('tabbed') do |height, width, top, left, element, wm|
   window.max_buffer_size = element.attributes['buffer-size'] || 1000
   window.time_stamp = BaseWindow.parse_flag_attr(element, 'timestamp')
   window.clock = wm.clock
-  window.keep_tabs(tab_names)
+  window.keep_tabs(tab_names, labels: labels)
   tab_names.each do |tab_name|
     wm.stream[tab_name] = window
   end

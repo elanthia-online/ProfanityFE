@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative '../server_text'
+
 # Health/mana/stamina progress bar display window.
 
 # Progress bar window for health, mana, stamina, and similar gauges.
@@ -120,14 +122,16 @@ class ProgressWindow < BaseWindow
 end
 
 BaseWindow.register_type('progress') do |height, width, top, left, element, wm|
-  unless (window = wm.claim_window(:progress, element.attributes['value'], ProgressWindow))
+  # The id the game connection sends for this window, as it keys it (ServerText.identity).
+  key = element.attributes['value'] && ServerText.identity(element.attributes['value'])
+  unless (window = wm.claim_window(:progress, key, ProgressWindow))
     window = ProgressWindow.new(height, width, top, left)
   end
   window.scrollok(false)
   window.label = element.attributes['label'] if element.attributes['label']
   window.fg = BaseWindow.parse_color_attrs(element, 'fg') if element.attributes['fg']
   window.bg = BaseWindow.parse_color_attrs(element, 'bg') if element.attributes['bg']
-  wm.progress[element.attributes['value']] = window if element.attributes['value']
+  wm.progress[key] = window if key
   window.redraw
   window
 end

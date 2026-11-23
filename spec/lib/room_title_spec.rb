@@ -119,6 +119,7 @@ RSpec.describe 'Room title' do
   # What the game sends (decoded) => the title row, and the room as the
   # terminal title names it (the row's text without the name's brackets).
   # A non-ASCII name: "Cafe, Unicode" with U+00E9, U+00DC, U+00EF and U+00F6.
+  # Each character outside ASCII arrives as "?" (ServerText.normalize!).
   accented = "Caf#{[0x00E9].pack('U')}, #{[0x00DC].pack('U')}n#{[0x00EF].pack('U')}c#{[0x00F6].pack('U')}d#{[0x00E9].pack('U')}"
   titles = {
     # Text after the closing bracket is shown as the game sends it.
@@ -152,7 +153,7 @@ RSpec.describe 'Room title' do
     '[Room - 1234] (230008)'     => ['[Room - 1234] (230008)', 'Room - 1234 (230008)'],
     '[Room - 1234 - (u230008)]'  => ['[Room - 1234 - (u230008)]', 'Room - 1234 - (u230008)'],
     '[Room - (**)]'              => ['[Room - (**)]', 'Room - (**)'],
-    "[#{accented}] (1234)"       => ["[#{accented}] (1234)", "#{accented} (1234)"],
+    "[#{accented}] (1234)"       => ['[Caf?, ?n?c?d?] (1234)', 'Caf?, ?n?c?d? (1234)'],
     # XML entities, decoded once.
     '[Smith & Sons] (1234)'      => ['[Smith & Sons] (1234)', 'Smith & Sons (1234)'],
     "[Smith's Forge]"            => ["[Smith's Forge]", "Smith's Forge"],

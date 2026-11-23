@@ -182,7 +182,7 @@ class LayoutLoader
       sink = SinkWindow.new
       @positions[sink] = position
       element.attributes['value']&.split(',')&.each do |str|
-        @wm.stream[Streams.canonical(str.strip)] = sink
+        @wm.stream[Streams.from_settings(str.strip)] = sink
       end
       return
     end

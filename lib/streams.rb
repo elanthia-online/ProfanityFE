@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative 'server_text'
+
 # Stream ids: the names the game gives its text streams (the +id+ of
 # +<pushStream>+, +<component>+ and +<clearStream>+) and the keys
 # {WindowManager#stream} and {WindowManager#room} file windows under.
@@ -129,5 +131,20 @@ module Streams
   #   Streams.canonical('combat')     # => "combat"
   def self.canonical(id)
     ALIASES.fetch(id, id)
+  end
+
+  # The stream id used here for one a settings file names (a layout window,
+  # a tab, a sink, a preset, a suppression exception): its key as the game
+  # connection writes the id ({ServerText.identity}), then {.canonical}.
+  # An id from the game connection is a key already and goes to
+  # {.canonical} alone.
+  #
+  # @param name [String] a stream id as a settings file writes it
+  # @return [String]
+  # @example
+  #   Streams.from_settings('combat')     # => "combat"
+  #   Streams.from_settings('ShopWindow') # => "shopWindow"
+  def self.from_settings(name)
+    canonical(ServerText.identity(name))
   end
 end

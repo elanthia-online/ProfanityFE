@@ -158,7 +158,7 @@ module SettingsLoader
         end
 
       when 'notification-stream'
-        settings[:notification_stream] = e.text.strip if e.text && !e.text.strip.empty?
+        settings[:notification_stream] = Streams.from_settings(e.text.strip) if e.text && !e.text.strip.empty?
 
       when 'history-size'
         size = e.text&.strip
@@ -179,7 +179,7 @@ module SettingsLoader
                     Config::DEFAULT_DUPLICATE_SUPPRESSION[:enabled]
                   end
         exceptions = e.attributes['except'].to_s.split(',').map(&:strip).reject(&:empty?)
-                      .map { |id| Streams.canonical(id) }.uniq.freeze
+                      .map { |id| Streams.from_settings(id) }.uniq.freeze
         settings[:duplicate_suppression] = { enabled: enabled, except: exceptions }.freeze
 
       when 'blank-lines'
@@ -208,8 +208,11 @@ module SettingsLoader
 
       case e.name
       when 'preset'
-        # A stream's preset may name it either way (see Streams::ALIASES)
-        settings[:presets][Streams.canonical(e.attributes['id'])] = [e.attributes['fg'], e.attributes['bg']]
+        # A preset with no id names nothing. A stream's preset may name it
+        # either way (see Streams::ALIASES)
+        next unless (id = e.attributes['id'])
+
+        settings[:presets][Streams.from_settings(id)] = [e.attributes['fg'], e.attributes['bg']]
       when 'layout'
         settings[:layouts][e.attributes['id']] = e if e.attributes['id']
       end
