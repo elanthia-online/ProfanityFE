@@ -379,7 +379,7 @@ class Application
     elsif arg.nil? || arg.empty?
       lines = TabbedTextWindow.list.map do |win|
         tabs_info = win.tab_names.each_with_index.map do |name, i|
-          "#{i + 1}:#{ServerText.readable(name)}#{name == win.active_tab ? '*' : ''}"
+          "#{i + 1}:#{win.tab_label(name)}#{name == win.active_tab ? '*' : ''}"
         end.join(' ')
         "* Tabs: #{tabs_info}"
       end

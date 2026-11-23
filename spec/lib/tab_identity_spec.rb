@@ -62,6 +62,38 @@ RSpec.describe 'Tabs named with a %' do
     expect(active_after(".tab loot%\n", ".tab loot%25\n", ".tab main\n")).to eq %w[loot% loot%25 main]
   end
 
+  context 'with tabs named with a character outside ASCII' do
+    # "cafe" with an acute e (the source is ASCII)
+    let(:cafe) { "caf#{[0xE9].pack('U')}" }
+
+    before do
+      File.write(settings_path, <<~XML)
+        <settings>
+          <key id='enter' action='send_command'/>
+          <layout id='default'>
+            <window class='tabbed' top='0' left='0' height='8' width='80' tabs='main,#{cafe},caf?'/>
+            <window class='command' top='8' left='0' height='1' width='80'/>
+          </layout>
+        </settings>
+      XML
+    end
+
+    it 'shows each tab by the name the layout wrote, in the tab bar and the .tab list' do
+      run_client(keyboard(".tab\n", 'x'))
+
+      expect(tabbed.rows.first).to include("2:#{cafe}", '3:caf?')
+      expect(tabbed.rows.map(&:to_s).join("\n")).to include("* Tabs: 1:main* 2:#{cafe} 3:caf?")
+    end
+
+    it 'selects each tab by the name it shows' do
+      keys = []
+      run_client(keyboard(".tab #{cafe}\n", -> { keys << tabbed.active_tab },
+                          ".tab caf?\n", -> { keys << tabbed.active_tab }, 'x'))
+
+      expect(keys).to eq %w[caf%C3%A9 caf?]
+    end
+  end
+
   it 'shows the tab names, not their keys, in the tab bar' do
     run_client(keyboard('x'))
 
