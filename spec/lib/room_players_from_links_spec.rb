@@ -94,8 +94,45 @@ RSpec.describe 'Room players indicator names' do
     end
   end
 
+  # Players whose names show only in their links: read from the text, the
+  # first gives "Bold". And two linked names whose colors must land on
+  # them, not on the title that shares Corwin's letters.
+  let(:decorated) { %(Also here: Lord <a exist="-1" noun="Aldric">Aldric the Bold</a>.) }
+  let(:corwin_and_ash_line) { "Also here: Corwinite #{link('Corwin', 1)} and #{link('Ash', 2)} who is wrapped in ash." }
+
+  # The inline line is read as the component is: from its links, with
+  # its links' colors while links are on.
+  shared_examples 'reads an inline LOOK as the component' do
+    it "takes a player's name from the link's noun" do
+      receive_from_server(*look(decorated))
+      expect(label).to eq 'Aldric'
+    end
+
+    it 'colors each name as the component does while links are on' do
+      state.blue_links = true
+      # Its own burst: a component owns the players of the burst it came in
+      receive_from_server("<component id='room players'>#{corwin_and_ash_line}</component>", '<prompt time="1791331836">&gt;</prompt>')
+      component_colors = indicator_updates.last[:label_colors]
+      indicator_updates.clear
+      receive_from_server(*look(corwin_and_ash_line))
+
+      expect(indicator_updates).not_to be_empty
+      expect(label).to eq 'Corwin, Ash'
+      expect(component_colors.map { |c| [c[:start], c[:end]] }).to eq [[0, 6], [8, 11]]
+      expect(indicator_updates.last[:label_colors]).to eq component_colors
+    end
+
+    it 'shows no link color while links are off' do
+      receive_from_server(*look(corwin_and_ash_line))
+      expect(label).to eq 'Corwin, Ash'
+      expect(indicator_updates.last[:label_colors]).to eq []
+    end
+  end
+
   context 'with a room window' do
     before { load_layout(main_window, room_window, indicator) }
+
+    it_behaves_like 'reads an inline LOOK as the component'
 
     context 'when the players are linked' do
       let(:players_line) { players }
@@ -112,6 +149,8 @@ RSpec.describe 'Room players indicator names' do
 
   context 'without a room window' do
     before { load_layout(main_window, indicator) }
+
+    it_behaves_like 'reads an inline LOOK as the component'
 
     context 'when the players are linked' do
       let(:players_line) { players }
@@ -135,10 +174,7 @@ RSpec.describe 'Room players indicator names' do
       expect(label).to eq 'Aldric'
     end
 
-    let(:corwin_and_ash) do
-      "<component id='room players'>Also here: Corwinite #{link('Corwin', 1)} and #{link('Ash', 2)} " \
-        'who is wrapped in ash.</component>'
-    end
+    let(:corwin_and_ash) { "<component id='room players'>#{corwin_and_ash_line}</component>" }
 
     # With links on, each name's link color lands on the name in the label,
     # not on a title or post string that shares its letters.
@@ -164,6 +200,16 @@ RSpec.describe 'Room players indicator names' do
       end
       receive_from_server(corwin_and_ash)
       expect(indicator_updates.last[:label_colors]).to eq [{ start: 8, end: 11, fg: 'ff0000', bg: nil, ul: nil }]
+    end
+
+    # A highlight on the name colors it where the link's text adds a title
+    it 'shows a highlight on the name inside a link that adds a title' do
+      allow(HighlightProcessor).to receive(:apply_highlights) do |text, colors|
+        start = text.index('Aldric')
+        colors << { start: start, end: start + 6, fg: 'ff0000' }
+      end
+      receive_from_server("<component id='room players'>#{decorated}</component>")
+      expect(indicator_updates.last[:label_colors]).to eq [{ start: 0, end: 6, fg: 'ff0000', bg: nil, ul: nil }]
     end
 
     it 'clears the indicator when the room empties' do

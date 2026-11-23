@@ -68,7 +68,9 @@ class RoomAssembler
   # distinct DragonRealms players lists since 2026-11-12 has one.
   PLAYER_NAME = /(?<![\w'-])[A-Z][A-Za-z'-]*(?=\.?\s*\z|,| and | who | whose | \(| (?:is|has|appears|glows) )/
 
-  # A player's link: players have negative game ids, in both games.
+  # A player's link in a players list: there, a link with a negative game
+  # id is a player, in both games. Elsewhere scenery and exits can have
+  # negative ids too (DragonRealms' rich stream, GemStone).
   PLAYER_EXIST = /\A-\d/
 
   # What styled text is being captured for the room: +:title+ (roomName),
@@ -320,6 +322,9 @@ class RoomAssembler
   # @param stream [String, nil] the stream the text is routed to
   # @param marks [Array<Hash>] the room marks for +text+ (see
   #   SpanTracker::ROOM_MARKS): its links and creatures
+  # @param runs [Array<Hash>] the color runs for +text+ (its links' colors
+  #   and presets), which an "Also here:" line passes on to the room
+  #   players indicator as a room players component's colors are
   # @return [Boolean, Symbol] true if this line was consumed by the
   #   RoomWindow (caller should not route it to the main window).  Returns
   #   false when title/desc text is captured for the terminal title but
@@ -327,7 +332,7 @@ class RoomAssembler
   #   main text window for display. Returns +:remote+ for the text of a
   #   view of another room (see #remote_title?), with or without a
   #   RoomWindow: the caller shows it as the familiar stream's.
-  def process_room_data(text, stream, marks)
+  def process_room_data(text, stream, marks, runs = [])
     return false if text.empty?
 
     # The inline lines are room data only on main: only room text on main
@@ -354,7 +359,7 @@ class RoomAssembler
     # inline text patterns (objects, exits, etc. are not applicable).
     unless room_window?
       if text =~ /^Also here:\s*(.+)$/
-        update_room_players_indicator(text, links: marks)
+        update_room_players_indicator(text, runs, links: marks)
       end
       return room_data_captured
     end
@@ -365,9 +370,14 @@ class RoomAssembler
       room_data_captured = true
     end
 
-    # Detect "Also here:" for players; the view keeps the first one
+    # Detect "Also here:" for players; the view keeps the first one, with
+    # its colors moved as RoomPart moves its links (copies: routing the
+    # line to main adds highlights to its runs in place)
     if text =~ /^Also here:\s*(.+)$/
-      @view[:players] ||= RoomPart.from_chunk(text, marks)
+      unless @view.key?(:players)
+        @view[:players] = RoomPart.from_chunk(text, marks)
+        @view[:players_colors] = shift_regions(runs, text.length - text.lstrip.length).map(&:dup)
+      end
       room_data_captured = true
     end
 
@@ -755,15 +765,12 @@ class RoomAssembler
   #   removed
   # @param links [Array<Hash>] the links in +text+, positions in +text+
   # @return [Array<Hash>] +{name:, start:, end:}+ for each player, +start+
-  #   and +end+ the span of its name (or link) in +text+
+  #   and +end+ the span of its name in +text+ (see #linked_player)
   # @api private
   def player_names(text, links)
     players = links.select { |link| (link[:mark].nil? || link[:mark] == :link) && PLAYER_EXIST.match?(link[:exist].to_s) }
     if players.any?
-      return players.sort_by { |link| link[:start] }.map do |link|
-        noun = link[:noun].to_s
-        { name: noun.empty? ? text[link[:start]...link[:end]] : noun, start: link[:start], end: link[:end] }
-      end
+      return players.sort_by { |link| link[:start] }.map { |link| linked_player(text, link) }
     end
 
     from = text.match(/\AAlso here:\s*/)&.end(0) || 0
@@ -771,6 +778,25 @@ class RoomAssembler
       match = Regexp.last_match
       { name: match[0], start: match.begin(0), end: match.end(0) } if match.begin(0) >= from
     end
+  end
+
+  # A linked player: the link's noun (its text when it has none), spanning
+  # the noun's word in the link's text ("Aldric" in a link reading "Aldric
+  # the Bold"), so a highlight on the name covers it, or the whole link
+  # when the text doesn't show the noun as a word.
+  #
+  # @param text [String] the "Also here: ..." text
+  # @param link [Hash] a player's link, +:start+ and +:end+ in +text+
+  # @return [Hash] +{name:, start:, end:}+
+  def linked_player(text, link)
+    body = text[link[:start]...link[:end]]
+    noun = link[:noun].to_s
+    return { name: body, start: link[:start], end: link[:end] } if noun.empty?
+
+    at = body.index(/(?<![A-Za-z'-])#{Regexp.escape(noun)}(?![A-Za-z'-])/)
+    return { name: noun, start: link[:start], end: link[:end] } unless at
+
+    { name: noun, start: link[:start] + at, end: link[:start] + at + noun.length }
   end
 
   # Regions (links or color runs) moved back by +shift+, for text that
@@ -837,7 +863,9 @@ class RoomAssembler
       # Also update the room players indicator (fallback for games that
       # don't use streams); players a component delivered updated it already
       players = view[:players]
-      update_room_players_indicator(players&.text, links: players&.links || []) unless @delivered.key?(:players)
+      unless @delivered.key?(:players)
+        update_room_players_indicator(players&.text, view[:players_colors] || [], links: players&.links || [])
+      end
     end
 
     # Update exits on every exits line, unless a component delivered them.
