@@ -11,6 +11,7 @@ require_relative 'key_action_registry'
 require_relative 'macro_interpreter'
 require_relative 'mouse_controller'
 require_relative 'settings_warnings'
+require_relative 'windows/sink_window'
 
 # Core application class for ProfanityFE.
 #
@@ -164,10 +165,14 @@ class Application
   #   also passed to the {GameTextProcessor}
   # @param game_rules [Games::Rules] the game's rules for the
   #   {GameTextProcessor} (--game, see Games.rules_for)
+  # @param ruby_warning [Array<String>, nil] lines to show once in the main
+  #   window, about the Ruby running the client (see RubyAdvisory.warning),
+  #   or nil for none
   def initialize(cli_options, settings_file:, host:, port:, boot_profiler: BootProfiler.new(enabled: false),
-                 game_rules: Games::BOTH_GAMES)
+                 game_rules: Games::BOTH_GAMES, ruby_warning: nil)
     @cli_options = cli_options
     @settings_file = settings_file
+    @ruby_warning = ruby_warning
     @boot_profiler = boot_profiler
     @game_rules = game_rules
     @connection = ServerConnection.new(host: host, port: port, declare_capabilities: cli_options.fetch(:rich_stream, false))
@@ -218,6 +223,8 @@ class Application
   #   otherwise ends through +exit+ (+.quit+, a disconnect or a fatal error)
   def run
     load_settings_and_layout
+    # Before the game's first lines, which could scroll it away.
+    CursesRenderer.synchronize { show_ruby_warning }
     @boot_profiler.mark('settings + layout')
     connect_server
     @boot_profiler.mark('connect_server')
@@ -954,6 +961,7 @@ class Application
         effects_updated = tick_effects
         # Drag held at a window edge keeps scrolling once per tick
         drag_scrolled = @mouse_controller.tick_drag_auto_scroll
+        show_ruby_warning
         show_settings_warnings
 
         ch, key_combo = handle_next_key(key_combo)
@@ -994,6 +1002,23 @@ class Application
 
     warnings = SettingsWarnings.take
     write_to_client(*warnings.map { |warning| "* #{warning}" }) unless warnings.empty?
+  end
+
+  # Show the warning about the Ruby running the client (the +ruby_warning+
+  # given to {#initialize}) in the main window, framed by {Feedback::BANNER}
+  # rows, and flush the screen. Shown once per run: not again on +.reload+
+  # or +.layout+. Called by {#run} once the layout is loaded, before the
+  # game's first lines, and on every pass of {#input_loop}; while there is
+  # no main window, or the layout sends main to a {SinkWindow} (which
+  # discards it), it is kept until there is one that shows it.
+  #
+  # @return [void]
+  def show_ruby_warning
+    main = @window_mgr.stream[MAIN_STREAM]
+    return unless @ruby_warning && main && !main.is_a?(SinkWindow)
+
+    write_to_client(*@ruby_warning.map { |line| "* #{line}" }, banner: true)
+    @ruby_warning = nil
   end
 
   # How long this pass of {#input_loop} waits for a key: {INPUT_POLL_SECONDS},
