@@ -48,7 +48,7 @@ RSpec.describe MouseController do
 
   # Deliver one mouse event (button state and screen position) with #deliver.
   def mouse(bstate, y, x)
-    allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x))
+    allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x), nil)
     deliver
   end
 
@@ -375,7 +375,7 @@ RSpec.describe MouseController do
         reports.each do |kind, y, x|
           next unless (event = ncurses.read(kind, y, x))
 
-          allow(Curses).to receive(:getmouse).and_return(event)
+          allow(Curses).to receive(:getmouse).and_return(event, nil)
           controller.handle_event
         end
       end
@@ -784,6 +784,51 @@ RSpec.describe MouseController do
 
       expect { controller.handle_event }.not_to(change { [main.rows, sent, SelectionManager.selecting] })
     end
+
+    # ncurses 6.6 gives one KEY_MOUSE for a press and a release that reach
+    # it in one read (a trackpad tap), and getmouse returns the press, then
+    # the release, then nothing. Seen with ncurses-libs 6.6-3.fc45.
+    describe 'with more than one event behind a KEY_MOUSE' do
+      let(:queued) { [] }
+
+      before do
+        allow(Curses).to receive(:getmouse) { queued.shift }
+        main.add_string('go north', [{ start: 3, end: 8, cmd: 'north' }])
+        main.add_string('go south', [{ start: 3, end: 8, cmd: 'south' }])
+      end
+
+      def tap_at(y, x)
+        queued << Struct.new(:bstate, :y, :x).new(Curses::BUTTON1_PRESSED, y, x)
+        queued << Struct.new(:bstate, :y, :x).new(Curses::BUTTON1_RELEASED, y, x)
+        controller.handle_event
+      end
+
+      it 'follows the link of a press and release read with one KEY_MOUSE' do
+        tap_at(0, 4)
+
+        expect(sent).to eq ['north']
+        expect(queued).to be_empty
+      end
+
+      it 'follows each tap under its own position, not the tap before it' do
+        tap_at(0, 4)
+        tap_at(1, 4)
+
+        expect(sent).to eq %w[north south]
+      end
+
+      it 'reads at most MAX_EVENTS_PER_KEY events for one KEY_MOUSE' do
+        reads = 0
+        allow(Curses).to receive(:getmouse) do
+          reads += 1
+          Struct.new(:bstate, :y, :x).new(0, 0, 0)
+        end
+
+        controller.handle_event
+
+        expect(reads).to eq MouseController::MAX_EVENTS_PER_KEY
+      end
+    end
   end
 
   describe 'through Application#handle_key' do
@@ -818,7 +863,7 @@ RSpec.describe MouseController do
     end
 
     it 'keeps a pending key combo across a mouse event' do
-      allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(Curses::BUTTON1_CLICKED, 0, 4))
+      allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(Curses::BUTTON1_CLICKED, 0, 4), nil)
       combo = { '1' => proc {} }
 
       expect(app.send(:handle_key, Curses::KEY_MOUSE, combo)).to be combo

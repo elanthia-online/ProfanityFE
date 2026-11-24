@@ -82,7 +82,7 @@ RSpec.describe 'The terminal cursor after an input-path flush' do
   end
 
   def mouse(bstate, y, x)
-    allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x))
+    allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x), nil)
     app.send(:handle_key, Curses::KEY_MOUSE, nil)
   end
 

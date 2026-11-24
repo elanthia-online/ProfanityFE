@@ -348,7 +348,7 @@ RSpec.describe 'Feedback lines in the main window' do
 
     context 'when copying a drag selection' do
       def mouse(bstate, y, x)
-        allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x))
+        allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x), nil)
         app.send(:handle_key, Curses::KEY_MOUSE, nil)
       end
 
@@ -466,7 +466,7 @@ RSpec.describe 'Feedback lines in the main window' do
       y = other.rows.index { |row| row.start_with?('You see') }
       [[Curses::BUTTON1_PRESSED, 0], [Curses::BUTTON1_RELEASED, 7]].each do |bstate, x|
         events.clear
-        allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x))
+        allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x), nil)
         app.send(:handle_key, Curses::KEY_MOUSE, nil)
       end
 
