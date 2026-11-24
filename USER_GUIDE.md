@@ -1698,7 +1698,8 @@ keycodes to use in key bindings.
 ```
 
 After typing `.key` and pressing Enter, press any key to see its keycode
-displayed in the main window.
+displayed in the main window. A mouse click shows the mouse keycode and does
+nothing else: it doesn't follow a link under the pointer.
 
 ### .reload
 

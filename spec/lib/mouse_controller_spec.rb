@@ -817,10 +817,29 @@ RSpec.describe MouseController do
         expect(sent).to eq %w[north south]
       end
 
+      # ncurses before 5.8 returns the last event from every getmouse, its id
+      # -1 once taken, and never ERR.
+      it 'stops at an event ncurses already handed out' do
+        event = Struct.new(:bstate, :y, :x, :eid)
+        calls = 0
+        allow(Curses).to receive(:getmouse) do
+          calls += 1
+          event.new(Curses::BUTTON1_CLICKED, 0, 4, calls == 1 ? 0 : MouseController::INVALID_EVENT_ID)
+        end
+
+        controller.handle_event
+
+        expect(sent).to eq ['north']
+        expect(calls).to eq 2
+      end
+
       it 'reads at most MAX_EVENTS_PER_KEY events for one KEY_MOUSE' do
         reads = 0
         allow(Curses).to receive(:getmouse) do
           reads += 1
+          # Fail at once, rather than hang, if the bound is lost
+          raise 'read beyond MAX_EVENTS_PER_KEY' if reads > MouseController::MAX_EVENTS_PER_KEY
+
           Struct.new(:bstate, :y, :x).new(0, 0, 0)
         end
 
@@ -860,6 +879,32 @@ RSpec.describe MouseController do
       click(0, 4)
 
       expect(server.string).to eq ''
+    end
+
+    # .key reads the next key, a click included, to show its key code. The
+    # click's events (a press and a release behind one KEY_MOUSE, as
+    # ncurses 6.6 gives a tap) must not follow a link with the next click.
+    it 'drops the mouse events of a click caught by .key' do
+      thoughts = app.window_mgr.stream['thoughts']
+      thoughts.add_string('go west', [{ start: 3, end: 7, cmd: 'west' }])
+      thoughts.add_string('go east', [{ start: 3, end: 7, cmd: 'east' }])
+      queued = []
+      allow(Curses).to receive(:getmouse) { queued.shift }
+      tap_at = lambda do |y, x|
+        queued << Struct.new(:bstate, :y, :x).new(Curses::BUTTON1_PRESSED, y, x)
+        queued << Struct.new(:bstate, :y, :x).new(Curses::BUTTON1_RELEASED, y, x)
+      end
+      allow(app).to receive(:wait_for_key) do
+        tap_at.call(5, 4)
+        Curses::KEY_MOUSE
+      end
+
+      app.execute_command('.key')
+      tap_at.call(6, 4)
+      deliver
+
+      expect(server.string).to eq "east\n"
+      expect(main.rows).to include("* Detected keycode: #{Curses::KEY_MOUSE}")
     end
 
     it 'keeps a pending key combo across a mouse event' do

@@ -53,6 +53,11 @@ class MouseController
   # bound, so a +getmouse+ that never runs dry can't hold the input loop.
   MAX_EVENTS_PER_KEY = 16
 
+  # The id ncurses gives a queue slot whose event was taken. ncurses before
+  # 5.8 (20100102) never returns ERR from +getmouse+: every call returns
+  # the last event again, and once it was taken its id reads this.
+  INVALID_EVENT_ID = -1
+
   # Handle the mouse events waiting for one KEY_MOUSE, read with
   # +Curses.getmouse+ until it returns none, oldest first.
   #
@@ -67,11 +72,34 @@ class MouseController
   #
   # @return [void]
   def handle_event
+    each_queued_event { |mouse| handle_mouse_event(mouse) }
+  end
+
+  # Read and drop the mouse events waiting for a KEY_MOUSE that was read
+  # for something other than the mouse: +.key+ shows the key code of the
+  # next key, a click included. Left queued, the events would be handled
+  # with the next KEY_MOUSE, and the click shown by +.key+ would follow
+  # its link then.
+  #
+  # @return [void]
+  def discard_events
+    each_queued_event { nil }
+  end
+
+  # Read the mouse events waiting for one KEY_MOUSE with +Curses.getmouse+,
+  # oldest first, until it returns none or an event already taken
+  # ({INVALID_EVENT_ID}), or {MAX_EVENTS_PER_KEY} are read.
+  #
+  # @yield [mouse] each event read
+  # @yieldparam mouse [Curses::MouseEvent] the event, with +bstate+, +y+, +x+
+  # @return [void]
+  private def each_queued_event
     MAX_EVENTS_PER_KEY.times do
       mouse = Curses.getmouse
       break unless mouse
+      break if mouse.respond_to?(:eid) && mouse.eid == INVALID_EVENT_ID
 
-      handle_mouse_event(mouse)
+      yield mouse
     end
   end
 
