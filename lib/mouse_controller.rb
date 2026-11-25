@@ -49,14 +49,66 @@ class MouseController
     @mouse_scroll.enable_click_events if links
   end
 
-  # Handle one mouse event, read with +Curses.getmouse+. While
-  # +.scrollcfg+ is learning the wheel, the event only goes to it.
+  # Most mouse events one KEY_MOUSE handles (see {#handle_event}). Only a
+  # bound, so a +getmouse+ that never runs dry can't hold the input loop.
+  MAX_EVENTS_PER_KEY = 16
+
+  # The id ncurses gives a queue slot whose event was taken. ncurses before
+  # 5.8 (20100102) never returns ERR from +getmouse+: every call returns
+  # the last event again, and once it was taken its id reads this.
+  INVALID_EVENT_ID = -1
+
+  # Handle the mouse events waiting for one KEY_MOUSE, read with
+  # +Curses.getmouse+ until it returns none, oldest first.
+  #
+  # One KEY_MOUSE can stand for more than one event. With ncurses 6.6, a
+  # press and a release that reach it in one read (a trackpad tap, or a
+  # click over a slow connection) give a single KEY_MOUSE, and
+  # +getmouse+ returns the press, then the release. Reading only the
+  # first left the release queued for the next KEY_MOUSE, so from then on
+  # each event was handled one report late: a click followed the link
+  # under the previous click's position, in whatever text the window
+  # showed there by then.
   #
   # @return [void]
   def handle_event
-    mouse = Curses.getmouse
-    return unless mouse
+    each_queued_event { |mouse| handle_mouse_event(mouse) }
+  end
 
+  # Read and drop the mouse events waiting for a KEY_MOUSE that was read
+  # for something other than the mouse: +.key+ shows the key code of the
+  # next key, a click included. Left queued, the events would be handled
+  # with the next KEY_MOUSE, and the click shown by +.key+ would follow
+  # its link then.
+  #
+  # @return [void]
+  def discard_events
+    each_queued_event { nil }
+  end
+
+  # Read the mouse events waiting for one KEY_MOUSE with +Curses.getmouse+,
+  # oldest first, until it returns none or an event already taken
+  # ({INVALID_EVENT_ID}), or {MAX_EVENTS_PER_KEY} are read.
+  #
+  # @yield [mouse] each event read
+  # @yieldparam mouse [Curses::MouseEvent] the event, with +bstate+, +y+, +x+
+  # @return [void]
+  private def each_queued_event
+    MAX_EVENTS_PER_KEY.times do
+      mouse = Curses.getmouse
+      break unless mouse
+      break if mouse.respond_to?(:eid) && mouse.eid == INVALID_EVENT_ID
+
+      yield mouse
+    end
+  end
+
+  # Handle one mouse event. While +.scrollcfg+ is learning the wheel, the
+  # event only goes to it.
+  #
+  # @param mouse [Curses::MouseEvent] the event, with +bstate+, +y+, +x+
+  # @return [void]
+  private def handle_mouse_event(mouse)
     if @mouse_scroll.configuring?
       @mouse_scroll.process(mouse)
       return

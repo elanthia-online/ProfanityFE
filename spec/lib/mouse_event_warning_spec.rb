@@ -48,9 +48,13 @@ RSpec.describe MouseEventWarning do
       verbose_at_getmouse << $VERBOSE
       warn "warning: #{warning_text}" unless used_up
       used_up = true
-      event
+      queued_events.shift
     end
   end
+
+  # The events curses holds, as getmouse hands them out: each one once,
+  # then nothing.
+  let(:queued_events) { [] }
 
   # The client as the input loop sees it, with a text window under row 0,
   # so a mouse event goes through MouseController and MouseScroll.
@@ -70,6 +74,7 @@ RSpec.describe MouseEventWarning do
     XML
     app.window_mgr.load_layout('warning')
     app.cmd_buffer.window = app.window_mgr.command_window
+    queued_events << event
     app.send(:handle_key, Curses::KEY_MOUSE, nil)
   end
 
@@ -90,8 +95,9 @@ RSpec.describe MouseEventWarning do
       described_class.trigger_silently
       mouse_event_through_input_loop
 
+      # The startup read, the event, and the read that finds no more
       expect($stderr.string).to eq ''
-      expect(verbose_at_getmouse.size).to eq 2
+      expect(verbose_at_getmouse.size).to eq 3
     end
 
     it 'prints nothing after trigger_silently, through MouseScroll' do
@@ -107,7 +113,7 @@ RSpec.describe MouseEventWarning do
       mouse_event_through_input_loop
       warn 'a later warning'
 
-      expect(verbose_at_getmouse).to eq [nil, false]
+      expect(verbose_at_getmouse).to eq [nil, false, false]
       expect($stderr.string).to eq "a later warning\n"
     end
   end

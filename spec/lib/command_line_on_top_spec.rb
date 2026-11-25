@@ -192,7 +192,7 @@ RSpec.describe 'The command line on top of overlapping windows' do
       end
 
       def click_at(y, x)
-        event = ->(bstate) { allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x)) }
+        event = ->(bstate) { allow(Curses).to receive(:getmouse).and_return(Struct.new(:bstate, :y, :x).new(bstate, y, x), nil) }
         [press_after(Curses::KEY_MOUSE) { event.call(Curses::BUTTON1_PRESSED) },
          press_after(Curses::KEY_MOUSE) { event.call(Curses::BUTTON1_RELEASED) }]
       end

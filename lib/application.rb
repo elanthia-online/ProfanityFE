@@ -294,13 +294,15 @@ class Application
 
   # +.key+: wait for one key press (see {#wait_for_key}) and show its key
   # code in the main window, or say that none came. Does nothing without a
-  # main window.
+  # main window. A click shows as the mouse key, and its mouse events are
+  # dropped: the click was for this command, not for a link under it.
   #
   # @return [void]
   def handle_dot_key
     return unless write_to_client(Feedback::BANNER, '* Waiting for key press...')
 
     ch = wait_for_key
+    @mouse_controller.discard_events if ch == Curses::KEY_MOUSE
     msg = if ch.nil?
             "* No key pressed within #{DOT_KEY_TIMEOUT_MS / 1000} seconds"
           else

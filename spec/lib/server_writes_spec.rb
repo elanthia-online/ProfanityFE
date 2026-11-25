@@ -85,7 +85,7 @@ RSpec.describe 'Writes to the game server' do
       allow(MouseScroll).to receive(:new).and_return(mouse_scroll)
       allow(IO).to receive(:select).and_return(nil)
       allow(Curses).to receive(:getmouse)
-        .and_return(Struct.new(:y, :x, :bstate).new(*link_position, Curses::BUTTON1_CLICKED))
+        .and_return(Struct.new(:y, :x, :bstate).new(*link_position, Curses::BUTTON1_CLICKED), nil)
       LAYOUT['writes'] = REXML::Document.new(<<~XML).root
         <layout>
           <window class='text' top='0' left='0' height='10' width='40' value='main'/>
