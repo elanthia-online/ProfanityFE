@@ -124,13 +124,7 @@ class MouseController
     elsif (bstate & Curses::BUTTON1_RELEASED) != 0
       handle_release(screen_y, screen_x)
     elsif defined?(Curses::BUTTON1_CLICKED) && (bstate & Curses::BUTTON1_CLICKED) != 0
-      SelectionManager.clear_selection
-      window = window_at(screen_y, screen_x)
-      if window
-        rel_y = screen_y - window.begy
-        rel_x = screen_x - window.begx
-        dispatch_link(window, rel_y, rel_x)
-      end
+      handle_resolved_click(screen_y, screen_x)
     elsif MouseScroll::MOTION_EVENTS.nonzero? && (bstate & MouseScroll::MOTION_EVENTS) != 0
       handle_drag(screen_y, screen_x)
     end
@@ -155,6 +149,29 @@ class MouseController
   end
 
   private
+
+  # A click curses resolved itself (+BUTTON1_CLICKED+): follow the link
+  # under it, unless the click is the second or third of a double or
+  # triple click whose first followed a link. Without the live drag
+  # highlight, curses resolves clicks, and a double-click comes as two
+  # +BUTTON1_CLICKED+ (the mouse mask asks for no +BUTTON1_DOUBLE_CLICKED+),
+  # so each would send the link's command. On the press and release path
+  # the same repeat does nothing more ({SelectionManager.repeats_link_click?}).
+  #
+  # @param screen_y [Integer] the pointer's row on the screen
+  # @param screen_x [Integer] the pointer's column on the screen
+  # @return [void]
+  def handle_resolved_click(screen_y, screen_x)
+    SelectionManager.clear_selection
+    window = window_at(screen_y, screen_x)
+    return unless window
+
+    rel_y = screen_y - window.begy
+    rel_x = screen_x - window.begx
+    return if SelectionManager.count_resolved_click(window, rel_y, rel_x)
+
+    SelectionManager.link_followed if dispatch_link(window, rel_y, rel_x)
+  end
 
   # Button 1 pressed: start a selection in the window under the pointer.
   # A press outside every window, or on the command line, clears the

@@ -317,6 +317,77 @@ RSpec.describe MouseController do
         expect(copied).to eq ['alpha']
       end
 
+      # Without the live drag highlight, curses resolves clicks itself, and
+      # with the client's mouse mask (no BUTTON1_DOUBLE_CLICKED) ncurses 6.6
+      # reports a double click as two BUTTON1_CLICKED (#310).
+      describe 'when curses resolves the clicks (BUTTON1_CLICKED)' do
+        def resolved_click(y, x)
+          mouse(Curses::BUTTON1_CLICKED, y, x)
+        end
+
+        it 'sends the link once for a double click' do
+          resolved_click(0, 4)
+          later
+          resolved_click(0, 4)
+
+          expect(sent).to eq ['north']
+          expect(main.rows).to eq ['go north now', '>north', '', '']
+        end
+
+        it 'sends the link once for both clicks read behind one KEY_MOUSE' do
+          queued = Array.new(2) { Struct.new(:bstate, :y, :x).new(Curses::BUTTON1_CLICKED, 0, 4) }
+          allow(Curses).to receive(:getmouse) { queued.shift }
+
+          controller.handle_event
+
+          expect(sent).to eq ['north']
+          expect(queued).to be_empty
+        end
+
+        it 'sends the link once for a triple click' do
+          3.times do
+            resolved_click(0, 5)
+            later
+          end
+
+          expect(sent).to eq ['north']
+        end
+
+        it 'sends the link again for a second click after the double-click interval' do
+          resolved_click(0, 4)
+          later(SelectionManager::MULTI_CLICK_INTERVAL + 0.1)
+          resolved_click(0, 4)
+
+          expect(sent).to eq %w[north north]
+        end
+
+        it 'sends the link again for a second click two columns away' do
+          resolved_click(0, 4)
+          later
+          resolved_click(0, 6)
+
+          expect(sent).to eq %w[north north]
+        end
+
+        # Columns 2 and 3 are close enough to count as one double click; the
+        # first followed no link, so the second still does.
+        it 'follows the link for a quick click on it right beside a click on plain text' do
+          resolved_click(0, 2)
+          later
+          resolved_click(0, 3)
+
+          expect(sent).to eq ['north']
+        end
+
+        it 'sends the link for a press and release after a resolved click on it, once the interval passed' do
+          resolved_click(0, 4)
+          later(SelectionManager::MULTI_CLICK_INTERVAL + 0.1)
+          click(0, 4)
+
+          expect(sent).to eq %w[north north]
+        end
+      end
+
       it 'still copies a drag that starts with a second press on the link' do
         click(0, 4)
         later

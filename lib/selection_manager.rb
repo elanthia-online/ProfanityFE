@@ -114,6 +114,23 @@ module SelectionManager
       @link_followed = true
     end
 
+    # Count a click curses resolved itself (+BUTTON1_CLICKED+, as it
+    # reports one with the live drag highlight off) like a press, toward a
+    # double or triple click, and tell whether it repeats a click that
+    # followed a link (see {.link_followed}). Such a click follows no link,
+    # as on the press and release path ({.repeats_link_click?}). It
+    # selects nothing either way.
+    #
+    # @param window [BaseWindow] the clicked window
+    # @param y [Integer] click row (window-relative)
+    # @param x [Integer] click column (window-relative)
+    # @param now [Float, nil] monotonic clock override for tests
+    # @return [Boolean] whether the click repeats one that followed a link
+    def count_resolved_click(window, y, x, now: nil)
+      count_click(window, y, x, now || monotonic_now)
+      @repeats_link_click
+    end
+
     # Begin a new text selection at the given window coordinates.
     # Clears any previous selection highlight first, then resolves the
     # press position to a stable [line_id, x] anchor immediately - before

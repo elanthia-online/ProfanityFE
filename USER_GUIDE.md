@@ -6,7 +6,7 @@ configurable multi-window interface with color highlighting, key bindings,
 scrollable text buffers, progress bars, countdown timers, and more -- all
 running inside a standard terminal emulator.
 
-**Version:** 1.0.4
+**Version:** 1.0.5
 
 ---
 
@@ -2261,7 +2261,8 @@ linked name nothing else colors is drawn in the link color.
 **Clickable links:** When `.links` is enabled, clicking on highlighted link
 text sends the associated command to the game server. In DragonRealms, this
 executes the `cmd` attribute (e.g., `get #40872332`). The command is echoed
-to the main window as if you had typed it.
+to the main window as if you had typed it. A double or triple click on a link
+sends its command once, with `.draghl` on or off.
 
 **GemStone coord links:** some GemStone links carry a `coord` attribute
 (the exits in "Obvious paths:", ACCEPT/DECLINE on an offer, a merchant's pay
